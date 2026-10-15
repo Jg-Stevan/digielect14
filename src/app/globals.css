@@ -1,0 +1,258 @@
+@import "tailwindcss";
+
+/* ============================================================
+   STITCH REDESIGN (SPEC-e14-redesign-stitch Rev. 1 §1) —
+   tokens canónicos consolidados de las 6 pantallas del ZIP
+   (download/stitch-e14-redesign/stitch_exportaci_n_parcial_stitch/).
+   ÚNICA paleta permitida: el tema anterior (Precision Monitor /
+   cyber-neón) queda ELIMINADO por completo (regla de oro del
+   dueño: «ven necesito que me elimines cualquier diseño que
+   tengamos y solo dejemos estos… estás combinando diseños y no
+   me gusta eso»).
+   ============================================================ */
+@theme inline {
+  /* Superficies (de mayor a menor profundidad) */
+  --color-brand-black: #070a0d;        /* raíz de pantallas de revisión (bg-body) */
+  --color-brand-viewfinder: #050706;   /* raíz del visor de cámara (escaneo) */
+  --color-brand-surface: #0f151b;      /* tarjetas / píldoras / botones secundarios */
+  --color-brand-surfacelight: #18222c; /* chips inactivos / banner de ubicación / hovers */
+  --color-brand-panel: #0a0e0c;        /* dock inferior del escaneo */
+  --color-brand-chip: #121915;         /* contenedor de chips del dock de escaneo */
+  --color-brand-border: #23303d;       /* bordes de revisión */
+  --color-brand-borderdim: #1b2620;    /* bordes del dock de escaneo */
+  /* Semántica de desenlace */
+  --color-brand-green: #00e676;        /* óptima / enviada / activo */
+  --color-brand-greendark: #08331e;    /* fondo de píldora verde sólida / nube online */
+  --color-brand-greenmuted: #003b20;
+  /* Tipos — Inter (todo) + JetBrains Mono (scores/chips/códigos/horas/banner) */
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jbmono);
+}
+
+/* ============================================================
+   Esquinas AR del visor del acta (ZIP literal — rechazada_1
+   <style>: 18×18, bordes 3.5px). El color por defecto es verde
+   (óptima); rojo/ámbar se aplican con style="border-color: …"
+   exactamente como hace el mock advertencia_1.
+   ============================================================ */
+.scanner-corner-tl {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 18px;
+  height: 18px;
+  border-top: 3.5px solid #00e676;
+  border-left: 3.5px solid #00e676;
+}
+.scanner-corner-tr {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-top: 3.5px solid #00e676;
+  border-right: 3.5px solid #00e676;
+}
+.scanner-corner-bl {
+  position: absolute;
+  bottom: -2px;
+  left: -2px;
+  width: 18px;
+  height: 18px;
+  border-bottom: 3.5px solid #00e676;
+  border-left: 3.5px solid #00e676;
+}
+.scanner-corner-br {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-bottom: 3.5px solid #00e676;
+  border-right: 3.5px solid #00e676;
+}
+
+/* ============================================================
+   Animaciones del ZIP (se portan — SPEC §1)
+   ============================================================ */
+
+/* Línea láser del visor de escaneo (escaneo code.html) */
+@keyframes scan-laser {
+  0% {
+    top: 2%;
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.95;
+  }
+  100% {
+    top: 98%;
+    opacity: 0.15;
+  }
+}
+@utility animate-scan {
+  animation: scan-laser 2.8s ease-in-out infinite alternate;
+}
+
+/* Pulso del aro del obturador (escaneo code.html) */
+@keyframes pulse-ring {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.4);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 8px rgba(0, 230, 118, 0);
+  }
+}
+@utility shutter-glow {
+  animation: pulse-ring 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Ripple táctil suave (rechazada_1 code.html) */
+.tap-action:active {
+  transform: scale(0.97);
+  transition: transform 0.08s ease-in-out;
+}
+
+/* Scrollbars ocultas para chips horizontales (rechazada_1) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ============================================================
+   Utilidades del sistema (Stitch — reemplazan a las del tema
+   anterior; los nombres viejos DESAPARECEN, AC9)
+   ============================================================ */
+
+/* Safe areas (PWA / iOS notch) */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Scrollbar fina para listas largas */
+@utility thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-brand-border) transparent;
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-brand-border);
+    border-radius: 2px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+html,
+body {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  background-color: var(--color-brand-black);
+  color: #f3f4f6;
+}
+
+body {
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: var(--color-brand-green);
+  color: #000;
+}
+
+/* ============================================================
+   Animaciones neutras del shell (transiciones — sin color del
+   tema anterior)
+   ============================================================ */
+
+/* Transición entre vistas del shell (150 ms) */
+@keyframes view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility animate-view-enter {
+  animation: view-enter 150ms ease-out;
+}
+
+/* Destello blanco de captura (mock 1: overlay 320 ms) */
+@keyframes capture-flash {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@utility animate-capture-flash {
+  animation: capture-flash 320ms ease-out forwards;
+}
+
+/* Entrada del overlay CROP / visores modales (QuadEditor,
+   ZoomableVisor — neutral, ~280 ms) */
+@keyframes editor-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@utility animate-editor-enter {
+  animation: editor-enter 280ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* Pulso del asa de esquina del editor de recorte */
+@keyframes handle-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+@utility animate-handle-pulse {
+  animation: handle-pulse 1.3s ease-out infinite;
+}
+
+/* Latido sutil de indicadores en vivo (dots de píldoras) */
+@keyframes pulse-subtle {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.08);
+  }
+}
+@utility animate-pulse-sync {
+  animation: pulse-subtle 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

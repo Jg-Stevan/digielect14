@@ -1,0 +1,152 @@
+/**
+ * E14Bridge — la ÚNICA fuente de datos de las vistas (SPEC §2, D1).
+ * FASE LÓGICA L1 (SPEC-fase-logica §3.2): contrato ASYNC con eventos de
+ * progreso. El CompositeBridge enruta por `fuente` (D17: get-bridge.ts
+ * sigue siendo el punto único de intercambio — las vistas no se enteran).
+ *
+ * UX-REAL F1 (SPEC-ux-real-bn-editor §F1, D35): el MockBridge de la fase
+ * gráfica se RETIRÓ — SIMULACIÓN también pasa por el bridge real (pipeline
+ * real sobre el acta E-14 incluida). Los gates pasan de «fuente ≠ SIM» a
+ * PRESENCIA DE FOTO (recortar ya no mira `acta.fuente`; el flujo PDF salió
+ * de e14 — SPEC-rediseno-enviada Rev. 2 §7).
+ * Fuente: (diseño propio e14, D35 — el mock de la fase gráfica se retiró;
+ * SIMULACIÓN = pipeline real sobre el acta incluida).
+ */
+import type { Acta, ProgresoAnalisis, FuenteCaptura, TipoPagina } from "./types";
+import type { PageFilter, Quad } from "@jg-stevan/scanner-core/types";
+
+/** Página de mesa a la que apunta el próximo escaneo (D7: vive en el store). */
+export interface PaginaObjetivo {
+  mesaId: string; // "MESA 02"
+  tipo: TipoPagina; // "DELEGADOS" | "TRANSMISIÓN"
+  pagina: 1 | 2;
+}
+
+export interface OpcionesEscaneo {
+  objetivo: PaginaObjetivo | null;
+  intento: number;
+  maxIntentos: number;
+  fuente: FuenteCaptura;
+  archivo?: File; // fuente ARCHIVO (y SIMULACIÓN si el store inyecta el acta incluida)
+  frameActual?: HTMLVideoElement | null; // fuente CAMARA
+  /**
+   * §D3 (SPEC-e14-simulacion-scores): true SOLO cuando el disparo viene de un
+   * chip de simulación (store.simularScore). Con `simular` el pipeline corre
+   * NORMAL sobre el asset FIJO de la banda (resuelto por `scoreSimulado`) y
+   * OMITE la verificación de completitud (la acta cortada del dueño es a
+   * propósito — un chip jamás cae INCOMPLETA, AC6). El recorte manual NUNCA
+   * simula (re-evaluación real, §D4).
+   */
+  simular?: boolean;
+  /** §D3: score INYECTADO del chip (8.2 | 7.0 | 4.3) — reemplaza el calculado
+   *  DESPUÉS de scoreDeCalidad y ANTES del gate; el desenlace real (ÓPTIMA
+   *  enviada / EN_REVISION_HUMANA / RECHAZADA) lo decide `evaluarGate`. */
+  scoreSimulado?: number;
+  onProgreso?: (p: ProgresoAnalisis) => void;
+}
+
+export interface E14Bridge {
+  /** Analiza la imagen y resuelve con el acta resultante (async, §3.2). */
+  escanearActa(opciones: OpcionesEscaneo): Promise<Acta>;
+  /**
+   * L5 (§7.5): re-ejecuta el pipeline §5 sobre `fotoOriginal` del acta con el
+   * QUAD MANUAL (F5-MANUAL: respeta el quad al píxel, sin refine) → devuelve
+   * el acta ACTUALIZADA (fotoProcesada/score/status/rechazo/ocr/metricas;
+   * fuente/intento/maxIntentos/paginación IGUALES — el rescate D20 NO consume
+   * intento). F4/D37: `rotacionOverride` hornea la rotación LOCAL del editor
+   * de recorte (undefined = conserva `acta.rotation`).
+   */
+  recortar(
+    acta: Acta,
+    quad: Quad,
+    onProgreso?: (p: ProgresoAnalisis) => void,
+    rotacionOverride?: number,
+  ): Promise<Acta>;
+  /**
+   * F2 (§F2.2, D36): re-procesa la foto con el filtro elegido — IGUAL que
+   * setFilterOnPage del core (apps/scanner-lab/…/store.ts L644-669): solo
+   * processImage, SIN re-OCR ni re-calidad (el gate ya resolvió) → acta
+   * actualizada (fotoProcesada + filtro).
+   */
+  revelar(acta: Acta, filtro: PageFilter): Promise<Acta>;
+  /**
+   * F-OCR del lab (EditorView.tsx L1360-1395): corre requestOcr sobre la
+   * imagen PROCESADA del acta y devuelve el texto crudo.
+   */
+  reconocerTexto(acta: Acta): Promise<string>;
+  /** HH:MM:SS — hora del envío automático. */
+  horaEnvio(): string;
+  /** HH:MM — hora de las filas del historial. */
+  horaHistorial(): string;
+}
+
+function dosDigitos(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * Enrutador (SPEC §3.3, D17 — simplificado en D35): TODO pasa al bridge real
+ * (SIMULACIÓN incluida: el real carga el acta E-14 incluida). El gate de
+ * recortar mira la PRESENCIA DE FOTO, no la fuente.
+ * get-bridge.ts sigue siendo el punto único de intercambio.
+ */
+export class CompositeBridge implements E14Bridge {
+  constructor(private real: E14Bridge | null = null) {}
+
+  escanearActa(opciones: OpcionesEscaneo): Promise<Acta> {
+    if (!this.real) {
+      return Promise.reject(new Error("FUENTE REAL NO IMPLEMENTADA (L2)"));
+    }
+    return this.real.escanearActa(opciones);
+  }
+
+  recortar(
+    acta: Acta,
+    quad: Quad,
+    onProgreso?: (p: ProgresoAnalisis) => void,
+    rotacionOverride?: number,
+  ): Promise<Acta> {
+    if (!this.real) {
+      return Promise.reject(new Error("FUENTE REAL NO IMPLEMENTADA (L2)"));
+    }
+    // D35: el gate es la foto, no la fuente (SIMULACIÓN tiene foto real).
+    if (!acta.fotoOriginal) {
+      return Promise.reject(new Error("RECORTAR NO APLICA SIN FOTO REAL"));
+    }
+    return this.real.recortar(acta, quad, onProgreso, rotacionOverride);
+  }
+
+  revelar(acta: Acta, filtro: PageFilter): Promise<Acta> {
+    if (!this.real) {
+      return Promise.reject(new Error("FUENTE REAL NO IMPLEMENTADA (L2)"));
+    }
+    // D35: el gate es la foto, no la fuente (SIMULACIÓN tiene foto real).
+    if (!acta.fotoOriginal) {
+      return Promise.reject(new Error("FILTRAR NO APLICA SIN FOTO REAL"));
+    }
+    return this.real.revelar(acta, filtro);
+  }
+
+  reconocerTexto(acta: Acta): Promise<string> {
+    if (!this.real) {
+      return Promise.reject(new Error("FUENTE REAL NO IMPLEMENTADA (L2)"));
+    }
+    // D35: el gate es la foto, no la fuente (SIMULACIÓN tiene foto real).
+    if (!acta.fotoProcesada) {
+      return Promise.reject(new Error("RECONOCER TEXTO NO APLICA SIN FOTO REAL"));
+    }
+    return this.real.reconocerTexto(acta);
+  }
+
+  horaEnvio(): string {
+    // Las horas son de dominio de sesión, no del motor (D35: antes delegaba
+    // al mock; ahora viven aquí — mismo formato HH:MM:SS).
+    const d = new Date();
+    return `${dosDigitos(d.getHours())}:${dosDigitos(d.getMinutes())}:${dosDigitos(d.getSeconds())}`;
+  }
+
+  horaHistorial(): string {
+    const d = new Date();
+    return `${dosDigitos(d.getHours())}:${dosDigitos(d.getMinutes())}`;
+  }
+}
