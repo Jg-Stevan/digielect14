@@ -45,6 +45,10 @@
  */
 import type { Quad } from "@jg-stevan/scanner-core/types";
 import { loadImage } from "@jg-stevan/scanner-core/image-processor";
+// KIT consenso-frankfurt-v1 (FASE 2, §3): las esquinas fiduciales del kit
+// identificacion-codigo-v1 perdonan la sospecha geométrica. Mismo paquete
+// src — SIN ciclo: integridad no importa completitud.
+import type { EsquinasActa } from "./integridad";
 
 // ── Geometría (mismos umbrales del guard del PR #33 — §F-1, byte a byte) ──
 /** «Sobre el borde» literal — el acta BUENA del dueño enmarca apretado
@@ -224,17 +228,55 @@ async function medirTintaAlFilo(
 }
 
 /**
+ * KIT consenso-frankfurt-v1 (FASE 2, §3): los fiduciales PERDONAN al guard
+ * geométrico — helper ÚNICO aplicado a TODOS los desenlaces del análisis:
+ * 4 marcas presentes = el papel está DEMOSTRADO entero dentro del cuadro
+ * (ANALISIS §5.1 — ese era su propósito original) → la sospecha geométrica
+ * NO condena aunque haya tinta al filo (la «tinta al filo» es contenido
+ * pegado al borde del papel, no recorte). `sospecha`, `tintaFilo`,
+ * `densidades` y `fondo` se conservan para el log (el escudo D10/techo 7.9
+ * sigue activo en el bridge: fondo en el warp sigue molesto, no es recorte).
+ * // Fuente: §0-F2 — la acta perfecta de Frankfurt 746 encuadrada al filo
+ * (hábito del dueño) condenaba INCOMPLETA 6.4 OBLIGATORIO REPETIR FOTO:
+ * la franja exterior 0-2% mezclaba grietas de MESA oscura con papel y la
+ * densidad caía en la zona 20-85% del escudo. Conservador: un recorte REAL
+ * con las 4 marcas visibles no existe (si vieras las 4 marcas, el papel
+ * está entero) — y el kit 118 sigue atrapando recortes de CONTENIDO por
+ * OCR de secciones, sin cambio.
+ */
+function perdonadaSiPapelEntero(
+  r: ResultadoCompletitud,
+  esquinas?: EsquinasActa | null,
+): ResultadoCompletitud {
+  if (
+    !r.completa &&
+    esquinas &&
+    esquinas.tl &&
+    esquinas.tr &&
+    esquinas.bl &&
+    esquinas.br
+  ) {
+    return { ...r, completa: true };
+  }
+  return r;
+}
+
+/**
  * GUARD-BORDE (D1) — tabla de decisión §2:
  *  | Geometría                          | Tinta al filo        | Resultado            |
  *  | Sana (sin filo ∧ área ≥30%)        | — (ni se analiza)    | COMPLETA (costo 0)   |
  *  | Sospechosa (alBorde ∨ área <30%)   | NO en lados sospech. | COMPLETA → gate (cura) |
  *  | Sospechosa                         | SÍ (≥20%, D5)        | INCOMPLETA → veto 6.4 |
  *  | Sospechosa + franja ≥85% (D10)     | fondo, NO tinta      | COMPLETA → gate techo 7.9 |
+ *  | Sospechosa condenada + 4 fiduciales (FASE 2) | — | COMPLETA (perdón — log conserva la evidencia) |
  * Camino frío (D4): quad sano → SIN decodificación ni análisis (cero costo).
+ * `esquinas` (opcional, FASE 2): null o con faltantes → comportamiento
+ * EXACTO de hoy (la tinta decide).
  */
 export async function verificarCompletitud(
   quad: Quad,
   fotoProcesada: string,
+  esquinas?: EsquinasActa | null,
 ): Promise<ResultadoCompletitud> {
   const porBorde = ladosAlBorde(quad);
   const cobertura = areaDeQuad(quad) < AREA_MINIMA;
@@ -249,8 +291,12 @@ export async function verificarCompletitud(
   const analisis = await medirTintaAlFilo(fotoProcesada, sospechosos);
   if (!analisis.utilizable) {
     // §7 (warp degenerado / decode imposible): la sospecha geométrica SE
-    // MANTIENE como condena, igual que hoy (comportamiento del PR #33).
-    return { completa: false, sospecha, tintaFilo: true, densidades: [], fondo: false };
+    // MANTIENE como condena, igual que hoy (comportamiento del PR #33) —
+    // salvo 4 fiduciales presentes (FASE 2: papel entero demostrado).
+    return perdonadaSiPapelEntero(
+      { completa: false, sospecha, tintaFilo: true, densidades: [], fondo: false },
+      esquinas,
+    );
   }
   // D10 primero (escudo): franja ≥85% = fondo/sombra incluida por el warp —
   // ese lado NO condena (el fondo llena TODA la franja, un renglón cortado
@@ -265,5 +311,8 @@ export async function verificarCompletitud(
     }
     if (d >= UMBRAL_TINTA_FILO * 100) tintaFilo = true;
   }
-  return { completa: !tintaFilo, sospecha, tintaFilo, densidades: analisis.densidades, fondo };
+  return perdonadaSiPapelEntero(
+    { completa: !tintaFilo, sospecha, tintaFilo, densidades: analisis.densidades, fondo },
+    esquinas,
+  );
 }
