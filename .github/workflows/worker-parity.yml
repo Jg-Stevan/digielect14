@@ -1,0 +1,12 @@
+name: Worker parity
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -sL https://raw.githubusercontent.com/Jg-Stevan/web-scanner/main/apps/scanner-lab/public/scanner/detection-worker.js -o /tmp/worker-lab.js
+          diff -q /tmp/worker-lab.js public/scanner/detection-worker.js
