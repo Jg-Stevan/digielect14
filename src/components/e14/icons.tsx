@@ -703,3 +703,22 @@ export const StitchArrowLeftIcon = ({ className = "w-6 h-6" }: IconProps) => (
     <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
+
+// Fuente: lucide-react «gauge» (mismo path que usa la pill del medidor de
+// captura del lab — apps/scanner-lab/src/components/scanner/CameraView.tsx
+// L3410-3414 usa <Gauge/> de lucide). KIT camara-visor-v1 G7: e14 no tiene
+// lucide-react (cero dependencias nuevas) → el path EXACTO del icono,
+// re-vestido con el patrón stroke de los iconos propios.
+export const GaugeIcon = ({ className = "w-4 h-4" }: IconProps) => (
+  <svg
+    className={`${className} stroke-current fill-none`}
+    strokeWidth="2.2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    viewBox="0 0 24 24"
+    aria-hidden
+  >
+    <path d="m12 14 4-4" />
+    <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+  </svg>
+);

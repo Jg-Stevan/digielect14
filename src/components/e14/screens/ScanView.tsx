@@ -72,9 +72,11 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { warmUpScannerWorker } from "@jg-stevan/scanner-core/detector-client";
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L61-L67
-// (imports del sensor-profiler — el core YA exporta todo: cero cambios en el core).
+// (imports del sensor-profiler — el core YA exporta todo: cero cambios en el
+// core. KIT camara-visor G3: buildCappedPhotoSettings sale de la captura —
+// la resolución la manda FOTO_LADDER; clampBlobToSafeCap/getSensorSafeCap
+// siguen como Capa 2 — red de seguridad post-decode).
 import {
-  buildCappedPhotoSettings,
   clampBlobToSafeCap,
   getSensorSafeCap,
   profileSensor,
@@ -88,6 +90,7 @@ import { CameraFrameLoop, type FrameLoopTelemetry } from "@jg-stevan/scanner-cor
 import { SHUTTER_SCORE } from "@jg-stevan/scanner-core/quality";
 import type { Quad } from "@jg-stevan/scanner-core/types";
 import { useE14Store, type BandaSim } from "@/lib/e14/store";
+import type { Acta } from "@/lib/e14/types";
 import {
   CameraNavIcon,
   FolderImportIcon,
@@ -97,6 +100,7 @@ import {
   StitchGridIcon,
   StitchImportIcon,
   StitchShutterDocIcon,
+  GaugeIcon,
 } from "../icons";
 
 /* ── Chips de calidad = BOTONES DE SIMULACIÓN (SPEC-e14-simulacion-scores
@@ -153,9 +157,69 @@ const NIVELES_CALIDAD: {
 
 /* ── Constantes de cámara (lab CameraView.tsx, adaptadas al task §2) ─────── */
 
-/** Preview ideal 1920×1080 (task L3); la captura full-res va por takePhoto. */
-const IDEAL_PREVIEW_WIDTH = 1920;
-const IDEAL_PREVIEW_HEIGHT = 1080;
+// Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L142-151
+// (FIX v6 6.1 del lab — IS_ANDROID / CAN_TAKEPHOTO): Safari MODERNO (iOS
+// 17+/26) TAMBIÉN expone ImageCapture (con un takePhoto() que se cuelga) —
+// el reparto de regímenes ya NO puede decidirse por «typeof ImageCapture»:
+// se decide por UA Android (la única plataforma donde takePhoto funciona de
+// verdad). La exclusión de iOS vuelve a ser automática y Android queda igual.
+const IS_ANDROID =
+  typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+/** takePhoto() fiable SOLO en Android (Chrome). Safari moderno expone
+ *  ImageCapture pero takePhoto() se cuelga → NO usar en iOS. */
+const CAN_TAKEPHOTO = IS_ANDROID && typeof ImageCapture !== "undefined";
+
+// Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L156-176
+// (LOTE 5.1 — REVERT de F5-B): preview POR PLATAFORMA. Android gama baja:
+// 960×540@30 (evidencia diag v6 SM-A135M: 1080p en gama baja = 2 fps, 216
+// long tasks — el preview ligero 540p es el régimen de Android y el loop de
+// detección de e14 ya remuestrea a ~400 px → análisis idéntico desde 540p);
+// iOS/resto: 1920×1440 (el disparo manual es input nativo y el régimen alto
+// ya es probado). La foto real de Android llega por la escalera FOTO_LADDER
+// (~1 s en 2048×1536) — DUAL PIPELINE intacto. Regla E3 intacta: SOLO
+// `ideal`, nunca `exact/min` (no rechaza).
+const IDEAL_PREVIEW_WIDTH = CAN_TAKEPHOTO ? 960 : 1920;
+const IDEAL_PREVIEW_HEIGHT = CAN_TAKEPHOTO ? 540 : 1440;
+/** Tope suave de FPS del preview (lab L173-175): «ideal» NO rechaza cámaras
+ *  que solo ofrecen 60, solo evita negociar 60 cuando el hardware lo permite. */
+const IDEAL_PREVIEW_FPS = 30;
+
+// Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L155-161
+// (LOTE 5, F5-A — escalera rápida de photoSettings para takePhoto en
+// Android. Evidencia cam-lab SM-A135M 2026-10-14: el takePhoto DESNUDO
+// (sin photoSettings) tarda ~15 s (proceso full-res del ISP) y 2048×1536
+// tarda ~1.0 s. El desnudo queda como ÚLTIMO recurso (ningún dispositivo
+// queda peor que hoy: cada peldaño solo se intenta si el anterior falló
+// RÁPIDO).)
+const FOTO_LADDER: Array<{ imageWidth: number; imageHeight: number }> = [
+  { imageWidth: 2048, imageHeight: 1536 },
+  { imageWidth: 1280, imageHeight: 960 },
+];
+
+// Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L178-188
+// (LOTE 5.5 — ¿esta captura va a «calidad primero»?): ADAPTACIÓN e14 — no
+// hay ajustes de photoMode (el lab lee su store) → modo «auto» EXACTO del
+// lab: SOLO los equipos con 8+ GB (deviceMemory === 8) pagan la espera del
+// desnudo full-res. Se lee en cada captura, NUNCA en render (cero
+// re-renders). try/catch: navegador sin datos → rápido.
+function esCalidadPrimero(): boolean {
+  try {
+    const dm = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+    return CAN_TAKEPHOTO && dm === 8;
+  } catch {
+    return false;
+  }
+}
+
+// Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L200-209
+// (FIX v4 4.5 — tope de lado mayor de las copias del ring ZSL). El ring es
+// SOLO el fallback de la auto-captura (anti tap-shock): no necesita
+// resolución completa. Con el stream alto de iOS (1920×1440), 8 slots a
+// resolución completa ≈ 66 MB — esa presión hacía que WebKit matara la
+// capa de video (visor negro en iPhones modestos). Presupuesto resultante:
+// ≤ 8 × (1280×960×4) ≈ 37 MB.
+const RING_MAX_LONG_SIDE = 1280;
+
 /** Cooldown anti doble-disparo (lab §5.2 — CAPTURE_COOLDOWN_MS del core). */
 const COOLDOWN_MS = 1500;
 /** F-ZSL: ventana pre-tap 80–450 ms (anti tap-shock) + ring de máx 8 frames. */
@@ -169,7 +233,10 @@ const TELEMETRIA_UI_MS = 100;
 /** Destello de captura ~120 ms (spec §7 — duración en globals.css) + margen
  *  antes de navegar a ANALIZANDO (el visor se desmonta). */
 const NAVEGACION_TRAS_MS = 260;
-/** takePhoto puede colgarse (lab error #29): carrera de 8 s. */
+/** takePhoto puede colgarse (lab error #29): carrera de 8 s — KIT
+ *  camara-visor G3: la carrera queda SOLO para el ÚLTIMO peldaño de la
+ *  escalera (el desnudo, el que puede tardar ~15 s del ISP); los peldaños
+ *  intermedios fallan RÁPIDO si las constraints son rechazadas. */
 const TAKEPHOTO_TIMEOUT_MS = 8000;
 
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L119-L127
@@ -254,18 +321,48 @@ function readCapsNum(v: unknown): number {
  *  medir el sensor real requiere abrir la cámara "pelada". Devuelve null
  *  si la cámara no se pudo abrir (queda descartada). El `finally` CIERRA
  *  el stream SIEMPRE — nunca hay dos cámaras abiertas a la vez (era la
- *  causa del bug v3: sondas con el stream vivo → NotReadableError). */
+ *  causa del bug v3: sondas con el stream vivo → NotReadableError).
+ *  FIX v5 (5.3) del lab — `timeoutMs` opcional: una sonda colgada
+ *  (getUserMedia que nunca resuelve, típico en algún driver Android)
+ *  caduca y devuelve null; si la apertura llega TARDE, su stream se cierra
+ *  igualmente para no dejar la cámara ocupada para siempre. */
 async function probeCamera(
   media: MediaDevices,
   deviceId: string,
-  label: string
+  label: string,
+  timeoutMs = 0,
 ): Promise<CameraProbeResult | null> {
   let stream: MediaStream | null = null;
+  let timedOut = false;
   try {
-    stream = await media.getUserMedia({
+    const opening = media.getUserMedia({
       video: { deviceId: { exact: deviceId } },
       audio: false,
     });
+    if (timeoutMs > 0) {
+      stream = await Promise.race([
+        opening,
+        new Promise<null>((resolve) => {
+          window.setTimeout(() => {
+            timedOut = true;
+            resolve(null);
+          }, timeoutMs);
+        }),
+      ]);
+      if (timedOut || stream === null) {
+        // La sonda caducó: si la apertura resuelve después, cerrarla (sin
+        // esto la cámara quedaría abierta y las siguientes sondas darían
+        // NotReadableError en cadena).
+        void opening
+          .then((s) => {
+            s.getTracks().forEach((t) => t.stop());
+          })
+          .catch(() => undefined);
+        return null;
+      }
+    } else {
+      stream = await opening;
+    }
     const track = stream.getVideoTracks()[0];
     if (!track) return null;
     const caps = (track.getCapabilities?.() ?? {}) as {
@@ -324,6 +421,71 @@ function chooseMainProbe(probes: CameraProbeResult[]): CameraProbeResult | null 
         );
   return ranked[0];
 }
+
+// Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L362-418
+// (FIX v5 5.3 — APERTURA RÁPIDA): la elección de la cámara principal se
+// persiste en localStorage y los arranques siguientes abren la deviceId
+// cacheada DIRECTAMENTE (2ª apertura < ~1 s perceptual — sin desbloqueo/
+// sondeos/elección). Sin TTL (el hardware no cambia); invalidación SOLO por
+// fallo de apertura (NotFound/NotReadable/permiso revocado) → borrado y
+// sondeo completo. Clave PROPIA de e14 (kit camara-visor G6):
+// «e14-main-camera-v1» — NO comparte caché con el lab.
+const MAIN_CAMERA_CACHE_KEY = "e14-main-camera-v1";
+
+interface MainCameraCache {
+  deviceId: string;
+  label: string;
+  /** score = maxWidth×maxHeight (regla D3) — solo telemetría/depuración. */
+  score: number;
+  at: number;
+  torch: boolean;
+  focusModes: string[];
+  maxWidth: number;
+  maxHeight: number;
+}
+
+function readMainCameraCache(): MainCameraCache | null {
+  try {
+    const raw = localStorage.getItem(MAIN_CAMERA_CACHE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw) as MainCameraCache;
+    if (!c || typeof c.deviceId !== "string" || c.deviceId === "") return null;
+    return c;
+  } catch {
+    return null; // almacenamiento corrupto/bloqueado — sondeo completo
+  }
+}
+
+function writeMainCameraCache(p: CameraProbeResult): void {
+  try {
+    const entry: MainCameraCache = {
+      deviceId: p.deviceId,
+      label: p.label,
+      score: p.maxWidth * p.maxHeight,
+      at: Date.now(),
+      torch: p.torch,
+      focusModes: p.focusModes,
+      maxWidth: p.maxWidth,
+      maxHeight: p.maxHeight,
+    };
+    localStorage.setItem(MAIN_CAMERA_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    /* cuota llena / modo privado — solo es una caché */
+  }
+}
+
+function clearMainCameraCache(): void {
+  try {
+    localStorage.removeItem(MAIN_CAMERA_CACHE_KEY);
+  } catch {
+    /* idem */
+  }
+}
+
+// Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L424-426
+// (FIX v5 5.3) — plazo por sonda (ms): una cámara lenta no puede bloquear
+// el arranque 10 s; caduca y se sigue con la siguiente.
+const PROBE_TIMEOUT_MS = 2000;
 
 
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L245-L290
@@ -492,6 +654,8 @@ export function ScanView() {
   const simularScore = useE14Store((s) => s.simularScore);
   const setArchivoPendiente = useE14Store((s) => s.setArchivoPendiente);
   const setFramePendiente = useE14Store((s) => s.setFramePendiente);
+  // G3 (upgrade silencioso): re-proceso full-res del acta en revisión.
+  const mejorarFotoActa = useE14Store((s) => s.mejorarFotoActa);
   const inputRef = useRef<HTMLInputElement>(null);
   /** HQ-iOS: cámara NATIVA del sistema (el click del shutter es el gesto). */
   const inputCamaraRef = useRef<HTMLInputElement>(null);
@@ -556,6 +720,15 @@ export function ScanView() {
   const [videoDims, setVideoDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [boxSize, setBoxSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const puedeTomarFotoRef = useRef(false);
+  // Fuente: lab CameraView.tsx L770 (takePhotoBrokenRef) — FIX v4 4.1: lista
+  // negra temporal del sensor. Un takePhoto que expira la marca para que
+  // captureSmart NO vuelva a colgar en cada disparo; se rehabilita al abrir
+  // stream nuevo (lab L2760) y si una respuesta futura llega (L1434).
+  const takePhotoBrokenRef = useRef(false);
+  // G3 (upgrade silencioso del lab L1806-1842): identidad del acta que ESTE
+  // disparo creó (el pageId del lab) — la captura despacharCaptura al
+  // resolver dispararEscaneo; el runner del upgrade la usa como guard.
+  const actaObjetivoRef = useRef<Acta | null>(null);
   const toastIOSYaRef = useRef(false);
   const telemetriaAtRef = useRef(0);
   // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L433-L440
@@ -672,13 +845,20 @@ export function ScanView() {
   }, []);
 
   /** Copia el fotograma al ring (máx 8) y suelta YA el backing store del
-   *  expulsado (disciplina de memoria iOS, error #22). */
+   *  expulsado (disciplina de memoria iOS, error #22).
+   *  Fuente: lab CameraView.tsx L1512-1537 (FIX v4 4.5) — la copia se dibuja
+   *  ESCALADA para que su lado mayor sea ≤ RING_MAX_LONG_SIDE (1280 px): a
+   *  resolución completa (stream alto de iOS 1920×1440) 8 slots ≈ 66 MB y
+   *  esa presión de memoria hacía que WebKit matara la capa de video (visor
+   *  negro). El ring es SOLO el fallback: no necesita resolución completa. */
   const empujarAnillo = useCallback((canvas: HTMLCanvasElement, lapVar: number) => {
     const anillo = anilloRef.current;
+    const srcLong = Math.max(canvas.width, canvas.height);
+    const escala = srcLong > RING_MAX_LONG_SIDE ? RING_MAX_LONG_SIDE / srcLong : 1;
     const copia = document.createElement("canvas");
-    copia.width = canvas.width;
-    copia.height = canvas.height;
-    copia.getContext("2d")?.drawImage(canvas, 0, 0);
+    copia.width = Math.max(1, Math.round(canvas.width * escala));
+    copia.height = Math.max(1, Math.round(canvas.height * escala));
+    copia.getContext("2d")?.drawImage(canvas, 0, 0, copia.width, copia.height);
     anillo.push({ canvas: copia, lapVar, timestamp: performance.now() });
     if (anillo.length > RING_MAX) {
       const viejo = anillo.shift();
@@ -687,7 +867,11 @@ export function ScanView() {
   }, []);
 
   /** Alimenta el ring desde el <video> vivo a ~5 Hz: garantiza que el buffer
-   *  SIEMPRE cubra la ventana pre-tap de 80–450 ms. */
+   *  SIEMPRE cubra la ventana pre-tap de 80–450 ms.
+   *  Fuente: lab CameraView.tsx L1541-1574 (FIX v4 4.5) — el scratch se
+   *  dimensiona a la medida ESCALADA (lado mayor ≤ 1280 px), no a la
+   *  resolución del track: el ring no necesita más y la medición es
+   *  idéntica (medirPixeles remuestrea a ~400 px). */
   const alimentarAnillo = useCallback((): void => {
     const ahora = performance.now();
     if (ahora - anilloFeedAtRef.current < RING_FEED_MS) return;
@@ -696,14 +880,18 @@ export function ScanView() {
     if (!video || video.readyState < 2 || !video.videoWidth) return;
     if (!anilloScratchRef.current) anilloScratchRef.current = document.createElement("canvas");
     const scratch = anilloScratchRef.current;
-    if (scratch.width !== video.videoWidth || scratch.height !== video.videoHeight) {
-      scratch.width = video.videoWidth;
-      scratch.height = video.videoHeight;
+    const srcLong = Math.max(video.videoWidth, video.videoHeight);
+    const escala = srcLong > RING_MAX_LONG_SIDE ? RING_MAX_LONG_SIDE / srcLong : 1;
+    const dw = Math.max(1, Math.round(video.videoWidth * escala));
+    const dh = Math.max(1, Math.round(video.videoHeight * escala));
+    if (scratch.width !== dw || scratch.height !== dh) {
+      scratch.width = dw;
+      scratch.height = dh;
     }
     const ctx = scratch.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    const m = medirPixeles(scratch, scratch.width, scratch.height);
+    ctx.drawImage(video, 0, 0, dw, dh);
+    const m = medirPixeles(scratch, dw, dh);
     empujarAnillo(scratch, m?.lapVar ?? 0);
   }, [empujarAnillo]);
 
@@ -767,54 +955,109 @@ export function ScanView() {
     []
   );
 
-  // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L637-L681
-  // (takePhotoBlob COMPLETO — remediación H2: capas 1 y 2 del F-SENSOR-PROFILER).
-  /** DUAL PIPELINE (pilar 2) — Captura a RESOLUCIÓN DEL SENSOR como Blob
-   *  (aún SIN convertir a data URL): takePhoto() IGNORA la resolución del
-   *  <video> del preview y dispara directo al sensor físico (12–48 MP, p.ej.
-   *  4000×3000). Carrera de 8 s (takePhoto puede colgarse — error #29); null
-   *  → el llamador cae al ZSL pre-tap y a los frames del video. La
-   *  orientación EXIF la aplica el pipeline al decodificar (loadImage). */
-  const tomarFoto = useCallback(async (): Promise<Blob | null> => {
-    const track = streamRef.current?.getVideoTracks()[0];
-    if (!track || typeof ImageCapture === "undefined") return null;
-    try {
-      const capture = new ImageCapture(track);
-      // Dispara a resolución completa del hardware (4000×3000 / 3840×2160):
-      // sin photoConstraints — el sensor manda, el preview no limita...
-      // EXCEPTO cuando el sensor excede el tope seguro (48/108 MP): el
-      // F-SENSOR-PROFILER pide al ISP una foto dentro del tope EN la captura
-      // (capa 1) y el blob del gigante jamás llega a decodificarse.
-      const profile = sensorProfileRef.current;
-      const settings = profile ? buildCappedPhotoSettings(profile) : undefined;
-      const attempt = async (ps?: PhotoSettings): Promise<Blob | null> => {
-        try {
-          const blob = await Promise.race([
-            capture.takePhoto(ps),
-            new Promise<never>((_, reject) =>
-              window.setTimeout(
-                () => reject(new Error("takePhoto timeout 8s")),
-                TAKEPHOTO_TIMEOUT_MS,
+  // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L1289-1470
+  // (takePhotoBlob — LOTE 5 F5-A + F5.3/F5.4/F5.5 + FIX v4 4.1 + FIX v6 6.1,
+  //  remediación H2: capas 1 y 2 del F-SENSOR-PROFILER se conservan).
+  /** DUAL PIPELINE (pilar 2) — Captura a RESOLUCIÓN DEL SENSOR como Blob con
+   *  la ESCALERA FOTO_LADDER: 2048×1536 → 1280×960 → desnudo (cada peldaño
+   *  solo se intenta si el anterior falló RÁPIDO; la carrera de 8 s queda
+   *  SOLO para el ÚLTIMO peldaño — el desnudo, el que puede tardar ~15 s del
+   *  ISP). takePhoto() IGNORA la resolución del <video> del preview y dispara
+   *  directo al sensor físico (12–48 MP). FIX v6 6.1: el guard de plataforma
+   *  es CAN_TAKEPHOTO (positiva de Android) — Safari moderno expone
+   *  ImageCapture pero takePhoto() se cuelga → fuera de Android ni se
+   *  intenta. Lista negra temporal (takePhotoBrokenRef): un desnudo que
+   *  expira marca el sensor para que captureSmart no vuelva a colgar en cada
+   *  disparo (lab L1432-1435; rehabilitación: respuesta ok / stream nuevo).
+   *  LOTE 5.4 (F5.4-A): si el ganador fue un PELDAÑO dispara YA la foto
+   *  full-res del sensor y la entrega por `onUpgrade` — corre SIEMPRE fuera
+   *  de presupuesto y NUNCA bloquea (su catch vive en el runner del llamador). */
+  const tomarFoto = useCallback(
+    async (onUpgrade?: (upgrade: Promise<Blob>) => void): Promise<Blob | null> => {
+      if (!CAN_TAKEPHOTO) return null; // FIX v6 6.1 del lab — Android only
+      const track = streamRef.current?.getVideoTracks()[0];
+      if (!track) return null;
+      try {
+        const capture = new ImageCapture(track);
+        const profile = sensorProfileRef.current;
+        // LOTE 5.5 — calidad primero (deviceMemory 8+): UNA carrera larga
+        // contra el sensor con el DESNUDO de primero (la página nace
+        // full-res). Si el desnudo falla RÁPIDO, la cola cae a los peldaños.
+        const qualityFirst = esCalidadPrimero();
+        const settings = qualityFirst ? undefined : FOTO_LADDER[0];
+        // Settings del ÚLTIMO intento disparado; se lee SOLO si hubo blob
+        // ganador para decidir si corres upgrade (peldaño → sí; desnudo →
+        // ya es full-res, no).
+        let winnerSettings: { imageWidth: number; imageHeight: number } | undefined =
+          settings;
+        const attempt = async (
+          ps?: { imageWidth: number; imageHeight: number },
+          conCarrera?: boolean,
+        ): Promise<Blob | null> => {
+          try {
+            const photoPromise = capture.takePhoto(ps as PhotoSettings);
+            if (!conCarrera) {
+              // Peldaño intermedio: falla RÁPIDO si las constraints son
+              // rechazadas — sin carrera (la de 8 s es del desnudo).
+              const b = await photoPromise;
+              return b && b.size > 0 ? b : null;
+            }
+            const blob = await Promise.race([
+              photoPromise,
+              new Promise<never>((_, reject) =>
+                window.setTimeout(
+                  () => reject(new Error("takePhoto timeout 8s")),
+                  TAKEPHOTO_TIMEOUT_MS,
+                ),
               ),
-            ),
-          ]);
-          return blob && blob.size > 0 ? blob : null;
-        } catch {
-          return null;
+            ]);
+            return blob && blob.size > 0 ? blob : null;
+          } catch {
+            return null;
+          }
+        };
+        // Primer intento: con carrera SOLO si es el desnudo (qualityFirst).
+        let blob = await attempt(settings, settings === undefined);
+        // LOTE 5.3 (F5.3-A) — avance de escalera ÚNICO para Android:
+        // siguiente peldaño y luego desnudo (con carrera). qualityFirst: el
+        // desnudo ya corrió de primero — los peldaños son el plan B (sin
+        // carrera: fail fast). Caso raro «desnudo falló rápido + peldaño
+        // ganó» → winnerSettings queda definido y el upgrade SÍ se dispara
+        // (comportamiento EXACTO del lab — su winnerSettings se asigna igual
+        // en el retry de qualityFirst).
+        const escalera: Array<{ imageWidth: number; imageHeight: number } | undefined> =
+          qualityFirst ? [...FOTO_LADDER] : [...FOTO_LADDER.slice(1), undefined];
+        for (const ps of escalera) {
+          if (blob) break;
+          winnerSettings = ps;
+          blob = await attempt(ps, ps === undefined);
         }
-      };
-      let blob = await attempt(settings);
-      // Reintento sin photoSettings si el ajuste del profiler fue rechazado
-      // (hardware exótico): mejor foto sin tope que perder la captura.
-      if (!blob && settings) blob = await attempt(undefined);
-      if (!blob) return null;
-      // Capa 2 — red de seguridad post-decode (solo recorta si el blob
-      // excede el tope; si no, el blob original pasa intacto).
-      return await clampBlobToSafeCap(blob, profile?.safeCapPx ?? getSensorSafeCap());
-    } catch {
-      return null;
-    }
-  }, []);
+        // FIX v4 4.1 — lista negra temporal: respondió → rehabilitar;
+        // expiró el desnudo → captureSmart deja de pedir takePhoto.
+        if (blob) takePhotoBrokenRef.current = false;
+        else takePhotoBrokenRef.current = true;
+        if (!blob) return null;
+        // LOTE 5.4 (F5.4-A) — el upgrade solo tiene sentido si lo que ganó
+        // fue un PELDAÑO (2048/1280). Fire-and-forget: la promesa NUNCA se
+        // espera aquí (el desnudo tarda ~15 s); SIN tocar takePhotoBrokenRef
+        // (un desnudo lento/roto NO lista-negrea la escalera, que ya entregó
+        // la foto del flujo).
+        if (winnerSettings !== undefined && onUpgrade) {
+          try {
+            onUpgrade(capture.takePhoto(undefined));
+          } catch {
+            /* throw sincrónico raro del sensor: nunca rompe la captura */
+          }
+        }
+        // Capa 2 — red de seguridad post-decode (solo recorta si el blob
+        // excede el tope; si no, el blob original pasa intacto).
+        return await clampBlobToSafeCap(blob, profile?.safeCapPx ?? getSensorSafeCap());
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
 
   /** Canvas → Blob JPEG 0.92 (toBlob, NUNCA toDataURL en canvas grande). */
   const canvasABlob = useCallback(async (canvas: HTMLCanvasElement): Promise<Blob | null> => {
@@ -826,7 +1069,9 @@ export function ScanView() {
 
   /** Despacha la captura: destello + vibrate + File → store → ANALIZANDO.
    *  La navegación se demora ~260 ms para que el destello (~120 ms) se vea
-   *  ANTES de desmontar el visor. */
+   *  ANTES de desmontar el visor. G3 (upgrade silencioso): al resolver
+   *  dispararEscaneo captura la IDENTIDAD del acta creada por este disparo
+   *  (el pageId del lab) — el runner del upgrade la usa como guard. */
   const despacharCaptura = useCallback(
     (archivo: File) => {
       setArchivoPendiente(archivo);
@@ -837,7 +1082,9 @@ export function ScanView() {
       window.setTimeout(() => {
         procesandoRef.current = false;
         setProcesando(false);
-        void dispararEscaneo();
+        void dispararEscaneo().then(() => {
+          actaObjetivoRef.current = useE14Store.getState().actaActual;
+        });
       }, NAVEGACION_TRAS_MS);
     },
     [dispararEscaneo, setArchivoPendiente],
@@ -903,6 +1150,50 @@ export function ScanView() {
     [archivoDentroDeTope, despacharCaptura],
   );
 
+  // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L1806-1842
+  // (runSilentUpgrade — LOTE 5.4/5.5, adaptado a e14).
+  /** G3 — UPGRADE SILENCIOSO: la foto full-res del sensor aterrizó (~15-18 s)
+   *  tras el disparo rápido por peldaño → re-procesa el acta EN REVISIÓN
+   *  (store.mejorarFotoActa → bridge.mejorarResolucion: re-proceso sin
+   *  consumir intento, quad RE-DETECTADO sobre la foto nueva, gate completo).
+   *  Todo el trabajo vive FUERA del flujo crítico (el usuario ya está en
+   *  revisión). Solo SUBE (lab L1830-1832): si el lado mayor no supera
+   *  claramente al del peldaño (2048), el acta no se toca. Fallos
+   *  silenciosos: si no llega o llega roto, el acta queda como está. */
+  const mejorarSilenciosa = useCallback(
+    async (upgrade: Promise<Blob>): Promise<void> => {
+      try {
+        const blob = await upgrade;
+        if (!blob || blob.size === 0) return;
+        // Solo SUBE: decode FUERA del flujo crítico (el upgrade ya vuela en
+        // segundo plano — el lab lo mide con readBlobLongSide barato; aquí
+        // el decode único de loadImage es aceptable a esta altura).
+        const rawDataUrl = await blobToDataUrl(blob);
+        if (!rawDataUrl) return;
+        const decoded = await loadImage(rawDataUrl);
+        const longSide = Math.max(decoded.naturalWidth || 0, decoded.naturalHeight || 0);
+        if (!Number.isFinite(longSide) || longSide < 2048) return;
+        // Mismo tratamiento que el camino de siempre: decode único + tope
+        // por GAMA (archivoDentroDeTope — capa 3 H2) antes del bridge.
+        const objetivo = actaObjetivoRef.current;
+        if (!objetivo) return;
+        const final = await archivoDentroDeTope(
+          new File([blob], "mejora-fullres.jpg", { type: blob.type || "image/jpeg" }),
+          false,
+        );
+        if (!final) return;
+        const finalUrl = await blobToDataUrl(final);
+        if (!finalUrl) return;
+        // Guardas de identidad (acta sigue viva y es la misma) viven en el
+        // store — igual que el lab (pageId alive check L1824-1826).
+        void mejorarFotoActa(finalUrl, objetivo);
+      } catch {
+        /* silencioso: el upgrade JAMÁS rompe nada */
+      }
+    },
+    [blobToDataUrl, archivoDentroDeTope, mejorarFotoActa],
+  );
+
   /** Captura inteligente (lab captureSmart L785-885, adaptada a e14: el
    *  resultado entra al pipeline del bridge como File):
    *  1. ZSL pre-tap (ganador del ring, anti tap-shock).
@@ -925,7 +1216,13 @@ export function ScanView() {
     // (remediación H3 — snapA existe antes del disparo; el burst de respaldo
     //  queda [zsl, snapA, snapB] con snapA del instante correcto).
     const snapA = instantanea();
-    const fotoBlob = puedeTomarFotoRef.current ? await tomarFoto() : null;
+    // G3/G5 (lab L1770): canPhoto = gate de plataforma (CAN_TAKEPHOTO, ya en
+    // el ref) Y lista negra temporal NO activa — un sensor con el takePhoto
+    // colgado no vuelve a pagar los 8 s en cada disparo.
+    const puedeFotoAhora = puedeTomarFotoRef.current && !takePhotoBrokenRef.current;
+    const fotoBlob = puedeFotoAhora
+      ? await tomarFoto((upgrade) => void mejorarSilenciosa(upgrade))
+      : null;
     if (fotoBlob) {
       // La foto full-sensor gana: suelta los frames de respaldo (R-14).
       if (zsl) liberarCanvas(zsl.canvas);
@@ -936,7 +1233,7 @@ export function ScanView() {
       void despacharArchivo(fotoBlob, false);
       return;
     }
-    if (puedeTomarFotoRef.current && camEstado === "viva") {
+    if (puedeFotoAhora && camEstado === "viva") {
       // takePhoto colgó (> 8 s) o no existe → aviso honesto del fallback
       // (franja del visor — redesign-stitch §3.1.4).
       mostrarAviso(
@@ -990,6 +1287,7 @@ export function ScanView() {
     dispararEscaneo,
     camEstado,
     mostrarAviso,
+    mejorarSilenciosa,
   ]);
 
   /** Ref fresca del captureSmart para los listeners del loop (lab L887-888). */
@@ -1028,12 +1326,16 @@ export function ScanView() {
     // {video:true}. Es la RED DE SEGURIDAD que corre SOLO si las sondas de
     // F-LENS v4 no lograron abrir la principal.
     const abrirConCascada = async (): Promise<MediaStream | null> => {
+      // Fuente: lab CameraView.tsx L2353-2391 (E3 + DUAL PIPELINE) — el
+      // PREVIEW pide las constraints ideales POR PLATAFORMA (G2) + 30 FPS
+      // (fluido en gama baja; la captura hi-res va por takePhoto al sensor).
       const intentos: MediaStreamConstraints[] = [
         {
           video: {
             facingMode: { exact: "environment" },
             width: { ideal: IDEAL_PREVIEW_WIDTH },
             height: { ideal: IDEAL_PREVIEW_HEIGHT },
+            frameRate: { ideal: IDEAL_PREVIEW_FPS },
           },
           audio: false,
         },
@@ -1042,6 +1344,7 @@ export function ScanView() {
             facingMode: "environment",
             width: { ideal: IDEAL_PREVIEW_WIDTH },
             height: { ideal: IDEAL_PREVIEW_HEIGHT },
+            frameRate: { ideal: IDEAL_PREVIEW_FPS },
           },
           audio: false,
         },
@@ -1076,6 +1379,28 @@ export function ScanView() {
     //  «Activar cámara»; e14 no tiene ese overlay — el fallback unificado a
     //  SIMULACIÓN con toast cubre el caso, ver fila 16 de la auditoría.)
     const abrirCamaraPrincipal = async (): Promise<MediaStream | null> => {
+      // 0) Fuente: lab CameraView.tsx L2468-2489 (FIX v5 5.3 — VÍA RÁPIDA):
+      //    abrir la deviceId CACHEADA con las MISMAS constraints de preview
+      //    ideal del camino completo (sin sondas → 2ª apertura < ~1 s
+      //    perceptual). Invalidación SOLO por fallo (NotFound/NotReadable/
+      //    permiso revocado) → borrar y sondear completo como antes.
+      const cache = readMainCameraCache();
+      if (cache) {
+        try {
+          return await media.getUserMedia({
+            video: {
+              deviceId: { exact: cache.deviceId },
+              width: { ideal: IDEAL_PREVIEW_WIDTH },
+              height: { ideal: IDEAL_PREVIEW_HEIGHT },
+              frameRate: { ideal: IDEAL_PREVIEW_FPS },
+            },
+            audio: false,
+          });
+        } catch (err) {
+          clearMainCameraCache();
+          if (esErrorPermiso(err)) return null; // permiso: la cascada no ayuda
+        }
+      }
       // 1) Desbloqueo de etiquetas (F1-a de codigo-test): sin permiso previo
       //    los labels/deviceIds llegan vacíos en enumerateDevices.
       try {
@@ -1095,12 +1420,16 @@ export function ScanView() {
       }
       const probes: CameraProbeResult[] = [];
       for (const d of devices) {
-        const p = await probeCamera(media, d.deviceId, d.label);
+        // FIX v5 (5.3) del lab: plazo de 2 s por sonda (una cámara lenta no
+        // bloquea el arranque).
+        const p = await probeCamera(media, d.deviceId, d.label, PROBE_TIMEOUT_MS);
         if (p) probes.push(p);
       }
       // 3) Elección de la principal (D3: AF real → mayor resolución).
       const main = chooseMainProbe(probes);
       // 4) Apertura SOLO de la ganadora (con fallbacks en cascada).
+      // DUAL PIPELINE (G2): preview POR PLATAFORMA + 30 fps ideal; el sensor
+      // completo solo despierta en el instante de la captura (FOTO_LADDER).
       const attempts: MediaStreamConstraints[] = main
         ? [
             {
@@ -1108,6 +1437,7 @@ export function ScanView() {
                 deviceId: { exact: main.deviceId },
                 width: { ideal: IDEAL_PREVIEW_WIDTH },
                 height: { ideal: IDEAL_PREVIEW_HEIGHT },
+                frameRate: { ideal: IDEAL_PREVIEW_FPS },
               },
               audio: false,
             },
@@ -1115,9 +1445,13 @@ export function ScanView() {
           ]
         : [];
       attempts.push({ video: true, audio: false }); // último recurso
-      for (const c of attempts) {
+      for (let ai = 0; ai < attempts.length; ai += 1) {
         try {
-          const stream = await media.getUserMedia(c);
+          const stream = await media.getUserMedia(attempts[ai]!);
+          // FIX v5 (5.3) del lab: persistir la elección SOLO si el stream
+          // abrió con la deviceId de la ganadora (los 2 primeros intentos la
+          // fijan; el fallback {video:true} NO escribe caché).
+          if (main && ai < 2) writeMainCameraCache(main);
           // Vía zoom: si el track abrió con zoom < 1 (equivalente 0.5× del
           // MISMO track), súbelo a 1 para el FOV de la principal.
           try {
@@ -1207,7 +1541,12 @@ export function ScanView() {
       profileActiveSensor(stream);
       // §5.2: Safari/iOS no implementa ImageCapture → el shutter manual abre
       // la cámara NATIVA; auto-captura usa frames del video.
-      puedeTomarFotoRef.current = typeof ImageCapture !== "undefined";
+      // G5 (FIX v6 6.1 del lab): el gate es CAN_TAKEPHOTO (positiva de
+      // Android) — Safari moderno expone ImageCapture pero takePhoto se
+      // cuelga. KIT camara-visor: stream nuevo rehabilita takePhoto
+      // (lab L2760 — la lista negra temporal se limpia).
+      puedeTomarFotoRef.current = CAN_TAKEPHOTO;
+      takePhotoBrokenRef.current = false;
       if (!puedeTomarFotoRef.current && esIOS() && !toastIOSYaRef.current) {
         toastIOSYaRef.current = true;
         mostrarAviso(
@@ -1529,11 +1868,11 @@ export function ScanView() {
         onChange={alElegirFotoCamara}
       />
 
-      {/* §3.1.2 VISOR (mock 1): fondo #050706 con las capas del mock —
-          vignette + radial del lente + scanlines — y LÁSER animate-scan. La
-          cámara real sigue siendo el <video>/stream actual: las capas van
-          ENCIMA como decoración del visor (spec). En modo CÁMARA se
-          conservan TODOS los overlays funcionales, re-vestidos a brand-green. */}
+      {/* §3.1.2 VISOR (mock 1): fondo #050706 limpio (G1: sin LÁSER — el
+          anillo de análisis de AnalyzingView es OTRA pantalla y conserva su
+          animación). La cámara real sigue siendo el <video>/stream actual.
+          En modo CÁMARA se conservan TODOS los overlays funcionales,
+          re-vestidos a brand-green. */}
       <div className="flex-1 min-h-0 flex">
         <div
           ref={visorRef}
@@ -1544,8 +1883,10 @@ export function ScanView() {
               mix-blend-screen + gradiente negro 80/40/90 + scanlines)
               oscurecían y "filtraban" la imagen real de la cámara, que es
               justo lo que el operador necesita ver nítido para encuadrar.
-              Se conservan el LÁSER de escaneo y la retícula opcional
-              (afordancias de UI; no alteran la imagen). */}
+              G1 (KIT camara-visor-v1): el LÁSER de escaneo también sale
+              (puro adorno — pointer-events-none — pedido expreso del dueño:
+              «quitar la línea verde de la cámara»). Se conserva SOLO la
+              retícula opcional (no altera la imagen). */}
           {/* Retícula visual (§3.1.1: botón de cuadrícula de la píldora IA) */}
           {gridOn && (
             <div
@@ -1553,12 +1894,6 @@ export function ScanView() {
               aria-hidden
             />
           )}
-          {/* Láser de escaneo (mock 1: animate-scan 2.8s — siempre visible,
-              también en SIMULACIÓN como el mock) */}
-          <div
-            className="absolute left-[12%] right-[12%] h-[2px] bg-brand-green/70 shadow-[0_0_12px_rgba(0,230,118,0.55)] animate-scan z-[12] pointer-events-none"
-            aria-hidden
-          />
 
           {/* §3.1.1 HEADER (mock 1): píldora [IA][grid][AUTO] a la izquierda +
               botón AMARILLO de modo a la derecha (⋮ oculto por defecto §6.6). */}
@@ -1815,24 +2150,51 @@ export function ScanView() {
                 </div>
               )}
 
-              {/* HUD (§7 rev.3): CALIDAD % + estado de detección. La pill
-                  IA·AUTO/MANUAL desaparece como pieza separada (§3.1.1 — vive
-                  en la píldora del header). */}
+              {/* HUD (§7 rev.3): medidor de captura EN VIVO (G7 del kit
+                  camara-visor-v1) + estado de detección. La pill del texto
+                  «CALIDAD NN%» se reemplaza por la pill VISUAL del lab:
+                  Fuente: apps/scanner-lab/src/components/scanner/
+                  CameraView.tsx L3393-3441 (LOTE 5.7) — icono Gauge + barra
+                  w-14 + número; verde >80 (umbral del shutter), azul >55,
+                  gris debajo. Datos = el MISMO live.score que el loop ya
+                  computa a ~10 Hz (scorePct) — cero lógica nueva, solo UI
+                  (framer-motion del lab → render condicional CSS de e14). */}
               {camaraViva && !procesando && (
                 <>
-                  <div
-                    className="pointer-events-none absolute bottom-3 left-3 z-20 rounded-full border border-white/10 bg-black/55 px-2.5 py-1.5 backdrop-blur-sm"
-                    role="status"
-                    aria-label={`Calidad de encuadre ${scorePct ?? 0} por ciento`}
-                  >
-                    <span
-                      className={`text-[10px] font-bold tracking-[0.12em] tabular-nums font-mono ${
-                        scoreAlto ? "text-brand-green" : "text-white/85"
-                      }`}
+                  {scorePct !== null && (
+                    <div
+                      className="pointer-events-none absolute bottom-3 left-3 z-20"
+                      role="status"
+                      aria-label={`Calidad de encuadre ${scorePct} por ciento`}
                     >
-                      CALIDAD {scorePct !== null ? `${scorePct}%` : "--%"}
-                    </span>
-                  </div>
+                      <div className="flex h-8 items-center gap-2.5 rounded-full bg-black/55 px-3 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur-md">
+                        <GaugeIcon
+                          className={`h-3.5 w-3.5 ${
+                            scorePct > SHUTTER_SCORE * 100 ? "text-[#34c759]" : "text-white/80"
+                          }`}
+                        />
+                        <div className="h-1 w-14 overflow-hidden rounded-full bg-white/20">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ease-out ${
+                              scorePct > SHUTTER_SCORE * 100
+                                ? "bg-gradient-to-r from-[#30d158] to-[#34c759]"
+                                : scorePct > 55
+                                  ? "bg-gradient-to-r from-[#007aff] to-[#4da2ff]"
+                                  : "bg-white/50"
+                            }`}
+                            style={{ width: `${Math.min(100, Math.max(4, scorePct))}%` }}
+                          />
+                        </div>
+                        <span
+                          className={`min-w-7 text-right text-[11px] font-semibold tabular-nums ${
+                            scorePct > SHUTTER_SCORE * 100 ? "text-[#34c759]" : "text-white/85"
+                          }`}
+                        >
+                          {scorePct}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   <div className="pointer-events-none absolute bottom-3 right-3 z-20 rounded-full border border-white/10 bg-black/55 px-2.5 py-1.5 backdrop-blur-sm">
                     <span
                       className={`text-[10px] font-bold tracking-[0.12em] font-mono ${

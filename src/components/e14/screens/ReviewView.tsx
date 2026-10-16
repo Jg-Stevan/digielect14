@@ -24,12 +24,19 @@ import { useE14Store } from "@/lib/e14/store";
 import { OCR_NO_TEXT } from "@jg-stevan/scanner-core/ocr";
 import { defaultQuad, FILTER_PRESETS } from "@jg-stevan/scanner-core/types";
 import type { PageFilter } from "@jg-stevan/scanner-core/types";
+// G4 (KIT camara-visor-v1): descarga de la foto PROCESADA. downloadBlob y
+// sanitizeFileName YA están publicados en el core (pdf-export 0.1.0) —
+// dataUrlToBlob NO existe en el tarball (la instrucción la citaba; se porta
+// como helper local de 5 líneas con fetch → blob, cero dependencias nuevas).
+import { downloadBlob } from "@jg-stevan/scanner-core/pdf-export";
+import { nombreExportacion } from "@/lib/e14/clasificador";
 import { QuadEditor } from "../QuadEditor";
 import { ZoomableVisor } from "@jg-stevan/scanner-ui";
 import { PanelClasificacion } from "../PanelClasificacion";
 import { Chip, PrimaryBtn, ToolbarBtn } from "../primitives";
 import {
   CopyIcon,
+  DownloadIcon,
   LoaderIcon,
   ScanTextIcon,
   SlidersIcon,
@@ -91,6 +98,15 @@ function OcrHighlightedText({
   );
 }
 
+// G4 (KIT camara-visor-v1) — dataUrlToBlob LOCAL: el lab la tiene en su
+// EditorView (L1144-1195 la usa para su F-IMG); el tarball 0.1.0 del core no
+// la exporta → helper de módulo con fetch(dataUrl).blob() (data URLs son
+// fetch-ables). Cero dependencias nuevas.
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const res = await fetch(dataUrl);
+  return res.blob();
+}
+
 export function ReviewView() {
   const acta = useE14Store((s) => s.actaActual);
   const paginaObjetivo = useE14Store((s) => s.paginaObjetivo);
@@ -112,6 +128,9 @@ export function ReviewView() {
   // D2 (redesign-stitch §4.3): feedback de COPIAR en el propio botón
   // (1.5 s «COPIADO ✓» / «NO SE PUDO COPIAR») — sin toast flotante.
   const [copiado, setCopiado] = useState<"ok" | "err" | null>(null);
+  // G4 (KIT camara-visor-v1): mismo patrón de feedback — 1.5 s en el botón
+  // «Imagen» («DESCARGADA ✓» / «NO SE PUDO»), sin toast flotante.
+  const [imagenDesc, setImagenDesc] = useState<"ok" | "err" | null>(null);
   // Fuente: apps/scanner-lab/src/components/scanner/EditorView.tsx L1563-1578
   // (ocrStats — contadores del sheet de texto). ADAPTACIÓN: sin `matches`
   // (F-FIND excluido — e14 no tiene biblioteca buscable, §1 del spec).
@@ -131,6 +150,33 @@ export function ReviewView() {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [visorAbierto]);
+
+  // G4 (KIT camara-visor-v1) — botón «Imagen»: descarga la foto PROCESADA
+  // (la evidencia que ve el visor — D3 del kit; e14 NO reprocesa a 4032:
+  // el pipeline ya produce fotoProcesada definitiva). Nombre de archivo:
+  // nombreExportacion(clasificacion) + .jpg; sin clasificación →
+  // E14_CAPTURA_<hora>. Feedback en el propio botón (estilo e14, D2).
+  const descargarImagen = async (): Promise<void> => {
+    const foto = acta?.fotoProcesada;
+    if (!foto) return;
+    try {
+      const clave =
+        acta.clasificacion && acta.clasificacion.nivel === "AUTO"
+          ? nombreExportacion(acta.clasificacion)
+          : null;
+      const hora = new Date()
+        .toTimeString()
+        .slice(0, 8)
+        .replace(/:/g, "");
+      const nombre = `${clave ?? `E14_CAPTURA_${hora}`}.jpg`;
+      downloadBlob(await dataUrlToBlob(foto), nombre);
+      setImagenDesc("ok");
+    } catch {
+      setImagenDesc("err");
+    } finally {
+      window.setTimeout(() => setImagenDesc(null), 1500);
+    }
+  };
 
   if (!acta) return null;
 
@@ -396,7 +442,14 @@ export function ReviewView() {
             <div className="scanner-corner-bl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             <div className="scanner-corner-br" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             {fotoVisible ? (
-              <div className="w-full h-full relative flex items-center justify-center min-h-0 mt-2">
+              // G8 (KIT camara-visor-v1): altura DEFINIDA (patrón exacto del
+              // lab — FIX v3 1.1 de PresentationView L520-531: iOS Safari no
+              // resuelve `max-height:100%` contra padre auto). Con padre de
+              // altura definida el stage `h-full` del paquete queda estable
+              // y la imagen gira DENTRO vía object-contain — ROTAR deja de
+              // mover el marco. NO se toca ZoomableVisor del paquete (pan a
+              // 1× en card exigiría publicación npm — fuera de alcance).
+              <div className="w-full h-[420px] max-h-[60vh] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
                   src={fotoVisible}
@@ -451,7 +504,8 @@ export function ReviewView() {
             <div className="scanner-corner-bl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             <div className="scanner-corner-br" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             {fotoVisible ? (
-              <div className="w-full h-full relative flex items-center justify-center min-h-0 mt-2">
+              // G8: misma altura definida (2º wrapper del visor de card).
+              <div className="w-full h-[420px] max-h-[60vh] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
                   src={fotoVisible}
@@ -504,6 +558,15 @@ export function ReviewView() {
               }
             />
             <ToolbarBtn
+              icon={<DownloadIcon />}
+              label={imagenDesc === "ok" ? "Descargada ✓" : imagenDesc === "err" ? "No se pudo" : "Imagen"}
+              onClick={
+                acta.fotoProcesada
+                  ? () => void descargarImagen()
+                  : undefined
+              }
+            />
+            <ToolbarBtn
               icon={<ScanTextIcon />}
               label="Texto"
               active={hayTexto}
@@ -530,6 +593,16 @@ export function ReviewView() {
               icon={<StitchRotateIcon />}
               label="Rotar 90°"
               onClick={acta.fotoProcesada ? () => void rotarFoto() : undefined}
+            />
+            <ToolbarBtn
+              icon={<DownloadIcon />}
+              label={imagenDesc === "ok" ? "Descargada ✓" : imagenDesc === "err" ? "No se pudo" : "Imagen"}
+              aria-label="Descargar imagen en alta calidad"
+              onClick={
+                acta.fotoProcesada
+                  ? () => void descargarImagen()
+                  : undefined
+              }
             />
             <ToolbarBtn
               icon={<StitchFullscreenIcon />}
