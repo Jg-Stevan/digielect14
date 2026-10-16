@@ -50,6 +50,7 @@ import { statusDeScore } from "./types";
 import { cargarDivipol } from "./divipol";
 import {
   clasificarCabecera,
+  faltaSeccionInferior,
   PATRON_CABECERA,
   tituloYUbicacionDe,
   type ClasificacionE14,
@@ -421,11 +422,14 @@ interface ResultadoGate {
 function fmtClasif(c: ClasificacionE14 | null): string {
   if (!c) return "sin-clasificar";
   const tipo = c.tipo === "TRANSMISION" ? "T" : c.tipo === "DELEGADOS" ? "D" : "-";
+  // KIT actas-vivas-paginas-v1 (FASE B): página en la traza de auditoría —
+  // «pag:2/2» leída · «pag:?» DESCONOCIDA (el hueco irá al primer libre).
+  const pag = c.pagina ? `${c.pagina.index}/${c.pagina.total}` : "?";
   return (
     `dep:${c.departamento?.codigo ?? "?"},mun:${c.municipio?.codigo ?? "?"},` +
     `zon:${c.zona?.codigo ?? "?"},std:${c.puesto?.codigo ?? "?"},` +
     `mesa:${c.mesa !== null ? String(c.mesa).padStart(3, "0") : "?"},` +
-    `tipo:${tipo},nivel:${c.nivel}`
+    `pag:${pag},tipo:${tipo},nivel:${c.nivel}`
   );
 }
 
@@ -687,6 +691,11 @@ export class RealCoreBridge implements E14Bridge {
     //    regex + divipol cacheada) y alimenta el score — el OCR y la
     //    identificación manda sobre las métricas globales del crudo.
     const clasificacion = clasificarCabecera(texto, await cargarDivipol());
+    // KIT actas-vivas-paginas-v1 (FASE C): RECORTADA por OCR de secciones —
+    // P1 sin «SUMA TOTAL» / P≥2 sin «FIRMA» (faltaSeccionInferior);
+    // página DESCONOCIDA nunca condena. Techo 7.9 = ADVERTENCIA (NO
+    // rechazo — conservador en campo).
+    const recortada = faltaSeccionInferior(texto, clasificacion.pagina);
     const ocrLegible = ocrTextIsValid(texto);
     // §D1 (SPEC-e14-score-ocr): señal de CONTENIDO del acta — alimenta el
     // score (techo 4.9 sin señal) y el desenlace §D3 (rechazo BAJO).
@@ -726,13 +735,25 @@ export class RealCoreBridge implements E14Bridge {
     // manda primero: el veto de votos SOLO condena actas completas sin
     // tinta en la zona de votos.
     const marcadores = await medirZonaVotos(fotoProcesada);
-    const marcadoresOk = completa ? marcadores.hayVotos : true;
+    // KIT actas-vivas-paginas-v1 (FASE C): gate de votos SOLO P1 — la pág 2
+    // (constancias) NO tiene zona de votos (hoy pasaba por la tinta de las
+    // líneas impresas: de la suerte). Página desconocida → se mide
+    // (conservador). Log: votos=skip-pag2 cuando aplique.
+    const votosSkipPag2 = clasificacion.pagina?.index === 2;
+    const marcadoresOk = completa ? (votosSkipPag2 ? true : marcadores.hayVotos) : true;
     // D10 — escudo anti-fondo: franja(s) ≥85% oscura(s) al filo = fondo/sombra
     // incluida por el warp (NO tinta cortada) → el acta pasa al gate con
     // TECHO 7.9 (nunca ÓPTIMA — statusDeScore: ≥8; el recorte trae fondo y el
     // operador puede preferir repetir) sin copy nuevo. SOLO actas completas
     // (la condenada por tinta no llega al gate).
     if (completa && verificacionResuelta?.fondo) {
+      score = Math.min(score, TECHO_ESCUDO_FONDO);
+    }
+    // KIT actas-vivas-paginas-v1 (FASE C): acta RECORTADA (OCR de secciones)
+    // → techo 7.9 — ADVERTENCIA, NO rechazo (conservador en campo). Cap
+    // DESPUÉS de la inyección SIM (mismo sitio que el escudo de fondo — el
+    // recorte físico manda sobre cualquier score).
+    if (recortada) {
       score = Math.min(score, TECHO_ESCUDO_FONDO);
     }
     const gate: ResultadoGate = !completa
@@ -802,7 +823,7 @@ export class RealCoreBridge implements E14Bridge {
         `proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia} votos=${marcadores.densidadVotosPct.toFixed(1)}%${marcadoresOk ? "" : " SIN_VOTOS"}${evidenciaAsis}${evidenciaBorde} ` +
+        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${evidenciaAsis}${evidenciaBorde} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtroActa} clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
@@ -814,6 +835,9 @@ export class RealCoreBridge implements E14Bridge {
     return this.construirActa(opciones, parcial, {
       fotoProcesada,
       procesadaVacia,
+      // KIT actas-vivas-paginas-v1 (FASE C): el acta lleva la bandera del
+      // OCR de secciones para la píldora de REVISIÓN.
+      recortada,
       quadDetectado: quad,
       calidad,
       ocrTexto: texto,
@@ -997,9 +1021,20 @@ export class RealCoreBridge implements E14Bridge {
     // §4.4): el recorte re-evalúa TODO el gate, los votos incluidos. Sin
     // excepción: un recorte que deja la zona de votos fuera → SIN_VOTOS
     // (vuelve a captura) — el recorte NUNCA rescata un acta sin votos.
-    const marcadores = await medirZonaVotos(fotoProcesada);
-    const marcadoresOk = completa ? marcadores.hayVotos : true;
+    // KIT actas-vivas-paginas-v1 (FASE C): clasificación ANTES de
+    // medirZonaVotos (solo depende de texto — ya está en vuelo): el gate de
+    // votos necesita la página (solo P1 tiene zona) y el recorte OCR de
+    // secciones se calcula de paso.
     const clasificacion = clasificarCabecera(texto, await cargarDivipol());
+    // KIT actas-vivas-paginas-v1 (FASE C): RECORTADA por OCR de secciones —
+    // mismas señales que el escaneo (helper ÚNICO §4.4).
+    const recortada = faltaSeccionInferior(texto, clasificacion.pagina);
+    const marcadores = await medirZonaVotos(fotoProcesada);
+    // KIT actas-vivas-paginas-v1 (FASE C): gate de votos SOLO P1 — la pág 2
+    // (constancias) NO tiene zona de votos. Página desconocida → se mide
+    // (conservador). Log: votos=skip-pag2 cuando aplique.
+    const votosSkipPag2 = clasificacion.pagina?.index === 2;
+    const marcadoresOk = completa ? (votosSkipPag2 ? true : marcadores.hayVotos) : true;
     const ocrLegible = ocrTextIsValid(texto);
     // §D1 (SPEC-e14-score-ocr): señal de contenido — mismo criterio §4.4
     // (helper único, AMBOS pipelines con el MISMO criterio).
@@ -1012,6 +1047,11 @@ export class RealCoreBridge implements E14Bridge {
     // D10 — escudo anti-fondo (mismo criterio del escaneo): el rescate trae
     // fondo/sombra al filo → gate con TECHO 7.9 (nunca ÓPTIMA), sin copy.
     if (completa && verificacion.fondo) {
+      score = Math.min(score, TECHO_ESCUDO_FONDO);
+    }
+    // KIT actas-vivas-paginas-v1 (FASE C): acta RECORTADA → techo 7.9 —
+    // ADVERTENCIA, NO rechazo (mismo criterio del escaneo, helper ÚNICO §4.4).
+    if (recortada) {
       score = Math.min(score, TECHO_ESCUDO_FONDO);
     }
     const gate: ResultadoGate = !completa
@@ -1061,7 +1101,7 @@ export class RealCoreBridge implements E14Bridge {
         `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia} votos=${marcadores.densidadVotosPct.toFixed(1)}%${marcadoresOk ? "" : " SIN_VOTOS"}${evidenciaBordeRecorte} ` +
+        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${evidenciaBordeRecorte} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtro} clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
@@ -1082,6 +1122,9 @@ export class RealCoreBridge implements E14Bridge {
       ...acta,
       fotoProcesada,
       procesadaVacia,
+      // KIT actas-vivas-paginas-v1 (FASE C): bandera del OCR de secciones,
+      // re-evaluada en cada re-proceso (la más reciente manda).
+      recortada,
       quadDetectado: quad,
       rotation: rotacion,
       ocrTexto: texto,
@@ -1217,6 +1260,9 @@ export class RealCoreBridge implements E14Bridge {
       fotoProcesada?: string;
       /** §D4 (SPEC-e14-score-ocr): la procesada salió sin tinta. */
       procesadaVacia?: boolean;
+      /** KIT actas-vivas-paginas-v1 (FASE C): OCR de secciones detectó el
+       *  recorte del papel (faltaSeccionInferior). */
+      recortada?: boolean;
       quadDetectado?: Quad;
       calidad?: PageQuality;
       ocrTexto?: string;
@@ -1256,11 +1302,14 @@ export class RealCoreBridge implements E14Bridge {
         mesa: numeroMesa,
       },
       tipo: ACTA_MOCK.tipo,
-      // §6: página REAL del «Ver/Pag/de» cuando la clasificación la leyó;
-      // clasificación sin «Ver/Pag» → default P1/2 (mismo default del hueco
-      // Fase B — coherencia display/archivo); sin clasificación → objetivo seed.
+      // §6: página REAL del «Ver/Pag/de» cuando la clasificación la leyó.
+      // KIT actas-vivas-paginas-v1 (FASE B): la página viaja COMO VENGA de
+      // la clasificación (null incluido — DESCONOCIDA: el chip muestra
+      // «PÁG - DE -» y el hueco va al primer libre; el default P1 mintió
+      // con la pág 2 del Frankfurt, bug del dueño 16-oct). Sin
+      // clasificación → objetivo seed (hoy).
       pagina: campos.clasificacion
-        ? (campos.clasificacion.pagina ?? { index: 1, total: 2 })
+        ? campos.clasificacion.pagina
         : {
             index: opciones.objetivo?.pagina ?? 1,
             total: 2,
@@ -1283,6 +1332,7 @@ export class RealCoreBridge implements E14Bridge {
       fotoOriginal: parcial.fotoOriginal,
       fotoProcesada: campos.fotoProcesada,
       procesadaVacia: campos.procesadaVacia,
+      recortada: campos.recortada ?? false,
       ocrTexto: campos.ocrTexto,
       metricas: campos.calidad
         ? {

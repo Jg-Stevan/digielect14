@@ -11,7 +11,9 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useE14Store, type ActaArchivada, type PuestoActual } from "@/lib/e14/store";
-import { PUESTO_SIMULADO, mesasIniciales } from "@/lib/e14/seed";
+// KIT actas-vivas-paginas-v1 (FASE A): mesasIniciales ya NO se importa — el
+// guion del SIM vive en el store (mesas) y avanzan con el tick de 5 s.
+import { PUESTO_SIMULADO } from "@/lib/e14/seed";
 import { cargarDivipol, mesasDePuesto } from "@/lib/e14/divipol";
 import type { Mesa, MesaPagina } from "@/lib/e14/types";
 import { ChevronDownIcon, MapPinIcon, SensorsIcon } from "../icons";
@@ -98,6 +100,13 @@ export function ActasView() {
   const puestoReal = useE14Store((s) => s.puestoActual);
   const modoSimulacion = useE14Store((s) => s.modoSimulacion);
   const alternarModoSimulacion = useE14Store((s) => s.alternarModoSimulacion);
+  // KIT actas-vivas-paginas-v1 (FASE A): guion VIVO del SIM (store) —
+  // avanzarSimulacion marca una página OK cada 5 s; el tick se detiene
+  // SOLO al completar el guion (simCompleta).
+  const mesas = useE14Store((s) => s.mesas);
+  const simCompleta = useE14Store((s) => s.simCompleta);
+  const simUltima = useE14Store((s) => s.simUltima);
+  const avanzarSimulacion = useE14Store((s) => s.avanzarSimulacion);
   const online = useE14Store((s) => s.online);
   const alternarConexion = useE14Store((s) => s.alternarConexion);
   const [mesaAbierta, setMesaAbierta] = useState<string | null>(null);
@@ -149,9 +158,14 @@ export function ActasView() {
           paginas.push({
             tipo,
             pagina: p as 1 | 2,
-            estado: entrada?.huecos.some((h) => h.tipo === tipo && h.pagina === p)
-              ? ("OK" as const)
-              : ("PENDIENTE" as const),
+            // KIT actas-vivas-paginas-v1 (FASE C): el estado de la página
+            // viene del hueco REAL (OK | RESCANEO) — el chip «P# ⚠ Rescaneo»
+            // ya existía muerto; con RESCANEO la mesa queda EN PROCESO
+            // (ocupadas cuenta SOLO OK) y el re-archivo del mismo hueco la
+            // sube a ✓ (AC-RC5).
+            estado:
+              entrada?.huecos.find((h) => h.tipo === tipo && h.pagina === p)?.estado ??
+              ("PENDIENTE" as const),
           });
         }
       }
@@ -175,8 +189,28 @@ export function ActasView() {
     return lista;
   }, [archivadas, puestoReal, totalMesas]);
 
-  // Vista efectiva: simulación (sin puesto real) = seed del mock; si no, real.
-  const mesasMostradas: Mesa[] = enSimulacion ? mesasIniciales() : mesasDelPuesto;
+  // Vista efectiva: simulación (sin puesto real) = guion VIVO del store
+  // (KIT actas-vivas-paginas-v1, FASE A — mesasIniciales() se recreaba en
+  // cada render y por eso el mock nunca avanzaba); si no, real.
+  const mesasMostradas: Mesa[] = enSimulacion ? mesas : mesasDelPuesto;
+
+  // KIT actas-vivas-paginas-v1 (FASE A): progreso del puesto demo (páginas
+  // OK del guion vivo) — contador bajo «MESAS SIMULADAS».
+  const paginasOcupadas = mesas.reduce(
+    (n, m) => n + m.paginas.filter((p) => p.estado === "OK").length,
+    0,
+  );
+  const paginasTotales = mesas.reduce((n, m) => n + m.paginas.length, 0);
+
+  // KIT actas-vivas-paginas-v1 (FASE A): tick del SIM VIVO — cada 5 s sube
+  // un acta (avanzarSimulacion en el store). Se detiene SOLO al completar
+  // el guion (AC-SIM1, sin ticks colgando); OFF→ON reinicia el guion en el
+  // store (AC-SIM2). Con puesto real no corre (real manda — AC-SIM4).
+  useEffect(() => {
+    if (!enSimulacion || simCompleta) return;
+    const t = window.setInterval(avanzarSimulacion, 5000);
+    return () => window.clearInterval(t);
+  }, [enSimulacion, simCompleta, avanzarSimulacion]);
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-brand-black flex flex-col">
@@ -213,7 +247,7 @@ export function ActasView() {
                     modoSimulacion
                       ? "bg-amber-950/60 border-amber-500 text-amber-400"
                       : "bg-brand-surface border-brand-border text-gray-400"
-                  }`}
+                  } ${enSimulacion && !simCompleta ? "animate-pulse-sync" : ""}`}
                 >
                   SIM
                 </button>
@@ -245,6 +279,26 @@ export function ActasView() {
                 {enSimulacion ? "MESAS SIMULADAS" : "MESAS DEL PUESTO"} ({totalMesas ?? mesasMostradas.length})
               </span>
               <span className="h-px flex-1 bg-brand-border" />
+            </div>
+          )}
+          {/* KIT actas-vivas-paginas-v1 (FASE A): feedback del SIM VIVO —
+              última página subida + progreso del guion; al completarse,
+              fila verde PUESTO COMPLETADO ✓ (estilo del bloque ENVIADO). */}
+          {enSimulacion && (
+            <div className="flex flex-col gap-1 -mt-3">
+              <p className="font-mono text-[11px] tracking-wider text-gray-400">
+                ÚLTIMA: {simUltima ?? "—"}
+              </p>
+              <p className="font-mono text-[11px] tracking-wider text-gray-400">
+                PROGRESO: {paginasOcupadas} DE {paginasTotales} PÁGINAS
+              </p>
+              {simCompleta && (
+                <div className="flex items-center justify-center px-3 py-2.5 rounded-2xl bg-brand-greendark/60 border border-brand-green/60">
+                  <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-brand-green">
+                    PUESTO COMPLETADO ✓
+                  </span>
+                </div>
+              )}
             </div>
           )}
           {mesasMostradas.length === 0 && (

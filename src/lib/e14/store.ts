@@ -89,6 +89,12 @@ interface E14Store {
    *  §6.4) cuando NO hay puesto real — overlay de VISTA, jamás escribe en
    *  `archivadas`/`puestoActual` (cero contaminación de datos reales). */
   modoSimulacion: boolean;
+  /** KIT actas-vivas-paginas-v1 (FASE A): true cuando el guion del SIM quedó
+   *  completo (todas las páginas OK) — detiene el tick de 5 s en ACTAS. */
+  simCompleta: boolean;
+  /** KIT actas-vivas-paginas-v1 (FASE A): último acta «subida» por el tick,
+   *  p. ej. «MESA 02 · TRANSMISIÓN P1 ✓» (feedback bajo MESAS SIMULADAS). */
+  simUltima: string | null;
   completadas: number;
   asignadasHoy: number;
   colaOffline: number;
@@ -96,8 +102,15 @@ interface E14Store {
   historial: HistorialRow[];
 
   navegar: (vista: Vista) => void;
-  /** MODO SIMULACIÓN (regla del dueño): alterna el toggle «SIM» de ACTAS. */
+  /** MODO SIMULACIÓN (regla del dueño): alterna el toggle «SIM» de ACTAS.
+   *  KIT actas-vivas-paginas-v1 (FASE A): ENCENDER entrega guion FRESCO
+   *  (seed nuevo + SIM reiniciado); APAGAR solo apaga. */
   alternarModoSimulacion: () => void;
+  /** KIT actas-vivas-paginas-v1 (FASE A): un tick del SIM VIVO — «sube» un
+   *  acta al guion demo (marca la próxima página como OK cada 5 s). Overlay
+   *  de VISTA (D6 INTOCABLE): SOLO escribe mesas/simUltima/simCompleta,
+   *  JAMÁS archivadas/puestoActual/historial/completadas/actasSesion. */
+  avanzarSimulacion: () => void;
   setFuente: (fuente: FuenteCaptura) => void;
   setArchivoPendiente: (archivo: File | null) => void;
   /** Registra el <video> vivo de la cámara (null al detener el stream). */
@@ -202,10 +215,34 @@ function recalcularMesa(mesa: Mesa): Mesa {
   return { ...mesa, progresoPct, estado: estado as Mesa["estado"] };
 }
 
-/** Hueco archivado de una mesa real (§6: cuerpo DELEGADOS|TRANSMISIÓN × pág 1/2). */
+/** KIT actas-vivas-paginas-v1 (FASE A): lógica EXTRAÍDA de registrarEnvio
+ *  (marcaba la paginaObjetivo como OK y recalculaba su mesa, inline) —
+ *  cero duplicación, cero cambio de comportamiento. La usa el envío REAL
+ *  (registrarEnvio) Y el tick del SIM (avanzarSimulacion). */
+function marcarPaginaOK(mesas: Mesa[], objetivo: PaginaObjetivo): Mesa[] {
+  return mesas.map((m) =>
+    m.id === objetivo.mesaId
+      ? recalcularMesa({
+          ...m,
+          paginas: m.paginas.map((p) =>
+            p.tipo === objetivo.tipo && p.pagina === objetivo.pagina
+              ? { ...p, estado: "OK" }
+              : p,
+          ),
+        })
+      : m,
+  );
+}
+
+/** Hueco archivado de una mesa real (§6: cuerpo DELEGADOS|TRANSMISIÓN × pág 1/2).
+ *  KIT actas-vivas-paginas-v1 (FASE C): `estado` — OK (acta limpia) o
+ *  RESCANEO (la captura archivada llegó ADVERTENCIA: ⚠ en ACTAS, cuenta
+ *  como no-OK y deja la mesa EN PROCESO invitando al re-escaneo; el
+ *  re-archivo del mismo hueco lo sube a OK — la más reciente manda). */
 export interface HuecoArchivado {
   tipo: TipoPagina;
   pagina: 1 | 2;
+  estado: "OK" | "RESCANEO";
 }
 /** Entrada Fase B (§6): clasificación guardada + huecos ocupados de la mesa. */
 export interface ActaArchivada {
@@ -240,6 +277,9 @@ export interface PuestoActual {
 function archivarHueco(
   archivadas: Record<string, ActaArchivada>,
   clasif: ClasificacionE14,
+  /** KIT actas-vivas-paginas-v1 (FASE C): true → hueco RESCANEO (la
+   *  captura archivada llegó ADVERTENCIA). */
+  conRescate: boolean,
 ): { nuevas: Record<string, ActaArchivada>; duplicado: boolean; puesto: PuestoActual | null } {
   const clave = claveDeMesa(clasif);
   const tipo = clasif.tipo ? tipoPaginaDe(clasif.tipo) : null;
@@ -255,11 +295,31 @@ function archivarHueco(
     zona: clasif.zona?.codigo ?? "",
     puesto: clasif.puesto?.codigo ?? "",
   };
+  // KIT actas-vivas-paginas-v1 (FASE B): la página del papel es DATO — si el
+  // OCR/1D NO la leyó (pagina == null) el hueco va al PRIMER hueco LIBRE de
+  // ese tipo (P1 libre → P1 · si no P2 libre → P2 · si no → P1, que
+  // reemplaza — duplicado, semántica de hoy). NUNCA se asume P1 en silencio
+  // (bug del dueño 16-oct: pág 2 de Frankfurt archivada en TRANSMISIÓN P1 →
+  // la mesa 012 quedaba incompleta para siempre). Con página conocida →
+  // exactamente igual que hoy.
+  const previa = archivadas[clave];
+  const paginaHueco: 1 | 2 = clasif.pagina
+    ? clasif.pagina.index === 2
+      ? 2
+      : 1
+    : (() => {
+        const huecos = previa?.huecos ?? [];
+        const ocupado = (p: 1 | 2) => huecos.some((h) => h.tipo === tipo && h.pagina === p);
+        return !ocupado(1) ? 1 : !ocupado(2) ? 2 : 1;
+      })();
   const hueco: HuecoArchivado = {
     tipo,
-    pagina: (clasif.pagina?.index ?? 1) === 2 ? 2 : 1,
+    pagina: paginaHueco,
+    // KIT actas-vivas-paginas-v1 (FASE C): el hueco hereda el estado del
+    // desenlace de la captura que se archiva; el re-archivo del mismo hueco
+    // reemplaza clasificación Y estado (la más reciente manda — ya existía).
+    estado: conRescate ? "RESCANEO" : "OK",
   };
-  const previa = archivadas[clave];
   if (!previa) {
     return {
       nuevas: { ...archivadas, [clave]: { clasificacion: clasif, huecos: [hueco] } },
@@ -333,7 +393,13 @@ export const useE14Store = create<E14Store>((set, get) => {
     let archivadasNuevas = archivadas;
     let puestoNuevo: PuestoActual | null = null;
     if (actaActual?.clasificacion?.nivel === "AUTO") {
-      const r = archivarHueco(archivadas, actaActual.clasificacion);
+      const r = archivarHueco(
+        archivadas,
+        actaActual.clasificacion,
+        // KIT actas-vivas-paginas-v1 (FASE C): el estado del hueco lo pone el
+        // desenlace de la captura que se archiva (ADVERTENCIA → RESCANEO).
+        actaActual.status === "ADVERTENCIA",
+      );
       archivadasNuevas = r.nuevas;
       puestoNuevo = r.puesto;
     }
@@ -355,7 +421,9 @@ export const useE14Store = create<E14Store>((set, get) => {
     // Fase B (§6): título de mesa REAL cuando la clasificación está resuelta.
     const c = actaActual?.clasificacion;
     if (c?.nivel === "AUTO" && c.puesto && c.mesa !== null && c.tipo) {
-      const p = (c.pagina?.index ?? 1) === 1 ? "P1" : "P2";
+      // KIT actas-vivas-paginas-v1 (FASE B): página DESCONOCIDA → honesto
+      // en el historial («PÁG ?»), NUNCA P1 mentiroso.
+      const p = c.pagina == null ? "PÁG ?" : c.pagina.index === 1 ? "P1" : "P2";
       return `${c.puesto.nombre} · MESA ${c.mesa} — ${tipoPaginaDe(c.tipo)} ${p}`;
     }
     if (!paginaObjetivo) return "MESA 01 — TRANSMISIÓN P1";
@@ -383,6 +451,8 @@ export const useE14Store = create<E14Store>((set, get) => {
     archivadas: {},
     puestoActual: null,
     modoSimulacion: false,
+    simCompleta: false,
+    simUltima: null,
     completadas: progresoInicial().completadas,
     asignadasHoy: progresoInicial().asignadasHoy,
     colaOffline: COLA_OFFLINE_INICIAL,
@@ -391,7 +461,40 @@ export const useE14Store = create<E14Store>((set, get) => {
 
     navegar: (vista) => set({ vista }),
 
-    alternarModoSimulacion: () => set((s) => ({ modoSimulacion: !s.modoSimulacion })),
+    // KIT actas-vivas-paginas-v1 (FASE A): ENCENDER → guion FRESCO (seed
+    // nuevo + SIM reiniciado — AC-SIM2); APAGAR → solo apaga. Overlay de
+    // vista: no toca archivadas/puestoActual/historial/completadas (D6).
+    alternarModoSimulacion: () =>
+      set((s) =>
+        s.modoSimulacion
+          ? { modoSimulacion: false }
+          : {
+              modoSimulacion: true,
+              mesas: mesasIniciales(),
+              simCompleta: false,
+              simUltima: null,
+            },
+      ),
+
+    // KIT actas-vivas-paginas-v1 (FASE A): SIM VIVO — cada tick «sube» un
+    // acta al guion demo (proximaPagina YA existe con la prioridad
+    // EN_PROCESO > PENDIENTE > RESCANEO; el seed arranca en m2-D2 y el
+    // puesto se completa ~8 ticks). D6: SOLO mesas (guion del puesto demo)
+    // + feedback — jamás datos reales. Guion completo → simCompleta (el
+    // tick de ACTAS se detiene SOLO).
+    avanzarSimulacion: () => {
+      const objetivo = proximaPagina(get().mesas);
+      if (!objetivo) {
+        if (!get().simCompleta) set({ simCompleta: true });
+        return;
+      }
+      const mesas = marcarPaginaOK(get().mesas, objetivo);
+      set({
+        mesas,
+        simUltima: `${objetivo.mesaId} · ${objetivo.tipo} P${objetivo.pagina} ✓`,
+        simCompleta: mesas.every((m) => m.paginas.every((p) => p.estado === "OK")),
+      });
+    },
 
     setFuente: (fuente) => set({ fuente }),
 
@@ -607,7 +710,13 @@ export const useE14Store = create<E14Store>((set, get) => {
         nivel: "AUTO",
         confianzas: { departamento: 1, municipio: 1, puesto: 1, tipo: 1 },
       };
-      const { nuevas, puesto } = archivarHueco(archivadas, final);
+      const { nuevas, puesto } = archivarHueco(
+        archivadas,
+        final,
+        // KIT actas-vivas-paginas-v1 (FASE C): el estado del acta corregida
+        // manda (llegó ADVERTENCIA → hueco RESCANEO; re-archivo la sube a OK).
+        actaActual.status === "ADVERTENCIA",
+      );
       // §1.4 (SPEC-titulo-ubicacion): la corrección del panel también pasa el
       // título/ubicación al acta (AUTO-manual → el helper aplica).
       const titUbi = tituloYUbicacionDe(final);
