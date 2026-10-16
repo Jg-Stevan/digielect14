@@ -43,6 +43,20 @@ export function mesasIniciales(): Mesa[] {
   ];
 }
 
+/** Puesto demo del MODO SIMULACIÓN (look clásico del mock §6.4). SOLO
+ *  alimenta la vista cuando `modoSimulacion && !puestoActual` — JAMÁS se
+ *  escribe en `archivadas` ni en `puestoActual` (cero contaminación de
+ *  datos reales). `clave` es placeholder de display: en simulación no se
+ *  filtra `archivadas` ni se consulta countTable. */
+export const PUESTO_SIMULADO = {
+  clave: "88-000-10-02",
+  titulo: "ROMA - CONSULADO",
+  departamento: "CONSULADOS",
+  municipio: "ITALIA",
+  zona: "10",
+  puesto: "02",
+} as const;
+
 /** 12 asignadas / 9 completadas → "PROGRESO DEL PUESTO: 75%" (§6.4). */
 export function progresoInicial(): ProgresoPuesto {
   return { asignadasHoy: 12, completadas: 9 };
