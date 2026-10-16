@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@source "../../node_modules/@jg-stevan/scanner-ui/dist";
+
 /* ============================================================
    STITCH REDESIGN (SPEC-e14-redesign-stitch Rev. 1 §1) —
    tokens canónicos consolidados de las 6 pantallas del ZIP
