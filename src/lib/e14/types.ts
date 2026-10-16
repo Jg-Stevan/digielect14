@@ -95,6 +95,11 @@ export interface Acta {
    *  Score con techo 7.9 (ADVERTENCIA, no rechazo) + píldora «ACTA
    *  RECORTADA». Página desconocida → jamás se marca. */
   recortada?: boolean;
+  /** KIT identificacion-codigo-v1 (FASE F, Task 120): LADO de la esquina
+   *  fiducial faltante («sup-izq» — marcasEsquina sobre el crop ya
+   *  enderezado) cuando el recorte lo detectó la señal de esquinas; null si
+   *  el recorte vino SOLO del OCR de secciones del kit 118 o 4/4 presentes. */
+  recorteLado?: string | null;
   /** texto detectado (debug/verificación). */
   ocrTexto?: string;
   /** métricas del core 0-100. */

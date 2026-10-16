@@ -56,6 +56,16 @@ import {
   type ClasificacionE14,
 } from "./clasificador";
 import { procesadaVaciaDataUrl } from "./image-utils";
+// KIT identificacion-codigo-v1 (FASE F, Task 120): marcas fiduciales de
+// esquina sobre el crop ya enderezado — señal «sin recortar» que ve los
+// recortes SUPERIORES que faltaSeccionInferior (kit 118, solo inferior) no ve.
+import {
+  ESQUINAS_OK,
+  ladoEsquinaFaltante,
+  marcasEsquina,
+  trazaEsquinas,
+  type EsquinasActa,
+} from "./integridad";
 // GUARD-BORDE Rev. 2 (SPEC-e14-guard-borde §2-§3, D1/D3): la verificación de
 // completitud vive en helper ÚNICO (completitud.ts) — «la geometría sospecha,
 // la tinta condena» — usado por AMBOS pipelines (escaneo y recorte, AC11).
@@ -411,6 +421,33 @@ async function calidadDeActa(
   }
 }
 
+/**
+ * KIT identificacion-codigo-v1 (FASE F): marcas fiduciales de esquina sobre
+ * la FOTOPROCESADA (el warp del core ya la enderezó y recortó al acta — el
+ * mismo contenido que evalúa calidadDeActa; ADAPTACIÓN documentada: el kit
+ * dice «crop ya enderezado, mismo input que calidadDeActa» y fotoProcesada
+ * ES ese crop sin duplicar lógica de recorte).
+ * Devuelve null cuando NO se pudo medir (decode fallido / sin foto): la
+ * política del repo es «sin señal honesta no se condena» — null JAMÁS marca
+ * recorte (mismo espíritu que página desconocida en faltaSeccionInferior).
+ */
+async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | null> {
+  if (!foto) return null;
+  try {
+    const img = await loadImage(foto);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    if (!canvas.width || !canvas.height) return null;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0);
+    return marcasEsquina(canvas);
+  } catch {
+    return null;
+  }
+}
+
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
 interface ResultadoGate {
   status: ActaStatus;
@@ -425,11 +462,15 @@ function fmtClasif(c: ClasificacionE14 | null): string {
   // KIT actas-vivas-paginas-v1 (FASE B): página en la traza de auditoría —
   // «pag:2/2» leída · «pag:?» DESCONOCIDA (el hueco irá al primer libre).
   const pag = c.pagina ? `${c.pagina.index}/${c.pagina.total}` : "?";
+  // KIT identificacion-codigo-v1 (Task 120): consenso del código + avisos de
+  // los cruces en la traza de auditoría (cod:crudo · av:A+B+C).
+  const cod = c.codigoUnico ? `,cod:${c.codigoUnico.crudo}` : "";
+  const av = c.avisos?.length ? `,av:${c.avisos.join("+")}` : "";
   return (
     `dep:${c.departamento?.codigo ?? "?"},mun:${c.municipio?.codigo ?? "?"},` +
     `zon:${c.zona?.codigo ?? "?"},std:${c.puesto?.codigo ?? "?"},` +
     `mesa:${c.mesa !== null ? String(c.mesa).padStart(3, "0") : "?"},` +
-    `pag:${pag},tipo:${tipo},nivel:${c.nivel}`
+    `pag:${pag},tipo:${tipo},nivel:${c.nivel}${cod}${av}`
   );
 }
 
@@ -691,11 +732,21 @@ export class RealCoreBridge implements E14Bridge {
     //    regex + divipol cacheada) y alimenta el score — el OCR y la
     //    identificación manda sobre las métricas globales del crudo.
     const clasificacion = clasificarCabecera(texto, await cargarDivipol());
+    // KIT identificacion-codigo-v1 (FASE F): marcas fiduciales de esquina
+    // sobre la procesada (crop ya enderezado). SOLO fuera de SIM — los
+    // assets de la demo no tienen las marcas calibradas y §6 del kit exige
+    // chips SIM 8.2/7.0/4.3 intactos (MISMO patrón del guard `completa`).
+    // Falta una esquina → MISMO canal del kit 118 (techo 7.9 + píldora) con
+    // el LADO en el aviso; las 4 presentes → solo traza ESQUINAS_OK.
+    const esquinas = opciones.simular ? ESQUINAS_OK : await esquinasDeActa(fotoProcesada);
+    const ladoEsquina = esquinas ? ladoEsquinaFaltante(esquinas) : null;
+    const trazaEsq = opciones.simular ? "sim" : trazaEsquinas(esquinas);
     // KIT actas-vivas-paginas-v1 (FASE C): RECORTADA por OCR de secciones —
     // P1 sin «SUMA TOTAL» / P≥2 sin «FIRMA» (faltaSeccionInferior);
     // página DESCONOCIDA nunca condena. Techo 7.9 = ADVERTENCIA (NO
-    // rechazo — conservador en campo).
-    const recortada = faltaSeccionInferior(texto, clasificacion.pagina);
+    // rechazo — conservador en campo). FASE F: OR con la señal de esquinas.
+    const recortada =
+      faltaSeccionInferior(texto, clasificacion.pagina) || ladoEsquina !== null;
     const ocrLegible = ocrTextIsValid(texto);
     // §D1 (SPEC-e14-score-ocr): señal de CONTENIDO del acta — alimenta el
     // score (techo 4.9 sin señal) y el desenlace §D3 (rechazo BAJO).
@@ -823,7 +874,7 @@ export class RealCoreBridge implements E14Bridge {
         `proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${evidenciaAsis}${evidenciaBorde} ` +
+        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaAsis}${evidenciaBorde} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtroActa} clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
@@ -838,6 +889,10 @@ export class RealCoreBridge implements E14Bridge {
       // KIT actas-vivas-paginas-v1 (FASE C): el acta lleva la bandera del
       // OCR de secciones para la píldora de REVISIÓN.
       recortada,
+      // KIT identificacion-codigo-v1 (FASE F): LADO de la esquina faltante
+      // (píldora «ACTA RECORTADA · SUP-IZQ») — null si vino SOLO del OCR
+      // de secciones o 4/4 presentes.
+      recorteLado: ladoEsquina,
       quadDetectado: quad,
       calidad,
       ocrTexto: texto,
@@ -1026,9 +1081,17 @@ export class RealCoreBridge implements E14Bridge {
     // votos necesita la página (solo P1 tiene zona) y el recorte OCR de
     // secciones se calcula de paso.
     const clasificacion = clasificarCabecera(texto, await cargarDivipol());
+    // KIT identificacion-codigo-v1 (FASE F): esquinas fiduciales sobre la
+    // procesada del recorte — MISMO canal que el escaneo (helper ÚNICO §4.4;
+    // el recorte no tiene SIM: siempre real). Falta una → techo 7.9 + píldora
+    // con el LADO; 4/4 → solo traza ESQUINAS_OK.
+    const esquinas = await esquinasDeActa(fotoProcesada);
+    const ladoEsquina = esquinas ? ladoEsquinaFaltante(esquinas) : null;
+    const trazaEsq = trazaEsquinas(esquinas);
     // KIT actas-vivas-paginas-v1 (FASE C): RECORTADA por OCR de secciones —
-    // mismas señales que el escaneo (helper ÚNICO §4.4).
-    const recortada = faltaSeccionInferior(texto, clasificacion.pagina);
+    // mismas señales que el escaneo (helper ÚNICO §4.4). FASE F: OR esquinas.
+    const recortada =
+      faltaSeccionInferior(texto, clasificacion.pagina) || ladoEsquina !== null;
     const marcadores = await medirZonaVotos(fotoProcesada);
     // KIT actas-vivas-paginas-v1 (FASE C): gate de votos SOLO P1 — la pág 2
     // (constancias) NO tiene zona de votos. Página desconocida → se mide
@@ -1101,7 +1164,7 @@ export class RealCoreBridge implements E14Bridge {
         `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${evidenciaBordeRecorte} ` +
+        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtro} clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
@@ -1125,6 +1188,10 @@ export class RealCoreBridge implements E14Bridge {
       // KIT actas-vivas-paginas-v1 (FASE C): bandera del OCR de secciones,
       // re-evaluada en cada re-proceso (la más reciente manda).
       recortada,
+      // KIT identificacion-codigo-v1 (FASE F): LADO de la esquina faltante,
+      // re-evaluado en cada re-proceso (null = vino SOLO del OCR de
+      // secciones o 4/4 presentes).
+      recorteLado: ladoEsquina,
       quadDetectado: quad,
       rotation: rotacion,
       ocrTexto: texto,
@@ -1263,6 +1330,10 @@ export class RealCoreBridge implements E14Bridge {
       /** KIT actas-vivas-paginas-v1 (FASE C): OCR de secciones detectó el
        *  recorte del papel (faltaSeccionInferior). */
       recortada?: boolean;
+      /** KIT identificacion-codigo-v1 (FASE F): LADO de la esquina fiducial
+       *  faltante (píldora «ACTA RECORTADA · SUP-IZQ») — null cuando el
+       *  recorte vino SOLO del OCR de secciones o 4/4 presentes. */
+      recorteLado?: string | null;
       quadDetectado?: Quad;
       calidad?: PageQuality;
       ocrTexto?: string;
@@ -1333,6 +1404,7 @@ export class RealCoreBridge implements E14Bridge {
       fotoProcesada: campos.fotoProcesada,
       procesadaVacia: campos.procesadaVacia,
       recortada: campos.recortada ?? false,
+      recorteLado: campos.recorteLado ?? null,
       ocrTexto: campos.ocrTexto,
       metricas: campos.calidad
         ? {

@@ -16,6 +16,8 @@
  * existente los sigue cubriendo.
  */
 import type { DivipolBase } from "./divipol";
+// KIT identificacion-codigo-v1 (FASE D.6/E): registro kit→mesa con guardas.
+import { kitEnRegistro } from "./kits";
 
 // ---------- Tipos (§3.4) ----------
 
@@ -43,6 +45,15 @@ export interface ClasificacionE14 {
    *  alimentan la señal de contenido del score (§D1) y el chip MESA parcial
    *  de REVISIÓN. Opcional: las construcciones manuales (panel) no lo llevan. */
   parciales?: { cabecera: boolean; mesa: number | null; tipo: TipoCopia | null };
+  /** KIT identificacion-codigo-v1 (FASE D.2, display): consenso del código
+   *  1D parseado con la gramática completa (codigoUnicoE14) — null si no
+   *  hay código legible o los candidatos no acuerdan. NO decide envío. */
+  codigoUnico?: CodigoUnicoE14 | null;
+  /** KIT identificacion-codigo-v1 (FASE D, display+traza): avisos de los
+   *  cruces nuevos — BANDA_CODIGO_DISCREPAN · VERPAG_CODIGO_DISCREPAN ·
+   *  MESA_POR_KIT · MESA_KIT_DISCREPAN · KIT_OTRA_RUTA ·
+   *  KIT_MESA_FUERA_RANGO · CODIGO_1D_INCONSISTENTE. */
+  avisos?: string[];
 }
 
 /** Regla de dominio E-14 (§4.5): la cabecera debe decir E-14/REGISTRADURÍA.
@@ -129,6 +140,47 @@ const ANCLA_FORM = /No\.?\s*Form\.?\s*:?\s*(\d{1,6})/i;
 // 15 dígitos · d9: 3=TRANSMISIÓN, 2=CÓNSUL/EMBAJADOR · d12-13: página ·
 // d14-15: total. Evidencia en vivo: «710003993010102» → d9=3 (T), d12-15=01/02.
 const ANCLA_CODIGO_1D = /\b(\d{15})\b/g;
+
+// ---------------------------------------------------------------------------
+// KIT identificacion-codigo-v1 (FASE C, Task 120) — gramática COMPLETA del
+// código 1D impreso. // Fuente: ANALISIS §1 (docs/research/
+// PATRON-identificacion-actas-e14.md) — gramática cerrada VERIFICADA 12/12
+// con actas oficiales del visor Registraduría:
+//   7100 | KIT(4) | TIPO(1: 2=DELEGADOS, 3=TRANSMISION) | VER(2) | PAG(2) | TOTAL(2).
+// Ejemplos reales: «710003992010102» → kit 399, DELEGADOS, ver 01, pág 1 de 2;
+// «710003993010102» → el MISMO kit 399, TRANSMISION (misma mesa, otra copia).
+// ---------------------------------------------------------------------------
+
+export interface CodigoUnicoE14 {
+  crudo: string;
+  kit: number;
+  tipoDigito: "2" | "3";
+  ver: number;
+  pagina: number;
+  total: number;
+}
+
+/** Parseo TOTAL del código de 15 dígitos (prefijo + aritmética). null si
+ *  cualquiera de las reglas falla — la llamada decide qué hacer (consenso). */
+export function codigoUnicoE14(crudo: string): CodigoUnicoE14 | null {
+  if (!/^\d{15}$/.test(crudo)) return null;
+  if (crudo.slice(0, 4) !== "7100") return null;
+  const d9 = crudo[8];
+  if (d9 !== "2" && d9 !== "3") return null;
+  const ver = parseInt(crudo.slice(9, 11), 10);
+  const pagina = parseInt(crudo.slice(11, 13), 10);
+  const total = parseInt(crudo.slice(13, 15), 10);
+  const kit = parseInt(crudo.slice(4, 8), 10);
+  if (!Number.isFinite(kit) || kit < 1) return null;
+  if (!(ver >= 1 && ver <= 99)) return null;
+  if (!(pagina >= 1 && total >= pagina && total <= 9)) return null;
+  return { crudo, kit, tipoDigito: d9, ver, pagina, total };
+}
+
+/** d9 → tipo de copia (2=CÓNSUL/EMBAJADOR/DELEGADOS · 3=TRANSMISIÓN). */
+export function tipoDeDigito(d: "2" | "3"): TipoCopia {
+  return d === "3" ? "TRANSMISION" : "DELEGADOS";
+}
 
 // BANDA (tipo copia, §D.1): señal primaria — CLAVEROS existe pero NO se archiva.
 // CORRECCIÓN con evidencia (captura del dueño 2026-10-10): el `C[OÓ]NSUL` suelto
@@ -349,22 +401,76 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
   //      Frankfurt «Ver. 01 Pag: 2 de 2» se perdía → hueco P1 mentiroso).
   //      Ninguno cuadra → null (página DESCONOCIDA — hueco al primer libre). ----
   const codigos1D = [...texto.matchAll(ANCLA_CODIGO_1D)].map((m) => m[1]);
-  const pagina =
+
+  // ---- KIT identificacion-codigo-v1 (FASE D.1): CONSENSO del código 1D —
+  //      cada candidato se parsea con la gramática COMPLETA
+  //      (codigoUnicoE14, FASE C). ≥1 parsea y TODOS acuerdan
+  //      (kit, tipoDigito, pagina, total) → consenso; difieren → consenso
+  //      null + traza CODIGO_1D_INCONSISTENTE (no se adivina cuál es el
+  //      bueno: los consumidores ven el aviso y las reglas viejas siguen). ----
+  const parseados = codigos1D
+    .map((codigo) => codigoUnicoE14(codigo))
+    .filter((c): c is CodigoUnicoE14 => c !== null);
+  let consenso: CodigoUnicoE14 | null = null;
+  if (parseados.length >= 1) {
+    const primero = parseados[0];
+    const acuerdan = parseados.every(
+      (c) =>
+        c.kit === primero.kit &&
+        c.tipoDigito === primero.tipoDigito &&
+        c.pagina === primero.pagina &&
+        c.total === primero.total,
+    );
+    if (acuerdan) consenso = primero;
+  }
+  const avisos: string[] = [];
+  if (parseados.length >= 1 && consenso === null) avisos.push("CODIGO_1D_INCONSISTENTE");
+
+  // ---- PÁGINA (§C): «Ver/Pag/de» impreso primero; respaldo d12-13/d14-15 del
+  //      código 1D impreso (ANALISIS §D.2 — «710003993010102» → 01/02 = «1 de 2»,
+  //      verificado en vivo con el OCR del dueño). KIT actas-vivas-paginas-v1
+  //      (FASE B): los candidatos se prueban EN ORDEN y gana el PRIMERO cuya
+  //      aritmética cuadre — exigir UN único código de 15 dígitos limpio era
+  //      frágil (el OCR puede arrastrar códigos remanentes y la pág real del
+  //      Frankfurt «Ver. 01 Pag: 2 de 2» se perdía → hueco P1 mentiroso).
+  //      Ninguno cuadra → null (página DESCONOCIDA — hueco al primer libre).
+  //      KIT identificacion-codigo-v1 (FASE D.4): el consenso del código 1D
+  //      cruza contra VerPag — discrepancia → gana el CÓDIGO (impreso OCR-B
+  //      más fiable: sale del mismo sistema que el barcode) + aviso; VerPag
+  //      ausente → consenso (misma validación, ahora con prefijo+kit). ----
+  const paginaVerPag =
     mVerPag && Number.isFinite(numeroLimpio(mVerPag[2]))
       ? {
           index: Math.max(1, numeroLimpio(mVerPag[1]) || 1),
           total: Math.max(1, numeroLimpio(mVerPag[3]) || 2),
         }
-      : (codigos1D
-          .map((codigo) => paginaDesdeCodigo1D(codigo))
-          .find((p) => p !== null) ?? null);
-  // ---- KIT (pie — §3.2: KIT preferido, No. Form de respaldo). ----
-  const kit =
+      : null;
+  const pagConsenso: { index: number; total: number } | null = consenso
+    ? { index: consenso.pagina, total: consenso.total }
+    : null;
+  let pagina: { index: number; total: number } | null = paginaVerPag;
+  if (paginaVerPag && pagConsenso) {
+    if (paginaVerPag.index !== pagConsenso.index || paginaVerPag.total !== pagConsenso.total) {
+      pagina = pagConsenso;
+      avisos.push("VERPAG_CODIGO_DISCREPAN");
+    }
+  } else if (pagConsenso) {
+    pagina = pagConsenso;
+  } else if (!paginaVerPag) {
+    pagina = codigos1D
+      .map((codigo) => paginaDesdeCodigo1D(codigo))
+      .find((p) => p !== null) ?? null;
+  }
+  // ---- KIT (pie — §3.2: KIT preferido, No. Form de respaldo).
+  //      KIT identificacion-codigo-v1 (FASE D.5): pie ausente + consenso →
+  //      kit del código (vacía la mayoría de SINKIT en nombreExportacion). ----
+  let kit =
     mKit && Number.isFinite(numeroLimpio(mKit[1]))
       ? numeroLimpio(mKit[1])
       : mForm && Number.isFinite(numeroLimpio(mForm[1]))
         ? numeroLimpio(mForm[1])
         : null;
+  if (kit === null && consenso) kit = consenso.kit;
 
   // ---- TIPO (banda §D.1 — orden del spec: TRANSMISIÓN primero, DELEGADOS
   //      solo si la banda de transmisión NO aparece). Respaldo §D.2: dígito 9
@@ -387,6 +493,17 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
         confianzaTipo = 0.9;
       }
     }
+  }
+
+  // ---- KIT identificacion-codigo-v1 (FASE D.3): cruce banda↔código —
+  //      banda presente Y consenso presente Y tipoDeDigito(d9) ≠ tipo de la
+  //      banda → la banda SIGUE ganando (nivel sin cambio, §6 inmutables)
+  //      pero confianza tipo 0.75 + aviso display (ANALISIS §2: regla para
+  //      discrepancia — el kit 399 de EL CAIRO trae las DOS copias de la
+  //      misma mesa con d9 distinto: 2=delegados, 3=transmisión). ----
+  if (tipo !== null && consenso && tipoDeDigito(consenso.tipoDigito) !== tipo) {
+    confianzaTipo = 0.75;
+    avisos.push("BANDA_CODIGO_DISCREPAN");
   }
 
   // ---- DEPARTAMENTO (§3.3 regla 1-2) ----
@@ -589,6 +706,42 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
       return Boolean(p && mesaLeida >= 1 && mesaLeida <= p.t);
     })();
 
+  // ---- KIT identificacion-codigo-v1 (FASE D.6 + FASE E): MESA por registro
+  //      kit→mesa (src/lib/e14/kits.ts — ANALISIS §4.2). SOLO si la cabecera
+  //      NO leyó mesa (mesaLeida null): registro kit→mesa con municipio
+  //      resuelto que coincida → mesa = registro.mesa + aviso MESA_POR_KIT.
+  //      NIVEL: NO cambia (mesaValidaLeida sigue exigiendo lectura de
+  //      cabecera → máx SUGERIDA, como hoy — §6 inmutables). Si mesaLeida
+  //      existe y el registro difiere → NO se sobreescribe; aviso
+  //      MESA_KIT_DISCREPAN. Guardas del kit §4: zona/puesto resueltos que
+  //      contradigan el registro → NO aplicar (KIT_OTRA_RUTA); con ruta
+  //      completa, 1 ≤ mesa ≤ p.t (regla 5) o no aplica
+  //      (KIT_MESA_FUERA_RANGO). ----
+  const registro = kitEnRegistro(municipio?.codigo ?? null, consenso ? consenso.kit : null);
+  let mesaFinal: number | null = Number.isFinite(mesaLeida) ? mesaLeida : null;
+  if (registro) {
+    if (mesaFinal === null) {
+      const otraRuta =
+        (zona !== null && registro.zon !== zona.codigo) ||
+        (puesto !== null && registro.std !== puesto.codigo);
+      let mesaEnRango = true;
+      if (departamento && municipio && zona && puesto) {
+        const p = base[departamento.codigo]?.m?.[municipio.codigo]?.z?.[zona.codigo]?.s?.[puesto.codigo];
+        mesaEnRango = Boolean(p && registro.mesa >= 1 && registro.mesa <= p.t);
+      }
+      if (otraRuta) {
+        avisos.push("KIT_OTRA_RUTA");
+      } else if (!mesaEnRango) {
+        avisos.push("KIT_MESA_FUERA_RANGO");
+      } else {
+        mesaFinal = registro.mesa;
+        avisos.push("MESA_POR_KIT");
+      }
+    } else if (mesaFinal !== registro.mesa) {
+      avisos.push("MESA_KIT_DISCREPAN");
+    }
+  }
+
   // ---- NIVEL (§3.4): AUTO exige dep+mun+puesto resueltos (código o ≥0.82)
   //      + mesa válida + tipo leído. Sin tipo → máx SUGERIDA (§D.4: prohibido
   //      asumir el tipo). PATRON_CABECERA matchea pero no llega a AUTO →
@@ -616,7 +769,7 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
     municipio,
     zona,
     puesto,
-    mesa: Number.isFinite(mesaLeida) ? mesaLeida : null,
+    mesa: mesaFinal,
     tipo,
     pagina,
     kit,
@@ -629,6 +782,9 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
       mesa: Number.isFinite(mesaLeida) ? mesaLeida : null,
       tipo,
     },
+    // KIT identificacion-codigo-v1 (FASE D.2): consenso + avisos (display).
+    codigoUnico: consenso,
+    avisos,
     confianzas: {
       departamento: Math.round(confDep * 100) / 100,
       municipio: Math.round(confMun * 100) / 100,
