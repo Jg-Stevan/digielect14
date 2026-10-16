@@ -14,3 +14,4 @@ Versión del motor consumida: ^0.1.0
     bun run dev      # :3001
     bunx tsc --noEmit
     bun run lint
+test: disparar primer Vercel Preview del repo nuevo (se borra tras la prueba).
