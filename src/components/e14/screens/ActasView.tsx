@@ -1,18 +1,20 @@
 "use client";
 
 /**
- * ACTAS (§7.6 / C1) — "CONTROL ACTAS E-14": puesto actual, alerta de mesas
- * incompletas y acordeón de mesas con chips de página (DELEGADOS/TRANSMISIÓN
- * × P1/P2). MESA 01 expandida por defecto; solo una a la vez.
- * Fase B (SPEC-cabecera-clasificacion §6): la lista ya NO es solo el seed
- * del modo demo — las mesas REALES se construyen de las clasificaciones
- * guardadas (título `standName · MESA {mesa}`; la foto clasificada ocupa su
- * hueco DELEGADOS|TRANSMISIÓN × pág 1/2 según «Ver/Pag/de»).
+ * ACTAS (§7.6 / C1) — "CONTROL ACTAS E-14": puesto ACTUAL (el de la ÚLTIMA
+ * clasificación archivada — regla del dueño: SOLO un puesto en pantalla) con
+ * la cantidad de mesas DIVIPOL del puesto, y acordeón con TODAS las mesas de
+ * ESE puesto (1..countTable; PENDIENTE lo no archivado). MODO SIMULACIÓN:
+ * toggle que llena la vista con el puesto demo (seed §6.4) cuando NO hay
+ * puesto real — jamás escribe en archivadas (overlay de vista). Sin datos →
+ * estado vacío honesto. La alerta «N MESAS INCOMPLETAS» quedó FUERA.
  */
-import { useMemo, useState } from "react";
-import { useE14Store } from "@/lib/e14/store";
+import { useEffect, useMemo, useState } from "react";
+import { useE14Store, type ActaArchivada, type PuestoActual } from "@/lib/e14/store";
+import { PUESTO_SIMULADO, mesasIniciales } from "@/lib/e14/seed";
+import { cargarDivipol, mesasDePuesto } from "@/lib/e14/divipol";
 import type { Mesa, MesaPagina } from "@/lib/e14/types";
-import { ChevronDownIcon, MapPinIcon, SensorsIcon, WarnTriangleIcon } from "../icons";
+import { ChevronDownIcon, MapPinIcon, SensorsIcon } from "../icons";
 
 function chipPagina(p: MesaPagina): { label: string; clases: string } {
   switch (p.estado) {
@@ -92,26 +94,62 @@ function CardMesa({ mesa, abierta, onToggle }: { mesa: Mesa; abierta: boolean; o
 }
 
 export function ActasView() {
-  const mesas = useE14Store((s) => s.mesas);
   const archivadas = useE14Store((s) => s.archivadas);
+  const puestoReal = useE14Store((s) => s.puestoActual);
+  const modoSimulacion = useE14Store((s) => s.modoSimulacion);
+  const alternarModoSimulacion = useE14Store((s) => s.alternarModoSimulacion);
   const online = useE14Store((s) => s.online);
   const alternarConexion = useE14Store((s) => s.alternarConexion);
-  const colaOffline = useE14Store((s) => s.colaOffline);
-  const [mesaAbierta, setMesaAbierta] = useState<string | null>("MESA 01");
+  const [mesaAbierta, setMesaAbierta] = useState<string | null>(null);
+  const [totalMesas, setTotalMesas] = useState<number | null>(null);
 
-  // Fase B (§6): mesas reales derivadas de las clasificaciones guardadas —
-  // cada entrada `archivadas` es una mesa con su(s) hueco(s) ocupado(s).
-  const mesasReales = useMemo<Mesa[]>(() => {
-    return Object.entries(archivadas).map(([clave, { clasificacion: c, huecos }]) => {
-      // Formato de la mesa: «Ver/Pag/de» leído (default 2 páginas).
-      const total = Math.min(2, c.pagina?.total ?? 2);
+  // Puesto mostrado: el real manda; en simulación (sin puesto real) el demo.
+  const puestoActual: PuestoActual | null = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
+  const enSimulacion = !puestoReal && modoSimulacion;
+
+  // Cantidad de mesas del puesto (countTable DIVIPOL §1). En simulación:
+  // fija 3 (mesas del mock). Base en caché de módulo → consulta instantánea.
+  useEffect(() => {
+    let vivo = true;
+    if (enSimulacion) {
+      setTotalMesas(3);
+      return () => {
+        vivo = false;
+      };
+    }
+    if (!puestoReal) {
+      setTotalMesas(null);
+      return;
+    }
+    const [dep, mun, zon, std] = puestoReal.clave.split("-");
+    cargarDivipol().then((base) => {
+      if (vivo) setTotalMesas(mesasDePuesto(base, dep, mun, zon, std));
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [enSimulacion, puestoReal]);
+
+  // Mesas DEL PUESTO ACTUAL: 1..countTable (PENDIENTE lo no archivado) +
+  // defensivamente archivadas fuera de rango. Sin base → solo las archivadas.
+  const mesasDelPuesto = useMemo<Mesa[]>(() => {
+    if (!puestoReal) return [];
+    const prefijo = `${puestoReal.clave}-`;
+    const porNumero = new Map<number, ActaArchivada>();
+    for (const [clave, entrada] of Object.entries(archivadas)) {
+      if (!clave.startsWith(prefijo)) continue;
+      const numero = Number.parseInt(clave.slice(prefijo.length), 10);
+      if (Number.isFinite(numero)) porNumero.set(numero, entrada);
+    }
+    const construir = (numero: number, entrada: ActaArchivada | undefined): Mesa => {
+      const total = Math.min(2, entrada?.clasificacion.pagina?.total ?? 2);
       const paginas: MesaPagina[] = [];
       for (const tipo of ["DELEGADOS", "TRANSMISIÓN"] as const) {
         for (let p = 1; p <= total; p += 1) {
           paginas.push({
             tipo,
             pagina: p as 1 | 2,
-            estado: huecos.some((h) => h.tipo === tipo && h.pagina === p)
+            estado: entrada?.huecos.some((h) => h.tipo === tipo && h.pagina === p)
               ? ("OK" as const)
               : ("PENDIENTE" as const),
           });
@@ -119,26 +157,29 @@ export function ActasView() {
       }
       const ocupadas = paginas.filter((p) => p.estado === "OK").length;
       return {
-        // §6: tarjeta nueva con título `standName · MESA {mesa}` (la clave
-        // DIVIPOL queda como id único de la tarjeta).
-        id: `${c.puesto?.nombre ?? "PUESTO"} · MESA ${c.mesa ?? "?"}`,
-        estado: ocupadas === paginas.length ? "COMPLETADA" : "EN_PROCESO",
+        id: `MESA ${String(numero).padStart(2, "0")}`,
+        estado:
+          ocupadas === 0 ? "PENDIENTE" : ocupadas === paginas.length ? "COMPLETADA" : "EN_PROCESO",
         progresoPct: Math.round((ocupadas / paginas.length) * 100),
         paginas,
-        clave,
       };
-    });
-  }, [archivadas]);
+    };
+    const numeros =
+      totalMesas != null
+        ? Array.from({ length: totalMesas }, (_, i) => i + 1)
+        : [...porNumero.keys()].sort((a, b) => a - b);
+    const lista = numeros.map((n) => construir(n, porNumero.get(n)));
+    for (const [n, entrada] of porNumero) {
+      if (totalMesas != null && n > totalMesas) lista.push(construir(n, entrada));
+    }
+    return lista;
+  }, [archivadas, puestoReal, totalMesas]);
 
-  const todas = useMemo(() => [...mesasReales, ...mesas], [mesasReales, mesas]);
-  const incompletas = todas.filter((m) => m.estado !== "COMPLETADA");
-  const detalleIncompletas = incompletas
-    .map((m) => `${m.id} (${m.estado === "EN_PROCESO" ? "En proceso" : "Pendiente"})`)
-    .join(", ");
+  // Vista efectiva: simulación (sin puesto real) = seed del mock; si no, real.
+  const mesasMostradas: Mesa[] = enSimulacion ? mesasIniciales() : mesasDelPuesto;
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-brand-black flex flex-col">
-      {/* Header propio de la pantalla (§8) */}
       <header className="sticky top-0 z-40 w-full bg-brand-black/95 backdrop-blur border-b border-brand-border/60 flex items-center justify-between px-4 h-14 shrink-0">
         <h1 className="font-mono text-sm font-bold tracking-widest text-brand-green uppercase">
           CONTROL ACTAS E-14
@@ -146,71 +187,72 @@ export function ActasView() {
       </header>
 
       <div className="flex-grow flex flex-col gap-6 px-4 pt-4 pb-6 max-w-md mx-auto w-full">
-        {/* Puesto actual */}
+        {/* Puesto actual — REAL (última clasificación archivada) o SIMULADO.
+            Píldoras: EN LÍNEA (siempre) + SIMULACIÓN (toggle del dueño). */}
         <section className="flex justify-between items-end border-b border-brand-border pb-2">
           <div className="flex flex-col gap-1 w-full">
-            <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">PUESTO ACTUAL</span>
+            <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">
+              PUESTO ACTUAL
+            </span>
             <h2 className="text-xl font-bold text-white uppercase tracking-wide">
-              ROMA - CONSULADO
+              {puestoActual?.titulo ?? "SIN PUESTO"}
             </h2>
             <div className="flex items-center justify-between mt-1">
               <span className="font-mono text-xs text-gray-400">
-                ITALIA &gt; ZONA 10 &gt; PUESTO 02
+                {puestoActual
+                  ? `${puestoActual.municipio} > ZONA ${puestoActual.zona} > PUESTO ${puestoActual.puesto}` +
+                    (totalMesas != null ? ` · ${totalMesas} MESAS` : "")
+                  : "ESCANEA UN ACTA PARA IDENTIFICAR EL PUESTO"}
               </span>
-              <button
-                type="button"
-                onClick={alternarConexion}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-[11px] font-bold uppercase tracking-wider ${
-                  online
-                    ? "bg-brand-greendark border-brand-green/40 text-brand-green"
-                    : "bg-amber-950/60 border-amber-500 text-amber-400"
-                }`}
-                aria-pressed={!online}
-              >
-                <SensorsIcon className={`w-3 h-3 ${online ? "text-brand-green animate-pulse-sync" : "text-amber-400"}`} />
-                {online ? "EN LÍNEA" : "OFFLINE"}
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={alternarModoSimulacion}
+                  aria-pressed={modoSimulacion}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-[11px] font-bold uppercase tracking-wider ${
+                    modoSimulacion
+                      ? "bg-amber-950/60 border-amber-500 text-amber-400"
+                      : "bg-brand-surface border-brand-border text-gray-400"
+                  }`}
+                >
+                  SIM
+                </button>
+                <button
+                  type="button"
+                  onClick={alternarConexion}
+                  aria-pressed={!online}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-[11px] font-bold uppercase tracking-wider ${
+                    online
+                      ? "bg-brand-greendark border-brand-green/40 text-brand-green"
+                      : "bg-amber-950/60 border-amber-500 text-amber-400"
+                  }`}
+                >
+                  <SensorsIcon className={`w-3 h-3 ${online ? "text-brand-green animate-pulse-sync" : "text-amber-400"}`} />
+                  {online ? "EN LÍNEA" : "OFFLINE"}
+                </button>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* Alerta de mesas incompletas */}
-        {incompletas.length > 0 && (
-          <div
-            className="bg-red-500/10 border border-red-500/40 p-2.5 flex items-center justify-between gap-2 rounded-xl"
-            role="alert"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <WarnTriangleIcon className="w-[18px] h-[18px] text-red-500 shrink-0" />
-              <div className="flex flex-col min-w-0">
-                <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-red-500">
-                  {incompletas.length} MESAS INCOMPLETAS
-                  {online ? "" : ` · ${colaOffline} EN COLA`}
-                </span>
-                <span className="font-mono text-[11px] text-gray-400 truncate">
-                  {detalleIncompletas}
-                </span>
-              </div>
-            </div>
-            <span className="font-mono text-[10px] font-bold bg-[#E52222] text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-              ATENCIÓN
-            </span>
-          </div>
-        )}
-
-        {/* Acordeón de mesas: PRIMERO las reales (Fase B §6 — "dónde va" cada
-            foto clasificada), luego el seed del modo demo. */}
+        {/* Acordeón de mesas DEL PUESTO ACTUAL (1..countTable DIVIPOL o seed
+            en simulación). La alerta «N MESAS INCOMPLETAS» quedó FUERA. */}
         <div className="flex flex-col gap-4">
-          {mesasReales.length > 0 && (
+          {puestoActual && (
             <div className="flex items-center gap-2 pt-1">
               <MapPinIcon className="w-3.5 h-3.5 text-brand-green shrink-0" />
               <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-brand-green">
-                MESAS CLASIFICADAS ({mesasReales.length})
+                {enSimulacion ? "MESAS SIMULADAS" : "MESAS DEL PUESTO"} ({totalMesas ?? mesasMostradas.length})
               </span>
               <span className="h-px flex-1 bg-brand-border" />
             </div>
           )}
-          {todas.map((mesa) => (
+          {mesasMostradas.length === 0 && (
+            <p className="font-mono text-[11px] uppercase tracking-wider text-gray-500">
+              {puestoActual ? "SIN MESAS ARCHIVADAS" : "AÚN NO HAY ACTAS ESCANEADAS"}
+            </p>
+          )}
+          {mesasMostradas.map((mesa) => (
             <CardMesa
               key={mesa.id}
               mesa={mesa}
