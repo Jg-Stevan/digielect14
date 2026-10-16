@@ -292,6 +292,21 @@ function rescatarRutaPorNombreGlobal(
 // ---------- Clasificación (§3.4) ----------
 
 /**
+ * KIT actas-vivas-paginas-v1 (FASE B): página desde el código 1D impreso
+ * (d12-13 índice · d14-15 total — ANALISIS §D.2; El Cairo 710003903010102 →
+ * 01/02, Frankfurt 710007453010202 → 02/02). Devuelve null si la aritmética
+ * no cuadra (idx ≥ 1 · tot ≥ idx · tot ≤ 9) — la página es DATO: sin señal
+ * honesta se declara DESCONOCIDA, jamás se asume P1.
+ */
+function paginaDesdeCodigo1D(codigo: string): { index: number; total: number } | null {
+  const idx = parseInt(codigo.slice(11, 13), 10);
+  const tot = parseInt(codigo.slice(13, 15), 10);
+  return Number.isFinite(idx) && Number.isFinite(tot) && idx >= 1 && tot >= idx && tot <= 9
+    ? { index: idx, total: tot }
+    : null;
+}
+
+/**
  * Clasifica la cabecera IMPRESA de un acta a partir de su OCR completo.
  * Los anclas que no matchean son normales (campo ausente → baja a
  * fuzzy/manual, §3.2): NUNCA lanza, siempre devuelve un veredicto.
@@ -327,25 +342,22 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
 
   // ---- PÁGINA (§C): «Ver/Pag/de» impreso primero; respaldo d12-13/d14-15 del
   //      código 1D impreso (ANALISIS §D.2 — «710003993010102» → 01/02 = «1 de 2»,
-  //      verificado en vivo con el OCR del dueño). Solo si hay UN único código
-  //      de 15 dígitos y la aritmética cuadra. ----
+  //      verificado en vivo con el OCR del dueño). KIT actas-vivas-paginas-v1
+  //      (FASE B): los candidatos se prueban EN ORDEN y gana el PRIMERO cuya
+  //      aritmética cuadre — exigir UN único código de 15 dígitos limpio era
+  //      frágil (el OCR puede arrastrar códigos remanentes y la pág real del
+  //      Frankfurt «Ver. 01 Pag: 2 de 2» se perdía → hueco P1 mentiroso).
+  //      Ninguno cuadra → null (página DESCONOCIDA — hueco al primer libre). ----
   const codigos1D = [...texto.matchAll(ANCLA_CODIGO_1D)].map((m) => m[1]);
-  const codigo1DUnico = codigos1D.length === 1 ? codigos1D[0] : null;
   const pagina =
     mVerPag && Number.isFinite(numeroLimpio(mVerPag[2]))
       ? {
           index: Math.max(1, numeroLimpio(mVerPag[1]) || 1),
           total: Math.max(1, numeroLimpio(mVerPag[3]) || 2),
         }
-      : codigo1DUnico
-        ? (() => {
-            const idx = parseInt(codigo1DUnico.slice(11, 13), 10);
-            const tot = parseInt(codigo1DUnico.slice(13, 15), 10);
-            return Number.isFinite(idx) && Number.isFinite(tot) && idx >= 1 && tot >= idx && tot <= 9
-              ? { index: idx, total: tot }
-              : null;
-          })()
-        : null;
+      : (codigos1D
+          .map((codigo) => paginaDesdeCodigo1D(codigo))
+          .find((p) => p !== null) ?? null);
   // ---- KIT (pie — §3.2: KIT preferido, No. Form de respaldo). ----
   const kit =
     mKit && Number.isFinite(numeroLimpio(mKit[1]))
@@ -665,6 +677,25 @@ export function nombreExportacion(c: ClasificacionE14): string | null {
   const tipo = c.tipo; // ASCII: TRANSMISION/DELEGADOS
   const pag = c.pagina?.index ?? 1;
   return `E14_${kit}_${clave.replaceAll("-", "_")}_${tipo}-${pag}`;
+}
+
+/**
+ * KIT actas-vivas-paginas-v1 (FASE C): RECORTADA por OCR de secciones —
+ * la captura real del dueño salió con la parte inferior pisada (firmas al
+ * filo) SIN advertencia específica: un recorte limpio por una franja blanca
+ * pasaba (solo el guard geométrico de tinta al filo y el escudo de fondo
+ * atrapaban casos). Señales por página (la página es DATO — §C):
+ *   P1 exige «SUMA TOTAL» (el pie de la pág 1) · P≥2 exige «FIRMA».
+ * Página DESCONOCIDA (null) → false SIEMPRE (conservador: no condena por
+ * OCR débil).
+ */
+export function faltaSeccionInferior(
+  texto: string,
+  pagina: { index: number; total: number } | null,
+): boolean {
+  if (pagina == null) return false;
+  if (pagina.index === 1) return !/SUMA\s*TOTAL/i.test(texto);
+  return !/FIRMA/i.test(texto);
 }
 
 // ---------- Título y ubicación reales (SPEC-titulo-ubicacion §1) ----------
