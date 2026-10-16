@@ -53,6 +53,7 @@ import {
   faltaSeccionInferior,
   PATRON_CABECERA,
   tituloYUbicacionDe,
+  tipoDeBanda,
   type ClasificacionE14,
 } from "./clasificador";
 import { procesadaVaciaDataUrl } from "./image-utils";
@@ -448,6 +449,48 @@ async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | 
   }
 }
 
+/**
+ * KIT consenso-frankfurt-v1 (FASE 4, §5): segunda pasada OCR DIRIGIDA del
+ * sello de la banda — el sello TRANSMISIÓN es BLANCO-sobre-negro y tesseract
+ * (psm6, página completa) NO lo lee: 0 menciones en la captura de Frankfurt
+ * 746 (§0-F4). Recorta la franja de la banda (x 22-88% · y 3-13% — la banda
+ * vive bajo el encabezado), la INVIERTE (255-lum → tinta oscura sobre claro,
+ * la geometría del sello se vuelve legible) y la escala ×2 antes del OCR
+ * del core. Corre UNA sola vez y SOLO cuando `tipoDeBanda(texto)` es null
+ * (presupuesto ~1-3 s, dentro del TIMEOUT_MS de 15 s del core — si venció,
+ * se descarta igual). NO re-OCR del acta completa. Fallo → "" (sin banda
+ * nueva: la cascada sigue con el d9 del consenso — nunca condena).
+ */
+async function ocrBanda(fotoProcesada: string): Promise<string> {
+  try {
+    const img = await loadImage(fotoProcesada);
+    const W = img.naturalWidth;
+    const H = img.naturalHeight;
+    if (!W || !H) return "";
+    const x0 = Math.round(W * 0.22);
+    const y0 = Math.round(H * 0.03);
+    const w = Math.max(1, Math.round(W * 0.88) - x0);
+    const h = Math.max(1, Math.round(H * 0.13) - y0);
+    const canvas = document.createElement("canvas");
+    canvas.width = w * 2; // escala ×2 (§5)
+    canvas.height = h * 2;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return "";
+    ctx.drawImage(img, x0, y0, w, h, 0, 0, w * 2, h * 2);
+    const d = ctx.getImageData(0, 0, w * 2, h * 2);
+    // INVERTIDO (§5): el sello es blanco-sobre-negro → 255-lum por canal.
+    for (let i = 0; i < d.data.length; i += 4) {
+      d.data[i] = 255 - d.data[i];
+      d.data[i + 1] = 255 - d.data[i + 1];
+      d.data[i + 2] = 255 - d.data[i + 2];
+    }
+    ctx.putImageData(d, 0, 0);
+    return await requestOcr(canvas.toDataURL("image/jpeg", 0.9), () => {});
+  } catch {
+    return ""; // fallo de decode/canvas/OCR → sin banda nueva (nunca condena)
+  }
+}
+
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
 interface ResultadoGate {
   status: ActaStatus;
@@ -685,6 +728,17 @@ export class RealCoreBridge implements E14Bridge {
       filtroActa = "bw";
       motor = resultado.precision?.engine ?? "canvas";
     }
+    // KIT consenso-frankfurt-v1 (FASE 2, §3): esquinas fiduciales ANTES del
+    // guard — la marca presente es PRUEBA POSITIVA de que el papel está
+    // entero dentro del cuadro (ANALISIS §5.1) → verificarCompletitud la
+    // consulta y perdona la sospecha geométrica (§0-F2: Frankfurt 746 al
+    // filo condenaba INCOMPLETA 6.4 falso). UNA sola medición (helper único
+    // esquinasDeActa — §4.4); SOLO fuera de SIM (assets de la demo sin
+    // marcas calibradas — chips 8.2/7.0/4.3 intactos, MISMO guard del kit
+    // identificacion-codigo-v1). <80×120 → null (n/d — jamás condena).
+    const esquinas = opciones.simular ? ESQUINAS_OK : await esquinasDeActa(fotoProcesada);
+    const ladoEsquina = esquinas ? ladoEsquinaFaltante(esquinas) : null;
+    const trazaEsq = opciones.simular ? "sim" : trazaEsquinas(esquinas);
     // GUARD-BORDE Rev. 2 (§3b): la verificación de completitud corre DESPUÉS
     // del paso 3 — fotoProcesada ya existe (la tinta al filo se mide SOBRE el
     // recorte, no sobre la foto cruda). Helper ÚNICO (D3/AC11). El análisis
@@ -693,9 +747,11 @@ export class RealCoreBridge implements E14Bridge {
     // (presupuesto propio <30 ms p95 — §3d/AC9). Con `simular` NO corre
     // (completa = true forzado — AC7). Nota sinRecorte: SOLO alcanzable desde
     // la rama SIMULACIÓN (AC15 score-ocr) → también cubierto por el skip.
+    // FASE 2 (§3): recibe las esquinas — 4 fiduciales presentes → la
+    // sospecha geométrica NO condena (papel entero demostrado).
     const verificacion: Promise<ResultadoCompletitud> | null = opciones.simular
       ? null
-      : verificarCompletitud(quad, fotoProcesada);
+      : verificarCompletitud(quad, fotoProcesada, esquinas);
     // §D4 (SPEC-e14-score-ocr): visor nunca vacío — tinta de la PROCESADA
     // (muestreo 64×64): un warp sin tinta (quad degenerado sobre superficie
     // lisa → blanco puro del B/N adaptativo) marca el acta para que REVISIÓN
@@ -716,11 +772,21 @@ export class RealCoreBridge implements E14Bridge {
 
     // 5) OCR sobre la PROCESADA (spa+eng local; progreso real 0→1).
     const tOcr = performance.now();
-    const texto = await requestOcr(fotoProcesada, (p) => {
+    let texto = await requestOcr(fotoProcesada, (p) => {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     });
     ms.ocr = performance.now() - tOcr;
     emitir({ etapa: "OCR", progreso: 1 });
+    // KIT consenso-frankfurt-v1 (FASE 4, §5): banda dirigida — si el OCR
+    // completo no leyó la banda (sello blanco-sobre-negro, §0-F4), SEGUNDA
+    // pasada OCR del crop invertido ×2. UNA sola vez, ANTES de
+    // clasificarCabecera; el tiempo se suma a ms.ocr (es OCR). SIM: OMITIDO
+    // (AC6 — cero llamadas a ocrBanda en SIM; guard opciones.simular).
+    if (!opciones.simular && tipoDeBanda(texto) === null) {
+      const tBanda = performance.now();
+      texto += "\n" + (await ocrBanda(fotoProcesada));
+      ms.ocr += performance.now() - tBanda;
+    }
     ms.total = performance.now() - inicio;
 
     // (motor/filtroActa calculados en el paso 3 — §D8.3: as-is → "canvas"/"original")
@@ -732,15 +798,8 @@ export class RealCoreBridge implements E14Bridge {
     //    regex + divipol cacheada) y alimenta el score — el OCR y la
     //    identificación manda sobre las métricas globales del crudo.
     const clasificacion = clasificarCabecera(texto, await cargarDivipol());
-    // KIT identificacion-codigo-v1 (FASE F): marcas fiduciales de esquina
-    // sobre la procesada (crop ya enderezado). SOLO fuera de SIM — los
-    // assets de la demo no tienen las marcas calibradas y §6 del kit exige
-    // chips SIM 8.2/7.0/4.3 intactos (MISMO patrón del guard `completa`).
-    // Falta una esquina → MISMO canal del kit 118 (techo 7.9 + píldora) con
-    // el LADO en el aviso; las 4 presentes → solo traza ESQUINAS_OK.
-    const esquinas = opciones.simular ? ESQUINAS_OK : await esquinasDeActa(fotoProcesada);
-    const ladoEsquina = esquinas ? ladoEsquinaFaltante(esquinas) : null;
-    const trazaEsq = opciones.simular ? "sim" : trazaEsquinas(esquinas);
+    // (KIT consenso-frankfurt-v1 FASE 2: las esquinas se miden ANTES del
+    // guard — arriba; aquí solo consume ladoEsquina/trazaEsq.)
     // KIT actas-vivas-paginas-v1 (FASE C): RECORTADA por OCR de secciones —
     // P1 sin «SUMA TOTAL» / P≥2 sin «FIRMA» (faltaSeccionInferior);
     // página DESCONOCIDA nunca condena. Techo 7.9 = ADVERTENCIA (NO
@@ -1048,11 +1107,18 @@ export class RealCoreBridge implements E14Bridge {
 
     // 3) OCR sobre la PROCESADA + gate §4.2 (progreso real 0→1).
     const tOcr = performance.now();
-    const texto = await requestOcr(fotoProcesada, (p) => {
+    let texto = await requestOcr(fotoProcesada, (p) => {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     });
     ms.ocr = performance.now() - tOcr;
     emitir({ etapa: "OCR", progreso: 1 });
+    // KIT consenso-frankfurt-v1 (FASE 4, §5): banda dirigida — MISMO helper
+    // del escaneo (§4.4); el recorte no tiene SIM (siempre real).
+    if (tipoDeBanda(texto) === null) {
+      const tBanda = performance.now();
+      texto += "\n" + (await ocrBanda(fotoProcesada));
+      ms.ocr += performance.now() - tBanda;
+    }
     ms.total = performance.now() - inicio;
 
     const motor = resultado.precision?.engine ?? "canvas";
@@ -1069,7 +1135,15 @@ export class RealCoreBridge implements E14Bridge {
     // de bypass: si el papel está cortado EN VERDAD (tinta al filo), ningún
     // crop lo completa; si el acta SÍ está entera (detección falló por
     // sombra), el recorte manual la rescata legítimamente.
-    const verificacion = await verificarCompletitud(quad, fotoProcesada);
+    // KIT consenso-frankfurt-v1 (FASE 2, §3): esquinas ANTES del guard — la
+    // marca presente es PRUEBA POSITIVA de papel entero (ANALISIS §5.1) →
+    // verificarCompletitud la consulta y perdona la sospecha geométrica
+    // (§0-F2). UNA sola medición (helper único esquinasDeActa — §4.4).
+    // <80×120 → null (n/d — jamás condena).
+    const esquinas = await esquinasDeActa(fotoProcesada);
+    const ladoEsquina = esquinas ? ladoEsquinaFaltante(esquinas) : null;
+    const trazaEsq = trazaEsquinas(esquinas);
+    const verificacion = await verificarCompletitud(quad, fotoProcesada, esquinas);
     const completa = verificacion.completa;
     // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) en el recorte — mismo
     // marcador obligatorio y MISMO criterio que el escaneo (helper ÚNICO,
@@ -1081,13 +1155,8 @@ export class RealCoreBridge implements E14Bridge {
     // votos necesita la página (solo P1 tiene zona) y el recorte OCR de
     // secciones se calcula de paso.
     const clasificacion = clasificarCabecera(texto, await cargarDivipol());
-    // KIT identificacion-codigo-v1 (FASE F): esquinas fiduciales sobre la
-    // procesada del recorte — MISMO canal que el escaneo (helper ÚNICO §4.4;
-    // el recorte no tiene SIM: siempre real). Falta una → techo 7.9 + píldora
-    // con el LADO; 4/4 → solo traza ESQUINAS_OK.
-    const esquinas = await esquinasDeActa(fotoProcesada);
-    const ladoEsquina = esquinas ? ladoEsquinaFaltante(esquinas) : null;
-    const trazaEsq = trazaEsquinas(esquinas);
+    // (KIT consenso-frankfurt-v1 FASE 2: las esquinas se miden ANTES del
+    // guard — arriba; aquí solo consume ladoEsquina/trazaEsq.)
     // KIT actas-vivas-paginas-v1 (FASE C): RECORTADA por OCR de secciones —
     // mismas señales que el escaneo (helper ÚNICO §4.4). FASE F: OR esquinas.
     const recortada =

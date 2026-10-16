@@ -29,7 +29,11 @@ import type { PageFilter } from "@jg-stevan/scanner-core/types";
 // dataUrlToBlob NO existe en el tarball (la instrucción la citaba; se porta
 // como helper local de 5 líneas con fetch → blob, cero dependencias nuevas).
 import { downloadBlob } from "@jg-stevan/scanner-core/pdf-export";
-import { nombreExportacion, tipoDeDigito } from "@/lib/e14/clasificador";
+import {
+  nombreExportacion,
+  tipoDeBanda,
+  type TipoCopia,
+} from "@/lib/e14/clasificador";
 import { QuadEditor } from "../QuadEditor";
 import { ZoomableVisor } from "@jg-stevan/scanner-ui";
 import { PanelClasificacion } from "../PanelClasificacion";
@@ -108,7 +112,12 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
 
 export function ReviewView() {
   const acta = useE14Store((s) => s.actaActual);
-  const paginaObjetivo = useE14Store((s) => s.paginaObjetivo);
+  // KIT consenso-frankfurt-v1 (FASE 5, §6.1): el selector paginaObjetivo fue
+  // RETIRADO de esta pantalla — PROHIBIDO paginaObjetivo?.tipo (era el tipo
+  // del HUECO donde cayó archivada la acta, no el del acta: el «DELEGADOS»
+  // falso del dueño con Frankfurt 746). El chip muestra solo señales REALES
+  // del acta (clasifAuto → tipoDeBanda → «---»). El store no se toca: otras
+  // pantallas siguen usando su propio selector.
   const recortando = useE14Store((s) => s.recortando);
   const revelando = useE14Store((s) => s.revelando);
   const aplicarRecorte = useE14Store((s) => s.aplicarRecorte);
@@ -182,9 +191,15 @@ export function ReviewView() {
   // Fase B (§6 — coherencia de display): clasificación AUTO resuelta → la
   // REVISIÓN muestra la ubicación REAL (tipo/mesa/página del acta).
   const clasifAuto = acta.clasificacion?.nivel === "AUTO" ? acta.clasificacion : null;
-  const tipo = clasifAuto?.tipo
-    ? (clasifAuto.tipo === "TRANSMISION" ? "TRANSMISIÓN" : "DELEGADOS")
-    : (paginaObjetivo?.tipo ?? "TRANSMISIÓN");
+  // KIT consenso-frankfurt-v1 (FASE 5, §6.1): chip de tipo HONESTO —
+  // PROHIBIDO paginaObjetivo?.tipo (era el tipo del HUECO donde CAYÓ
+  // archivada la acta, no el del acta: el «DELEGADOS» falso del dueño con
+  // Frankfurt 746). Sin clasifAuto → tipoDeBanda sobre el OCR; tampoco →
+  // «---» (mismo estilo que MESA ---).
+  const tipoBanda = tipoDeBanda(acta.ocrTexto ?? "");
+  const tipoTexto = (t: TipoCopia | null | undefined): string =>
+    t ? (t === "TRANSMISION" ? "TRANSMISIÓN" : "DELEGADOS") : "---";
+  const tipo = clasifAuto?.tipo ? tipoTexto(clasifAuto.tipo) : tipoTexto(tipoBanda);
   // KIT actas-vivas-paginas-v1 (FASE B): paginaIdentificada exige página
   // LEÍDA — clasificación sin página (acta.pagina == null) → chip «PÁG -
   // DE -» (honesto; el default P1 mintió con la pág 2 de Frankfurt, bug
@@ -449,7 +464,7 @@ export function ReviewView() {
         {/* Chips de estado (mock §3.2.3 — grid-cols-3, activo sólido). */}
         <div className="grid grid-cols-3 gap-2 w-full select-none">
           <Chip tone={toneEstado} solid>
-            {hayClasificacion ? tipo : "---"}
+            {tipo}
           </Chip>
           <Chip tone="neutral">
             {clasifAuto ? (
@@ -475,32 +490,41 @@ export function ReviewView() {
           </Chip>
         </div>
 
-        {/* KIT identificacion-codigo-v1 (Task 120, FASE D.2): chip del CÓDIGO
-            1D parseado (gramática completa 12/12 — «KIT 745 · TRANSMISION ·
-            2/2», QA G-A) y chip MESA POR KIT cuando la mesa vino del registro
-            kit→mesa (QA G-C). Solo se montan con señal — sin ruido visual. */}
+        {/* KIT consenso-frankfurt-v1 (Task 122, FASE 5 §6.2): LÍNEA DE ID —
+            kit FINAL (pie/código/registro, §4.2) + tipo leído + página +
+            FUENTE real de la procedencia. Sin kit → «KIT ---» (nunca
+            inventar); tipo/página desconocidas → «---»/«-/-». El chip
+            MESA · POR KIT se conserva (§6.3: todo lo demás SIN CAMBIO). */}
         {(() => {
-          const cu = acta.clasificacion?.codigoUnico ?? null;
-          const mesaPorKit = acta.clasificacion?.avisos?.includes("MESA_POR_KIT") ?? false;
-          if (!cu && !mesaPorKit) return null;
+          const cl = acta.clasificacion;
+          const kitTxt = cl?.kit != null ? `KIT ${cl.kit}` : "KIT ---";
+          const tipoId = cl?.tipo ? tipoTexto(cl.tipo) : tipoTexto(tipoBanda);
+          // Misma HONESTIDAD que el chip PÁG (§6.3): sin clasificación la
+          // página mostrada sería la del HUECO asignado, no la LEÍDA → "-/-".
+          const pagId = paginaIdentificada ? { index: paginaIdx, total: paginaTotal } : null;
+          const fuenteTxt =
+            cl?.kitFuente === "PIE"
+              ? "PIE"
+              : cl?.kitFuente === "CODIGO"
+                ? "CÓDIGO"
+                : cl?.kitFuente === "REGISTRO"
+                  ? "REGISTRO"
+                  : "---";
+          const mesaPorKit = cl?.avisos?.includes("MESA_POR_KIT") ?? false;
           return (
-            <div
-              className={`${cu && mesaPorKit ? "grid-cols-2" : "grid-cols-1"} grid gap-2 w-full select-none`}
-            >
-              {cu && (
-                <Chip tone="neutral">
-                  {`KIT ${cu.kit} · ${tipoDeDigito(cu.tipoDigito)} · ${cu.pagina}/${cu.total}`}
-                  <span
-                    className="ml-1 text-[9px] font-bold tracking-[0.1em] text-gray-400"
-                    title="Código 1D impreso bajo el barcode — gramática 7100|KIT|T|VER|PAG|TOT"
-                  >
-                    · CÓDIGO
-                  </span>
-                </Chip>
-              )}
+            <div className="grid gap-2 w-full select-none">
+              <Chip tone="neutral">
+                {`${kitTxt} · ${tipoId} · ${pagId ? `${pagId.index}/${pagId.total}` : "-/-"}`}
+                <span
+                  className="ml-1 text-[9px] font-bold tracking-[0.1em] text-gray-400"
+                  title="Procedencia del KIT: pie impreso (PIE) · código 1D (CÓDIGO) · registro KIT→mesa (REGISTRO)"
+                >
+                  {`· ${fuenteTxt}`}
+                </span>
+              </Chip>
               {mesaPorKit && (
                 <Chip tone="neutral">
-                  {`MESA ${String(acta.clasificacion?.mesa ?? 0).padStart(3, "0")}`}
+                  {`MESA ${String(cl?.mesa ?? 0).padStart(3, "0")}`}
                   <span
                     className="ml-1 text-[9px] font-bold tracking-[0.1em] text-gray-400"
                     title="Mesa recuperada del registro KIT→mesa (cabecera sin MESA legible)"

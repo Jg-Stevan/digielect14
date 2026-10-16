@@ -17,7 +17,9 @@
  */
 import type { DivipolBase } from "./divipol";
 // KIT identificacion-codigo-v1 (FASE D.6/E): registro kit→mesa con guardas.
-import { kitEnRegistro } from "./kits";
+// KIT consenso-frankfurt-v1 (FASE 3, §4.2): REGISTRO_KITS para el fuzzy a
+// distancia de edición 1 del consenso pie/código.
+import { kitEnRegistro, REGISTRO_KITS } from "./kits";
 
 // ---------- Tipos (§3.4) ----------
 
@@ -50,10 +52,18 @@ export interface ClasificacionE14 {
    *  hay código legible o los candidatos no acuerdan. NO decide envío. */
   codigoUnico?: CodigoUnicoE14 | null;
   /** KIT identificacion-codigo-v1 (FASE D, display+traza): avisos de los
-   *  cruces nuevos — BANDA_CODIGO_DISCREPAN · VERPAG_CODIGO_DISCREPAN ·
-   *  MESA_POR_KIT · MESA_KIT_DISCREPAN · KIT_OTRA_RUTA ·
-   *  KIT_MESA_FUERA_RANGO · CODIGO_1D_INCONSISTENTE. */
+   *  cruces — BANDA_CODIGO_DISCREPAN · VERPAG_CODIGO_DISCREPAN ·
+   *  MESA_POR_KIT · KIT_OTRA_RUTA · KIT_MESA_FUERA_RANGO ·
+   *  CODIGO_1D_INCONSISTENTE. KIT consenso-frankfurt-v1 (FASE 3): NUEVOS —
+   *  PIE_CODIGO_DISCREPAN · KIT_CODIGO_CORREGIDO · MESA_FUERA_RANGO ·
+   *  MESA_REGISTRO_DISCREPAN (reemplaza a MESA_KIT_DISCREPAN: mismo
+   *  disparador + baja AUTO→SUGERIDA — §4.3.2). */
   avisos?: string[];
+  /** KIT consenso-frankfurt-v1 (FASE 3, §4.2 + FASE 5): procedencia REAL del
+   *  kit ganador tras el arbitraje pie/código — el pie impreso (PIE), el
+   *  consenso del código 1D (CODIGO) o el registro a distancia de edición 1
+   *  (REGISTRO). null sin kit. Display-only (chip de ID de REVISIÓN). */
+  kitFuente?: "PIE" | "CODIGO" | "REGISTRO" | null;
 }
 
 /** Regla de dominio E-14 (§4.5): la cabecera debe decir E-14/REGISTRADURÍA.
@@ -182,6 +192,34 @@ export function tipoDeDigito(d: "2" | "3"): TipoCopia {
   return d === "3" ? "TRANSMISION" : "DELEGADOS";
 }
 
+/** Todas las subcadenas de largo exacto n (§4.1 del kit consenso-frankfurt). */
+function ventanasDe(s: string, n: number): string[] {
+  const out: string[] = [];
+  for (let i = 0; i + n <= s.length; i += 1) out.push(s.slice(i, i + n));
+  return out;
+}
+
+/**
+ * KIT consenso-frankfurt-v1 (FASE 3, §4.1): candidatos del código 1D
+ * tolerantes al «7» impreso como «/» y a espacios.
+ * // Fuente: §0-F4 — Frankfurt «/1000/453010202» = 7100|0745|3|01|02|02:
+ * la fuente de puntos del impreso renderiza el «7» como «/» y el OCR mete
+ * espacios («71009 453010202»), ANCLA_CODIGO_1D (\d{15}, QUE QUEDA como
+ * está — §7) nunca matchea → consenso null. Genera candidatos de 15
+ * caracteres sobre secuencias pegadas de [\d/ ] SIN espacios y con
+ * «/»→«7». Los candidatos puros \d{15} ya los cubre ANCLA_CODIGO_1D.
+ */
+export function candidatosCodigo1D(texto: string): string[] {
+  const out = new Set<string>();
+  for (const m of texto.matchAll(/[0-9/][0-9/ ]{13,19}[0-9/]/g)) {
+    const pegado = m[0].replace(/ /g, "");
+    for (const w of ventanasDe(pegado, 15)) {
+      if (w.includes("/")) out.add(w.replaceAll("/", "7"));
+    }
+  }
+  return [...out];
+}
+
 // BANDA (tipo copia, §D.1): señal primaria — CLAVEROS existe pero NO se archiva.
 // CORRECCIÓN con evidencia (captura del dueño 2026-10-10): el `C[OÓ]NSUL` suelto
 // matcheaba la caja impresa «CONSULADO: 88 - CONSULADOS» (presente en TODAS las
@@ -190,6 +228,19 @@ export function tipoDeDigito(d: "2" | "3"): TipoCopia {
 // EMBAJADOR ya la cubre sin colisionar con la caja del encabezado.
 const BANDA_TRANSMISION = /TRANSMISI[OÓ]N/;
 const BANDA_DELEGADOS = /EMBAJADOR|DELEGADOS/;
+
+/**
+ * KIT consenso-frankfurt-v1 (FASE 4, §5.1): cascada de banda EXTRAÍDA —
+ * TRANSMISIÓN primero, DELEGADOS después (mismos regex BANDA_TRANSMISION /
+ * BANDA_DELEGADOS byte a byte). El bridge la consulta ANTES de
+ * clasificarCabecera para decidir la segunda pasada OCR dirigida del sello
+ * (§5: solo cuando la banda no se leyó).
+ */
+export function tipoDeBanda(texto: string): TipoCopia | null {
+  if (BANDA_TRANSMISION.test(texto)) return "TRANSMISION";
+  if (BANDA_DELEGADOS.test(texto)) return "DELEGADOS";
+  return null;
+}
 
 // ---------- Umbrales (§3.3) ----------
 
@@ -359,6 +410,42 @@ function paginaDesdeCodigo1D(codigo: string): { index: number; total: number } |
 }
 
 /**
+ * KIT consenso-frankfurt-v1 (FASE 3, §4.2): kit del MISMO municipio a
+ * «distancia de edición 1» — misma longitud y los dígitos que difieren
+ * corresponden a UNA sola sustitución (un par leído→real constante).
+ * // Fuente: §0-F3 — El Cairo impreso real 710003993010102, el OCR leyó
+ * 710003003010102: los DOS 9 del kit se leyen 0 → 300↔399 es UNA edición
+ * (el ejemplo del kit); un dígito distinto es el caso mínimo. 2+ pares
+ * distintos o longitudes distintas → null (ambiguo: NO se inventa).
+ * Helper local ~8 líneas — PROHIBIDO levenshtein general o dependencias
+ * (§4.2). Si hay 2+ kits candidatos → null (sin inventar).
+ */
+function kitADistancia1(mun: string | null, kit: number): number | null {
+  if (!mun || !Number.isFinite(kit)) return null;
+  const leido = String(kit);
+  let unico: number | null = null;
+  for (const r of REGISTRO_KITS) {
+    if (r.mun !== mun || r.kit === kit) continue;
+    const real = String(r.kit);
+    if (real.length !== leido.length) continue;
+    let par: [string, string] | null = null; // [leído, real]
+    let unaEdicion = true;
+    for (let i = 0; i < leido.length; i += 1) {
+      if (leido[i] === real[i]) continue;
+      if (par === null) par = [leido[i], real[i]];
+      else if (par[0] !== leido[i] || par[1] !== real[i]) {
+        unaEdicion = false;
+        break;
+      }
+    }
+    if (!unaEdicion || par === null) continue;
+    if (unico !== null && unico !== r.kit) return null; // 2+ candidatos
+    unico = r.kit;
+  }
+  return unico;
+}
+
+/**
  * Clasifica la cabecera IMPRESA de un acta a partir de su OCR completo.
  * Los anclas que no matchean son normales (campo ausente → baja a
  * fuzzy/manual, §3.2): NUNCA lanza, siempre devuelve un veredicto.
@@ -400,7 +487,12 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
   //      frágil (el OCR puede arrastrar códigos remanentes y la pág real del
   //      Frankfurt «Ver. 01 Pag: 2 de 2» se perdía → hueco P1 mentiroso).
   //      Ninguno cuadra → null (página DESCONOCIDA — hueco al primer libre). ----
-  const codigos1D = [...texto.matchAll(ANCLA_CODIGO_1D)].map((m) => m[1]);
+  const codigos1DPuros = [...texto.matchAll(ANCLA_CODIGO_1D)].map((m) => m[1]);
+  // KIT consenso-frankfurt-v1 (FASE 3, §4.1): la lista del consenso pasa a
+  // ser la UNIÓN de ANCLA_CODIGO_1D + candidatosCodigo1D (Set, primero los
+  // puros) — ANCLA_CODIGO_1D queda byte a byte (§7): se AÑADEN candidatos,
+  // no se relajan reglas. El consenso de abajo (todos acuerdan) SIN CAMBIO.
+  const codigos1D = [...new Set([...codigos1DPuros, ...candidatosCodigo1D(texto)])];
 
   // ---- KIT identificacion-codigo-v1 (FASE D.1): CONSENSO del código 1D —
   //      cada candidato se parsea con la gramática COMPLETA
@@ -461,28 +553,28 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
       .map((codigo) => paginaDesdeCodigo1D(codigo))
       .find((p) => p !== null) ?? null;
   }
-  // ---- KIT (pie — §3.2: KIT preferido, No. Form de respaldo).
-  //      KIT identificacion-codigo-v1 (FASE D.5): pie ausente + consenso →
-  //      kit del código (vacía la mayoría de SINKIT en nombreExportacion). ----
-  let kit =
+  // ---- KIT (pie — §3.2): el ARBITRAJE pie↔código↔registro vive ABAJO
+  //      (KIT consenso-frankfurt-v1, FASE 3 §4.2) — necesita el municipio
+  //      FINAL (cascada + rescate 4b) para consultar el registro. Aquí solo
+  //      se capturan las lecturas crudas del pie. ----
+  const mKitPie =
     mKit && Number.isFinite(numeroLimpio(mKit[1]))
       ? numeroLimpio(mKit[1])
       : mForm && Number.isFinite(numeroLimpio(mForm[1]))
         ? numeroLimpio(mForm[1])
         : null;
-  if (kit === null && consenso) kit = consenso.kit;
 
   // ---- TIPO (banda §D.1 — orden del spec: TRANSMISIÓN primero, DELEGADOS
-  //      solo si la banda de transmisión NO aparece). Respaldo §D.2: dígito 9
-  //      del código 1D impreso (3=TRANSMISIÓN, 2=DELEGADOS) SOLO si la banda
-  //      no se leyó; confianza 0.9 (señal impresa verificada 8/8, §F). ----
+  //      solo si la banda de transmisión NO aparece — FASE 4 §5.1: cascada
+  //      extraída a tipoDeBanda, mismos regex byte a byte). Respaldo §D.2:
+  //      dígito 9 del código 1D impreso (3=TRANSMISIÓN, 2=DELEGADOS) SOLO si
+  //      la banda no se leyó; confianza 0.9 (señal impresa verificada 8/8,
+  //      §F). ----
   let tipo: TipoCopia | null = null;
   let confianzaTipo = 0;
-  if (BANDA_TRANSMISION.test(texto)) {
-    tipo = "TRANSMISION";
-    confianzaTipo = 1;
-  } else if (BANDA_DELEGADOS.test(texto)) {
-    tipo = "DELEGADOS";
+  const banda = tipoDeBanda(texto);
+  if (banda !== null) {
+    tipo = banda;
     confianzaTipo = 1;
   } else {
     const codigos = [...texto.matchAll(ANCLA_CODIGO_1D)].map((m) => m[1]);
@@ -695,30 +787,97 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
   }
 
   // ---- MESA (regla 5: validar 1 ≤ mesa ≤ countTable; si falla → sugerida
-  //      con aviso, NUNCA descartar el número leído). ----
+  //      con aviso, NUNCA descartar el número leído) — FASE 3 §4.3.1: el
+  //      guard de rango AHORA SÍ descarta la lectura IMPOSIBLE (fuera de
+  //      1..p.t), porque «mesaLeida pasa a null» — la señal la da el conteo
+  //      embarcado. // Fuente: §0-F5 — public/e14/divipol.json trae p.t por
+  //      puesto: El Cairo puesto 02 tiene t:1 → una lectura «MESA: 004» es
+  //      IMPOSIBLE (tesseract leyó MESA 001→004 en la captura cruda del
+  //      dueño). Sin ruta completa no hay p.t → el guard no aplica. ----
   const rutaCompleta = Boolean(departamento && municipio && zona && puesto);
-  const mesaValidaLeida =
-    mesaLeida !== null &&
-    Number.isFinite(mesaLeida) &&
-    rutaCompleta &&
-    (() => {
-      const p = base[departamento!.codigo]?.m?.[municipio!.codigo]?.z?.[zona!.codigo]?.s?.[puesto!.codigo];
-      return Boolean(p && mesaLeida >= 1 && mesaLeida <= p.t);
-    })();
+  const pRuta = rutaCompleta
+    ? base[departamento!.codigo]?.m?.[municipio!.codigo]?.z?.[zona!.codigo]?.s?.[puesto!.codigo]
+    : undefined;
+  let mesaLeidaEfectiva: number | null =
+    mesaLeida !== null && Number.isFinite(mesaLeida) ? mesaLeida : null;
+  if (
+    mesaLeidaEfectiva !== null &&
+    pRuta !== undefined &&
+    (mesaLeidaEfectiva < 1 || mesaLeidaEfectiva > pRuta.t)
+  ) {
+    avisos.push("MESA_FUERA_RANGO");
+    mesaLeidaEfectiva = null; // la lectura es imposible — el registro puede rescatar (abajo)
+  }
+  const mesaValidaLeidaInicial =
+    mesaLeidaEfectiva !== null && rutaCompleta && pRuta !== undefined &&
+    mesaLeidaEfectiva >= 1 && mesaLeidaEfectiva <= pRuta.t;
+
+  // ---- KIT consenso-frankfurt-v1 (FASE 3, §4.2): consenso del kit ARBITRADO
+  //      por el registro. Corre con el municipio FINAL (cascada + rescate
+  //      4b) — // Fuente: §0-F3 (El Cairo: código leído «…0300…», pie 399,
+  //      registro(335)=399 — el campo KIT del código no tiene redundancia y
+  //      el OCR leyó los DOS 9 como 0). Reglas: pie y código difieren → gana
+  //      el que esté en registro; ambos o ninguno → gana el pie (impreso
+  //      grande, menos confuso) — siempre con PIE_CODIGO_DISCREPAN. Fuzzy
+  //      honesto: código fuera de registro con un vecino a distancia de
+  //      edición 1 del MISMO municipio → lectura errada del código: gana el
+  //      registro SOLO si el pie lo confirma o si no hay pie, con
+  //      KIT_CODIGO_CORREGIDO. El kit NUNCA se inventa: sin ninguna fuente →
+  //      null (SINKIT como hoy). ----
+  const codigoKit = consenso ? consenso.kit : null;
+  let kit: number | null = null;
+  let kitFuente: "PIE" | "CODIGO" | "REGISTRO" | null = null;
+  const enRegistro = (k: number): boolean => kitEnRegistro(municipio?.codigo ?? null, k) !== null;
+  if (mKitPie !== null && codigoKit !== null && mKitPie !== codigoKit) {
+    avisos.push("PIE_CODIGO_DISCREPAN");
+    if (enRegistro(codigoKit) && !enRegistro(mKitPie)) {
+      kit = codigoKit;
+      kitFuente = "CODIGO";
+    } else {
+      kit = mKitPie;
+      kitFuente = "PIE";
+    }
+    if (!enRegistro(codigoKit)) {
+      const vecino = kitADistancia1(municipio?.codigo ?? null, codigoKit);
+      if (vecino !== null && mKitPie === vecino) {
+        // El pie CONFIRMA el vecino del registro — el código era la errada.
+        kit = vecino;
+        kitFuente = "REGISTRO";
+        avisos.push("KIT_CODIGO_CORREGIDO");
+      }
+      // Pie presente y distinto del vecino → gana el pie (regla anterior).
+    }
+  } else if (mKitPie !== null) {
+    kit = mKitPie;
+    kitFuente = "PIE";
+  } else if (codigoKit !== null) {
+    kit = codigoKit;
+    kitFuente = "CODIGO";
+    if (!enRegistro(codigoKit)) {
+      // Sin pie: el vecino del registro se acepta como lectura errada (§4.2).
+      const vecino = kitADistancia1(municipio?.codigo ?? null, codigoKit);
+      if (vecino !== null) {
+        kit = vecino;
+        kitFuente = "REGISTRO";
+        avisos.push("KIT_CODIGO_CORREGIDO");
+      }
+    }
+  }
 
   // ---- KIT identificacion-codigo-v1 (FASE D.6 + FASE E): MESA por registro
   //      kit→mesa (src/lib/e14/kits.ts — ANALISIS §4.2). SOLO si la cabecera
-  //      NO leyó mesa (mesaLeida null): registro kit→mesa con municipio
-  //      resuelto que coincida → mesa = registro.mesa + aviso MESA_POR_KIT.
-  //      NIVEL: NO cambia (mesaValidaLeida sigue exigiendo lectura de
-  //      cabecera → máx SUGERIDA, como hoy — §6 inmutables). Si mesaLeida
-  //      existe y el registro difiere → NO se sobreescribe; aviso
-  //      MESA_KIT_DISCREPAN. Guardas del kit §4: zona/puesto resueltos que
-  //      contradigan el registro → NO aplicar (KIT_OTRA_RUTA); con ruta
-  //      completa, 1 ≤ mesa ≤ p.t (regla 5) o no aplica
-  //      (KIT_MESA_FUERA_RANGO). ----
-  const registro = kitEnRegistro(municipio?.codigo ?? null, consenso ? consenso.kit : null);
-  let mesaFinal: number | null = Number.isFinite(mesaLeida) ? mesaLeida : null;
+  //      NO leyó mesa (o su lectura fue imposible — §4.3.1): registro kit→mesa
+  //      con municipio resuelto que coincida → mesa = registro.mesa + aviso
+  //      MESA_POR_KIT. NIVEL: NO cambia (mesaValidaLeida sigue exigiendo
+  //      lectura de cabecera → máx SUGERIDA, como hoy — §6 inmutables).
+  //      KIT consenso-frankfurt-v1 (FASE 3, §4.2): la consulta usa el kit
+  //      ARBITRADO (pie/código/registro — p. ej. código 300 + pie 399 → el
+  //      registro 399 rescata la mesa que el código errado no encontraría).
+  //      Guardas del kit §4: zona/puesto resueltos que contradigan el
+  //      registro → NO aplicar (KIT_OTRA_RUTA); con ruta completa,
+  //      1 ≤ mesa ≤ p.t (regla 5) o no aplica (KIT_MESA_FUERA_RANGO). ----
+  const registro = kitEnRegistro(municipio?.codigo ?? null, kit);
+  let mesaFinal: number | null = mesaLeidaEfectiva;
   if (registro) {
     if (mesaFinal === null) {
       const otraRuta =
@@ -738,9 +897,17 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
         avisos.push("MESA_POR_KIT");
       }
     } else if (mesaFinal !== registro.mesa) {
-      avisos.push("MESA_KIT_DISCREPAN");
+      // KIT consenso-frankfurt-v1 (FASE 3, §4.3.2): mesa válida EN RANGO pero
+      // ≠ mesa del registro → conflicto de fuentes NO se resuelve en silencio:
+      // aviso + si el nivel era AUTO baja a SUGERIDA (mesaValidaLeida=false
+      // abajo — el panel de corrección muestra ambas).
+      avisos.push("MESA_REGISTRO_DISCREPAN");
     }
   }
+  // §4.3.2: la discrepancia mesa↔registro NUNCA es AUTO (conflicto de
+  // fuentes) — baja a SUGERIDA conservando la mesa leída (el panel muestra
+  // ambas: MESA 001 leída vs registro 008).
+  const mesaValidaLeida = mesaValidaLeidaInicial && !avisos.includes("MESA_REGISTRO_DISCREPAN");
 
   // ---- NIVEL (§3.4): AUTO exige dep+mun+puesto resueltos (código o ≥0.82)
   //      + mesa válida + tipo leído. Sin tipo → máx SUGERIDA (§D.4: prohibido
@@ -750,7 +917,7 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
     departamento !== null ||
     municipio !== null ||
     puesto !== null ||
-    (mesaLeida !== null && Number.isFinite(mesaLeida)) ||
+    (mesaLeidaEfectiva !== null && Number.isFinite(mesaLeidaEfectiva)) ||
     tipo !== null;
   let nivel: NivelClasificacion;
   if (depResuelto && munResuelto && puestoResuelto && mesaValidaLeida && tipo !== null) {
@@ -777,14 +944,18 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
     // §D2 (SPEC-e14-score-ocr): paquete display-only — lecturas crudas ANTES
     // de la validación divipol (la jerarquía puede no resolver y aun así la
     // MESA/tipo leídos son información real del acta para el chip parcial).
+    // FASE 3 §4.3.1: la mesa IMPOSIBLE (fuera de 1..p.t) NO se muestra —
+    // mesaLeidaEfectiva ya es null en ese caso.
     parciales: {
       cabecera: PATRON_CABECERA.test(texto),
-      mesa: Number.isFinite(mesaLeida) ? mesaLeida : null,
+      mesa: mesaLeidaEfectiva,
       tipo,
     },
     // KIT identificacion-codigo-v1 (FASE D.2): consenso + avisos (display).
     codigoUnico: consenso,
     avisos,
+    // KIT consenso-frankfurt-v1 (FASE 3, §4.2): procedencia del kit ganador.
+    kitFuente,
     confianzas: {
       departamento: Math.round(confDep * 100) / 100,
       municipio: Math.round(confMun * 100) / 100,
