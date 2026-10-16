@@ -144,6 +144,22 @@ export function mesaValida(base: DivipolBase, ruta: RutaDivipol, mesa: number): 
   return Number.isInteger(mesa) && mesa >= 1 && mesa <= puesto.t;
 }
 
+/** Número de mesas del puesto (countTable «t», §1) por ruta completa.
+ *  null si la ruta no existe en la base (base vacía/falló → degradación). */
+export function mesasDePuesto(
+  base: DivipolBase,
+  dep: string,
+  mun: string,
+  zon: string,
+  std: string,
+): number | null {
+  const d = dep.padStart(2, "0");
+  const m = mun.padStart(3, "0");
+  const z = zon.padStart(2, "0");
+  const s = std.padStart(2, "0");
+  return base[d]?.m?.[m]?.z?.[z]?.s?.[s]?.t ?? null;
+}
+
 /**
  * Busca puestos por NOMBRE en toda la base (§3.3 estrategia 3: deducir
  * municipio/departamento cuando el operador solo tiene el nombre — p. ej.

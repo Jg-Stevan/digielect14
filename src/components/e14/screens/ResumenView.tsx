@@ -7,6 +7,7 @@
  */
 import { useE14Store } from "@/lib/e14/store";
 import type { HistorialRow } from "@/lib/e14/types";
+import { PUESTO_SIMULADO } from "@/lib/e14/seed";
 import { SegmentedBar } from "../primitives";
 
 function badgeEstado(estado: HistorialRow["estado"]) {
@@ -38,6 +39,11 @@ export function ResumenView() {
   const colaOffline = useE14Store((s) => s.colaOffline);
   const solicitudesRescaneo = useE14Store((s) => s.solicitudesRescaneo);
   const historial = useE14Store((s) => s.historial);
+  // PUESTO ACTUAL (kit actas-resumen-puesto-v2): el real manda; en simulación
+  // (sin puesto real) el demo — MISMO puesto que muestra ACTAS en todo momento.
+  const puestoReal = useE14Store((s) => s.puestoActual);
+  const modoSimulacion = useE14Store((s) => s.modoSimulacion);
+  const puestoMostrado = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
 
   const pct = Math.round((completadas / asignadasHoy) * 100);
   const ultimaActividad = historial[0]?.hora ?? "—";
@@ -52,11 +58,18 @@ export function ResumenView() {
       </header>
 
       <div className="flex-grow flex flex-col gap-6 px-4 pt-4 pb-6 max-w-md mx-auto w-full">
-        {/* Puesto actual */}
+        {/* Puesto actual — REAL (última clasificación archivada) o SIMULADO. */}
         <section className="flex justify-between items-end border-b border-brand-border pb-2">
           <div className="flex flex-col gap-1">
             <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">PUESTO ACTUAL</span>
-            <h2 className="text-lg font-bold text-white uppercase">ROMA - CONSULADO</h2>
+            <h2 className="text-lg font-bold text-white uppercase">
+              {puestoMostrado?.titulo ?? "SIN PUESTO"}
+            </h2>
+            {puestoMostrado && (
+              <span className="font-mono text-xs text-gray-400">
+                {`${puestoMostrado.municipio} > ZONA ${puestoMostrado.zona} > PUESTO ${puestoMostrado.puesto}`}
+              </span>
+            )}
           </div>
         </section>
 
