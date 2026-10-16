@@ -109,6 +109,7 @@ export function ToolbarBtn({
   label,
   onClick,
   active = false,
+  ariaLabel,
 }: {
   icon: ReactNode;
   label: string;
@@ -117,11 +118,16 @@ export function ToolbarBtn({
   active?: boolean;
   /** Compat — ignorado (fila neutra, SPEC §3.2.5). */
   tone?: "crit";
+  /** G4 (KIT camara-visor-v1): ARIA específico cuando el label corto no
+   *  describe la acción completa (p. ej. «Imagen» → «Descargar imagen en
+   *  alta calidad»). */
+  ariaLabel?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={ariaLabel}
       className={`min-h-11 py-2 px-2 rounded-xl border font-sans font-medium text-xs flex items-center justify-center gap-1.5 tap-action transition-colors leading-tight text-center ${
         active
           ? "bg-brand-surface border-brand-green/50 text-brand-green"
