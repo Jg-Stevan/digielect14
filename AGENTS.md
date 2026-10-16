@@ -32,3 +32,7 @@
 - Si necesitas un cambio en el core: NO lo hagas aquí; regístralo como `[REQUIERE-CORE]`.
 - Commit pequeño y frecuente > commit gigante.
 - Fase gráfica: prohibido añadir dependencias de cámara/procesado.
+
+## Registro de kits (una línea por kit — detalle en docs/worklog.md y docs/REPORTE-*.md)
+- `2026-10-16` **gate-v2** (PR #3, MERGEADO `2383820`): marcadores obligatorios SIN_VOTOS + flujo post-recorte normal.
+- `2026-10-15` **actas-resumen-puesto-v2** (PR ABIERTO, SIN merge): ACTAS muestra el puesto REAL (última clasificación archivada) con countTable DIVIPOL + MODO SIMULACIÓN (toggle «SIM», overlay de vista) + RESUMEN espeja el puesto; alerta «MESAS INCOMPLETAS» y seed demo FUERA de ACTAS.

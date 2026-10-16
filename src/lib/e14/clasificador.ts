@@ -647,6 +647,14 @@ export function claveDeMesa(c: ClasificacionE14): string | null {
   return `${dep}-${mun}-${zon}-${std}-${mesa}`;
 }
 
+/** Prefijo PUESTO de la clave de mesa: «dep-mun-zon-std» (mismos anchos con
+ *  ceros que claveDeMesa). Todas las claves de mesas de UN puesto comparten
+ *  este prefijo — así se filtra `archivadas` por puesto sin parsear códigos. */
+export function claveDePuesto(c: ClasificacionE14): string | null {
+  const clave = claveDeMesa(c);
+  return clave ? clave.split("-").slice(0, 4).join("-") : null;
+}
+
 /** Nombre de salida al exportar (§6 / §G.4.5):
  *  E14_{KIT}_{dep}_{mun}_{zon}_{puesto}_{mesa}_{TIPO}-{pag}. Extensión la
  *  pone el exportador real (PDF §6 — adaptación documentada). */

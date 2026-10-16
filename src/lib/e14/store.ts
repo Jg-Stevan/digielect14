@@ -15,7 +15,13 @@ import type { PageFilter } from "@jg-stevan/scanner-core/types";
 import type { PaginaObjetivo } from "./bridge";
 import type { Acta, FuenteCaptura, HistorialRow, Mesa, ProgresoAnalisis, TipoPagina } from "./types";
 import type { Quad } from "@jg-stevan/scanner-core/types";
-import { claveDeMesa, tipoPaginaDe, tituloYUbicacionDe, type ClasificacionE14 } from "./clasificador";
+import {
+  claveDeMesa,
+  claveDePuesto,
+  tipoPaginaDe,
+  tituloYUbicacionDe,
+  type ClasificacionE14,
+} from "./clasificador";
 import {
   COLA_OFFLINE_INICIAL,
   SOLICITUDES_RESCANEO_INICIAL,
@@ -75,6 +81,14 @@ interface E14Store {
   /** Fase B (§6): archivado «dónde va» — clasificaciones guardadas por
    *  clave de mesa real; la vista ACTAS las añade al seed (modo demo). */
   archivadas: Record<string, ActaArchivada>;
+  /** Regla del dueño «solo un puesto debe de aparecer»: el puesto de la
+   *  ÚLTIMA clasificación archivada. ACTAS y RESUMEN renderizan SOLO este
+   *  puesto; al escanear otro puesto se reemplaza completo. */
+  puestoActual: PuestoActual | null;
+  /** MODO SIMULACIÓN: toggle que llena la vista con el puesto demo (seed
+   *  §6.4) cuando NO hay puesto real — overlay de VISTA, jamás escribe en
+   *  `archivadas`/`puestoActual` (cero contaminación de datos reales). */
+  modoSimulacion: boolean;
   completadas: number;
   asignadasHoy: number;
   colaOffline: number;
@@ -82,6 +96,8 @@ interface E14Store {
   historial: HistorialRow[];
 
   navegar: (vista: Vista) => void;
+  /** MODO SIMULACIÓN (regla del dueño): alterna el toggle «SIM» de ACTAS. */
+  alternarModoSimulacion: () => void;
   setFuente: (fuente: FuenteCaptura) => void;
   setArchivoPendiente: (archivo: File | null) => void;
   /** Registra el <video> vivo de la cámara (null al detener el stream). */
@@ -184,20 +200,48 @@ export interface ActaArchivada {
   huecos: HuecoArchivado[];
 }
 
+/** PUESTO ACTUAL (regla del dueño: «solo un puesto debe de aparecer»): el
+ *  puesto de la ÚLTIMA clasificación archivada. ACTAS y RESUMEN renderizan
+ *  SOLO este puesto; al escanear otro puesto se reemplaza completo. */
+export interface PuestoActual {
+  /** Prefijo de clave «dep-mun-zon-std» (claveDePuesto). */
+  clave: string;
+  /** «ROMA - CONSULADO» (puesto.nombre en MAYÚSCULAS — convención de tituloYUbicacionDe). */
+  titulo: string;
+  /** Línea de ruta: país/municipio por NOMBRE, zona y puesto por CÓDIGO. */
+  departamento: string;
+  municipio: string;
+  zona: string;
+  puesto: string;
+}
+
 /**
  * Fase B (§6): archiva el hueco de una clasificación bajo su clave de mesa
  * (códigos con ceros, p. ej. «88-335-05-02-001»). Duplicado del MISMO hueco
  * → reemplaza (la clasificación más reciente queda como vigente) y avisa
  * (análisis §G.4.1). Idempotente: re-archivar el mismo acta es silencioso
  * para el llamador que ignora `duplicado`.
+ * KIT actas-resumen-puesto-v2: además devuelve el PUESTO de la clasificación
+ * (regla del dueño «solo un puesto» — la última archivada manda).
  */
 function archivarHueco(
   archivadas: Record<string, ActaArchivada>,
   clasif: ClasificacionE14,
-): { nuevas: Record<string, ActaArchivada>; duplicado: boolean } {
+): { nuevas: Record<string, ActaArchivada>; duplicado: boolean; puesto: PuestoActual | null } {
   const clave = claveDeMesa(clasif);
   const tipo = clasif.tipo ? tipoPaginaDe(clasif.tipo) : null;
-  if (!clave || !tipo) return { nuevas: archivadas, duplicado: false };
+  const prefijo = claveDePuesto(clasif);
+  if (!clave || !tipo || !prefijo)
+    return { nuevas: archivadas, duplicado: false, puesto: null };
+  // PUESTO ACTUAL (regla del dueño): la última clasificación archivada manda.
+  const puesto: PuestoActual = {
+    clave: prefijo,
+    titulo: (clasif.puesto?.nombre || "PUESTO SIN NOMBRE").toUpperCase(),
+    departamento: clasif.departamento?.nombre ?? "",
+    municipio: clasif.municipio?.nombre ?? "",
+    zona: clasif.zona?.codigo ?? "",
+    puesto: clasif.puesto?.codigo ?? "",
+  };
   const hueco: HuecoArchivado = {
     tipo,
     pagina: (clasif.pagina?.index ?? 1) === 2 ? 2 : 1,
@@ -207,6 +251,7 @@ function archivarHueco(
     return {
       nuevas: { ...archivadas, [clave]: { clasificacion: clasif, huecos: [hueco] } },
       duplicado: false,
+      puesto,
     };
   }
   const yaEstaba = previa.huecos.some((h) => h.tipo === hueco.tipo && h.pagina === hueco.pagina);
@@ -220,6 +265,7 @@ function archivarHueco(
       },
     },
     duplicado: yaEstaba,
+    puesto,
   };
 }
 
@@ -272,8 +318,11 @@ export const useE14Store = create<E14Store>((set, get) => {
     // hueco. Idempotente: si el panel ya la archivó, el reemplazo es
     // silencioso (mismo acta, mismos datos).
     let archivadasNuevas = archivadas;
+    let puestoNuevo: PuestoActual | null = null;
     if (actaActual?.clasificacion?.nivel === "AUTO") {
-      archivadasNuevas = archivarHueco(archivadas, actaActual.clasificacion).nuevas;
+      const r = archivarHueco(archivadas, actaActual.clasificacion);
+      archivadasNuevas = r.nuevas;
+      puestoNuevo = r.puesto;
     }
     set({
       historial: [fila, ...historial],
@@ -281,6 +330,8 @@ export const useE14Store = create<E14Store>((set, get) => {
       colaOffline,
       mesas: mesasActualizadas,
       archivadas: archivadasNuevas,
+      // PUESTO ACTUAL (kit actas-resumen-puesto-v2): el del archivo AUTO manda.
+      puestoActual: puestoNuevo ?? get().puestoActual,
       actaActual: actaActual ? { ...actaActual, hashSha256: hash } : actaActual,
     });
     return { online, hora };
@@ -317,6 +368,8 @@ export const useE14Store = create<E14Store>((set, get) => {
     actasSesion: 0,
     mesas: mesasIniciales(),
     archivadas: {},
+    puestoActual: null,
+    modoSimulacion: false,
     completadas: progresoInicial().completadas,
     asignadasHoy: progresoInicial().asignadasHoy,
     colaOffline: COLA_OFFLINE_INICIAL,
@@ -324,6 +377,8 @@ export const useE14Store = create<E14Store>((set, get) => {
     historial: historialInicial(),
 
     navegar: (vista) => set({ vista }),
+
+    alternarModoSimulacion: () => set((s) => ({ modoSimulacion: !s.modoSimulacion })),
 
     setFuente: (fuente) => set({ fuente }),
 
@@ -539,7 +594,7 @@ export const useE14Store = create<E14Store>((set, get) => {
         nivel: "AUTO",
         confianzas: { departamento: 1, municipio: 1, puesto: 1, tipo: 1 },
       };
-      const { nuevas } = archivarHueco(archivadas, final);
+      const { nuevas, puesto } = archivarHueco(archivadas, final);
       // §1.4 (SPEC-titulo-ubicacion): la corrección del panel también pasa el
       // título/ubicación al acta (AUTO-manual → el helper aplica).
       const titUbi = tituloYUbicacionDe(final);
@@ -553,6 +608,9 @@ export const useE14Store = create<E14Store>((set, get) => {
           ...(titUbi ? { titulo: titUbi.titulo, ubicacion: titUbi.ubicacion } : {}),
         },
         archivadas: nuevas,
+        // PUESTO ACTUAL (kit actas-resumen-puesto-v2): la corrección del
+        // panel TAMBIÉN manda (AUTO-manual → el puesto corregido es el actual).
+        puestoActual: puesto ?? get().puestoActual,
       });
     },
 
