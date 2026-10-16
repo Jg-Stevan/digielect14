@@ -228,6 +228,10 @@ export function ReviewView() {
         return { texto: `ACTA INCOMPLETA${acta.rechazo.detalle ? ` · ${acta.rechazo.detalle}` : ""}`, tono: "crit" as const };
       if (acta.rechazo?.tipo === "BAJO")
         return { texto: `SCORE BAJO${acta.rechazo.detalle ? ` · ${acta.rechazo.detalle}` : ""}`, tono: "crit" as const };
+      // KIT e14-gate-v2 (G2): marcador obligatorio de votos fallido — copy
+      // CORTO y descriptivo (decisión del dueño: SIN guía de cámara).
+      if (acta.rechazo?.tipo === "SIN_VOTOS")
+        return { texto: "ACTA SIN VOTOS", tono: "crit" as const };
       return { texto: "ACTA RECHAZADA", tono: "crit" as const };
     }
     if (status === "ADVERTENCIA") {
@@ -324,17 +328,11 @@ export function ReviewView() {
           </Chip>
         </div>
 
-        {/* OPTIMA-rescate (L5 D20): la ÓPTIMA de aquí SOLO llega tras un
-            rescate por recorte — pill informativa in-flow re-vestida
-            (reemplaza la pill flotante del skin anterior). */}
-        {status === "OPTIMA" && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-brand-surfacelight border border-brand-green/30 text-xs font-mono">
-            <span className="w-2 h-2 rounded-full bg-brand-green animate-pulse-sync" aria-hidden />
-            <span className="text-[11px] font-bold tracking-wider text-brand-green uppercase truncate">
-              ✓ {acta.score.toFixed(1)}/10 ÓPTIMA · RECUPERADA — ENVÍO MANUAL
-            </span>
-          </div>
-        )}
+        {/* G4 (KIT e14-gate-v2): el banner informativo del envío manual
+            fue ELIMINADO — el recorte es un flujo NORMAL: re-evalúa y si
+            da OPTIMA se auto-envía (aplicarRecorte → mismo camino de
+            analisisCompletado). OPTIMA es un estado TRANSITORIO: nunca se
+            renderiza en REVISIÓN. */}
 
         {/* EN_RH (no cubierto por mocks — §2): banners informativos
             «repetir-primero» / contingencia, re-vestidos con tokens ámbar. */}
@@ -480,9 +478,10 @@ export function ReviewView() {
         )}
 
         {/* Fila de acciones (mock §3.2.5 — grid-cols-3 NEUTRA; el estado
-            vive en las esquinas AR y la píldora flotante). OPTIMA-rescate
-            conserva sus 5 acciones (Filtros + Texto, F2/F-OCR) — grid
-            auto-filas. Handlers actuales INTACTOS. */}
+            vive en las esquinas AR y la píldora flotante). La rama OPTIMA
+            conserva sus 5 acciones como defensa (G4: OPTIMA es transitoria
+            — se auto-envía al llegar; hoy es inalcanzable en REVISIÓN).
+            Handlers actuales INTACTOS. */}
         {status === "OPTIMA" && esReal ? (
           <div className="grid grid-cols-3 gap-2 w-full select-none">
             <ToolbarBtn
@@ -810,7 +809,9 @@ function BadgeRefresco({ size = 6 }: { size?: 5 | 6 }) {
 export function ReviewCtas() {
   const acta = useE14Store((s) => s.actaActual);
   const navegar = useE14Store((s) => s.navegar);
-  const enviarActa = useE14Store((s) => s.enviarActa);
+  // G4 (KIT e14-gate-v2): el selector enviarActa se retiró — la ÓPTIMA ya
+  // no llega a REVISIÓN (se auto-envía al capturar y tras el recorte), y
+  // el envío MANUAL solo existe para ADVERTENCIA vía REVISIÓN HUMANA.
   const repetirFoto = useE14Store((s) => s.repetirFoto);
   // Selector extra + candado (una sola fuente de verdad):
   const escalarRevisionHumana = useE14Store((s) => s.escalarRevisionHumana);
@@ -827,26 +828,6 @@ export function ReviewCtas() {
       <button
         type="button"
         onClick={() => navegar("escanear")}
-        className="w-full bg-brand-green hover:bg-emerald-400 text-black font-extrabold text-sm py-3.5 px-6 rounded-2xl shadow-[0_4px_20px_rgba(0,230,118,0.35)] flex items-center justify-center gap-2 tap-action transition-all select-none"
-      >
-        <span className="tracking-wide uppercase font-mono font-bold">
-          SEGUIR ESCANEANDO
-        </span>
-      </button>
-    );
-  }
-
-  if (status === "OPTIMA") {
-    // Fix del dueño (14-oct) #5: ÓPTIMA = diseño ENVIADA, CTA ÚNICO verde
-    // «SEGUIR ESCANEANDO» (envía y navega). Fuera el par «ENVIAR A
-    // TRANSMISIÓN» + «REPETIR» — solo 3 diseños: óptimo/medio/bajo.
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          enviarActa();
-          navegar("escanear");
-        }}
         className="w-full bg-brand-green hover:bg-emerald-400 text-black font-extrabold text-sm py-3.5 px-6 rounded-2xl shadow-[0_4px_20px_rgba(0,230,118,0.35)] flex items-center justify-center gap-2 tap-action transition-all select-none"
       >
         <span className="tracking-wide uppercase font-mono font-bold">
