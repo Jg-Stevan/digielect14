@@ -474,9 +474,11 @@ export const useE14Store = create<E14Store>((set, get) => {
 
     enviarActa: () => {
       const { actaActual } = get();
-      // D20 (L5): envío MANUAL para ADVERTENCIA y también para ÓPTIMA tras un
-      // rescate por recorte (el auto-envío D4 solo dispara al capturar — el
-      // rescate nunca se auto-envía, evita la doble transmisión).
+      // D20 (L5) + G4 (KIT e14-gate-v2): envío MANUAL para ADVERTENCIA. La
+      // ÓPTIMA ya no espera envío manual: el auto-envío D4 dispara al
+      // capturar (analisisCompletado) Y tras el recorte (aplicarRecorte) —
+      // el recorte es un flujo NORMAL: re-evalúa y, si pasa, auto-envía
+      // como cualquier captura (sin banner ni CTA especial).
       if (
         !actaActual ||
         (actaActual.status !== "ADVERTENCIA" && actaActual.status !== "OPTIMA")
@@ -572,8 +574,28 @@ export const useE14Store = create<E14Store>((set, get) => {
           rotacionNueva,
         );
         set({ actaActual: acta, progresoAnalisis: null });
-        // El desenlace (RECUPERADA/SIGUE RECHAZADA) vive PERSISTENTE en la
-        // píldora de estado de la REVISIÓN (§4.3).
+        // G4 (KIT e14-gate-v2): flujo post-recorte NORMAL — el recorte
+        // re-evalúa y si el gate da OPTIMA+AUTO se auto-envía como
+        // CUALQUIER captura (mismo camino de analisisCompletado D4).
+        // Adiós la excepción D20 «el rescate nunca se auto-envía»: sin
+        // flag, sin banner de envío manual y sin CTA especial. La razón
+        // de ser de D20 (no hay doble transmisión) se conserva por otra
+        // vía: el recorte SOLO existe en actas NO enviadas.
+        if (acta.status === "OPTIMA") {
+          const hora = bridge.horaEnvio();
+          registrarEnvio(tituloPaginaActual());
+          set({
+            actaActual: {
+              ...get().actaActual!,
+              status: "ENVIADA",
+              enviadoAutomaticamente: hora,
+            },
+            vista: "revision",
+          });
+          return;
+        }
+        // El desenlace (SIGUE RECHAZADA / SIN_VOTOS / ADVERTENCIA…) vive
+        // PERSISTENTE en la píldora de estado de la REVISIÓN (§4.3).
       } catch {
         set({ progresoAnalisis: null });
       } finally {
