@@ -58,8 +58,9 @@ $ bun run lint                 → 0 errores (eslint .)
 $ git status --short           → M ActasView.tsx · M ResumenView.tsx ·
                                  M clasificador.ts · M divipol.ts · M seed.ts · M store.ts
 $ rg "PUESTO_SIMULADO" src/lib/e14/store.ts        → 0 matches (D6: overlay de vista)
-$ rg "WarnTriangleIcon|MESAS INCOMPLETAS" src/components/e14/screens/ActasView.tsx
-                               → 0 matches (D1)
+$ rg "WarnTriangleIcon" src/components/e14/screens/ActasView.tsx
+                               → 0 matches (D1); «MESAS INCOMPLETAS» solo en 2 COMENTARIOS
+                                 («quedó FUERA»), 0 en código
 $ rg "ROMA - CONSULADO" src/components/e14/screens/   → 0 matches hardcodeado (venía del store/seed)
 ```
 
