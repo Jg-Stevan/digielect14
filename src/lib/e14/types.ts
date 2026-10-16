@@ -52,7 +52,11 @@ export interface Acta {
   titulo: string; // "ROMA - CONSULADO"
   ubicacion: ActaUbicacion;
   tipo: string; // "SENADO DE LA REPÚBLICA"
-  pagina: { index: number; total: number };
+  /** Página del acta (KIT actas-vivas-paginas-v1, FASE B — nullable): la
+   *  página del papel es DATO — si el OCR/1D no la leyó viaja null
+   *  (DESCONOCIDA) y TODOS los consumidores muestran la honestidad
+   *  («PÁG - DE -», hueco al primer libre) en vez de asumir P1 mintiendo. */
+  pagina: { index: number; total: number } | null;
   candidatos: ActaCandidato[];
   firmas: ActaFirma[];
   codigoBarras: string; // "*E14-SEN-2026-001*"
@@ -85,6 +89,12 @@ export interface Acta {
   /** §D4 (SPEC-e14-score-ocr): la PROCESADA salió sin tinta (warp de un quad
    *  degenerado sobre superficie lisa) → REVISIÓN muestra la ORIGINAL. */
   procesadaVacia?: boolean;
+  /** KIT actas-vivas-paginas-v1 (FASE C): OCR de secciones detectó el
+   *  RECORTE del papel (P1 sin «SUMA TOTAL» / P≥2 sin «FIRMA» — el caso
+   *  real del dueño: captura con la parte inferior pisada sin advertencia).
+   *  Score con techo 7.9 (ADVERTENCIA, no rechazo) + píldora «ACTA
+   *  RECORTADA». Página desconocida → jamás se marca. */
+  recortada?: boolean;
   /** texto detectado (debug/verificación). */
   ocrTexto?: string;
   /** métricas del core 0-100. */
