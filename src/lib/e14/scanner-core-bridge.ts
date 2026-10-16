@@ -58,6 +58,9 @@ import { procesadaVaciaDataUrl } from "./image-utils";
 // completitud vive en helper ÚNICO (completitud.ts) — «la geometría sospecha,
 // la tinta condena» — usado por AMBOS pipelines (escaneo y recorte, AC11).
 import { verificarCompletitud, type ResultadoCompletitud } from "./completitud";
+// KIT e14-gate-v2 (FASE G2): marcador OBLIGATORIO de votos — helper ÚNICO
+// compartido con el guard de completitud (motorTinta, cero duplicación).
+import { medirZonaVotos } from "./marcadores";
 // §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
 // import estático: Next resuelve el basePath /web-scanner del deploy estático.
 import actaSimUrl from "@/assets/acta-e14-real.jpg";
@@ -82,6 +85,11 @@ const DETALLE_GENERICO = "SCORE INSUFICIENTE PARA TRANSMISIÓN";
 // §F-5 (SPEC-camara-funcional): detalle del rechazo por acta INCOMPLETA —
 // la captura corta el papel aunque la cabecera sea legible.
 const DETALLE_INCOMPLETA = "EL ACTA ESTÁ CORTADA EN EL ENCUADRE — ALÉJATE UN POCO Y CAPTURA EL ACTA COMPLETA";
+// KIT e14-gate-v2 (FASE G2): detalle del rechazo por el MARCADOR
+// OBLIGATORIO de votos fallido — copy CORTO y descriptivo (decisión del
+// dueño: SIN guía de cámara). El rechazo directo regresa el flujo a
+// captura (comportamiento existente de RECHAZADA).
+const DETALLE_SIN_VOTOS = "ACTA SIN VOTOS VISIBLES";
 // §D1 (SPEC-e14-score-ocr): modelo del score por RECONOCIMIENTO — techo de
 // una foto SIN SEÑAL de contenido del acta (bolsa de papas, pared, borrosa
 // total): por debajo de RECHAZADA (6.5) → «score bajo» garantizado. El
@@ -240,12 +248,15 @@ function dosDigitos(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-// §X (SPEC-score-legible): pisos de legibilidad.
+// §X (SPEC-score-legible): piso de legibilidad por contraste.
+// §G3 (KIT e14-gate-v2): el PISO de identificación (=10) ELIMINADO — la
+// identificación AUTO de la cabecera ya NO fuerza 10/10. El fallo del
+// 2026-10-16 (acta SIN votos 10/10 y auto-enviada) nació aquí: el piso se
+// aplicaba AL FINAL y mandaba sobre todos los techos. El score llega a 10
+// SOLO por métricas reales; los votos los cuida el gate de marcadores
+// (./marcadores) y la identificación sigue alimentando SOLO la
+// clasificación AUTO del gate (evaluarGate — intocable).
 const PISO_CONTRASTE_LEGIBLE = 80; // ≈ excellentQuality().contrast=84 del core
-const PISO_IDENTIFICADA = 10;      // §X.3 (SPEC-score-10-identificada): identificada AUTO =
-                                   // acta legible y digitalizada con certeza total → puntaje
-                                   // perfecto (petición del dueño). El score deja de describir
-                                   // el crudo y describe la CERTEZA de la digitalización.
 
 /** §X.1 (SPEC-score-legible): contraste efectivo — una foto de documento
  *  (papel blanco ~85 % del encuadre) tiene dispersión global de luminancia
@@ -281,18 +292,14 @@ function scoreDeCalidad(
   }
   if (level === "fair") score10 = Math.min(score10, 7.9); // techo ADVERTENCIA
   if (level === "poor") score10 = Math.min(score10, 6.4); // techo RECHAZADA
-  // §D1 (SPEC-e14-score-ocr): techo SIN SEÑAL de contenido — ANTES del piso
-  // de identificada (no colisiona: AUTO exige tipo leído → implica señal).
-  // Fórmulas/techos/piso existentes BYTE A BYTE intactos (§7 prohibido).
+  // §D1 (SPEC-e14-score-ocr): techo SIN SEÑAL de contenido (AUTO exige tipo
+  // leído → implica señal — no colisionan). Fórmulas/techos existentes BYTE
+  // A BYTE intactos (§7 prohibido).
   if (senales && !senales.conSenal) score10 = Math.min(score10, TECHO_SIN_SENAL);
-  // §X.2 piso por IDENTIFICACIÓN — ÚLTIMO (manda sobre los techos): una
-  // clasificación AUTO (jerarquía divipol validada + mesa ≤ countTable + tipo)
-  // es evidencia directa de legibilidad → el acta identificada nunca queda en
-  // MODERADA ni RECHAZADA por métricas globales del crudo. SUGERIDA/MANUAL NO
-  // reciben piso: el panel de corrección (§5) sigue siendo su camino.
-  // §X.3 (SPEC-score-10-identificada): el piso es 10 — la identificación
-  // completa es la evidencia MÁXIMA de legibilidad → puntaje perfecto.
-  if (senales?.identificada) score10 = Math.max(score10, PISO_IDENTIFICADA);
+  // §G3 (KIT e14-gate-v2): SIN piso por identificación — los techos de
+  // arriba y las métricas reales deciden el score; `identificada` (el
+  // parámetro sigue llegando) alimenta SOLO la clasificación AUTO del gate
+  // (evaluarGate), NUNCA el score.
   return score10;
 }
 
@@ -579,33 +586,36 @@ export class RealCoreBridge implements E14Bridge {
       conSenal: senalActa,
     });
     // §D3 (SPEC-e14-simulacion-scores): inyección determinista del chip —
-    // reemplaza el calculado DESPUÉS de scoreDeCalidad y ANTES del gate. El
-    // piso de identificada §X.3 RE-APLICA SOLO en la banda óptima (§D6.3
-    // SPEC-e14-score-ocr Rev. 3: `scoreSimulado >= 8` — la foto b/n del MEDIO
-    // clasifica AUTO real y sin esta condición el piso la subiría a 10.0
-    // ÓPTIMA y la banda medio moriría; el chip manda: 7.0 → ADVERTENCIA).
-    // La óptima sí se identifica: 8.2 + AUTO → 10.0 — AC2/AC13; sin AUTO el
-    // score inyectado llega limpio al gate (7.0 → ADVERTENCIA · 4.3 →
-    // RECHAZADA, §D4). Capturas REALES: piso INTACTO (la guarda vive SOLO
-    // dentro de este if simular). Nada se fuerza a mano: `evaluarGate` decide.
+    // reemplaza el calculado DESPUÉS de scoreDeCalidad y ANTES del gate.
+    // §G3 (KIT e14-gate-v2): SIN re-aplicación del piso de identificada
+    // (la constante ya no existe) — el chip manda: 8.2 → OPTIMA por
+    // statusDeScore (auto-envío normal) · 7.0 → ADVERTENCIA · 4.3 →
+    // RECHAZADA (§D4). Nada se fuerza a mano: `evaluarGate` decide.
     if (opciones.simular && opciones.scoreSimulado != null) {
       score = opciones.scoreSimulado;
-      if (clasificacion.nivel === "AUTO" && opciones.scoreSimulado >= 8) {
-        score = Math.max(score, PISO_IDENTIFICADA);
-      }
     }
     // §F-2 (SPEC-camara-funcional) + GUARD-BORDE Rev. 2: acta INCOMPLETA →
     // resolución por la vía de rechazo SIN tocar evaluarGate (el veto sigue
-    // VIVIENDO FUERA del gate — §7 score-ocr intocado, D6/AC10; el piso de
-    // identificada solo beneficia a actas COMPLETAS — en la práctica anulado
-    // por el techo 6.4 del veto, mismo que «poor"). La decisión del guard
-    // llega aquí: la sospecha geométrica SOLO condena con tinta cortada al
-    // filo del recorte (D1 — el falso positivo del quad al filo con imagen
-    // perfecta queda curado). El resto del pipeline corrió igual
+    // VIVIENDO FUERA del gate — §7 score-ocr intocado, D6/AC10). La decisión
+    // del guard llega aquí: la sospecha geométrica SOLO condena con tinta
+    // cortada al filo del recorte (D1 — el falso positivo del quad al filo
+    // con imagen perfecta queda curado). El resto del pipeline corrió igual
     // (recorte/calidad/OCR) para que REVISIÓN muestre la imagen y el
     // operador entienda el problema.
     const verificacionResuelta = verificacion ? await verificacion : null;
     const completa = opciones.simular ? true : (verificacionResuelta?.completa ?? true);
+    // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) — marcador OBLIGATORIO de
+    // votos, FUERA de evaluarGate (MISMO patrón del veto INCOMPLETA: D6/
+    // AC10). Fallo del 2026-10-16: acta sin votos llegó OPTIMA y se
+    // auto-envió sin que nadie mirara la zona de votos. Medición sobre
+    // fotoProcesada (<30 ms p95, motor compartido motorTinta —
+    // marcadores.ts). Corre TAMBIÉN en `simular` (default del dueño —
+    // calibración: los 3 assets SIM pasan la zona 8.83-57.5% ≫ 0.8%, la
+    // demo no se rompe · docs/REPORTE-gate-marcadores-v2.md). INCOMPLETA
+    // manda primero: el veto de votos SOLO condena actas completas sin
+    // tinta en la zona de votos.
+    const marcadores = await medirZonaVotos(fotoProcesada);
+    const marcadoresOk = completa ? marcadores.hayVotos : true;
     // D10 — escudo anti-fondo: franja(s) ≥85% oscura(s) al filo = fondo/sombra
     // incluida por el warp (NO tinta cortada) → el acta pasa al gate con
     // TECHO 7.9 (nunca ÓPTIMA — statusDeScore: ≥8; el recorte trae fondo y el
@@ -614,9 +624,8 @@ export class RealCoreBridge implements E14Bridge {
     if (completa && verificacionResuelta?.fondo) {
       score = Math.min(score, TECHO_ESCUDO_FONDO);
     }
-    const gate: ResultadoGate = completa
-      ? this.evaluarGate(score, texto, clasificacion, opciones.intento, opciones.maxIntentos)
-      : {
+    const gate: ResultadoGate = !completa
+      ? {
           // intento < maxIntentos → RECHAZADA · al AGOTAR → contingencia
           // automática C4 (EN_REVISION_HUMANA con el MISMO rechazo).
           status:
@@ -625,8 +634,26 @@ export class RealCoreBridge implements E14Bridge {
               : ("RECHAZADA" as ActaStatus),
           rechazo: { tipo: "INCOMPLETA", detalle: DETALLE_INCOMPLETA },
           clasificacion: null,
-        };
+        }
+      : !marcadoresOk
+        ? {
+            // KIT e14-gate-v2 (G2): rechazo DIRECTO por marcador
+            // obligatorio fallido — mismo desenlace por intentos que
+            // INCOMPLETA (repetir; al AGOTAR, contingencia C4 con el
+            // MISMO rechazo SIN_VOTOS — un impreso sin votos no puede
+            // quedarse en bucle infinito). Copy CORTO, sin guía.
+            status:
+              opciones.intento >= opciones.maxIntentos
+                ? ("EN_REVISION_HUMANA" as ActaStatus)
+                : ("RECHAZADA" as ActaStatus),
+            rechazo: { tipo: "SIN_VOTOS", detalle: DETALLE_SIN_VOTOS },
+            clasificacion: null,
+          }
+        : this.evaluarGate(score, texto, clasificacion, opciones.intento, opciones.maxIntentos);
     if (!completa) score = Math.min(score, 6.4);
+    // Cap del veto de votos (mismo patrón del INCOMPLETA): RECHAZADA
+    // implica <6.5 (statusDeScore) — el score queda coherente con el status.
+    if (completa && !marcadoresOk) score = Math.min(score, 6.4);
 
     // §D3 (SPEC-e14-score-ocr): desenlace «SCORE BAJO» determinista — sin
     // señal de contenido, el rechazo se sustituye por BAJO SEA CUAL SEA el
@@ -661,7 +688,7 @@ export class RealCoreBridge implements E14Bridge {
         `proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia}${evidenciaAsis}${evidenciaBorde} ` +
+        `senal=${senalActa} vacia=${procesadaVacia} votos=${marcadores.densidadVotosPct.toFixed(1)}%${marcadoresOk ? "" : " SIN_VOTOS"}${evidenciaAsis}${evidenciaBorde} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtroActa} clasif={${fmtClasif(gate.clasificacion)}} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
@@ -808,6 +835,13 @@ export class RealCoreBridge implements E14Bridge {
     // sombra), el recorte manual la rescata legítimamente.
     const verificacion = await verificarCompletitud(quad, fotoProcesada);
     const completa = verificacion.completa;
+    // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) en el recorte — mismo
+    // marcador obligatorio y MISMO criterio que el escaneo (helper ÚNICO,
+    // §4.4): el recorte re-evalúa TODO el gate, los votos incluidos. Sin
+    // excepción: un recorte que deja la zona de votos fuera → SIN_VOTOS
+    // (vuelve a captura) — el recorte NUNCA rescata un acta sin votos.
+    const marcadores = await medirZonaVotos(fotoProcesada);
+    const marcadoresOk = completa ? marcadores.hayVotos : true;
     const clasificacion = clasificarCabecera(texto, await cargarDivipol());
     const ocrLegible = ocrTextIsValid(texto);
     // §D1 (SPEC-e14-score-ocr): señal de contenido — mismo criterio §4.4
@@ -823,17 +857,30 @@ export class RealCoreBridge implements E14Bridge {
     if (completa && verificacion.fondo) {
       score = Math.min(score, TECHO_ESCUDO_FONDO);
     }
-    const gate: ResultadoGate = completa
-      ? this.evaluarGate(score, texto, clasificacion, acta.intento, acta.maxIntentos)
-      : {
+    const gate: ResultadoGate = !completa
+      ? {
           status:
             acta.intento >= acta.maxIntentos
               ? ("EN_REVISION_HUMANA" as ActaStatus)
               : ("RECHAZADA" as ActaStatus),
           rechazo: { tipo: "INCOMPLETA", detalle: DETALLE_INCOMPLETA },
           clasificacion: null,
-        };
+        }
+      : !marcadoresOk
+        ? {
+            // KIT e14-gate-v2 (G2): rechazo directo SIN_VOTOS — mismo
+            // desenlace por intentos que INCOMPLETA (contingencia C4 al
+            // AGOTAR, con el MISMO rechazo). Copy CORTO, sin guía.
+            status:
+              acta.intento >= acta.maxIntentos
+                ? ("EN_REVISION_HUMANA" as ActaStatus)
+                : ("RECHAZADA" as ActaStatus),
+            rechazo: { tipo: "SIN_VOTOS", detalle: DETALLE_SIN_VOTOS },
+            clasificacion: null,
+          }
+        : this.evaluarGate(score, texto, clasificacion, acta.intento, acta.maxIntentos);
     if (!completa) score = Math.min(score, 6.4);
+    if (completa && !marcadoresOk) score = Math.min(score, 6.4);
     // §D3 (SPEC-e14-score-ocr): sustitución BAJO sin señal — igual que el
     // escaneo (el recorte de una foto sin acta no fabrica señal).
     const rechazoFinal: Acta["rechazo"] = senalActa
@@ -854,7 +901,7 @@ export class RealCoreBridge implements E14Bridge {
         `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia}${evidenciaBordeRecorte} ` +
+        `senal=${senalActa} vacia=${procesadaVacia} votos=${marcadores.densidadVotosPct.toFixed(1)}%${marcadoresOk ? "" : " SIN_VOTOS"}${evidenciaBordeRecorte} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtro} clasif={${fmtClasif(gate.clasificacion)}} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +

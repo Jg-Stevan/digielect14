@@ -123,38 +123,51 @@ function ladosAlBorde(quad: Quad): Lado[] {
 }
 
 /**
- * Densidad de tinta (luma < 128) en la franja EXTERIOR 0-2% de cada lado
- * sospechoso. Decodifica fotoProcesada a canvas ~320 px (§3a) y mide SOLO
- * las franjas de los lados pedidos (getImageData por franja — barato).
- * Muestreo por líneas/columnas (D5): la densidad es el promedio de las
- * franjas medidas — tolera la compresión JPEG de cámara (el análisis corre
- * sobre fotoProcesada ya binarizada por el filtro b/n del pipeline).
- * Devuelve `utilizable: false` ante cualquier fallo de decode/canvas o
- * recorte degenerado (§7) — el consumidor mantiene la condena geométrica.
+ * MOTOR DE TINTA COMPARTIDO (KIT e14-gate-v2 G1) — un solo criterio para
+ * TODA medición de tinta sobre la fotoProcesada: decodifica a canvas
+ * ~320 px (§3a) y expone `densidadDe(sx, sy, sw, sh)` — fracción de píxeles
+ * con tinta (luma<128, mismos pesos 0.299/0.587/0.114 del core) sobre
+ * COORDENADAS DE PÍXEL del canvas de análisis (cw×ch). Consumidores:
+ *  · medirTintaAlFilo (este archivo) — franjas 0-2% del filo (GUARD-BORDE).
+ *  · medirZonaVotos (./marcadores) — zona de votos del E-14 (GATE v2).
+ * Cero duplicación (verificación obligatoria del kit). Presupuesto <30 ms
+ * p95 (§3d) — el decode/downscale es el MISMO de siempre.
+ * `utilizable: false` ante cualquier fallo de decode/canvas o recorte
+ * degenerado (<80 px de lado útil — §7) — cada consumidor decide.
  */
-async function medirTintaAlFilo(
-  fotoProcesada: string,
-  lados: Lado[],
-): Promise<{ utilizable: boolean; densidades: number[] }> {
+export interface MotorTinta {
+  utilizable: boolean;
+  /** Dimensiones (px) del canvas de análisis. */
+  cw: number;
+  ch: number;
+  /** Densidad 0-1 de tinta (luma<128) en el rectángulo pedido (px). */
+  densidadDe: (sx: number, sy: number, sw: number, sh: number) => number;
+}
+
+export async function motorTinta(fotoProcesada: string): Promise<MotorTinta> {
+  const noUtilizable: MotorTinta = {
+    utilizable: false,
+    cw: 0,
+    ch: 0,
+    densidadDe: () => 0,
+  };
   try {
     const img = await loadImage(fotoProcesada);
     const w = img.naturalWidth;
     const h = img.naturalHeight;
-    if (!w || !h) return { utilizable: false, densidades: [] };
+    if (!w || !h) return noUtilizable;
     const escala = ANCHO_ANALISIS / w;
     const cw = Math.max(1, Math.round(w * escala));
     const ch = Math.max(1, Math.round(h * escala));
     if (cw < LADO_UTILIZABLE_MIN || ch < LADO_UTILIZABLE_MIN) {
-      return { utilizable: false, densidades: [] }; // warp degenerado (§7)
+      return noUtilizable; // warp degenerado (§7)
     }
     const canvas = document.createElement("canvas");
     canvas.width = cw;
     canvas.height = ch;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return { utilizable: false, densidades: [] };
+    if (!ctx) return noUtilizable;
     ctx.drawImage(img, 0, 0, cw, ch);
-    const franjaH = Math.max(MIN_FRANJA_PX, Math.round(ch * FRANJA_EXTERIOR));
-    const franjaW = Math.max(MIN_FRANJA_PX, Math.round(cw * FRANJA_EXTERIOR));
 
     /** Densidad (0-1) de tinta en el rectángulo pedido — recorrido por
      *  líneas (columnas para N/S, filas para E/O): el promedio de fracciones
@@ -170,23 +183,44 @@ async function medirTintaAlFilo(
       }
       return oscuras / (sw * sh);
     };
-
-    const densidades: number[] = [];
-    for (const lado of lados) {
-      if (lado === "N") {
-        densidades.push(densidadDe(0, 0, cw, franjaH));
-      } else if (lado === "S") {
-        densidades.push(densidadDe(0, ch - franjaH, cw, franjaH));
-      } else if (lado === "O") {
-        densidades.push(densidadDe(0, 0, franjaW, ch));
-      } else {
-        densidades.push(densidadDe(cw - franjaW, 0, franjaW, ch));
-      }
-    }
-    return { utilizable: true, densidades: densidades.map((d) => d * 100) };
+    return { utilizable: true, cw, ch, densidadDe };
   } catch {
-    return { utilizable: false, densidades: [] };
+    return noUtilizable;
   }
+}
+
+/**
+ * Densidad de tinta (luma < 128) en la franja EXTERIOR 0-2% de cada lado
+ * sospechoso, sobre el MOTOR COMPARTIDO motorTinta (mismo decode ~320 px).
+ * Muestreo por líneas/columnas (D5): la densidad es el promedio de las
+ * franjas medidas — tolera la compresión JPEG de cámara (el análisis corre
+ * sobre fotoProcesada ya binarizada por el filtro b/n del pipeline).
+ * Devuelve `utilizable: false` ante cualquier fallo de decode/canvas o
+ * recorte degenerado (§7) — el consumidor mantiene la condena geométrica.
+ */
+async function medirTintaAlFilo(
+  fotoProcesada: string,
+  lados: Lado[],
+): Promise<{ utilizable: boolean; densidades: number[] }> {
+  const motor = await motorTinta(fotoProcesada);
+  if (!motor.utilizable) return { utilizable: false, densidades: [] };
+  const { cw, ch, densidadDe } = motor;
+  const franjaH = Math.max(MIN_FRANJA_PX, Math.round(ch * FRANJA_EXTERIOR));
+  const franjaW = Math.max(MIN_FRANJA_PX, Math.round(cw * FRANJA_EXTERIOR));
+
+  const densidades: number[] = [];
+  for (const lado of lados) {
+    if (lado === "N") {
+      densidades.push(densidadDe(0, 0, cw, franjaH));
+    } else if (lado === "S") {
+      densidades.push(densidadDe(0, ch - franjaH, cw, franjaH));
+    } else if (lado === "O") {
+      densidades.push(densidadDe(0, 0, franjaW, ch));
+    } else {
+      densidades.push(densidadDe(cw - franjaW, 0, franjaW, ch));
+    }
+  }
+  return { utilizable: true, densidades: densidades.map((d) => d * 100) };
 }
 
 /**
