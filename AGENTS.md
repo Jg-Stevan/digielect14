@@ -35,4 +35,5 @@
 
 ## Registro de kits (una línea por kit — detalle en docs/worklog.md y docs/REPORTE-*.md)
 - `2026-10-16` **gate-v2** (PR #3, MERGEADO `2383820`): marcadores obligatorios SIN_VOTOS + flujo post-recorte normal.
-- `2026-10-15` **actas-resumen-puesto-v2** (PR ABIERTO, SIN merge): ACTAS muestra el puesto REAL (última clasificación archivada) con countTable DIVIPOL + MODO SIMULACIÓN (toggle «SIM», overlay de vista) + RESUMEN espeja el puesto; alerta «MESAS INCOMPLETAS» y seed demo FUERA de ACTAS.
+- `2026-10-15` **actas-resumen-puesto-v2** (PR #4, MERGEADO `e777535`): ACTAS muestra el puesto REAL (última clasificación archivada) con countTable DIVIPOL + MODO SIMULACIÓN (toggle «SIM», overlay de vista) + RESUMEN espeja el puesto; alerta «MESAS INCOMPLETAS» y seed demo FUERA de ACTAS.
+- `2026-10-16` **camara-visor-v1** (ESTA rama `feat/camara-visor-lab-v1`, PR #5 ABIERTO — rebaseado sobre el merge de #4): paquete cámara/visor del lab — láser fuera, preview por plataforma (540p Android), FOTO_LADDER + upgrade silencioso full-res, gate CAN_TAKEPHOTO, ring ≤1280, apertura rápida cacheada, medidor pill, visor del editor con marco FIJO + botón «Imagen».
