@@ -35,6 +35,7 @@ import {
   detectDocumentEdges,
   evaluateQuality,
   fileToCaptureDataUrl,
+  loadImage,
   processImage,
 } from "@jg-stevan/scanner-core/image-processor";
 import { ocrTextIsValid, requestOcr } from "@jg-stevan/scanner-core/ocr";
@@ -303,6 +304,112 @@ function scoreDeCalidad(
   return score10;
 }
 
+// ── KIT e14-visor-accion-y-score-v1 (FASE S §S.1) ──────────────────────
+/** Diagnóstico del recorte de `calidadDeActa` (out-param — mismo patrón del
+ *  acumulador `parcial` del pipeline): dimensiones del bbox REAL usado (px)
+ *  y si se activó el fallback al frame completo. Alimenta `crop=` en los 2
+ *  logs de auditoría (fallback → `crop=full`). */
+interface InfoCrop {
+  w: number;
+  h: number;
+  fallback: boolean;
+}
+
+/** Margen del bbox: +3% del PROPIO bbox por lado (clamp [0,1]) — evita
+ *  tinta al filo falsa por píxel (§S.1.1). */
+const MARGEN_BBOX_PCT = 0.03;
+/** Bbox degenerado: lado < 8 px REALES (o NaN/∞) → fallback al frame
+ *  completo (§S.1.1 — comportamiento de hoy). */
+const BBOX_MIN_PX = 8;
+/** Cap del canvas del recorte: lado más largo ≤ 2000 px — NUNCA upscalar
+ *  (§S.1.1; evaluateQuality baja a W=120 igual — costo: un drawImage). */
+const CROP_LADO_MAX = 2000;
+
+/** Bbox del acta en PÍXELES REALES desde el QUAD normalizado 0-1 (misma
+ *  convención que ya consumen processImage y verificarCompletitud — TL,TR,BR,
+ *  BL en fracciones; NO se inventa conversión nueva). Bbox = min/max de x e y
+ *  de los 4 puntos + margen. null si degenerado (NaN/∞ o lado < BBOX_MIN_PX). */
+function bboxActaEnPx(
+  quad: Quad,
+  w: number,
+  h: number,
+): { sx: number; sy: number; sw: number; sh: number } | null {
+  const xs = quad.map((p) => p.x);
+  const ys = quad.map((p) => p.y);
+  if (xs.some((v) => !Number.isFinite(v)) || ys.some((v) => !Number.isFinite(v))) {
+    return null;
+  }
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const padX = (maxX - minX) * MARGEN_BBOX_PCT;
+  const padY = (maxY - minY) * MARGEN_BBOX_PCT;
+  const x0 = Math.max(0, minX - padX);
+  const x1 = Math.min(1, maxX + padX);
+  const y0 = Math.max(0, minY - padY);
+  const y1 = Math.min(1, maxY + padY);
+  const sx = Math.round(x0 * w);
+  const sy = Math.round(y0 * h);
+  const sw = Math.round((x1 - x0) * w);
+  const sh = Math.round((y1 - y0) * h);
+  if (sw < BBOX_MIN_PX || sh < BBOX_MIN_PX) return null;
+  return { sx, sy, sw, sh };
+}
+
+/** FASE S (§S.0 — diagnóstico cerrado): el score ya NO mide la MESA — mide
+ *  el ACTA. `evaluateQuality` del core (paquete INTOCABLE) baja a W=120 sobre
+ *  TODO el encuadre: el acta vertical deja el papel en ~25-40% del cuadro y
+ *  la mesa oscura manda en el promedio (brightness 24-34 → peor métrica →
+ *  chip LUMINOSIDAD → 7.0-7.7 ADVERTENCIA en actas perfectas; la MISMA acta
+ *  sin fondo da 9.0). Helper: decodifica `fotoOriginal`, recorta el bbox del
+ *  quad (+3% por lado, clamp [0,1]) a canvas (cap 2000 px el lado largo —
+ *  nunca upscalar) y evalúa ESE recorte (ImageSource acepta
+ *  HTMLCanvasElement — core image-processor). Fallback conservador: bbox
+ *  degenerado o cualquier fallo de decode/canvas → `evaluateQuality(
+ *  fotoOriginal)` como hoy (frame completo). SIM sinRecorte (quad identidad):
+ *  bbox = frame completo → mismo camino; los chips SIM siguen INYECTADOS
+ *  (8.2/7.0/4.3 — §D3, no-regresión dura AC-S2). */
+async function calidadDeActa(
+  fotoOriginal: string,
+  quad: Quad,
+  info?: InfoCrop,
+): Promise<PageQuality> {
+  const marcarFallback = () => {
+    if (info) {
+      info.fallback = true;
+      info.w = 0;
+      info.h = 0;
+    }
+  };
+  try {
+    const img = await loadImage(fotoOriginal);
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (!w || !h) throw new Error("sin dimensiones");
+    const bbox = bboxActaEnPx(quad, w, h);
+    if (!bbox) throw new Error("bbox degenerado");
+    const escala = Math.min(1, CROP_LADO_MAX / Math.max(bbox.sw, bbox.sh));
+    const cw = Math.max(1, Math.round(bbox.sw * escala));
+    const ch = Math.max(1, Math.round(bbox.sh * escala));
+    const canvas = document.createElement("canvas");
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("sin ctx");
+    ctx.drawImage(img, bbox.sx, bbox.sy, bbox.sw, bbox.sh, 0, 0, cw, ch);
+    if (info) {
+      info.fallback = false;
+      info.w = bbox.sw;
+      info.h = bbox.sh;
+    }
+    return await evaluateQuality(canvas);
+  } catch {
+    marcarFallback();
+    return evaluateQuality(fotoOriginal);
+  }
+}
+
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
 interface ResultadoGate {
   status: ActaStatus;
@@ -551,10 +658,14 @@ export class RealCoreBridge implements E14Bridge {
     // borrosa B/N) se muestra la procesada como hoy — sin regresión.
     const procesadaVacia = await procesadaVaciaDataUrl(fotoProcesada);
 
-    // 4) Calidad de la página (Laplaciano + contraste + brillo sobre el crudo).
+    // 4) Calidad de la página (Laplaciano + contraste + brillo).
+    //    KIT visor-accion-score-v1 (FASE S): se evalúa el RECORTE del acta
+    //    (bbox del quad), NO el encuadre completo — la mesa oscura alrededor
+    //    ya no hunde el brillo global (§S.0; fallback al frame como hoy).
     emitir({ etapa: "CALIDAD", progreso: 0 });
     const tCalidad = performance.now();
-    const calidad = await evaluateQuality(fotoOriginal);
+    const infoCrop: InfoCrop = { w: 0, h: 0, fallback: false };
+    const calidad = await calidadDeActa(fotoOriginal, quad, infoCrop);
     ms.calidad = performance.now() - tCalidad;
     emitir({ etapa: "CALIDAD", progreso: 1 });
 
@@ -681,6 +792,9 @@ export class RealCoreBridge implements E14Bridge {
           ` franja=[${verificacionResuelta.densidades.map((d) => d.toFixed(1)).join(",")}]` +
           ` fondo=${verificacionResuelta.fondo}`
         : "";
+    // FASE S (§S.1.5): crop= bbox real usado por calidadDeActa (px) — WxH;
+    // `full` si el fallback al frame completo se activó (diagnóstico en campo).
+    const cropLog = infoCrop.fallback ? "full" : `${infoCrop.w}x${infoCrop.h}`;
     console.info(
       `[e14] pipeline ${opciones.fuente}/${"archivo" in entrada ? "file" : "video-grab"} ` +
         `total=${Math.round(ms.total)}ms ` +
@@ -691,6 +805,7 @@ export class RealCoreBridge implements E14Bridge {
         `senal=${senalActa} vacia=${procesadaVacia} votos=${marcadores.densidadVotosPct.toFixed(1)}%${marcadoresOk ? "" : " SIN_VOTOS"}${evidenciaAsis}${evidenciaBorde} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtroActa} clasif={${fmtClasif(gate.clasificacion)}} ` +
+        `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
         `level:${calidad.level}})${evidenciaSim}`,
@@ -841,10 +956,14 @@ export class RealCoreBridge implements E14Bridge {
     // criterio del pipeline (un crop sobre zona sin tinta → ORIGINAL).
     const procesadaVacia = await procesadaVaciaDataUrl(fotoProcesada);
 
-    // 2) Calidad de la página (sobre el crudo — misma regla §5 paso 4).
+    // 2) Calidad de la página.
+    //    KIT visor-accion-score-v1 (FASE S): MISMO cambio que el escaneo —
+    //    el quad del editor está en coordenadas de `fotoOriginal` (misma
+    //    unidad): el score mide el RECORTE pedido, no la mesa (§S.0).
     emitir({ etapa: "CALIDAD", progreso: 0 });
     const tCalidad = performance.now();
-    const calidad = await evaluateQuality(fotoOriginal);
+    const infoCrop: InfoCrop = { w: 0, h: 0, fallback: false };
+    const calidad = await calidadDeActa(fotoOriginal, quad, infoCrop);
     ms.calidad = performance.now() - tCalidad;
     emitir({ etapa: "CALIDAD", progreso: 1 });
 
@@ -934,6 +1053,9 @@ export class RealCoreBridge implements E14Bridge {
           ` franja=[${verificacion.densidades.map((d) => d.toFixed(1)).join(",")}]` +
           ` fondo=${verificacion.fondo}`
         : "";
+    // FASE S (§S.1.5): crop= bbox real usado por calidadDeActa (px) — WxH;
+    // `full` si el fallback al frame completo se activó (diagnóstico en campo).
+    const cropLog = infoCrop.fallback ? "full" : `${infoCrop.w}x${infoCrop.h}`;
     console.info(
       `[e14] recorte ${acta.fuente} total=${Math.round(ms.total)}ms ` +
         `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
@@ -942,6 +1064,7 @@ export class RealCoreBridge implements E14Bridge {
         `senal=${senalActa} vacia=${procesadaVacia} votos=${marcadores.densidadVotosPct.toFixed(1)}%${marcadoresOk ? "" : " SIN_VOTOS"}${evidenciaBordeRecorte} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtro} clasif={${fmtClasif(gate.clasificacion)}} ` +
+        `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
         `level:${calidad.level}})`,

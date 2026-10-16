@@ -43,7 +43,6 @@ import {
   WarnTriangleIcon,
   StitchCropIcon,
   StitchRotateIcon,
-  StitchFullscreenIcon,
   StitchEyeIcon,
   StitchSpinIcon,
 } from "../icons";
@@ -324,9 +323,93 @@ export function ReviewView() {
     }
   };
 
+  // KIT visor-accion-score-v1 (FASE A+B) — fila de acciones calculada FUERA
+  // del flujo: vive en la ZONA FIJA de abajo (nunca scrollea; pegada a los
+  // CTAs/BottomNav del shell — page.tsx intocable). FASE A: el botón
+  // «Pantalla completa» sale (redundante — tocar la foto abre el visor vía
+  // ZoomableVisor mode="card" onOpenFullscreen y la tarjeta ENVIADA es
+  // táctil); el modal fullscreen SIGUE existiendo con el mismo punto de
+  // entrada. ENVIADA → null: la zona fija NO se monta (sin toolbar fantasma).
+  const filaAcciones =
+    status === "OPTIMA" && esReal ? (
+      // Rama OPTIMA (defensa G4 — transitoria, inalcanzable en REVISIÓN):
+      // Recortar · Rotar 90° · Filtros · Imagen · Texto (5). Handlers intactos.
+      <div className="grid grid-cols-3 gap-2 w-full select-none">
+        <ToolbarBtn
+          icon={<StitchCropIcon />}
+          label="Recortar"
+          onClick={esReal && acta.fotoOriginal ? () => setEditando(true) : undefined}
+        />
+        <ToolbarBtn
+          icon={<StitchRotateIcon />}
+          label="Rotar 90°"
+          onClick={esReal ? () => void rotarFoto() : undefined}
+        />
+        <ToolbarBtn
+          icon={<SlidersIcon />}
+          label="Filtros"
+          onClick={
+            esReal && acta.fotoOriginal && !revelando
+              ? () => setFiltrosAbierto(true)
+              : undefined
+          }
+        />
+        <ToolbarBtn
+          icon={<DownloadIcon />}
+          label={imagenDesc === "ok" ? "Descargada ✓" : imagenDesc === "err" ? "No se pudo" : "Imagen"}
+          onClick={
+            acta.fotoProcesada
+              ? () => void descargarImagen()
+              : undefined
+          }
+        />
+        <ToolbarBtn
+          icon={<ScanTextIcon />}
+          label="Texto"
+          active={hayTexto}
+          onClick={
+            acta.fotoProcesada && !ocrEjecutando
+              ? () => setTextoAbierto(true)
+              : undefined
+          }
+        />
+      </div>
+    ) : status !== "ENVIADA" ? (
+      // Resto de estados: Recortar · Rotar 90° · Imagen — UNA sola fila de 3
+      // (grid-cols-3; la 4ª celda que forzaba segunda fila murió con la FASE A).
+      <div className="grid grid-cols-3 gap-2 w-full select-none">
+        <ToolbarBtn
+          icon={<StitchCropIcon />}
+          label="Recortar"
+          onClick={esReal && acta.fotoOriginal ? () => setEditando(true) : undefined}
+        />
+        <ToolbarBtn
+          icon={<StitchRotateIcon />}
+          label="Rotar 90°"
+          onClick={acta.fotoProcesada ? () => void rotarFoto() : undefined}
+        />
+        <ToolbarBtn
+          icon={<DownloadIcon />}
+          label={imagenDesc === "ok" ? "Descargada ✓" : imagenDesc === "err" ? "No se pudo" : "Imagen"}
+          aria-label="Descargar imagen en alta calidad"
+          onClick={
+            acta.fotoProcesada
+              ? () => void descargarImagen()
+              : undefined
+          }
+        />
+      </div>
+    ) : null;
+
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="max-w-md mx-auto w-full px-4 py-3 space-y-3">
+    // KIT visor-accion-score-v1 (FASE B): root en 2 ZONAS — scroll + barra
+    // de acciones FIJA abajo. Shell (page.tsx: h-dvh + main flex-1 min-h-0)
+    // INTOCABLE; único overflow-y-auto (sin scroll duplicado).
+    <div className="flex-1 min-h-0 flex flex-col">
+      {/* ZONA SCROLL — contenido de siempre, MISMO orden (banner + chips +
+          tarjeta + nota + bloque ENVIADO + panel). max-w-md centrado aquí y
+          en la zona fija: el centrado no baile. */}
+      <div className="flex-1 min-h-0 overflow-y-auto max-w-md mx-auto w-full px-4 py-3 space-y-3">
         {/* Banner de ubicación (mock §3.2.2 — mono, dot del estado). */}
         {status === "ENVIADA" || status === "OPTIMA" ? (
           <div className="flex items-center px-3 py-1.5 rounded-xl bg-brand-surfacelight border border-brand-border text-[10px] font-mono shadow-sm overflow-x-auto no-scrollbar">
@@ -449,7 +532,11 @@ export function ReviewView() {
               // y la imagen gira DENTRO vía object-contain — ROTAR deja de
               // mover el marco. NO se toca ZoomableVisor del paquete (pan a
               // 1× en card exigiría publicación npm — fuera de alcance).
-              <div className="w-full h-[420px] max-h-[60vh] relative flex items-center justify-center mt-2">
+              // KIT visor-accion-score-v1 (FASE B): 420px → 56vh — la tarjeta
+              // crece con el viewport (AC-B2). INVARIANTE G8 intacto: altura
+              // DEFINIDA en px/vh, JAMÁS derivada del aspecto de la imagen —
+              // ROTAR 90° no mueve el marco.
+              <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
                   src={fotoVisible}
@@ -504,8 +591,9 @@ export function ReviewView() {
             <div className="scanner-corner-bl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             <div className="scanner-corner-br" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             {fotoVisible ? (
-              // G8: misma altura definida (2º wrapper del visor de card).
-              <div className="w-full h-[420px] max-h-[60vh] relative flex items-center justify-center mt-2">
+              // G8: misma altura definida (2º wrapper del visor de card) —
+              // FASE B: mismo valor 56vh en ambos (invariante G8 intacto).
+              <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
                   src={fotoVisible}
@@ -531,87 +619,6 @@ export function ReviewView() {
           </p>
         )}
 
-        {/* Fila de acciones (mock §3.2.5 — grid-cols-3 NEUTRA; el estado
-            vive en las esquinas AR y la píldora flotante). La rama OPTIMA
-            conserva sus 5 acciones como defensa (G4: OPTIMA es transitoria
-            — se auto-envía al llegar; hoy es inalcanzable en REVISIÓN).
-            Handlers actuales INTACTOS. */}
-        {status === "OPTIMA" && esReal ? (
-          <div className="grid grid-cols-3 gap-2 w-full select-none">
-            <ToolbarBtn
-              icon={<StitchCropIcon />}
-              label="Recortar"
-              onClick={esReal && acta.fotoOriginal ? () => setEditando(true) : undefined}
-            />
-            <ToolbarBtn
-              icon={<StitchRotateIcon />}
-              label="Rotar 90°"
-              onClick={esReal ? () => void rotarFoto() : undefined}
-            />
-            <ToolbarBtn
-              icon={<SlidersIcon />}
-              label="Filtros"
-              onClick={
-                esReal && acta.fotoOriginal && !revelando
-                  ? () => setFiltrosAbierto(true)
-                  : undefined
-              }
-            />
-            <ToolbarBtn
-              icon={<DownloadIcon />}
-              label={imagenDesc === "ok" ? "Descargada ✓" : imagenDesc === "err" ? "No se pudo" : "Imagen"}
-              onClick={
-                acta.fotoProcesada
-                  ? () => void descargarImagen()
-                  : undefined
-              }
-            />
-            <ToolbarBtn
-              icon={<ScanTextIcon />}
-              label="Texto"
-              active={hayTexto}
-              onClick={
-                acta.fotoProcesada && !ocrEjecutando
-                  ? () => setTextoAbierto(true)
-                  : undefined
-              }
-            />
-            <ToolbarBtn
-              icon={<StitchFullscreenIcon />}
-              label="Pantalla completa"
-              onClick={fotoVisible ? () => setVisorAbierto(true) : undefined}
-            />
-          </div>
-        ) : status !== "ENVIADA" ? (
-          <div className="grid grid-cols-3 gap-2 w-full select-none">
-            <ToolbarBtn
-              icon={<StitchCropIcon />}
-              label="Recortar"
-              onClick={esReal && acta.fotoOriginal ? () => setEditando(true) : undefined}
-            />
-            <ToolbarBtn
-              icon={<StitchRotateIcon />}
-              label="Rotar 90°"
-              onClick={acta.fotoProcesada ? () => void rotarFoto() : undefined}
-            />
-            <ToolbarBtn
-              icon={<DownloadIcon />}
-              label={imagenDesc === "ok" ? "Descargada ✓" : imagenDesc === "err" ? "No se pudo" : "Imagen"}
-              aria-label="Descargar imagen en alta calidad"
-              onClick={
-                acta.fotoProcesada
-                  ? () => void descargarImagen()
-                  : undefined
-              }
-            />
-            <ToolbarBtn
-              icon={<StitchFullscreenIcon />}
-              label="Pantalla completa"
-              onClick={fotoVisible ? () => setVisorAbierto(true) : undefined}
-            />
-          </div>
-        ) : null}
-
         {/* Bloque ENVIADO (mock 6 §3.2.7 — solo ENVIADA): «✓ ENVIADO
             AUTOMÁTICAMENTE» + chip de la hora real del envío. */}
         {status === "ENVIADA" && (
@@ -636,6 +643,16 @@ export function ReviewView() {
           acta.clasificacion &&
           acta.clasificacion.nivel !== "AUTO" && <PanelClasificacion />}
       </div>
+
+      {/* ZONA FIJA (FASE B) — fila de acciones SIEMPRE pegada abajo (encima
+          de los CTAs/BottomNav del shell), NUNCA hace scroll. ENVIADA →
+          filaAcciones=null → la zona no se monta: la tarjeta hereda el
+          espacio (sin toolbar fantasma). */}
+      {filaAcciones && (
+        <div className="shrink-0 max-w-md mx-auto w-full px-4 pb-1 pt-2">
+          {filaAcciones}
+        </div>
+      )}
 
       {/* L5 §7.5 — EDITOR DE RECORTE (overlay a pantalla completa).
           Puro por props (D19). INTACTO — solo re-vestido por QuadEditor. */}
