@@ -70,6 +70,19 @@ export interface E14Bridge {
    */
   revelar(acta: Acta, filtro: PageFilter): Promise<Acta>;
   /**
+   * KIT camara-visor-v1 (G3 — upgrade silencioso del lab L1789-1842):
+   * re-procesa el acta con una foto NUEVA a máxima resolución (la toma
+   * full-res que aterrizó en segundo plano tras el disparo rápido por
+   * escalera). REUTILIZA el pipeline del recorte (re-proceso sin consumir
+   * intento) con quad RE-DETECTADO sobre la foto nueva (aspecto 4:3 del
+   * sensor ≠ preview — quads normalizados). El gate se re-evalúa completo.
+   */
+  mejorarResolucion(
+    acta: Acta,
+    fotoNueva: string,
+    onProgreso?: (p: ProgresoAnalisis) => void,
+  ): Promise<Acta>;
+  /**
    * F-OCR del lab (EditorView.tsx L1360-1395): corre requestOcr sobre la
    * imagen PROCESADA del acta y devuelve el texto crudo.
    */
@@ -125,6 +138,21 @@ export class CompositeBridge implements E14Bridge {
       return Promise.reject(new Error("FILTRAR NO APLICA SIN FOTO REAL"));
     }
     return this.real.revelar(acta, filtro);
+  }
+
+  mejorarResolucion(
+    acta: Acta,
+    fotoNueva: string,
+    onProgreso?: (p: ProgresoAnalisis) => void,
+  ): Promise<Acta> {
+    if (!this.real) {
+      return Promise.reject(new Error("FUENTE REAL NO IMPLEMENTADA (L2)"));
+    }
+    // D35: el gate es la foto, no la fuente (SIMULACIÓN tiene foto real).
+    if (!acta.fotoOriginal || !fotoNueva) {
+      return Promise.reject(new Error("MEJORAR RESOLUCIÓN NO APLICA SIN FOTO REAL"));
+    }
+    return this.real.mejorarResolucion(acta, fotoNueva, onProgreso);
   }
 
   reconocerTexto(acta: Acta): Promise<string> {
