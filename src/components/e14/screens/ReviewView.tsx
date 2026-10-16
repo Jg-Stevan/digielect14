@@ -29,7 +29,7 @@ import type { PageFilter } from "@jg-stevan/scanner-core/types";
 // dataUrlToBlob NO existe en el tarball (la instrucción la citaba; se porta
 // como helper local de 5 líneas con fetch → blob, cero dependencias nuevas).
 import { downloadBlob } from "@jg-stevan/scanner-core/pdf-export";
-import { nombreExportacion } from "@/lib/e14/clasificador";
+import { nombreExportacion, tipoDeDigito } from "@/lib/e14/clasificador";
 import { QuadEditor } from "../QuadEditor";
 import { ZoomableVisor } from "@jg-stevan/scanner-ui";
 import { PanelClasificacion } from "../PanelClasificacion";
@@ -288,7 +288,16 @@ export function ReviewView() {
       // secciones) manda sobre las razones genéricas del medidor — el
       // operador debe ver que FALTA PAPEL (decisión: también sobre
       // LECTURA PARCIAL — el defecto físico es lo urgente de comunicar).
-      if (acta.recortada) return { texto: "ACTA RECORTADA", tono: "warn" as const };
+      if (acta.recortada)
+        return {
+          // KIT identificacion-codigo-v1 (FASE F): cuando la señal de esquinas
+          // detectó el recorte, el aviso lleva el LADO («ACTA RECORTADA ·
+          // SUP-IZQ») — pill/pill-texto existente GANA (§5 del kit).
+          texto: acta.recorteLado
+            ? `ACTA RECORTADA · ${acta.recorteLado.toUpperCase()}`
+            : "ACTA RECORTADA",
+          tono: "warn" as const,
+        };
       if (mesaParcial != null) return { texto: "LECTURA PARCIAL", tono: "warn" as const };
       const m = acta.metricas;
       if (m) {
@@ -465,6 +474,44 @@ export function ReviewView() {
             {paginaIdentificada ? `PÁG ${paginaIdx} DE ${paginaTotal}` : "PÁG - DE -"}
           </Chip>
         </div>
+
+        {/* KIT identificacion-codigo-v1 (Task 120, FASE D.2): chip del CÓDIGO
+            1D parseado (gramática completa 12/12 — «KIT 745 · TRANSMISION ·
+            2/2», QA G-A) y chip MESA POR KIT cuando la mesa vino del registro
+            kit→mesa (QA G-C). Solo se montan con señal — sin ruido visual. */}
+        {(() => {
+          const cu = acta.clasificacion?.codigoUnico ?? null;
+          const mesaPorKit = acta.clasificacion?.avisos?.includes("MESA_POR_KIT") ?? false;
+          if (!cu && !mesaPorKit) return null;
+          return (
+            <div
+              className={`${cu && mesaPorKit ? "grid-cols-2" : "grid-cols-1"} grid gap-2 w-full select-none`}
+            >
+              {cu && (
+                <Chip tone="neutral">
+                  {`KIT ${cu.kit} · ${tipoDeDigito(cu.tipoDigito)} · ${cu.pagina}/${cu.total}`}
+                  <span
+                    className="ml-1 text-[9px] font-bold tracking-[0.1em] text-gray-400"
+                    title="Código 1D impreso bajo el barcode — gramática 7100|KIT|T|VER|PAG|TOT"
+                  >
+                    · CÓDIGO
+                  </span>
+                </Chip>
+              )}
+              {mesaPorKit && (
+                <Chip tone="neutral">
+                  {`MESA ${String(acta.clasificacion?.mesa ?? 0).padStart(3, "0")}`}
+                  <span
+                    className="ml-1 text-[9px] font-bold tracking-[0.1em] text-gray-400"
+                    title="Mesa recuperada del registro KIT→mesa (cabecera sin MESA legible)"
+                  >
+                    · POR KIT
+                  </span>
+                </Chip>
+              )}
+            </div>
+          );
+        })()}
 
         {/* G4 (KIT e14-gate-v2): el banner informativo del envío manual
             fue ELIMINADO — el recorte es un flujo NORMAL: re-evalúa y si
