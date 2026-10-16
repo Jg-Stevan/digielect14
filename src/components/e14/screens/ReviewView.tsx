@@ -25,7 +25,7 @@ import { OCR_NO_TEXT } from "@jg-stevan/scanner-core/ocr";
 import { defaultQuad, FILTER_PRESETS } from "@jg-stevan/scanner-core/types";
 import type { PageFilter } from "@jg-stevan/scanner-core/types";
 import { QuadEditor } from "../QuadEditor";
-import { ZoomableVisor } from "../ZoomableVisor";
+import { ZoomableVisor } from "@jg-stevan/scanner-ui";
 import { PanelClasificacion } from "../PanelClasificacion";
 import { Chip, PrimaryBtn, ToolbarBtn } from "../primitives";
 import {
