@@ -66,7 +66,11 @@ export interface Acta {
     | { tipo: "INCOMPLETA"; detalle: string }
     /** §D3 (SPEC-e14-score-ocr): sin señal de contenido del acta — «score
      *  bajo» determinista (repetir NUNCA revisión humana en 1ª ronda). */
-    | { tipo: "BAJO"; detalle: string };
+    | { tipo: "BAJO"; detalle: string }
+    /** KIT e14-gate-v2 (FASE G2): marcador OBLIGATORIO fallido — la zona de
+     *  votos del acta no tiene tinta (fallo 2026-10-16: acta sin votos
+     *  10/10 y auto-enviada). Rechazo directo → se repite la captura. */
+    | { tipo: "SIN_VOTOS"; detalle: string };
   intento: number;
   maxIntentos: number; // "INTENTO 1 DE 4"
   enviadoAutomaticamente?: string; // "16:42:00"
