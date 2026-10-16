@@ -185,14 +185,18 @@ export function ReviewView() {
   const tipo = clasifAuto?.tipo
     ? (clasifAuto.tipo === "TRANSMISION" ? "TRANSMISIÓN" : "DELEGADOS")
     : (paginaObjetivo?.tipo ?? "TRANSMISIÓN");
-  const paginaIdx = clasifAuto ? (clasifAuto.pagina?.index ?? 1) : acta.pagina.index;
-  const paginaTotal = clasifAuto ? (clasifAuto.pagina?.total ?? 2) : acta.pagina.total;
+  // KIT actas-vivas-paginas-v1 (FASE B): paginaIdentificada exige página
+  // LEÍDA — clasificación sin página (acta.pagina == null) → chip «PÁG -
+  // DE -» (honesto; el default P1 mintió con la pág 2 de Frankfurt, bug
+  // del dueño 16-oct). Con página leída sigue mostrando PÁG X DE Y.
+  const paginaIdx = clasifAuto ? (clasifAuto.pagina?.index ?? 1) : (acta.pagina?.index ?? 1);
+  const paginaTotal = clasifAuto ? (clasifAuto.pagina?.total ?? 2) : (acta.pagina?.total ?? 2);
   const status = acta.status;
   // D2/D3 Rev. 2: «---» = fallback SOLO cuando el sistema NO logra
   // identificar. UN solo predicado compartido por banner + chips.
   const hayClasificacion =
     acta.clasificacion != null && acta.clasificacion.nivel !== "MANUAL";
-  const paginaIdentificada = acta.clasificacion != null;
+  const paginaIdentificada = acta.clasificacion != null && acta.pagina != null;
   // ── Banner de ubicación (mock §3.2.2): dot del color del estado + texto
   // uppercase real. Fix del dueño (14-oct) #1: el banner es el NOMBRE DEL
   // PUESTO (acta.titulo) — nunca la ruta con «>».
@@ -280,6 +284,11 @@ export function ReviewView() {
       return { texto: "ACTA RECHAZADA", tono: "crit" as const };
     }
     if (status === "ADVERTENCIA") {
+      // KIT actas-vivas-paginas-v1 (FASE C): el RECORTE del papel (OCR de
+      // secciones) manda sobre las razones genéricas del medidor — el
+      // operador debe ver que FALTA PAPEL (decisión: también sobre
+      // LECTURA PARCIAL — el defecto físico es lo urgente de comunicar).
+      if (acta.recortada) return { texto: "ACTA RECORTADA", tono: "warn" as const };
       if (mesaParcial != null) return { texto: "LECTURA PARCIAL", tono: "warn" as const };
       const m = acta.metricas;
       if (m) {
