@@ -157,6 +157,19 @@ interface E14Store {
    */
   reconocerTextoActa: () => Promise<void>;
   /**
+   * KIT camara-visor-v1 (G3 — upgrade silencioso del lab L1789-1842):
+   * re-procesa el acta con la foto FULL-RES del sensor que aterrizó en
+   * segundo plano tras el disparo rápido por escalera (bridge.mejorarResolucion
+   * — re-proceso sin consumir intento, quad re-detectado, gate completo).
+   * Guardas de identidad del lab: `objetivo` es la referencia EXACTA del acta
+   * que creó este disparo (capturada por ScanView al resolver dispararEscaneo)
+   * — si el usuario re-disparó o editó (actaActual ≠ objetivo) el upgrade se
+   * descarta en silencio; nunca toca un acta ya ENVIADA ni corre junto a un
+   * recorte en vuelo (el rescate del editor manda). Si el re-proceso da
+   * OPTIMA se auto-envía con el MISMO camino de aplicarRecorte (gate-v2 G4).
+   */
+  mejorarFotoActa: (fotoNueva: string, objetivo: Acta) => Promise<void>;
+  /**
    * L5 §7 ReviewView: gira fotoProcesada 90° (rotateProcessedDataUrl del lab,
    * canvas puro) y hornea rotation para el PDF §6. Gate: foto (D35 — la
    * SIMULACIÓN también rota real).
@@ -725,6 +738,46 @@ export const useE14Store = create<E14Store>((set, get) => {
         }
       } catch {
         // Error de reconocimiento: los contadores del sheet quedan como están.
+      }
+    },
+
+    mejorarFotoActa: async (fotoNueva, objetivo) => {
+      const { actaActual } = get();
+      // Guardas del lab L1818-1832 (silenciosas — el upgrade JAMÁS rompe nada):
+      // identidad de la captura (el usuario pudo re-disparar/editar), acta ya
+      // enviada (nada que mejorar), recorte del editor en vuelo (el rescate manda).
+      if (!actaActual || actaActual !== objetivo) return;
+      if (actaActual.status === "ENVIADA") return;
+      if (get().recortando || get().revelando) return;
+      if (!actaActual.fotoOriginal) return;
+      set({ revelando: true }); // RECORTAR queda fuera durante el re-proceso
+      try {
+        const acta = await bridge.mejorarResolucion(objetivo, fotoNueva, (p) =>
+          set({ progresoAnalisis: p }),
+        );
+        // El usuario pudo actuar mientras el upgrade volaba (~15 s): solo
+        // escribo si el acta SIGUE siendo la misma (misma identidad del lab).
+        if (get().actaActual !== objetivo) return;
+        set({ actaActual: acta, progresoAnalisis: null });
+        // G4 (KIT e14-gate-v2) — MISMO patrón de aplicarRecorte: el upgrade
+        // re-evalúa y si el gate da OPTIMA se auto-envía como CUALQUIER
+        // captura (mismo camino de analisisCompletado D4).
+        if (acta.status === "OPTIMA") {
+          const hora = bridge.horaEnvio();
+          registrarEnvio(tituloPaginaActual());
+          set({
+            actaActual: {
+              ...get().actaActual!,
+              status: "ENVIADA",
+              enviadoAutomaticamente: hora,
+            },
+            vista: "revision",
+          });
+        }
+      } catch {
+        /* silencioso: el upgrade JAMÁS rompe nada (el acta queda como está) */
+      } finally {
+        set({ revelando: false });
       }
     },
   };

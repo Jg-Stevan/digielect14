@@ -768,6 +768,44 @@ export class RealCoreBridge implements E14Bridge {
     });
   }
 
+  /**
+   * KIT camara-visor-v1 (G3 — upgrade silencioso del lab L1789-1842):
+   * RE-PROCESA el acta con una foto NUEVA a máxima resolución (la toma
+   * full-res del sensor que aterrizó en segundo plano tras el disparo
+   * rápido por escalera). REUTILIZA el pipeline existente (mismo patrón de
+   * `recortar`: re-proceso sin consumir intento — el acta conserva
+   * identidad de captura: fuente/intento/maxIntentos/paginación) con dos
+   * diferencias obligatorias frente al recorte: (1) el QUAD se RE-DETECTA
+   * sobre la foto nueva (los quads son normalizados 0-1 y el aspecto del
+   * sensor 4:3 ≠ preview 16:9 — re-usar el quad del preview desplazaría el
+   * warp; el lab hace exactamente esto con applyAutoQuad) y (2) la
+   * `fotoOriginal` del acta queda REEMPLAZADA por la nueva. El gate se
+   * re-evalúa COMPLETO (pipelineRecorte: completitud + marcadores + OCR +
+   * clasificación — helper único §4.4).
+   */
+  async mejorarResolucion(
+    acta: Acta,
+    fotoNueva: string,
+    onProgreso?: (p: ProgresoAnalisis) => void,
+  ): Promise<Acta> {
+    // 1) Detección del quad sobre la foto NUEVA (worker OpenCV → fallback
+    //    Sobel del core — MISMA vía del pipeline de escaneo). Si no detecta
+    //    (imagen sin bordes), quad identidad: la foto entera es el acta —
+    //    degradación honesta (§0: sin datos reales no se inventa).
+    let quad: Quad;
+    try {
+      quad = await detectDocumentEdges(fotoNueva);
+    } catch {
+      quad = defaultQuad();
+    }
+    // 2) Pipeline de RECORTE existente sobre la foto nueva (calidad + OCR +
+    //    gate completo, timeout 15 s igual que recortar). El acta conservada
+    //    es la ORIGINAL del disparo (identidad); su fotoOriginal pasa a ser
+    //    la full-res que aterrizó.
+    const actaBase: Acta = { ...acta, fotoOriginal: fotoNueva };
+    return this.recortar(actaBase, quad, onProgreso);
+  }
+
   /** Pipeline §5 del RECORTE (sin decode/detección: la foto y el quad ya son
    *  conocidos). Reusa los helpers del pipeline L2 (conRampa, scoreDeCalidad,
    *  PATRON_CABECERA) y el mapeo §4.1 + gate §4.2 idénticos. */
