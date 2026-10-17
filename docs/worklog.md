@@ -1016,6 +1016,72 @@ PROFILER / snapA+TORCH_HINT+accept.
 - **Estado del flujo:** PRs #6/#7/#8/#9 TODOS mergeados — Tasks 116-122 en main. Sin PRs abiertos restantes.
 - **Pendiente:** QA física del dueño (AC7-AC10 con SUS capturas: Frankfurt sin pill/6.4, El Cairo KIT 399 real, SINKIT sigue condenada, encuadre al filo sin REPETIR FOTO) + G-A..G-D del kit 120. Registro kit→mesa: ampliar SOLO con actas oficiales. Decisiones abiertas C4/copy chip «10.0»/umbral votos — sin cambio. Sin nuevo kit pendiente de ejecución (esperar insumo del dueño).
 
+### [2026-10-17 00:55] — KIT informe-telemetria-ocr-v1 — Z.ai Code
+- **Hecho:** informe completo de telemetría (TXT/JSON) tras CADA captura,
+  generado en 2.º plano e invisible al operador (único efecto visible: la
+  píldora de descarga cuando YA está listo + auto-descarga). Incluye el
+  comparativo OCR en-dispositivo sobre la MISMA captura: 9 celdas
+  (motor actual × raw/text/gray/bw · Tesseract full-res × raw/text ·
+  RapidOCR PP-OCRv4 wasm × foto-completa/raw/bw) con presupuesto blando de
+  90 s y try/catch por celda, más la explicación completa del score
+  (re-deriva la cadena del puente: contEf piso §X, techos fair/poor/sin
+  señal, caps fondo/recortada/INCOMPLETA/SIN_VOTOS, override SIM) y las
+  conclusiones §5 con números de ESTA captura contrastadas con la
+  referencia de laboratorio embebida (Apéndice A del SPEC, verbatim).
+  TODO ADITIVO: pipeline/gate/score/store/pantallas byte a byte iguales
+  (contrato §1) — fallo del informe jamás rompe el flujo (try/catch +
+  evento informe/error).
+- **Archivos:** NUEVOS public/models/rapidocr/{ch_PP-OCRv4_det_infer.onnx,
+  ch_PP-OCRv4_rec_infer.onnx, ch_ppocr_mobile_v2.0_cls_infer.onnx,
+  ppocr_keys.txt} (sha256 verificados contra el SPEC) · public/vendor/
+  onnxruntime/{ort-wasm-simd-threaded.jsep.{wasm,mjs} §3 +
+  ort-wasm-simd-threaded.{wasm,mjs}} · src/lib/e14/informe/{telemetria,
+  analisis-texto, rapidocr, motores, matriz, referencia-lab, generar,
+  iniciar}.ts · src/components/e14/InformeDescarga.tsx. EDIT src/lib/e14/
+  scanner-core-bridge.ts (+1 import, +1 bloque try/catch §6.1), src/lib/e14/
+  store.ts (+1 import, +1 llamada §6.2), src/app/page.tsx (+1 import,
+  +1 componente §6.3), package.json/bun.lock (+onnxruntime-web@1.30.0),
+  docs/worklog.md (esta entrada).
+- **Decisiones:** det limit 1920/max = bench del dueño · postproceso DB en
+  JS puro (el build vendored de OpenCV no tiene minAreaRect: dilate 2×2 +
+  CCL 4-con + convex hull + min-area rect por barrido de aristas +
+  box_score_fast + unclip 1.6, convención TL,TR,BR,BL de get_mini_boxes) ·
+  ORT 1.30 con entrypoint onnxruntime-web/wasm §4.3 resuelve el par
+  NO-jsep → se copian AMBOS pares (desviación documentada del §3, que
+  decía "no copiar el no-jsep": sin él RapidOCR da 404 y no corre) ·
+  crops vía setTransform inverso [R|p0] → fuente→canvas (v1 tenía el
+  transform al revés: crops transparentes) · canales BGR (fidelidad
+  cv2/Paddle) · conf del CTC = prob del ONNX directamente (el output ya
+  sale con softmax; el doble softmax la aplastaba a 0) · dict 6622
+  ppocr_keys.txt con espacio en índices ≥6623 (C real del modelo 6625) ·
+  grayscale de la variante gray derivado por luma del "original" (el core
+  solo tiene original/text/bw; recorte-raw = "original", misma elección
+  §D8.3 del puente) · recortar/revelar NO generan informe nuevo (solo
+  capturas del flujo normal) · el anclaje §6.1 usa ocrValido:
+  ocrTextIsValid(texto) (el SPEC asumía una variable `ocrValido` que no
+  existe en scope — desviación mínima documentada, semántica idéntica al
+  log del puente) · desviación del API §4.1: el campo del PipelineInfo es
+  filtroActa (el bloque §6.1 lo inserta como shorthand — en el JSON se
+  emite como filtro).
+- **Cómo probar (QA §8):** `bun run lint` (0/0) · `bun run dev` (:3001) →
+  chip SIM óptima → esperar píldora (≤ 90 s) → descargar TXT+JSON → validar
+  §2 ms por etapa = console.info del puente byte a byte · §4 cadena del
+  score (en la chip baja: techo sin señal → 4.9 + override SIM) · §6 tabla
+  9 celdas con textos (1200 chars/celda en TXT, completos en JSON) · §8
+  conclusiones con NÚMEROS · red: solo ${base}/models/rapidocr/* y
+  ${base}/vendor/onnxruntime/* (cacheados; el 2.º informe no re-descarga) ·
+  IMPORTAR src/assets/acta-e14-real.jpg → celdas de los 3 motores y
+  actual/bw = ocrChars del pipeline. Pendiente (dispositivo del dueño,
+  N/A sandbox): §8.7 Galaxy A56.
+- **Commits:** 29f5003 · 71cdc94 (worklog) · bbc4b01 (sync worker: adopta
+  el detection-worker del lab — el merge del PR #3 de web-scanner de HOY
+  cambió el worker del lab (leaks A-04/A-05) y el gate worker-parity
+  comparaba contra web-scanner/main → rompía para todo PR nuevo de e14;
+  md5 82a0374d… → 6d801c2a…, cero cambios del kit)
+- **Pendiente/Bloqueado:** auditoría del dueño (PR draft — JAMÁS merge
+  desde aquí) · QA física §8.7 en Galaxy A56 (tiempos de etapa vs console
+  y tiempos de celda) · ciclo SW del kit PWA no aplica a este PR.
+
 ### [2026-10-17 02:25 (Bogotá)] — KIT FILTROS-1 (lab comparativa filtros): RIG COMPLETO + HUMO VERDE — DETENIDO el paso oficial: las 4 fotos reales del dueño NO existen en el sandbox (reinicio) — Z.ai Code (rama lab/filtros-1, PR ABIERTO sin merge)
 
 - **Hecho:** recon completo del kit `plan-comparativa-filtros-e14` (Task FILTROS-1). **Bloqueante del paso oficial (kit §3/§6):** las 4 fotos reales («Frankfurt-P2 foto campo (1)/(2)», «Frankfurt-P2 limpia (scanner)», «El-Cairo-P1 (votos a mano)») vivían SOLO en el sandbox anterior (lab «comparativa de motores» off-line, NO commiteado a ningún repo) y se perdieron con su reinicio — verificado en la historia completa de digielect14, web-scanner, web-scanner-monorepo-viejo y digilect (0 jpg de actas además de los assets de siempre), `Downloads.rar` = diagnósticos TXT de dispositivos, vault = 4 PDFs de ejemplo, issues/PRs/releases sin adjuntos. **En lugar de parar en seco se construyó y validó el RIG COMPLETO** (todo bajo `lab/`, producción intacta): (1) `gt/gt.py` — GT verbatim del Apéndice B (14 anclas F/EG · 24 líneas Frankfurt P2 · norm/lev/sim/CER) portado byte a byte de `src/lib/e14/informe/analisis-texto.ts` (PR #10) + `numeros_exactos` 5/5 del kit §5; (2) `filtros_app.py` — original/texto-claro/gris replicados 1:1 desde `public/scanner/detection-worker.js` (funciones citadas por línea: rgbaToGray, estimateShadowModel k=25, correctedGrayWithModel bilinear, whitePointStretchPct 0.95/0.97, textTargetLumaLut 1.45/0.82/0.15, edgeAwareSharpenGray 25/0.75, rebuildRgbaWithChroma 253/45/200/1.5; redondeo Uint8ClampedArray half-up replicado); (3) `crop_acta.py` — recorte nativo del papel (RE-IMPLEMENTACIÓN documentada: los scripts del lab previo se perdieron); (4) `ocr_engines.py` — rapidocr-v4 (rapidocr_onnxruntime==1.4.4, det 1920/max, CARGA medida aparte kit §8.1) + tesseract-tuned (spa tessdata_best, oem 1, psm 6 — perfil reconstruido, config exacta 39/56 perdida); (5) `variantes.py` (JPEG q90 + PNG) · `bench.py` (matriz 2×3×4×3, medianas, sanidad kit §1 exit 3, `--gen-gt` consenso EG, `--humo`) · `reporte.py` (ranking kit §5: 1º anclas, 2º CER, 3º tiempo; ganador general y por motor) · `laminas.py` (láminas lado a lado + zoom cabecera/ZONA-PUESTO-MESA/código 1D + galeria.html) · `zip_pack.py` (< 30 MB, /variantes /laminas galeria resultados /textos) · `setup_env.sh` (venv+deps+tessdata+configs — NADA al repo) · `run_filtros1.sh` (oficial | --humo, con gate «BLOQUEADO: faltan fotos»).
@@ -1024,3 +1090,40 @@ PROFILER / snapA+TORCH_HINT+accept.
 - **Commits:** feat(e14): rig FILTROS-1 · docs(e14): worklog — **PR `lab/filtros-1` → main ABIERTO, SIN merge** (protocolo del repo).
 - **Cómo probar (cuando el dueño re-suba las 4 fotos a `lab/fotos/`):** `bash lab/setup_env.sh && bash lab/run_filtros1.sh` → genera variantes, 72 inferencias, sanidad kit §1, ranking, láminas, galería y `lab/resultados/comparativa-filtros-e14-YYYYMMDD.zip`. Sin fotos: `bash lab/run_filtros1.sh` imprime el BLOQUEO con la lista exacta (exit 5).
 - **Pendiente/Bloqueado:** ÚNICO bloqueante = re-subida de las 4 fotos por el dueño (nombres esperados en `lab/fotos/` + manifest.json auto-generado). Desviaciones honestas documentadas en `lab/README.md` §Desviaciones (crop re-implementado, tesseract tuned reconstruido — los números pueden desviarse levemente del lab previo; árbitro = sanidad kit §1: RapidOCR 45–52/56 · CER ≤ 50%). PR #10 (informe) sigue ABIERTO esperando auditoría del dueño.
+
+### [2026-10-17 04:32 (Bogotá)] — KIT e14-ocr-lee-original-v1 (PROD-1) COMPLETO: el OCR lee el recorte SIN filtro, la imagen mostrada sigue bw — Z.ai Code (feat/ocr-lee-original desde feat/informe-telemetria-ocr @ 8443ff4, PR NUEVO ABIERTO sin merge — Task ID PROD-1)
+
+- **Hecho:** regla única de producto implementada C1-C5 (kit §2/§4). C1 `pipeline()`: DOS variantes bajo la MISMA conRampa (bw MOSTRAR/GUARDAR + "original" LEER, msEstimados 1400→2200) → `fotoOcr` con fallback `.catch(() => null)` → `bw-fallback` (el pipeline JAMÁS muere por la variante — §5/pitfall §9.6); rama sinRecorte: `fotoOcr = fotoOriginal`, `ocrIn=original-as-is`, cero llamadas nuevas. C2 `pipelineRecorte()`: mismo patrón `{manual:true}` + reuse `pOcr=pBw` si filtro ya es "original" (UNA sola llamada — pitfall §9.4). C3 `reconocerTexto()`: re-OCR del editor lee recorte "original" (fotoOriginal+quadDetectado) con fallback a la procesada. C4 trazas: token `ocrIn=` en AMBOS logs de auditoría + `PipelineInfo.ocrInputFiltro` (default "") pasado a `registrarPipelineE14` (el recorte NO registra en la base — documentado en el REPORTE §3.3). C5 `generar.ts`: «bw (producción hoy)» → «bw (imagen mostrada)» (LÓGICA intacta) + `ocrInputFiltro` en JSON (mapeo explícito) y línea TXT.
+- **Verificación (§6 completa):** lint 0 · tsc 0 · build 3/3 · intocables = 0 archivos fuera de alcance (solo bridge/telemetria/generar; core/bun.lock/divipol/ScanView/store/worker/modelos 0 toques) · navegador (:3001, 412×850, 0 errores): SIM óptima `filtro=bw ocrIn=original` chip 8.2 AUTO (cod 710007483010102) · SIM as-is `ocrIn=original-as-is proceso=0` chip 7.0 AUTO (399) · IMPORTAR `ARCHIVO filtro=bw ocrIn=original esquinas=OK AUTO` (2 variantes, misma rampa) · RECORTE manual sobre as-is `filtro=original ocrIn=original UNA sola llamada (reuse pOcr=pBw)` · informe TXT headless: `ocrInputFiltro=original` en la línea del pipeline · clasificadores AUTO sobre el TEXTO nuevo en los 3 assets SIN ajustar regex (§6.6 sin regresión).
+- **ADAPTACIONES documentadas (REPORTE §3):** (1) `.catch(() => null)` dentro del Promise.all (aclaración final del kit §4.1) en vez del try/catch del snippet; (2) token `original-as-is` para SIM (§6.3); (3) pipelineRecorte no registra en telemetría en la base (única llamada en escaneo L949 — no alterar el instrumento); (4) JSON del informe es mapeo selectivo → campo añadido explícitamente; (5) tipos de ocrIn por pipeline.
+- **Archivos:** src/lib/e14/scanner-core-bridge.ts · src/lib/e14/informe/telemetria.ts · src/lib/e14/informe/generar.ts · docs/{INSTRUCCIONES-e14-ocr-lee-original-v1.md (NUEVO, verbatim md5 86cc0312), REPORTE-ocr-lee-original-v1.md (NUEVO), worklog.md} · AGENTS.md
+- **Commits:** feat (C1-C5) · docs (este) — **PR: feat/ocr-lee-original → main** (NUEVO, ABIERTO, SIN merge — espera auditoría del dueño). Base: bifurcada de `feat/informe-telemetria-ocr` @ `8443ff4` (PR #10 ABIERTO, regla fija §8: NO se mergea nada por cuenta propia — el PR de PROD-1 se audita DESPUÉS del del informe).
+- **Pendiente/Bloqueado:** auditoría del dueño (PR #10 informe PRIMERO, luego este) + QA física §7 (El Cairo P1/Frankfurt P2 con SUS capturas: anclas 6→8/5→7, GT 9→10/7→8, menos chars Frankfurt ≈260 esperado) · desbloquea PROD-2 (kit e14-motor-rapidocr-v1 ya en /upload, base = ESTA rama).
+
+### [2026-10-17 04:50 (Bogotá)] — KIT e14-score-lectura-v1 (SCORE v2 "LA LECTURA MANDA") COMPLETO: A+B+C — Z.ai Code (feat/score-lectura desde main 5feea02, PR NUEVO ABIERTO sin merge — Task ID SCORE-LECTURA)
+
+- **Hecho (A+B+C completos, §2):** A `sharpnessHi` (Laplaciano 4-vecinos, MEDIANA de varianza de 9 tiles 3×3, σ×2.2 cap 100, sobre el recorte derivado a HI_RES_LADO=1000 — solo downscale, 1 getImageData, <80 ms) + `contrastPapel` (histograma 256 bins, p5/p95 por barrido acumulado SIN sort, spread×100/160) en `calidadDeActa` → `PageQualityV2` (tipo local — core intocable); fallback adjunta señales del frame vía el MISMO helper (o 0/0 → degrada a v1). B `contrasteEfectivoDe` → max(contrast, contrastPapel, ocrLegible?80:0) — el piso §X QUEDA (§9.6). C módulo NUEVO `senal-lectura.ts` (puro): 10 ANCLAS_LECTURA (copia local documentada — la fuente informe/analisis-texto.ts vive en PR #10 no mergeado; TRANSMISIÓN→KIT nnn según el kit) + `norm()` byte a byte del informe (§9.10) + `senalDeLectura` (FUERTE = mesa+4 anclas o ≥6; MEDIA = cabecera o ≥2 anclas o ≥150 chars; DEBIL resto) + constantes PISO_LECTURA_FUERTE=8.5 / TECHO_LECTURA_DEBIL=5.9; bloque C3 insertado EXACTAMENTE entre scoreDeCalidad y la inyección SIM/caps en AMBOS pipelines (L813/L1174 del kit — pitfall §9.9 mismo criterio); level recalculado con sharpnessV2 (misma fórmula/umbrales duplicados). Trazas: `lectura=<NIVEL> anclas=<k> piso=<bool>` en los 2 logs.
+- **Verificación (§6):** lint 0 · tsc 0 (build NO corrido — prohibido §8) · smoke módulo puro 4/4 (FUERTE/DEBIL/DEBIL/MEDIA) · navegador (:3001, 412×850, 0 errores): SIM 8.2/7.0/4.3 idénticos (inyección manda — §9.5), acta real Frankfurt P1 importada → `score=8.9 lectura=FUERTE anclas=6 piso=true esquinas=OK AUTO` (piso ACTIVO — §6.4 en el caso disponible; ⚠ public/fotos-lab/ NO existe — fotos perdidas con el sandbox, conocido desde FILTROS-1: 2×Frankfurt P2/El Cairo P1 → QA del dueño §7) · recorte manual `lectura=DEBIL` techo 5.9 no empeora (4.9) con escudo fondo+recortada ganando (§9.4) · SIN llamada OCR nueva · CALIDAD <200 ms (75/39/100/111/101 ms).
+- **Antes/después (REPORTE §3):** Frankfurt P1 real 8.5→**8.9** (+0.4 por contrastPapel: contEf 87→100; piso FUERTE garantiza ≥8.5) · SIM idénticos · baja/recorte sin cambio (4.9→4.9 — DEBIL no empeora).
+- **ADAPTACIONES documentadas (REPORTE §4):** (1) sort trivial de 9 varianzas (el §9.2 es del histograma de píxeles — respetado); (2) level recalcula si cambia CUALQUIERA de las 2 entradas v2; (3) §6.4 con la única foto real del repo; (4) base main 5feea02 según §8 — el conflicto futuro con PROD-1/PROD-2 (zona OCR→score L775-826/L1160-1186) se resolverá manteniendo AMBOS cambios.
+- **Archivos:** src/lib/e14/senal-lectura.ts (NUEVO) · src/lib/e14/scanner-core-bridge.ts · docs/{INSTRUCCIONES-e14-score-lectura-v1.md (NUEVO, verbatim md5 7137db23), REPORTE-score-lectura-v1.md (NUEVO), worklog.md} · AGENTS.md
+- **Commits:** feat (A+B+C+trazas) · docs (este) — **PR: feat/score-lectura → main** (NUEVO, ABIERTO, SIN merge — espera auditoría del dueño).
+- **Pendiente:** auditoría del dueño (orden de merge recomendado §8: PROD-1 → PROD-2 → score-lectura; conflicto esperado en zona OCR→score → mantener AMBOS cambios) + QA física §7 (buena luz ≥8.5 · reflejo parcial no engaña a la mediana · borroso ≤6.4 · chips 7.0/4.3 idénticos · logs para recalibración fina).
+
+### [2026-10-17 10:05 (Bogotá)] — KIT e14-motor-rapidocr-v1 (PROD-2) COMPLETO: RapidOCR PP-OCRv4 como motor de producción — Z.ai Code (feat/motor-rapidocr desde feat/ocr-lee-original @ 609f324, PR NUEVO ABIERTO sin merge — Task ID PROD-2)
+
+- **Hecho:** C1 MOVE literal `informe/rapidocr.ts` → `ocr/rapidocr.ts` (rename 95 %: 1 import `./telemetria` → `../informe/telemetria` + JSDoc módulo compartido + pre-warm `void rapidOcrInit().catch(()=>{})` al importar — arranque ANTES de la 1.ª captura sin tocar ScanView) + `matriz.ts` SOLO import path. C2 adaptador `reconocerRapidOcr(texto+progreso, sin fallback de motor)` en el bridge; los 3 puntos de lectura (pipeline/pipelineRecorte/reconocerTexto) consumen la MISMA entrada `fotoOcr` del PROD-1. C3 `ocrBanda` → RapidOCR (escape hatch §5: revert puntual de C3). C4 `rapidOcrReconocer(rt, dataUrl, onProgress?)` — progreso real i/total por lote de rec; el informe NO lo pasa (byte a byte). C5 token `ocr=rapidocr conf=X.XX det=NNNms rec=NNNms` junto a `ocrIn=` en AMBOS logs (conf/det/rec capturados ANTES de la banda — la banda pisa `ultimoOcr*`) + `PipelineInfo.ocrMotor`/`ocrConf` (defaults ""/null) + JSON auto-descripto + etiquetas de veracidad («Tesseract 1600 (motor anterior)», «MOTOR DE PRODUCCIÓN: RapidOCR PP-OCRv4», «motor anterior 27/56») — LÓGICA de conclusiones INTACTA.
+- **Verificación (§6 completa):** tsc 0 · lint 0 · build 3/3 · intocables 0 archivos (matriz diff = SOLO import path; 9 celdas 0 errores con motores congelados) · navegador (:3001, 412×850): pre-warm visible (4 fetches de modelos al cargar, antes de capturas) · SIM óptima `score=8.2 filtro=bw ocrIn=original ocr=rapidocr conf=0.93 det=1205ms rec=4648ms` AUTO cod 710007453010102 · SIM as-is `ocrIn=original-as-is` con `detect=0 proceso=0` (chips 7.0 y 4.3 intactos, conf 0.91/0.62) · IMPORTAR `ARCHIVO score=8.5 filtro=bw ocrIn=original ocr=rapidocr` AUTO · RECORTE manual `filtro=original ocrIn=original` (reuse, UNA llamada — pitfall §9.4) · informe 9 celdas con JSON `ocrMotor=rapidocr-v4 ocrConf=0.9333 ocrInputFiltro=original` + TXT con etiquetas · singleton compartido (matriz `carga 0`, 2.ª captura det=902 ms caliente, 0 re-descargas) · §6.6: clasificadores AUTO con el texto RapidOCR en TODAS las pruebas (cod 1D completo — lee MEJOR), SIN ajustar regex, sin regresión → no aplica STOP.
+- **ADAPTACIONES documentadas (REPORTE §3):** (1) C4 en el commit 1 (cada commit compila); (2) conf/det/rec capturados antes de la banda; (3) JSON mapeo selectivo → campos añadidos explícitos; (4) re-OCR del editor no alcanzable headless (rama OPTIMA transitoria de la propia UI) — mismo adaptador verificado en 4 flujos, QA del dueño; (5) `POST /api/ocr 404` en dev es pre-existente del core; (6) pipelineRecorte sigue sin registrar telemetría (base).
+- **Archivos:** src/lib/e14/{scanner-core-bridge.ts, ocr/rapidocr.ts (NUEVO por MOVE), informe/{rapidocr.ts (MOVE), matriz.ts, telemetria.ts, generar.ts, referencia-lab.ts}} · docs/{INSTRUCCIONES-e14-motor-rapidocr-v1.md (NUEVO, verbatim md5 82b083f4), REPORTE-motor-rapidocr-v1.md (NUEVO), worklog.md} · AGENTS.md
+- **Commits:** feat (C1-C4 MOVE+adaptador+puntos+banda+progreso) · feat (C5 trazas+informe+etiquetas) · docs (este) — **PR: feat/motor-rapidocr → main** (NUEVO, ABIERTO, SIN merge — espera auditoría del dueño). Base: bifurcada de `feat/ocr-lee-original` @ `609f324` (PR #12 ABIERTO, regla fija §8: NO se mergea nada por cuenta propia — el PR de PROD-2 se audita DESPUÉS del del PROD-1; orden de merge del dueño: PROD-1 → PROD-2 → score-lectura).
+- **Pendiente/Bloqueado:** auditoría del dueño (PR #12 PROD-1 PRIMERO, luego este) + QA física §7 (Frankfurt anclas 7→9, campos 3→6, GT 8→13, CER 60→28; El Cairo GT 10→12, conf ~0.92; ANALIZANDO +2-4 s esperado; verificar banda del sello y código 1D) · siguiente en la cola del dueño: kit e14-diagnostico-autoenvio-v1 DESPUÉS de mergear.
+
+### [2026-10-17 10:47 (Bogotá)] — REBASE PR #13 sobre main (cadena #10 → #12 → #14 MERGEADA — autorización del dueño en chat) — Z.ai Code (feat/score-lectura, Task ID REBASE-13)
+
+- **Contexto:** el dueño autorizó mergear en orden #10 (informe → `6cc1b79`) → #12 (PROD-1 → `2f3fda0`) → #14 (PROD-2 → `8a8c351`) y rebasar #13 sobre el main nuevo — el parity FAILURE de #13 se arregla al heredar el worker sync (kit informe). PR #10 estaba en DRAFT → marcado ready vía GraphQL `markPullRequestReadyForReview` antes del merge.
+- **Merge:** los 3 con merge commit (estilo del repo), CI 4/4 VERDE en cada head ANTES de mergear (Vercel/checks/parity ×2 en #10 `8443ff4`, #12 `609f324`, #14 `498723e`).
+- **Rebase (conflicto esperado, REPORTE §4-3 del kit):** `scanner-core-bridge.ts` ×3 — (1) imports EN UNIÓN (telemetría + senal-lectura); (2-3) trazas de auditoría de ambos pipelines EN UNIÓN: `ocrIn=` (PROD-1) + `ocr=rapidocr conf/det/rec` (PROD-2) + `lectura=/anclas=/piso=` (score-lectura) + `clasif=` una sola vez — todas las familias de tokens grep-ables preservadas (×8 verificado). `docs/worklog.md` + `AGENTS.md`: apéndices EN UNIÓN, orden por timestamp escrito (informe 00:55 → PROD-1 04:32 → score-lectura 04:50 → PROD-2 10:05). Commits rebaseados: `ccc211a` (feat A+B+C) + `c338df7` (docs) sobre `8a8c351`.
+- **Gates sobre el head rebaseado:** `bunx tsc --noEmit` → 0 · `bun run lint` → 0 · `bun run build` → OK (rutas estáticas) · diff vs main = 6 archivos (alcance exacto del kit: senal-lectura.ts NUEVO + bridge + docs) · tokens unidos verificados en el bridge.
+- **Push:** `--force-with-lease` a `feat/score-lectura` → PR #13 actualizado (base main `8a8c351`); CI corre sobre el head rebaseado — parity hereda el worker sync → esperado VERDE.
+- **Pendiente:** CI de #13 verde + auditoría del dueño (el PR sigue SIN merge — regla fija §8). Siguiente en la cola: kit e14-diagnostico-autoenvio-v1 (PROD-3) sobre main `8a8c351` — DESBLOQUEADO.
