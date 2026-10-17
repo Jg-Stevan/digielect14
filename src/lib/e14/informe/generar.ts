@@ -179,7 +179,7 @@ export function generarConclusiones(
           (sinFiltro.campos.ok === conFiltro.campos.ok && sinFiltro.chars > conFiltro.chars)));
     const ganador = ganaSin ? sinFiltro : conFiltro;
     out.push(
-      `¿ORIGINAL O FILTROS? Con el motor ${motor}, el recorte SIN filtro (${sinFiltro.variante}) recuperó ${sinFiltro.anclas.hits}/${sinFiltro.anclas.total} anclas y ${sinFiltro.chars} chars en ${sinFiltro.totalMs} ms; con filtro ${conFiltro.variante === "recorte-bw" ? "bw (producción hoy)" : conFiltro.variante}: ${conFiltro.anclas.hits}/${conFiltro.anclas.total} anclas y ${conFiltro.chars} chars en ${conFiltro.totalMs} ms → mejor captura: ${ganador.variante} (${ganaSin ? "sin filtro" : "con filtro"}).`,
+      `¿ORIGINAL O FILTROS? Con el motor ${motor}, el recorte SIN filtro (${sinFiltro.variante}) recuperó ${sinFiltro.anclas.hits}/${sinFiltro.anclas.total} anclas y ${sinFiltro.chars} chars en ${sinFiltro.totalMs} ms; con filtro ${conFiltro.variante === "recorte-bw" ? "bw (imagen mostrada)" : conFiltro.variante}: ${conFiltro.anclas.hits}/${conFiltro.anclas.total} anclas y ${conFiltro.chars} chars en ${conFiltro.totalMs} ms → mejor captura: ${ganador.variante} (${ganaSin ? "sin filtro" : "con filtro"}).`,
     );
   }
 
@@ -350,6 +350,8 @@ export async function construirInforme(
           sinRecorte: pipeline.sinRecorte,
           cropInfo: pipeline.cropInfo,
           filtro: pipeline.filtroActa,
+          // PROD-1 (§4.4a): la entrada del OCR queda auto-descripta en el JSON.
+          ocrInputFiltro: pipeline.ocrInputFiltro,
           motor: pipeline.motor,
           ocrChars: pipeline.ocrChars,
           ocrValido: pipeline.ocrValido,
@@ -437,10 +439,10 @@ export async function generarTxt(informe: InformeJson, textosPorCelda: string[])
   // 2 PIPELINE
   L.push("");
   L.push("2 · PIPELINE (ms por etapa)");
-  const p = informe.pipeline as { ms?: Record<string, number>; filtro?: string; motor?: string; ocrChars?: number; registrado?: boolean } | null;
+  const p = informe.pipeline as { ms?: Record<string, number>; filtro?: string; ocrInputFiltro?: string; motor?: string; ocrChars?: number; registrado?: boolean } | null;
   if (p?.ms) {
     for (const [k, v] of Object.entries(p.ms)) L.push(`  ${k.padEnd(9)} ${String(Math.round(v)).padStart(7)} ms`);
-    L.push(`  filtro=${p.filtro} · motor=${p.motor} · ocrChars=${p.ocrChars} · registrado=${p.registrado}`);
+    L.push(`  filtro=${p.filtro} · ocrInputFiltro=${p.ocrInputFiltro ?? ""} · motor=${p.motor} · ocrChars=${p.ocrChars} · registrado=${p.registrado}`);
   } else {
     L.push("  (pipeline no registrado — salida temprana del flujo, AC-3)");
   }

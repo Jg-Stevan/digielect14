@@ -704,18 +704,43 @@ export class RealCoreBridge implements E14Bridge {
     let fotoProcesada: string;
     let filtroActa: PageFilter;
     let motor: "worker" | "canvas";
+    // KIT e14-ocr-lee-original-v1 (PROD-1 §4.1): variante de ENTRADA del OCR +
+    // traza de su origen (§4.4). "original" = crudo del warp (warp sin realce,
+    // misma geometría que la bw — §3 del kit) · "original-as-is" = SIM (la
+    // original YA es la entrada) · "bw-fallback" = la variante nueva falló y
+    // el OCR lee la bw (comportamiento de hoy — §5: el pipeline JAMÁS muere
+    // por la variante nueva, pitfall §9.6).
+    let fotoOcr: string;
+    let ocrIn: "original" | "original-as-is" | "bw-fallback";
     if (sinRecorte) {
       fotoProcesada = fotoOriginal;
       filtroActa = "original";
       motor = "canvas";
+      // PROD-1 (§4.1): SIM as-is — la entrada del OCR YA era la original:
+      // cero llamadas nuevas (chips SIM 8.2/7.0/4.3 intactos por construcción).
+      fotoOcr = fotoOriginal;
+      ocrIn = "original-as-is";
       emitir({ etapa: "REALZANDO", progreso: 1 });
     } else {
-      const resultado = await conRampa(
-        // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L602-604
-        // (captura arranca en B/N adaptativo) + types.ts L50 (default del
-        // producto) — D36: e14 no tiene ajustes → el default fijo es "bw".
-        processImage(fotoOriginal, quad, "bw"),
-        1400,
+      // PROD-1 (§4.1): DOS variantes bajo la MISMA conRampa — bw para
+      // MOSTRAR/GUARDAR (hoy) y "original" (warp sin realce) para LEER.
+      // .catch(() => null) DENTRO del Promise.all (aclaración final del kit):
+      // si processImage("original") rechaza, Promise.all NO rechaza — decide
+      // con el resultado null → bw-fallback (§5). El pipeline NUNCA muere por
+      // la variante nueva.
+      const [resultado, resultadoOcr] = await conRampa(
+        Promise.all([
+          // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L602-604
+          // (captura arranca en B/N adaptativo) + types.ts L50 (default del
+          // producto) — D36: e14 no tiene ajustes → el default fijo es "bw".
+          processImage(fotoOriginal, quad, "bw"),
+          // PROD-1: la misma geometría (mismo warp, MISMA convención
+          // POST-warp — pitfall §9.5), solo cambia el filtro final.
+          processImage(fotoOriginal, quad, "original").catch(() => null),
+        ]),
+        // msEstimados 1400→2200 (§4.1): el segundo warp (~0.6-1.3 s, §1.4)
+        // se cubre con la MISMA rampa (el core serializa en su worker).
+        2200,
         // RECORTANDO .2→.6 (warp) → REALZANDO .4→1 (enhance), interpolado.
         (f) =>
           f < 0.55
@@ -728,6 +753,15 @@ export class RealCoreBridge implements E14Bridge {
       fotoProcesada = resultado.processed;
       filtroActa = "bw";
       motor = resultado.precision?.engine ?? "canvas";
+      // PROD-1 (§4.1) — entrada del OCR, con fallback que JAMÁS rompe el
+      // pipeline: fotoOcr queda = fotoProcesada (comportamiento de hoy).
+      fotoOcr = fotoProcesada;
+      ocrIn = "original";
+      if (resultadoOcr?.processed) {
+        fotoOcr = resultadoOcr.processed;
+      } else {
+        ocrIn = "bw-fallback";
+      }
     }
     // KIT consenso-frankfurt-v1 (FASE 2, §3): esquinas fiduciales ANTES del
     // guard — la marca presente es PRUEBA POSITIVA de que el papel está
@@ -771,9 +805,11 @@ export class RealCoreBridge implements E14Bridge {
     ms.calidad = performance.now() - tCalidad;
     emitir({ etapa: "CALIDAD", progreso: 1 });
 
-    // 5) OCR sobre la PROCESADA (spa+eng local; progreso real 0→1).
+    // 5) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.1: el recorte
+    //    SIN filtro — regla del dueño; la bw pasa a ser SOLO la imagen de
+    //    presentación/guardado; spa+eng local; progreso real 0→1).
     const tOcr = performance.now();
-    let texto = await requestOcr(fotoProcesada, (p) => {
+    let texto = await requestOcr(fotoOcr, (p) => {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     });
     ms.ocr = performance.now() - tOcr;
@@ -936,7 +972,7 @@ export class RealCoreBridge implements E14Bridge {
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaAsis}${evidenciaBorde} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
-        `score=${score} filtro=${filtroActa} clasif={${fmtClasif(gate.clasificacion)}} ` +
+        `score=${score} filtro=${filtroActa} ocrIn=${ocrIn} clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
@@ -957,6 +993,8 @@ export class RealCoreBridge implements E14Bridge {
         calidad,
         contEfectivo: contrasteEfectivoDe(calidad, ocrLegible),
         filtroActa,
+        // PROD-1 (§4.4): la entrada del OCR queda auto-descripta en el informe.
+        ocrInputFiltro: ocrIn,
         motor,
         ocrChars: texto.length,
         ocrValido: ocrTextIsValid(texto),
@@ -1114,11 +1152,25 @@ export class RealCoreBridge implements E14Bridge {
     const filtro: PageFilter = acta.filtro ?? "bw";
 
     // 1) Recorte + realce (warp real INTER_CUBIC + filtro del acta, F5-MANUAL).
+    //    KIT e14-ocr-lee-original-v1 (PROD-1 §4.2): MISMO patrón del escaneo —
+    //    DOS variantes bajo la MISMA conRampa: la del filtro del acta
+    //    (MOSTRAR/GUARDAR) y "original" para LEER. Si el acta YA está en
+    //    "original", la procesada ES la entrada del OCR (UNA sola llamada —
+    //    pitfall §9.4: NO duplicar el warp; la promesa se comparte).
+    //    .catch(() => null): la variante nueva jamás rechaza el rescate
+    //    (fallback bw-fallback §5). msEstimados 1400→2200 (2.º warp, §1.4).
     emitir({ etapa: "RECORTANDO", progreso: 0.2 });
     const tProceso = performance.now();
-    const resultado = await conRampa(
-      processImage(fotoOriginal, quad, filtro, rotacion, { manual: true }),
-      1400,
+    const pBw = processImage(fotoOriginal, quad, filtro, rotacion, { manual: true });
+    const pOcr =
+      filtro === "original"
+        ? pBw
+        : processImage(fotoOriginal, quad, "original", rotacion, { manual: true }).catch(
+            () => null,
+          );
+    const [resultado, resultadoOcr] = await conRampa(
+      Promise.all([pBw, pOcr]),
+      2200,
       // RECORTANDO .2→.6 (warp) → REALZANDO .4→1 (enhance), interpolado.
       (f) =>
         f < 0.55
@@ -1129,6 +1181,15 @@ export class RealCoreBridge implements E14Bridge {
     ms.proceso = performance.now() - tProceso;
     emitir({ etapa: "REALZANDO", progreso: 1 });
     const fotoProcesada = resultado.processed;
+    // PROD-1 (§4.2): entrada del OCR con fallback idéntico al escaneo (§5).
+    // Con filtro "original" la procesada ES la entrada (ocrIn=original — reuse).
+    let fotoOcr = fotoProcesada;
+    let ocrIn: "original" | "bw-fallback" = "original";
+    if (resultadoOcr?.processed) {
+      fotoOcr = resultadoOcr.processed;
+    } else {
+      ocrIn = "bw-fallback";
+    }
     // §D4 (SPEC-e14-score-ocr): tinta de la procesada re-recortada — mismo
     // criterio del pipeline (un crop sobre zona sin tinta → ORIGINAL).
     const procesadaVacia = await procesadaVaciaDataUrl(fotoProcesada);
@@ -1144,9 +1205,10 @@ export class RealCoreBridge implements E14Bridge {
     ms.calidad = performance.now() - tCalidad;
     emitir({ etapa: "CALIDAD", progreso: 1 });
 
-    // 3) OCR sobre la PROCESADA + gate §4.2 (progreso real 0→1).
+    // 3) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.2: recorte SIN
+    //    filtro con fallback idéntico al escaneo; gate §4.2; progreso real 0→1).
     const tOcr = performance.now();
-    let texto = await requestOcr(fotoProcesada, (p) => {
+    let texto = await requestOcr(fotoOcr, (p) => {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     });
     ms.ocr = performance.now() - tOcr;
@@ -1274,7 +1336,7 @@ export class RealCoreBridge implements E14Bridge {
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
-        `score=${score} filtro=${filtro} clasif={${fmtClasif(gate.clasificacion)}} ` +
+        `score=${score} filtro=${filtro} ocrIn=${ocrIn} clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
@@ -1403,6 +1465,13 @@ export class RealCoreBridge implements E14Bridge {
   /**
    * F-OCR del lab (EditorView.tsx L1360-1395): corre requestOcr sobre la
    * imagen PROCESADA del acta y devuelve el texto crudo.
+   * KIT e14-ocr-lee-original-v1 (PROD-1 §4.3): coherencia con la regla del
+   * producto — el re-OCR manual del editor aplica la MISMA regla: lee el
+   * RECORTE SIN filtro ("original", el crudo del warp) cuando hay
+   * fotoOriginal + quadDetectado; fallback a la procesada (comportamiento de
+   * hoy). NOTA (documentada): el texto del editor puede diferir del histórico
+   * — ES la regla nueva del producto, NO un bug (en impresas con sello el
+   * crudo colapsa chars — §1.2 del kit, esperado).
    * ADAPTACIÓN documentada: el lab elige imagen con prioridad
    * `preview ?? procesada-fresca ?? original` (L1373-1376) porque tiene
    * previewCache; en e14 la procesada SIEMPRE está fresca (todo cambio pasa
@@ -1415,7 +1484,23 @@ export class RealCoreBridge implements E14Bridge {
     if (!fotoProcesada) {
       throw new Error("SIN FOTO PROCESADA PARA RECONOCER TEXTO");
     }
-    return requestOcr(fotoProcesada);
+    // PROD-1 (§4.3): regla del producto en el re-OCR del editor — recorte
+    // "original" con el quad horneado (misma convención POST-warp); el catch
+    // cae al fallback de abajo (comportamiento de hoy, §5 del kit).
+    if (acta.fotoOriginal && acta.quadDetectado) {
+      try {
+        const r = await processImage(
+          acta.fotoOriginal,
+          acta.quadDetectado,
+          "original",
+          acta.rotation ?? 0,
+        );
+        return requestOcr(r.processed);
+      } catch {
+        /* cae al fallback de abajo */
+      }
+    }
+    return requestOcr(fotoProcesada); // comportamiento de hoy (fallback)
   }
 
   /** Firmas coherentes con el estado (misma regla del mock/§7.5):
