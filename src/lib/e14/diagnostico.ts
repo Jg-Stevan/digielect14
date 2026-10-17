@@ -18,6 +18,7 @@
  */
 import { zipSync, strToU8, type Zippable } from "fflate";
 import type { Acta, ActaStatus, DiagnosticoActa } from "./types";
+import type { NivelLectura } from "./senal-lectura";
 
 const STORAGE_KEY = "e14-diag-v1";
 const CAP_ENTRADAS = 500;
@@ -67,12 +68,18 @@ export function construirDiagnostico(p: {
   techos: string[];
   metricas: {
     sharpness: number;
+    // KIT e14-diag-campos-aditivos-v1: métricas v2 de main (calidadDeActa §3).
+    sharpnessHi: number;
     brightness: number;
     contrast: number;
+    contrastPapel: number;
     contrasteEfectivo: number;
   };
   level: string;
   lecturaChars: number;
+  // KIT e14-diag-campos-aditivos-v1: la señal de lectura que el bridge ya
+  // calcula (C3 del score v2) — misma instancia, SIN recálculo (pitfall §9.10).
+  senalLectura: { nivel: NivelLectura; anclas: number };
   senalActa: boolean;
   ocrValido: boolean;
   gate: DiagnosticoActa["gate"];
@@ -89,15 +96,19 @@ export function construirDiagnostico(p: {
     score: { visual: p.scoreVisual, final: p.scoreFinal, techos: p.techos },
     metricas: {
       sharpness: p.metricas.sharpness,
-      // v2 score-lectura (PR #13) — null hasta que main la herede (§8).
-      sharpnessHi: null,
+      sharpnessHi: p.metricas.sharpnessHi, // AHORA REAL (fallo → 0, §3)
       brightness: p.metricas.brightness,
       contrast: p.metricas.contrast,
-      contrastPapel: null,
+      contrastPapel: p.metricas.contrastPapel, // AHORA REAL
       contrasteEfectivo: p.metricas.contrasteEfectivo,
     },
     level: p.level,
-    lectura: { nivel: "—", anclas: 0, chars: p.lecturaChars },
+    // KIT e14-diag-campos-aditivos-v1: REAL — la señal del C3 (L1050/L1503).
+    lectura: {
+      nivel: p.senalLectura.nivel,
+      anclas: p.senalLectura.anclas,
+      chars: p.lecturaChars,
+    },
     senalActa: p.senalActa,
     ocrValido: p.ocrValido,
     gate: p.gate,

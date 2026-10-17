@@ -1182,6 +1182,13 @@ export class RealCoreBridge implements E14Bridge {
     if (calidad.level === "fair") techosDiag.push("techo-fair:7.9");
     if (calidad.level === "poor") techosDiag.push("techo-poor:6.4");
     if (!senalActa) techosDiag.push(`sin-senal:${TECHO_SIN_SENAL}`);
+    // KIT e14-diag-campos-aditivos-v1 (§8 score-lectura): ajustes de LECTURA
+    // del score v2 — NO son caps: observabilidad del ajuste (piso sube,
+    // techo baja). Condición espejo exacta del C3 (L1050-1055) — el C3
+    // aplica DESPUÉS de scoreDeCalidad y ANTES de los caps del sitio.
+    if (senal.nivel === "FUERTE" && calidad.level !== "poor")
+      techosDiag.push("piso-lectura-FUERTE:8.5");
+    if (senal.nivel === "DEBIL") techosDiag.push("lectura-DEBIL:5.9");
     if (completa && verificacionResuelta?.fondo)
       techosDiag.push(`escudo-fondo:${TECHO_ESCUDO_FONDO}`);
     if (recortada) techosDiag.push(`recortada:${TECHO_ESCUDO_FONDO}`);
@@ -1203,12 +1210,18 @@ export class RealCoreBridge implements E14Bridge {
           techos: techosDiag,
           metricas: {
             sharpness: calidad.sharpness,
+            // KIT e14-diag-campos-aditivos-v1: métricas v2 REALES (§3).
+            sharpnessHi: calidad.sharpnessHi,
             brightness: calidad.brightness,
             contrast: calidad.contrast,
+            contrastPapel: calidad.contrastPapel,
             contrasteEfectivo: contrasteEfectivoDe(calidad, ocrLegible),
           },
           level: calidad.level,
           lecturaChars: texto.length,
+          // KIT e14-diag-campos-aditivos-v1: la señal del C3 — MISMA
+          // instancia, sin recálculo (pitfall §9.10).
+          senalLectura: { nivel: senal.nivel, anclas: senal.anclas },
           senalActa,
           ocrValido: ocrTextIsValid(texto),
           gate: {
@@ -1652,6 +1665,13 @@ export class RealCoreBridge implements E14Bridge {
     if (calidad.level === "fair") techosDiag.push("techo-fair:7.9");
     if (calidad.level === "poor") techosDiag.push("techo-poor:6.4");
     if (!senalActa) techosDiag.push(`sin-senal:${TECHO_SIN_SENAL}`);
+    // KIT e14-diag-campos-aditivos-v1 (§8 score-lectura): ajustes de LECTURA
+    // del score v2 — NO son caps: observabilidad del ajuste (piso sube,
+    // techo baja). Condición espejo exacta del C3 del recorte (L1503-1508) —
+    // mismo criterio en AMBOS pipelines (pitfall §9.9 score-lectura).
+    if (senal.nivel === "FUERTE" && calidad.level !== "poor")
+      techosDiag.push("piso-lectura-FUERTE:8.5");
+    if (senal.nivel === "DEBIL") techosDiag.push("lectura-DEBIL:5.9");
     if (completa && verificacion.fondo)
       techosDiag.push(`escudo-fondo:${TECHO_ESCUDO_FONDO}`);
     if (recortada) techosDiag.push(`recortada:${TECHO_ESCUDO_FONDO}`);
@@ -1673,12 +1693,18 @@ export class RealCoreBridge implements E14Bridge {
           techos: techosDiag,
           metricas: {
             sharpness: calidad.sharpness,
+            // KIT e14-diag-campos-aditivos-v1: métricas v2 REALES (§3).
+            sharpnessHi: calidad.sharpnessHi,
             brightness: calidad.brightness,
             contrast: calidad.contrast,
+            contrastPapel: calidad.contrastPapel,
             contrasteEfectivo: contrasteEfectivoDe(calidad, ocrLegible),
           },
           level: calidad.level,
           lecturaChars: texto.length,
+          // KIT e14-diag-campos-aditivos-v1: la señal del C3 del recorte —
+          // MISMA instancia, sin recálculo (pitfall §9.10).
+          senalLectura: { nivel: senal.nivel, anclas: senal.anclas },
           senalActa,
           ocrValido: ocrTextIsValid(texto),
           gate: {
