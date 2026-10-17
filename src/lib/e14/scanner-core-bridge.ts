@@ -83,6 +83,7 @@ import { registrarPipelineE14 } from "./informe/telemetria";
 import {
   PISO_LECTURA_FUERTE,
   TECHO_LECTURA_DEBIL,
+  lazoPerdonadoPorLectura,
   senalDeLectura,
 } from "./senal-lectura";
 // §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
@@ -1027,8 +1028,14 @@ export class RealCoreBridge implements E14Bridge {
     // P1 sin «SUMA TOTAL» / P≥2 sin «FIRMA» (faltaSeccionInferior);
     // página DESCONOCIDA nunca condena. Techo 7.9 = ADVERTENCIA (NO
     // rechazo — conservador en campo). FASE F: OR con la señal de esquinas.
-    const recortada =
-      faltaSeccionInferior(texto, clasificacion.pagina) || ladoEsquina !== null;
+    // KIT e14-lectura-perdona-lazo-v1 (§4-B): la LECTURA perdona al lazo — un
+    // fiducial faltante cuyo lado está demostrado dentro por el OCR es falso
+    // positivo (margen corto/sombra). La señal de secciones NUNCA se perdona.
+    // En SIM esquinas=ESQUINAS_OK (L955) → helper false → recortada idéntica a
+    // hoy (chips 8.2/7.0/4.3 intactos — §2 del kit).
+    const faltaSeccion = faltaSeccionInferior(texto, clasificacion.pagina);
+    const lazoPerdonado = lazoPerdonadoPorLectura(esquinas, texto, faltaSeccion);
+    const recortada = faltaSeccion || (ladoEsquina !== null && !lazoPerdonado);
     const ocrLegible = ocrTextIsValid(texto);
     // §D1 (SPEC-e14-score-ocr): señal de CONTENIDO del acta — alimenta el
     // score (techo 4.9 sin señal) y el desenlace §D3 (rechazo BAJO).
@@ -1171,7 +1178,7 @@ export class RealCoreBridge implements E14Bridge {
         `proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaAsis}${evidenciaBorde} ` +
+        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaAsis}${evidenciaBorde} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtroActa} ocrIn=${ocrIn} ` +
         // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor
@@ -1478,8 +1485,13 @@ export class RealCoreBridge implements E14Bridge {
     // guard — arriba; aquí solo consume ladoEsquina/trazaEsq.)
     // KIT actas-vivas-paginas-v1 (FASE C): RECORTADA por OCR de secciones —
     // mismas señales que el escaneo (helper ÚNICO §4.4). FASE F: OR esquinas.
-    const recortada =
-      faltaSeccionInferior(texto, clasificacion.pagina) || ladoEsquina !== null;
+    // KIT e14-lectura-perdona-lazo-v1 (§4-B): MISMO perdón del escaneo — la
+    // LECTURA perdona al lazo (falso positivo margen corto/sombra); la señal
+    // de secciones NUNCA se perdona. Mismo criterio en AMBOS pipelines
+    // (pitfall §9.9 del kit score-lectura — helper único).
+    const faltaSeccion = faltaSeccionInferior(texto, clasificacion.pagina);
+    const lazoPerdonado = lazoPerdonadoPorLectura(esquinas, texto, faltaSeccion);
+    const recortada = faltaSeccion || (ladoEsquina !== null && !lazoPerdonado);
     const marcadores = await medirZonaVotos(fotoProcesada);
     // KIT actas-vivas-paginas-v1 (FASE C): gate de votos SOLO P1 — la pág 2
     // (constancias) NO tiene zona de votos. Página desconocida → se mide
@@ -1563,7 +1575,7 @@ export class RealCoreBridge implements E14Bridge {
         `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte} ` +
+        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
         `score=${score} filtro=${filtro} ocrIn=${ocrIn} ` +
         // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor.
