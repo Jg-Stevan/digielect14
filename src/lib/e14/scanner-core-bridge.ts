@@ -38,7 +38,11 @@ import {
   loadImage,
   processImage,
 } from "@jg-stevan/scanner-core/image-processor";
-import { ocrTextIsValid, requestOcr } from "@jg-stevan/scanner-core/ocr";
+import { ocrTextIsValid } from "@jg-stevan/scanner-core/ocr";
+// KIT e14-motor-rapidocr-v1 (PROD-2 §3): motor de OCR de producción — módulo
+// compartido con el informe (singleton de sesión ÚNICO, pitfall §9.6). El
+// requestOcr del core SOLO vive en motores.ts (celda «actual» de la matriz —
+// instrumento congelado, pitfall §9.2).
 import { defaultQuad } from "@jg-stevan/scanner-core/types";
 import type {
   PageFilter,
@@ -74,6 +78,13 @@ import { verificarCompletitud, type ResultadoCompletitud } from "./completitud";
 // KIT e14-gate-v2 (FASE G2): marcador OBLIGATORIO de votos — helper ÚNICO
 // compartido con el guard de completitud (motorTinta, cero duplicación).
 import { medirZonaVotos } from "./marcadores";
+import { registrarPipelineE14 } from "./informe/telemetria";
+// KIT e14-score-lectura-v1: señal de LECTURA del score v2 (módulo puro — §4-A).
+import {
+  PISO_LECTURA_FUERTE,
+  TECHO_LECTURA_DEBIL,
+  senalDeLectura,
+} from "./senal-lectura";
 // §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
 // import estático: Next resuelve el basePath /web-scanner del deploy estático.
 import actaSimUrl from "@/assets/acta-e14-real.jpg";
@@ -88,6 +99,8 @@ import actaSimIntermediaUrl from "@/assets/acta-sim-intermedia.jpg";
 import actaSimBajaUrl from "@/assets/acta-sim-baja.jpg";
 import type { Acta, ActaFirma, ActaStatus, ProgresoAnalisis } from "./types";
 import type { E14Bridge, OpcionesEscaneo } from "./bridge";
+// KIT e14-motor-rapidocr-v1 (PROD-2 §3): adaptador del motor de producción.
+import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
 
 /** Timeout de seguridad global §5 (worker colgado en gama baja). */
 const TIMEOUT_MS = 15_000;
@@ -277,9 +290,14 @@ const PISO_CONTRASTE_LEGIBLE = 80; // ≈ excellentQuality().contrast=84 del cor
  *  {sharpness:80 brightness:95 contrast:22} → 6.7 MODERADA de un acta
  *  clasificada AUTO). El contraste global del CRUDO no es evidencia de
  *  ilegibilidad cuando el OCR leyó texto válido → piso de acta legible.
- *  El OCR manda (principio §4.2 extendido). */
-function contrasteEfectivoDe(q: PageQuality, ocrLegible: boolean): number {
-  return ocrLegible ? Math.max(q.contrast, PISO_CONTRASTE_LEGIBLE) : q.contrast;
+ *  El OCR manda (principio §4.2 extendido).
+ *  KIT e14-score-lectura-v1 (C2): el spread de TINTA del papel
+ *  (`contrastPapel` — p95−p5 del recorte a hi-res) entra al max: rescata
+ *  actas borrosas-pero-legibles SIN depender del binario del OCR. El piso
+ *  existente QUEDA dentro del max (pitfall §9.6 — quitarlo es regresión
+ *  silenciosa en actas con tinta débil). */
+function contrasteEfectivoDe(q: PageQualityV2, ocrLegible: boolean): number {
+  return Math.max(q.contrast, q.contrastPapel, ocrLegible ? PISO_CONTRASTE_LEGIBLE : 0);
 }
 
 /** Mapeo §4.1: PageQuality del core → score 0-10 (1 decimal) con techos por
@@ -288,18 +306,24 @@ function contrasteEfectivoDe(q: PageQuality, ocrLegible: boolean): number {
  *  `conSenal` extiende el paquete — SIN señal de contenido del acta el score
  *  no describe una digitalización → techo 4.9 («score bajo»). */
 function scoreDeCalidad(
-  q: PageQuality,
+  q: PageQualityV2,
   senales?: { ocrLegible: boolean; identificada: boolean; conSenal?: boolean },
 ): number {
   const contrasteEf = contrasteEfectivoDe(q, senales?.ocrLegible ?? false);
-  const bruto = (q.sharpness * 0.4 + q.brightness * 0.3 + contrasteEf * 0.3) / 10;
+  // KIT e14-score-lectura-v1 (B2/C1): la nitidez del score v2 es la HI-RES
+  // (mediana de 9 tiles del Laplaciano a ~1000px — §4-B1). El 0 del fallback
+  // sin señal (degradación §5) cae a la del core (W=120) por el ||.
+  const sharpnessV2 = q.sharpnessHi || q.sharpness;
+  const bruto = (sharpnessV2 * 0.4 + q.brightness * 0.3 + contrasteEf * 0.3) / 10;
   let score10 = Math.round(bruto * 10) / 10;
   let level = q.level;
-  if (contrasteEf !== q.contrast) {
+  if (sharpnessV2 !== q.sharpness || contrasteEf !== q.contrast) {
     // Fuente: packages/scanner-core/src/image-processor.ts evaluateQuality —
     // fórmula y umbrales del level DUPLICADAS aquí (packages/ es intocable,
-    // regla de oro) SOLO para recalcular el techo con el contraste efectivo.
-    const scoreCore = q.sharpness * 0.45 + q.brightness * 0.25 + contrasteEf * 0.3;
+    // regla de oro) SOLO para recalcular el techo con las señales v2 (§3
+    // paso 2 del kit: misma fórmula/umbrales 80/62/45, solo cambia la
+    // entrada — sharpnessV2 + contrasteEfectivo).
+    const scoreCore = sharpnessV2 * 0.45 + q.brightness * 0.25 + contrasteEf * 0.3;
     level =
       scoreCore >= 80 ? "excellent" : scoreCore >= 62 ? "good" : scoreCore >= 45 ? "fair" : "poor";
   }
@@ -336,6 +360,121 @@ const BBOX_MIN_PX = 8;
 /** Cap del canvas del recorte: lado más largo ≤ 2000 px — NUNCA upscalar
  *  (§S.1.1; evaluateQuality baja a W=120 igual — costo: un drawImage). */
 const CROP_LADO_MAX = 2000;
+
+// ── KIT e14-score-lectura-v1 (C1 — nitidez de ALTA resolución) ──────────
+/** Lado largo del canvas de análisis hi-res (§3): costo <80 ms; el cap
+ *  CROP_LADO_MAX=2000 ya limita el recorte de origen (solo DOWNSCALE —
+ *  pitfall §9.1: NUNCA getImageData de la foto 12MP completa). */
+const HI_RES_LADO = 1000;
+/** MISMA normalización del core (evaluateQuality: σ(Laplaciano)×2.2 cap
+ *  100 — cambio solo de resolución, pitfall del kit §4-B1). */
+const LAP_NORM = 2.2;
+/** Spread de tinta del documento legible típico (§3): papel ~220 − tinta
+ *  ~60 = 160 → 100. Normaliza contrastPapel. */
+const PAPER_SPREAD_NORM = 160;
+
+/** KIT e14-score-lectura-v1 (§4-B1): PageQuality del core EXTENDIDO con las
+ *  2 señales hi-res del recorte. El tipo del core es INTOCABLE (pitfall
+ *  §9.7 — nunca modificar el paquete ni redeclarar el import). */
+interface PageQualityV2 extends PageQuality {
+  /** min(100, mediana de σ(Laplaciano) de 9 tiles 3×3 × 2.2) a ~1000px. */
+  sharpnessHi: number;
+  /** min(100, (p95−p5 del histograma de luminancia del recorte) × 100/160). */
+  contrastPapel: number;
+}
+
+/** Señales hi-res del recorte (§4-B1): Laplaciano 4-vecinos sobre gris;
+ *  MEDIANA (no promedio — pitfall §9.3: un reflejo especular inflaría el
+ *  promedio con su filo) de la varianza de 9 tiles 3×3;
+ *  sharpnessHi = min(100, σ_mediana×LAP_NORM). Histograma 256 bins del MISMO
+ *  gris para p5/p95 (percentiles por barrido acumulado — pitfall §9.2:
+ *  NUNCA sort de ~10⁶ píxeles); contrastPapel = min(100, (p95−p5)×100/160).
+ *  Un solo getImageData (willReadFrequently ya existe). Cualquier fallo →
+ *  0/0 (el score v2 degrada al comportamiento actual — §5 del kit). */
+function senalHiResDeCanvas(
+  origen: HTMLCanvasElement | HTMLImageElement,
+  wSrc: number,
+  hSrc: number,
+): { sharpnessHi: number; contrastPapel: number } {
+  try {
+    const lado = Math.max(wSrc, hSrc);
+    if (!lado || !Number.isFinite(lado)) return { sharpnessHi: 0, contrastPapel: 0 };
+    // Solo DOWNSCALE (§4-B1/pitfall §9.1): el recorte ya vive a ≤2000px, se
+    // deriva a ≤1000; si es más chico se queda tal cual (nunca upscale).
+    const escala = Math.min(1, HI_RES_LADO / lado);
+    const w = Math.max(1, Math.round(wSrc * escala));
+    const h = Math.max(1, Math.round(hSrc * escala));
+    const cv = document.createElement("canvas");
+    cv.width = w;
+    cv.height = h;
+    const ctx = cv.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return { sharpnessHi: 0, contrastPapel: 0 };
+    ctx.drawImage(origen, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    // Gris único (luminancia BT.601 como el core) + histograma 256 bins.
+    const gris = new Uint8ClampedArray(w * h);
+    const hist = new Uint32Array(256);
+    for (let i = 0, p = 0; i < gris.length; i++, p += 4) {
+      const g = ((data[p] * 299 + data[p + 1] * 587 + data[p + 2] * 114) / 1000) | 0;
+      gris[i] = g;
+      hist[g]++;
+    }
+    // Laplaciano 4-vecinos por tile (3×3 rejilla) → varianza → mediana.
+    const tw = Math.max(1, Math.floor(w / 3));
+    const th = Math.max(1, Math.floor(h / 3));
+    const vars: number[] = [];
+    for (let ty = 0; ty < 3; ty++) {
+      for (let tx = 0; tx < 3; tx++) {
+        const x0 = tx * tw;
+        const y0 = ty * th;
+        const x1 = tx === 2 ? w : x0 + tw;
+        const y1 = ty === 2 ? h : y0 + th;
+        let sum = 0;
+        let sumSq = 0;
+        let n = 0;
+        for (let y = y0 + 1; y < y1 - 1; y++) {
+          for (let x = x0 + 1; x < x1 - 1; x++) {
+            const i = y * w + x;
+            const lap = gris[i - 1] + gris[i + 1] + gris[i - w] + gris[i + w] - 4 * gris[i];
+            sum += lap;
+            sumSq += lap * lap;
+            n++;
+          }
+        }
+        if (n > 0) vars.push(sumSq / n - (sum / n) * (sum / n));
+      }
+    }
+    // Mediana de ≤9 varianzas (sort trivial — el pitfall §9.2 es del
+    // histograma de PÍXELES, no de estos 9 valores).
+    vars.sort((a, b) => a - b);
+    const medianaVar = vars.length > 0 ? vars[Math.floor(vars.length / 2)] : 0;
+    const sharpnessHi = Math.min(100, Math.sqrt(Math.max(0, medianaVar)) * LAP_NORM);
+    // p5/p95 por barrido acumulado del histograma (SIN sort — pitfall §9.2).
+    const total = w * h;
+    let acc = 0;
+    let p5 = 0;
+    let p95 = 255;
+    for (let b = 0; b < 256; b++) {
+      acc += hist[b];
+      if (acc >= total * 0.05) {
+        p5 = b;
+        break;
+      }
+    }
+    acc = 0;
+    for (let b = 0; b < 256; b++) {
+      acc += hist[b];
+      if (acc >= total * 0.95) {
+        p95 = b;
+        break;
+      }
+    }
+    const contrastPapel = Math.min(100, ((p95 - p5) * 100) / PAPER_SPREAD_NORM);
+    return { sharpnessHi, contrastPapel };
+  } catch {
+    return { sharpnessHi: 0, contrastPapel: 0 };
+  }
+}
 
 /** Bbox del acta en PÍXELES REALES desde el QUAD normalizado 0-1 (misma
  *  convención que ya consumen processImage y verificarCompletitud — TL,TR,BR,
@@ -386,7 +525,7 @@ async function calidadDeActa(
   fotoOriginal: string,
   quad: Quad,
   info?: InfoCrop,
-): Promise<PageQuality> {
+): Promise<PageQualityV2> {
   const marcarFallback = () => {
     if (info) {
       info.fallback = true;
@@ -415,10 +554,24 @@ async function calidadDeActa(
       info.w = bbox.sw;
       info.h = bbox.sh;
     }
-    return await evaluateQuality(canvas);
+    const calidad = await evaluateQuality(canvas);
+    // KIT e14-score-lectura-v1 (C1): señales hi-res del MISMO recorte ya
+    // dibujado (downscale a 1000px — un solo getImageData, <80 ms §3).
+    const extra = senalHiResDeCanvas(canvas, cw, ch);
+    return { ...calidad, ...extra };
   } catch {
     marcarFallback();
-    return evaluateQuality(fotoOriginal);
+    const q = await evaluateQuality(fotoOriginal);
+    // Fallback (§4-B1): señales hi-res del FRAME vía el MISMO helper (el
+    // drawImage del helper ya escala a 1000 — nunca getImageData de 12MP);
+    // si falla también → 0/0: el score v2 degrada al comportamiento actual.
+    try {
+      const img = await loadImage(fotoOriginal);
+      const extra = senalHiResDeCanvas(img, img.naturalWidth, img.naturalHeight);
+      return { ...q, ...extra };
+    } catch {
+      return { ...q, sharpnessHi: 0, contrastPapel: 0 };
+    }
   }
 }
 
@@ -461,6 +614,30 @@ async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | 
  * se descarta igual). NO re-OCR del acta completa. Fallo → "" (sin banda
  * nueva: la cascada sigue con el d9 del consenso — nunca condena).
  */
+// KIT e14-motor-rapidocr-v1 (PROD-2 §3/§4-C5): trazas del motor de producción
+// — conf/det/rec de la ÚLTIMA llamada reconocerRapidOcr. La banda del sello
+// y el re-OCR del editor también pasan por aquí: los pipelines capturan sus
+// valores justo tras su OCR PRINCIPAL (antes de la banda) para la traza.
+let ultimoOcrConf: number | null = null;
+let ultimoOcrDet = 0;
+let ultimoOcrRec = 0;
+
+/** Motor de producción (PROD-2): RapidOCR PP-OCRv4 sobre el recorte original.
+ *  Mismo contrato que requestOcr: texto + progreso 0→1. Sin fallback de motor
+ *  (pitfall §9.3): el fallo sigue el mismo camino controlado de hoy (§5 del
+ *  kit — texto vacío → gate decide). */
+async function reconocerRapidOcr(
+  dataUrl: string,
+  onProgress?: (p: number) => void,
+): Promise<string> {
+  const rt = await rapidOcrInit(); // singleton de sesión (pre-warm en bg)
+  const r = await rapidOcrReconocer(rt, dataUrl, onProgress);
+  ultimoOcrConf = r.confMedia; // para la traza (§4-C5)
+  ultimoOcrDet = r.msDet;
+  ultimoOcrRec = r.msRec;
+  return r.texto;
+}
+
 async function ocrBanda(fotoProcesada: string): Promise<string> {
   try {
     const img = await loadImage(fotoProcesada);
@@ -485,7 +662,11 @@ async function ocrBanda(fotoProcesada: string): Promise<string> {
       d.data[i + 2] = 255 - d.data[i + 2];
     }
     ctx.putImageData(d, 0, 0);
-    return await requestOcr(canvas.toDataURL("image/jpeg", 0.9), () => {});
+    // KIT e14-motor-rapidocr-v1 (PROD-2 §2-C3): la banda pasa al ÚNICO motor
+    // de producción — el canvas invertido ×2 ya es polaridad normal y
+    // RapidOCR lo lee (campos 6/6 en Frankfurt incluyen lo que aporta la
+    // banda). Escape hatch documentado (§5): revert puntual de C3.
+    return await reconocerRapidOcr(canvas.toDataURL("image/jpeg", 0.9));
   } catch {
     return ""; // fallo de decode/canvas/OCR → sin banda nueva (nunca condena)
   }
@@ -703,18 +884,43 @@ export class RealCoreBridge implements E14Bridge {
     let fotoProcesada: string;
     let filtroActa: PageFilter;
     let motor: "worker" | "canvas";
+    // KIT e14-ocr-lee-original-v1 (PROD-1 §4.1): variante de ENTRADA del OCR +
+    // traza de su origen (§4.4). "original" = crudo del warp (warp sin realce,
+    // misma geometría que la bw — §3 del kit) · "original-as-is" = SIM (la
+    // original YA es la entrada) · "bw-fallback" = la variante nueva falló y
+    // el OCR lee la bw (comportamiento de hoy — §5: el pipeline JAMÁS muere
+    // por la variante nueva, pitfall §9.6).
+    let fotoOcr: string;
+    let ocrIn: "original" | "original-as-is" | "bw-fallback";
     if (sinRecorte) {
       fotoProcesada = fotoOriginal;
       filtroActa = "original";
       motor = "canvas";
+      // PROD-1 (§4.1): SIM as-is — la entrada del OCR YA era la original:
+      // cero llamadas nuevas (chips SIM 8.2/7.0/4.3 intactos por construcción).
+      fotoOcr = fotoOriginal;
+      ocrIn = "original-as-is";
       emitir({ etapa: "REALZANDO", progreso: 1 });
     } else {
-      const resultado = await conRampa(
-        // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L602-604
-        // (captura arranca en B/N adaptativo) + types.ts L50 (default del
-        // producto) — D36: e14 no tiene ajustes → el default fijo es "bw".
-        processImage(fotoOriginal, quad, "bw"),
-        1400,
+      // PROD-1 (§4.1): DOS variantes bajo la MISMA conRampa — bw para
+      // MOSTRAR/GUARDAR (hoy) y "original" (warp sin realce) para LEER.
+      // .catch(() => null) DENTRO del Promise.all (aclaración final del kit):
+      // si processImage("original") rechaza, Promise.all NO rechaza — decide
+      // con el resultado null → bw-fallback (§5). El pipeline NUNCA muere por
+      // la variante nueva.
+      const [resultado, resultadoOcr] = await conRampa(
+        Promise.all([
+          // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L602-604
+          // (captura arranca en B/N adaptativo) + types.ts L50 (default del
+          // producto) — D36: e14 no tiene ajustes → el default fijo es "bw".
+          processImage(fotoOriginal, quad, "bw"),
+          // PROD-1: la misma geometría (mismo warp, MISMA convención
+          // POST-warp — pitfall §9.5), solo cambia el filtro final.
+          processImage(fotoOriginal, quad, "original").catch(() => null),
+        ]),
+        // msEstimados 1400→2200 (§4.1): el segundo warp (~0.6-1.3 s, §1.4)
+        // se cubre con la MISMA rampa (el core serializa en su worker).
+        2200,
         // RECORTANDO .2→.6 (warp) → REALZANDO .4→1 (enhance), interpolado.
         (f) =>
           f < 0.55
@@ -727,6 +933,15 @@ export class RealCoreBridge implements E14Bridge {
       fotoProcesada = resultado.processed;
       filtroActa = "bw";
       motor = resultado.precision?.engine ?? "canvas";
+      // PROD-1 (§4.1) — entrada del OCR, con fallback que JAMÁS rompe el
+      // pipeline: fotoOcr queda = fotoProcesada (comportamiento de hoy).
+      fotoOcr = fotoProcesada;
+      ocrIn = "original";
+      if (resultadoOcr?.processed) {
+        fotoOcr = resultadoOcr.processed;
+      } else {
+        ocrIn = "bw-fallback";
+      }
     }
     // KIT consenso-frankfurt-v1 (FASE 2, §3): esquinas fiduciales ANTES del
     // guard — la marca presente es PRUEBA POSITIVA de que el papel está
@@ -770,12 +985,20 @@ export class RealCoreBridge implements E14Bridge {
     ms.calidad = performance.now() - tCalidad;
     emitir({ etapa: "CALIDAD", progreso: 1 });
 
-    // 5) OCR sobre la PROCESADA (spa+eng local; progreso real 0→1).
+    // 5) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.1: el recorte
+    //    SIN filtro — regla del dueño; la bw pasa a ser SOLO la imagen de
+    //    presentación/guardado). KIT e14-motor-rapidocr-v1 (PROD-2 §2-C2):
+    //    motor RapidOCR PP-OCRv4; progreso REAL por lotes de rec (§2-C4).
     const tOcr = performance.now();
-    let texto = await requestOcr(fotoProcesada, (p) => {
+    let texto = await reconocerRapidOcr(fotoOcr, (p) => {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     });
     ms.ocr = performance.now() - tOcr;
+    // PROD-2 (§4.2): capturar conf/det/rec del OCR principal ANTES de la
+    // banda (también corre RapidOCR y pisaría ultimoOcr* en la traza).
+    const confOcr = ultimoOcrConf;
+    const detOcr = ultimoOcrDet;
+    const recOcr = ultimoOcrRec;
     emitir({ etapa: "OCR", progreso: 1 });
     // KIT consenso-frankfurt-v1 (FASE 4, §5): banda dirigida — si el OCR
     // completo no leyó la banda (sello blanco-sobre-negro, §0-F4), SEGUNDA
@@ -815,6 +1038,21 @@ export class RealCoreBridge implements E14Bridge {
       identificada: clasificacion.nivel === "AUTO",
       conSenal: senalActa,
     });
+    // KIT e14-score-lectura-v1 (C3): ajuste por LECTURA — el OCR manda (§3):
+    // FUERTE (mesa+4 anclas o 6) sube el score a ≥8.5 (el piso vence al techo
+    // fair pero NUNCA al poor — level del core "poor" es evidencia física
+    // dura); DEBIL techo 5.9; MEDIA no toca. El texto es el POST-banda
+    // (ocrBanda ya sumó — pitfall §9.8; SIN llamada OCR nueva — costo 0).
+    // Va EXACTAMENTE aquí (§4-B3): tras scoreDeCalidad y ANTES de la
+    // inyección SIM (pitfall §9.5 — los chips 8.2/7.0/4.3 mandan) y de los
+    // caps posteriores (escudo fondo/recortada/gate siguen MANDANDO —
+    // pitfall §9.4). Mismo criterio en el pipelineRecorte (pitfall §9.9).
+    const senal = senalDeLectura(texto, clasificacion.parciales);
+    if (senal.nivel === "FUERTE" && calidad.level !== "poor") {
+      score = Math.max(score, PISO_LECTURA_FUERTE);
+    } else if (senal.nivel === "DEBIL") {
+      score = Math.min(score, TECHO_LECTURA_DEBIL);
+    }
     // §D3 (SPEC-e14-simulacion-scores): inyección determinista del chip —
     // reemplaza el calculado DESPUÉS de scoreDeCalidad y ANTES del gate.
     // §G3 (KIT e14-gate-v2): SIN re-aplicación del piso de identificada
@@ -935,12 +1173,63 @@ export class RealCoreBridge implements E14Bridge {
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaAsis}${evidenciaBorde} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
-        `score=${score} filtro=${filtroActa} clasif={${fmtClasif(gate.clasificacion)}} ` +
+        `score=${score} filtro=${filtroActa} ocrIn=${ocrIn} ` +
+        // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor
+        // de producción, junto al ocrIn= del PROD-1 (conf/det/rec del OCR
+        // principal — capturados antes de la banda).
+        `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +
+        // KIT e14-score-lectura-v1 (REBASE): señal de lectura v2 en la traza.
+        `lectura=${senal.nivel} anclas=${senal.anclas} piso=${score >= 8.5 && senal.nivel === "FUERTE"} ` +
+        `clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
         `level:${calidad.level}})${evidenciaSim}`,
     );
+
+    // INFORME-TELEMETRÍA (solo observación — cero cambios de comportamiento):
+    // deja registradas las medidas exactas del pipeline para el informe TXT/JSON.
+    try {
+      registrarPipelineE14({
+        registrado: true,
+        fuente: opciones.fuente,
+        entradaArchivo: "archivo" in entrada,
+        ms,
+        quad,
+        sinRecorte,
+        cropInfo: { ...infoCrop },
+        calidad,
+        contEfectivo: contrasteEfectivoDe(calidad, ocrLegible),
+        filtroActa,
+        // PROD-1 (§4.4): la entrada del OCR queda auto-descripta en el informe.
+        ocrInputFiltro: ocrIn,
+        // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): el motor de OCR de
+        // producción queda auto-descripto (conf del OCR principal).
+        ocrMotor: "rapidocr-v4",
+        ocrConf: confOcr,
+        motor,
+        ocrChars: texto.length,
+        ocrValido: ocrTextIsValid(texto),
+        completa,
+        sospecha: verificacionResuelta?.sospecha ?? "",
+        tintaFilo: verificacionResuelta?.tintaFilo ?? false,
+        densidades: verificacionResuelta?.densidades ?? [],
+        fondo: verificacionResuelta?.fondo ?? false,
+        procesadaVacia,
+        votosDensidadPct: marcadores.densidadVotosPct,
+        votosSkipPag2,
+        votosOk: marcadoresOk,
+        recortada,
+        senalActa,
+        scoreFinal: score,
+        simular: opciones.simular === true,
+        scoreSimulado: opciones.scoreSimulado ?? null,
+        status: gate.status,
+        rechazo: rechazoFinal,
+      });
+    } catch {
+      /* el informe jamás rompe el pipeline */
+    }
 
     return this.construirActa(opciones, parcial, {
       fotoProcesada,
@@ -1075,11 +1364,25 @@ export class RealCoreBridge implements E14Bridge {
     const filtro: PageFilter = acta.filtro ?? "bw";
 
     // 1) Recorte + realce (warp real INTER_CUBIC + filtro del acta, F5-MANUAL).
+    //    KIT e14-ocr-lee-original-v1 (PROD-1 §4.2): MISMO patrón del escaneo —
+    //    DOS variantes bajo la MISMA conRampa: la del filtro del acta
+    //    (MOSTRAR/GUARDAR) y "original" para LEER. Si el acta YA está en
+    //    "original", la procesada ES la entrada del OCR (UNA sola llamada —
+    //    pitfall §9.4: NO duplicar el warp; la promesa se comparte).
+    //    .catch(() => null): la variante nueva jamás rechaza el rescate
+    //    (fallback bw-fallback §5). msEstimados 1400→2200 (2.º warp, §1.4).
     emitir({ etapa: "RECORTANDO", progreso: 0.2 });
     const tProceso = performance.now();
-    const resultado = await conRampa(
-      processImage(fotoOriginal, quad, filtro, rotacion, { manual: true }),
-      1400,
+    const pBw = processImage(fotoOriginal, quad, filtro, rotacion, { manual: true });
+    const pOcr =
+      filtro === "original"
+        ? pBw
+        : processImage(fotoOriginal, quad, "original", rotacion, { manual: true }).catch(
+            () => null,
+          );
+    const [resultado, resultadoOcr] = await conRampa(
+      Promise.all([pBw, pOcr]),
+      2200,
       // RECORTANDO .2→.6 (warp) → REALZANDO .4→1 (enhance), interpolado.
       (f) =>
         f < 0.55
@@ -1090,6 +1393,15 @@ export class RealCoreBridge implements E14Bridge {
     ms.proceso = performance.now() - tProceso;
     emitir({ etapa: "REALZANDO", progreso: 1 });
     const fotoProcesada = resultado.processed;
+    // PROD-1 (§4.2): entrada del OCR con fallback idéntico al escaneo (§5).
+    // Con filtro "original" la procesada ES la entrada (ocrIn=original — reuse).
+    let fotoOcr = fotoProcesada;
+    let ocrIn: "original" | "bw-fallback" = "original";
+    if (resultadoOcr?.processed) {
+      fotoOcr = resultadoOcr.processed;
+    } else {
+      ocrIn = "bw-fallback";
+    }
     // §D4 (SPEC-e14-score-ocr): tinta de la procesada re-recortada — mismo
     // criterio del pipeline (un crop sobre zona sin tinta → ORIGINAL).
     const procesadaVacia = await procesadaVaciaDataUrl(fotoProcesada);
@@ -1105,12 +1417,19 @@ export class RealCoreBridge implements E14Bridge {
     ms.calidad = performance.now() - tCalidad;
     emitir({ etapa: "CALIDAD", progreso: 1 });
 
-    // 3) OCR sobre la PROCESADA + gate §4.2 (progreso real 0→1).
+    // 3) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.2: recorte SIN
+    //    filtro con fallback idéntico al escaneo; gate §4.2). KIT
+    //    e14-motor-rapidocr-v1 (PROD-2 §2-C2): motor RapidOCR; progreso real
+    //    por lotes de rec (§2-C4).
     const tOcr = performance.now();
-    let texto = await requestOcr(fotoProcesada, (p) => {
+    let texto = await reconocerRapidOcr(fotoOcr, (p) => {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     });
     ms.ocr = performance.now() - tOcr;
+    // PROD-2 (§4.2): capturar conf/det/rec del OCR principal antes de la banda.
+    const confOcr = ultimoOcrConf;
+    const detOcr = ultimoOcrDet;
+    const recOcr = ultimoOcrRec;
     emitir({ etapa: "OCR", progreso: 1 });
     // KIT consenso-frankfurt-v1 (FASE 4, §5): banda dirigida — MISMO helper
     // del escaneo (§4.4); el recorte no tiene SIM (siempre real).
@@ -1176,6 +1495,17 @@ export class RealCoreBridge implements E14Bridge {
       identificada: clasificacion.nivel === "AUTO",
       conSenal: senalActa,
     });
+    // KIT e14-score-lectura-v1 (C3): MISMO ajuste por LECTURA del escaneo
+    // (§4-B3 — mismo criterio en re-análisis, pitfall §9.9). El texto es el
+    // POST-banda (consenso-frankfurt FASE 4); SIN llamada OCR nueva. Va
+    // ANTES de los caps posteriores: escudo fondo/recortada/gate siguen
+    // MANDANDO (pitfall §9.4 — una recortada con lectura FUERTE se queda ≤7.9).
+    const senal = senalDeLectura(texto, clasificacion.parciales);
+    if (senal.nivel === "FUERTE" && calidad.level !== "poor") {
+      score = Math.max(score, PISO_LECTURA_FUERTE);
+    } else if (senal.nivel === "DEBIL") {
+      score = Math.min(score, TECHO_LECTURA_DEBIL);
+    }
     // D10 — escudo anti-fondo (mismo criterio del escaneo): el rescate trae
     // fondo/sombra al filo → gate con TECHO 7.9 (nunca ÓPTIMA), sin copy.
     if (completa && verificacion.fondo) {
@@ -1235,7 +1565,12 @@ export class RealCoreBridge implements E14Bridge {
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
-        `score=${score} filtro=${filtro} clasif={${fmtClasif(gate.clasificacion)}} ` +
+        `score=${score} filtro=${filtro} ocrIn=${ocrIn} ` +
+        // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor.
+        `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +
+        // KIT e14-score-lectura-v1 (REBASE): señal de lectura v2 en la traza.
+        `lectura=${senal.nivel} anclas=${senal.anclas} piso=${score >= 8.5 && senal.nivel === "FUERTE"} ` +
+        `clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
@@ -1364,6 +1699,13 @@ export class RealCoreBridge implements E14Bridge {
   /**
    * F-OCR del lab (EditorView.tsx L1360-1395): corre requestOcr sobre la
    * imagen PROCESADA del acta y devuelve el texto crudo.
+   * KIT e14-ocr-lee-original-v1 (PROD-1 §4.3): coherencia con la regla del
+   * producto — el re-OCR manual del editor aplica la MISMA regla: lee el
+   * RECORTE SIN filtro ("original", el crudo del warp) cuando hay
+   * fotoOriginal + quadDetectado; fallback a la procesada (comportamiento de
+   * hoy). NOTA (documentada): el texto del editor puede diferir del histórico
+   * — ES la regla nueva del producto, NO un bug (en impresas con sello el
+   * crudo colapsa chars — §1.2 del kit, esperado).
    * ADAPTACIÓN documentada: el lab elige imagen con prioridad
    * `preview ?? procesada-fresca ?? original` (L1373-1376) porque tiene
    * previewCache; en e14 la procesada SIEMPRE está fresca (todo cambio pasa
@@ -1376,7 +1718,24 @@ export class RealCoreBridge implements E14Bridge {
     if (!fotoProcesada) {
       throw new Error("SIN FOTO PROCESADA PARA RECONOCER TEXTO");
     }
-    return requestOcr(fotoProcesada);
+    // PROD-1 (§4.3): regla del producto en el re-OCR del editor — recorte
+    // "original" con el quad horneado (misma convención POST-warp); el catch
+    // cae al fallback de abajo (comportamiento de hoy, §5 del kit).
+    if (acta.fotoOriginal && acta.quadDetectado) {
+      try {
+        const r = await processImage(
+          acta.fotoOriginal,
+          acta.quadDetectado,
+          "original",
+          acta.rotation ?? 0,
+        );
+        // PROD-2 (§2-C2): el re-OCR del editor pasa por el ÚNICO motor.
+        return reconocerRapidOcr(r.processed);
+      } catch {
+        /* cae al fallback de abajo */
+      }
+    }
+    return reconocerRapidOcr(fotoProcesada); // comportamiento de hoy (fallback)
   }
 
   /** Firmas coherentes con el estado (misma regla del mock/§7.5):
