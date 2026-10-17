@@ -5,7 +5,7 @@
     "": {
       "name": "digitalizador-e14",
       "dependencies": {
-        "@jg-stevan/scanner-core": "^0.1.0",
+        "@jg-stevan/scanner-core": "^0.4.0",
         "@jg-stevan/scanner-ui": "^0.1.0",
         "fflate": "^0.8.3",
         "framer-motion": "^12.23.2",
@@ -152,7 +152,7 @@
 
     "@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.35.5", "", { "os": "win32", "cpu": "x64" }, "sha512-x76eH0vEiHlcMQu8Y8IenntaACtddpT6W0wmXtWrnKcnKI7ME5DdgqhAD6SEWOEl1v2zDvkZDhFA9KnURwpfqg=="],
 
-    "@jg-stevan/scanner-core": ["@jg-stevan/scanner-core@0.1.0", "", { "dependencies": { "heic2any": "^0.0.4", "jspdf": "^4.2.1" }, "peerDependencies": { "zustand": "^5.0.6" } }, "sha512-iOYJbAOz8NX3ejSxKYHsM5kXflYL1gDoX9FB7ActWo8j3+o2BtdnLXjPMHPQOI71YSp9w6v+MHtNXsYkpK6QaA=="],
+    "@jg-stevan/scanner-core": ["@jg-stevan/scanner-core@0.4.0", "", { "dependencies": { "heic2any": "^0.0.4", "jspdf": "^4.2.1" }, "peerDependencies": { "zustand": "^5.0.6" } }, "sha512-ZbS3y/kiA0pOFtb5RSWMRjdR9u21XNmbQBE7Bh7tnQdwuloccADN+koLwSBc3ksfeBWTLd1+2ro7t1BiKKJOtg=="],
 
     "@jg-stevan/scanner-ui": ["@jg-stevan/scanner-ui@0.1.0", "", { "dependencies": { "@jg-stevan/scanner-core": "^0.1.0" }, "peerDependencies": { "framer-motion": "^12.23.2", "react": "^19.0.0" } }, "sha512-ribyZwiU2duz7BtCpH06PDywQcTWiLxRmetHjSRXDfJIfkCGz3TsP+mdpm30+Hkg3uycjysyP2dPxsoahApoeg=="],
 
@@ -963,6 +963,8 @@
     "@eslint/eslintrc/globals": ["globals@14.0.0", "", {}, "sha512-oahGvuMGQlPw/ivIYBjVSrWAfWLBeku5tpPE2fOPLi+WHffIWbuh2tCjhyQhTBPMf5E9jDEH4FOmTYgYwbKwtQ=="],
 
     "@img/sharp-wasm32/@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
+
+    "@jg-stevan/scanner-ui/@jg-stevan/scanner-core": ["@jg-stevan/scanner-core@0.1.0", "", { "dependencies": { "heic2any": "^0.0.4", "jspdf": "^4.2.1" }, "peerDependencies": { "zustand": "^5.0.6" } }, "sha512-iOYJbAOz8NX3ejSxKYHsM5kXflYL1gDoX9FB7ActWo8j3+o2BtdnLXjPMHPQOI71YSp9w6v+MHtNXsYkpK6QaA=="],
 
     "@next/eslint-plugin-next/@eslint-community/eslint-utils": ["@eslint-community/eslint-utils@4.9.1", "", { "dependencies": { "eslint-visitor-keys": "^3.4.3" }, "peerDependencies": { "eslint": "^6.0.0 || ^7.0.0 || >=8.0.0" } }, "sha512-phrYmNiYppR7znFEdqgfWHXR6NCkZEK7hwWDHZUjit/2/U0r6XvkDl0SYnoM51Hq7FhCGdLDT6zxCCOY1hexsQ=="],
 
