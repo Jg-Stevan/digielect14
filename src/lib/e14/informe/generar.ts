@@ -155,6 +155,13 @@ export function generarConclusiones(
   matriz: MatrizResultado,
 ): string[] {
   const out: string[] = [];
+  // KIT e14-motor-rapidocr-v1 (PROD-2 §4.4-C5): línea fija de veracidad —
+  // desde PROD-2 el motor de producción es RapidOCR; la celda «actual» del
+  // instrumento sigue midiendo Tesseract 1600 (motor anterior, matriz
+  // congelada para comparar antes/después).
+  out.push(
+    "MOTOR DE PRODUCCIÓN: RapidOCR PP-OCRv4 (leyendo el recorte sin filtro, regla PROD-1) — las celdas «actual» de esta matriz miden Tesseract 1600, el motor anterior (instrumento congelado para comparar).",
+  );
   const celdas = matriz.celdas.filter((c) => !c.error);
   const de = (motor: string, variante: string): CeldaMatriz | undefined =>
     celdas.find((c) => c.motor === motor && c.variante === variante);
@@ -179,7 +186,7 @@ export function generarConclusiones(
           (sinFiltro.campos.ok === conFiltro.campos.ok && sinFiltro.chars > conFiltro.chars)));
     const ganador = ganaSin ? sinFiltro : conFiltro;
     out.push(
-      `¿ORIGINAL O FILTROS? Con el motor ${motor}, el recorte SIN filtro (${sinFiltro.variante}) recuperó ${sinFiltro.anclas.hits}/${sinFiltro.anclas.total} anclas y ${sinFiltro.chars} chars en ${sinFiltro.totalMs} ms; con filtro ${conFiltro.variante === "recorte-bw" ? "bw (imagen mostrada)" : conFiltro.variante}: ${conFiltro.anclas.hits}/${conFiltro.anclas.total} anclas y ${conFiltro.chars} chars en ${conFiltro.totalMs} ms → mejor captura: ${ganador.variante} (${ganaSin ? "sin filtro" : "con filtro"}).`,
+      `¿ORIGINAL O FILTROS? Con el motor ${motor === "actual" ? "Tesseract 1600 (motor anterior)" : motor}, el recorte SIN filtro (${sinFiltro.variante}) recuperó ${sinFiltro.anclas.hits}/${sinFiltro.anclas.total} anclas y ${sinFiltro.chars} chars en ${sinFiltro.totalMs} ms; con filtro ${conFiltro.variante === "recorte-bw" ? "bw (imagen mostrada)" : conFiltro.variante}: ${conFiltro.anclas.hits}/${conFiltro.anclas.total} anclas y ${conFiltro.chars} chars en ${conFiltro.totalMs} ms → mejor captura: ${ganador.variante} (${ganaSin ? "sin filtro" : "con filtro"}).`,
     );
   }
 
@@ -191,7 +198,7 @@ export function generarConclusiones(
     const dChars = full.chars - hoy.chars;
     const dCer = full.cer !== null && hoy.cer !== null ? full.cer - hoy.cer : null;
     out.push(
-      `DOWNSCALE 1600: Tesseract a resolución completa (${full.anclas.hits} anclas, ${full.chars} chars${full.cer !== null ? `, CER ${(full.cer * 100).toFixed(1)}%` : ""}) vs hoy bw+1600 (${hoy.anclas.hits} anclas, ${hoy.chars} chars${hoy.cer !== null ? `, CER ${(hoy.cer * 100).toFixed(1)}%` : ""}) → Δanclas=${dAnclas >= 0 ? "+" : ""}${dAnclas}, Δchars=${dChars >= 0 ? "+" : ""}${dChars}${dCer !== null ? `, ΔCER=${dCer <= 0 ? "" : "+"}${(dCer * 100).toFixed(1)}pp` : ""}. El downscale a 1600 px ${dAnclas > 0 ? `cuesta ${dAnclas} anclas` : dAnclas === 0 ? "no pierde anclas en esta captura" : "no es el limitante aquí"}.`,
+      `DOWNSCALE 1600: Tesseract a resolución completa (${full.anclas.hits} anclas, ${full.chars} chars${full.cer !== null ? `, CER ${(full.cer * 100).toFixed(1)}%` : ""}) vs el motor anterior bw+1600 (${hoy.anclas.hits} anclas, ${hoy.chars} chars${hoy.cer !== null ? `, CER ${(hoy.cer * 100).toFixed(1)}%` : ""}) → Δanclas=${dAnclas >= 0 ? "+" : ""}${dAnclas}, Δchars=${dChars >= 0 ? "+" : ""}${dChars}${dCer !== null ? `, ΔCER=${dCer <= 0 ? "" : "+"}${(dCer * 100).toFixed(1)}pp` : ""}. El downscale a 1600 px ${dAnclas > 0 ? `cuesta ${dAnclas} anclas` : dAnclas === 0 ? "no pierde anclas en esta captura" : "no es el limitante aquí"}.`,
     );
   }
 
@@ -223,7 +230,7 @@ export function generarConclusiones(
           (r, i) =>
             `${i + 1}.º ${r.motor} (${r.celda!.gt ? `GT ${r.celda!.gt.hits}/${r.celda!.gt.total}` : `anclas ${r.celda!.anclas.hits}/${r.celda!.anclas.total}`}, ${r.celda!.totalMs} ms en ${r.celda!.variante})`,
         )
-        .join(" · ")}. Referencia de laboratorio (ranking definitivo, fotos reales ×4): RapidOCR PP-OCRv4 49/56 vs Tesseract tuned 39/56 vs Tesseract hoy 27/56.`,
+        .join(" · ")}. Referencia de laboratorio (ranking definitivo, fotos reales ×4): RapidOCR PP-OCRv4 49/56 vs Tesseract tuned 39/56 vs Tesseract (motor anterior) 27/56.`,
     );
   }
 
@@ -352,6 +359,10 @@ export async function construirInforme(
           filtro: pipeline.filtroActa,
           // PROD-1 (§4.4a): la entrada del OCR queda auto-descripta en el JSON.
           ocrInputFiltro: pipeline.ocrInputFiltro,
+          // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): motor y conf del OCR de
+          // producción, auto-descriptos en el JSON (§6.4 del kit).
+          ocrMotor: pipeline.ocrMotor,
+          ocrConf: pipeline.ocrConf,
           motor: pipeline.motor,
           ocrChars: pipeline.ocrChars,
           ocrValido: pipeline.ocrValido,

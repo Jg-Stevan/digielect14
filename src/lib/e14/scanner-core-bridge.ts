@@ -1012,7 +1012,12 @@ export class RealCoreBridge implements E14Bridge {
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaAsis}${evidenciaBorde} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
-        `score=${score} filtro=${filtroActa} ocrIn=${ocrIn} clasif={${fmtClasif(gate.clasificacion)}} ` +
+        `score=${score} filtro=${filtroActa} ocrIn=${ocrIn} ` +
+        // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor
+        // de producción, junto al ocrIn= del PROD-1 (conf/det/rec del OCR
+        // principal — capturados antes de la banda).
+        `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +
+        `clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
@@ -1035,6 +1040,10 @@ export class RealCoreBridge implements E14Bridge {
         filtroActa,
         // PROD-1 (§4.4): la entrada del OCR queda auto-descripta en el informe.
         ocrInputFiltro: ocrIn,
+        // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): el motor de OCR de
+        // producción queda auto-descripto (conf del OCR principal).
+        ocrMotor: "rapidocr-v4",
+        ocrConf: confOcr,
         motor,
         ocrChars: texto.length,
         ocrValido: ocrTextIsValid(texto),
@@ -1382,7 +1391,10 @@ export class RealCoreBridge implements E14Bridge {
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte} ` +
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
-        `score=${score} filtro=${filtro} ocrIn=${ocrIn} clasif={${fmtClasif(gate.clasificacion)}} ` +
+        `score=${score} filtro=${filtro} ocrIn=${ocrIn} ` +
+        // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor.
+        `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +
+        `clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
