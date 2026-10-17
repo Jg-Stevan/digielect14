@@ -4,7 +4,8 @@
  * Referencia de laboratorio (Apéndice A del SPEC) — datos YA medidos por el
  * dueño off-line (CPU del servidor de pruebas, Bun/Python, fotos reales).
  * Copiado VERBATIM: son la línea base con la que se contrasta la medición
- * EN el dispositivo (RapidOCR 49/56 vs Tesseract tuned 39/56 vs hoy 27/56
+ * EN el dispositivo (RapidOCR 49/56 vs Tesseract tuned 39/56 vs motor
+ * anterior 27/56
  * agregando las 4 fotos × 14 anclas).
  */
 
@@ -25,13 +26,13 @@ export const LAB_VERDICT2: LabVerdict2Row[] = [
   { motor: "RapidOCR PP-OCRv4", foto: "Frankfurt-P2 limpia (scanner)", hits: 13, total: 14, miss: "TRANSMISIÓN", ms: 2810 },
   { motor: "RapidOCR PP-OCRv4", foto: "Frankfurt-P2 foto campo (2)", hits: 10, total: 14, miss: "cabecera E-14, REGISTRADURÍA, Ver Pag 2 de 2, FIRMA", ms: 2360 },
   { motor: "RapidOCR PP-OCRv4", foto: "El-Cairo-P1 (votos a mano)", hits: 13, total: 14, miss: "REGISTRADURÍA", ms: 2590 },
-  { motor: "Tesseract hoy", foto: "Frankfurt-P2 foto campo (1)", hits: 7, total: 14, miss: "cabecera E-14, REGISTRADURÍA, KIT 745, Ver Pag 2 de 2, código 1D completo, CONSTANCIAS, FIRMA", ms: 3155 },
+  { motor: "Tesseract (motor anterior)", foto: "Frankfurt-P2 foto campo (1)", hits: 7, total: 14, miss: "cabecera E-14, REGISTRADURÍA, KIT 745, Ver Pag 2 de 2, código 1D completo, CONSTANCIAS, FIRMA", ms: 3155 },
   { motor: "Tesseract tuned", foto: "Frankfurt-P2 foto campo (1)", hits: 10, total: 14, miss: "cabecera E-14, KIT 745, Ver Pag 2 de 2, código 1D completo", ms: 2912 },
-  { motor: "Tesseract hoy", foto: "Frankfurt-P2 foto campo (2)", hits: 6, total: 14, miss: "cabecera E-14, REGISTRADURÍA, TRANSMISIÓN, KIT 745, Ver Pag 2 de 2, código 1D completo, LUGAR Frankfurt, CONSTANCIAS", ms: 1700 },
+  { motor: "Tesseract (motor anterior)", foto: "Frankfurt-P2 foto campo (2)", hits: 6, total: 14, miss: "cabecera E-14, REGISTRADURÍA, TRANSMISIÓN, KIT 745, Ver Pag 2 de 2, código 1D completo, LUGAR Frankfurt, CONSTANCIAS", ms: 1700 },
   { motor: "Tesseract tuned", foto: "Frankfurt-P2 foto campo (2)", hits: 8, total: 14, miss: "cabecera E-14, REGISTRADURÍA, TRANSMISIÓN, KIT 745, Ver Pag 2 de 2, código 1D completo", ms: 1752 },
-  { motor: "Tesseract hoy", foto: "El-Cairo-P1 (votos a mano)", hits: 8, total: 14, miss: "cabecera E-14, REGISTRADURÍA, MESA 001, Ver Pag 1 de 2, código 1D completo, LUGAR El Cairo", ms: 2477 },
+  { motor: "Tesseract (motor anterior)", foto: "El-Cairo-P1 (votos a mano)", hits: 8, total: 14, miss: "cabecera E-14, REGISTRADURÍA, MESA 001, Ver Pag 1 de 2, código 1D completo, LUGAR El Cairo", ms: 2477 },
   { motor: "Tesseract tuned", foto: "El-Cairo-P1 (votos a mano)", hits: 10, total: 14, miss: "cabecera E-14, REGISTRADURÍA, TRANSMISIÓN, Ver Pag 1 de 2", ms: 2446 },
-  { motor: "Tesseract hoy (bw+1600)", foto: "Frankfurt-P2 limpia (scanner)", hits: 6, total: 14, miss: "cabecera E-14, REGISTRADURÍA, TRANSMISIÓN, ZONA 15 (exacto), KIT 745, Ver Pag 2 de 2, CONSTANCIAS, FIRMA", ms: null },
+  { motor: "Tesseract (motor anterior, bw+1600)", foto: "Frankfurt-P2 limpia (scanner)", hits: 6, total: 14, miss: "cabecera E-14, REGISTRADURÍA, TRANSMISIÓN, ZONA 15 (exacto), KIT 745, Ver Pag 2 de 2, CONSTANCIAS, FIRMA", ms: null },
   { motor: "Tesseract tuned (text+full)", foto: "Frankfurt-P2 limpia (scanner)", hits: 11, total: 14, miss: "KIT 745, Ver Pag 2 de 2, CONSTANCIAS", ms: null },
 ];
 
