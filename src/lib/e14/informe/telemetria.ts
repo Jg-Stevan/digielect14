@@ -54,6 +54,13 @@ export interface PipelineInfo {
   ocrInputFiltro: string;
   /** "worker"/"canvas"/"mock". */
   motor: string;
+  /** KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): motor del OCR de producción —
+   *  "rapidocr-v4" (el instrumento del informe sigue midiendo "actual" =
+   *  Tesseract 1600 vía requestOcr del core — matriz CONGELADA). */
+  ocrMotor: string;
+  /** KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): conf media del OCR de
+   *  producción (0-1, CTC decode del rec) — null si no hay dato. */
+  ocrConf: number | null;
   ocrChars: number;
   ocrValido: boolean;
   completa: boolean | null;
@@ -139,6 +146,8 @@ export function marcarPipelineNoRegistrado(motivo: string): void {
     filtroActa: "",
     ocrInputFiltro: "",
     motor: "",
+    ocrMotor: "",
+    ocrConf: null,
     ocrChars: 0,
     ocrValido: false,
     completa: null,

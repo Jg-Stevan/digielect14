@@ -12,7 +12,9 @@ import { loadImage, processImage } from "@jg-stevan/scanner-core/image-processor
 import type { Quad, PageFilter } from "@jg-stevan/scanner-core/types";
 import { evaluarCelda, gtDeTexto, sim, norm, type EvalCelda, type GtKey } from "./analisis-texto";
 import { ocrActual, tessFullResInit, tessFullResReconocer, tessFullResTerminar } from "./motores";
-import { rapidOcrInit, rapidOcrReconocer } from "./rapidocr";
+// KIT e14-motor-rapidocr-v1 (PROD-2 §4.1-C1): el módulo se MOVIO a ocr/ —
+// misma instancia compartida con producción (singleton de sesión, §9.6).
+import { rapidOcrInit, rapidOcrReconocer } from "../ocr/rapidocr";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
