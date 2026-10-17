@@ -31,6 +31,7 @@
   let imgApp = null;       // el <img> del dataURL q0.92 — la MISMA entrada que el app (fidelidad total)
   let lastCorners = null;  // quad normalizado devuelto
   let lastFrame = null;    // {w, h}
+  let coreMod = null;      // bundle ESM del core 0.4.0 (import perezoso — kit e14-quad-sobel-v1 §4-D)
 
   const log = (t) => {
     if (trazas.querySelector(".warn")) trazas.textContent = "";
@@ -96,6 +97,9 @@
     $("detectBtn").disabled = !ready;
     $("warpBtn").disabled = true;
     lastCorners = null;
+    // kit e14-quad-sobel-v1 (§4-D): tarjeta «origen» disponible con fixture cargado
+    $("origenBtn").disabled = false;
+    $("origenOut").textContent = "Listo — correrá detectDocumentEdgesDetail (core 0.4.0) sobre la MISMA entrada dataURL q0.92 que el app.";
     // dibujo base
     cv.width = bitmapBase.width; cv.height = bitmapBase.height;
     ajustaCanvas();
@@ -233,7 +237,86 @@
     try { bmp.close(); } catch {}
   }
 
+  // ---------- origen (kit e14-quad-sobel-v1 §4-D — solo lab, cero producción) ----------
+  // La API NUEVA del core 0.4.0 (PR de Fase A en web-scanner): detectDocumentEdgesDetail
+  // dice QUIÉN fabricó el quad — "worker" (la cascada OpenCV ganó) o "sobel" (el
+  // FALLBACK, incluido su catch con rect por defecto). Sobre la MISMA entrada que el
+  // app: imgApp.src = el dataURL q0.92 de cadenaApp (fidelidad total del hallazgo del rig).
+  // La verificación cruzada contra el quad del worker-copy del harness es la del kit:
+  // coincide (Δ ≤ 0.01 por lado) / DIFIERE / worker SIN quad → el fallback fabricó el
+  // quad (exactamente el caso mesa-002 de campo — H3 confirmada).
+  const formatQuad = (pts) => "[" + pts.map((p) => `${(+p.x).toFixed(3)},${(+p.y).toFixed(3)}`).join(" ") + "]";
+
+  function dibujaQuadDetalle(pts) {
+    // foto + quad del worker (azul, si hubo) + quad del DETALLE (rojo discontinuo)
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(imgEl, 0, 0, cv.width, cv.height);
+    const dibuja = (c, color, dash) => {
+      ctx.save();
+      ctx.lineWidth = Math.max(2, cv.width / 400);
+      ctx.strokeStyle = color;
+      ctx.setLineDash(dash);
+      ctx.beginPath();
+      c.map((p) => ({ x: p.x * cv.width, y: p.y * cv.height }))
+        .forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    };
+    if (lastCorners) dibuja(lastCorners, "#7aa2ff", []);
+    dibuja(pts, "#ff5d5d", [6, 4]);
+  }
+
+  async function correrOrigen() {
+    if (!imgApp) return;
+    const btn = $("origenBtn"), out = $("origenOut");
+    btn.disabled = true;
+    try {
+      if (!coreMod) {
+        out.textContent = "cargando bundle del core 0.4.0 (import dinámico, primera vez)…";
+        coreMod = await import("./scanner-core-0.4.0.bundle.js");
+      }
+      out.textContent = "detectDocumentEdgesDetail corriendo sobre la MISMA entrada (dataURL q0.92)…";
+      const t0 = performance.now();
+      const detalle = await coreMod.detectDocumentEdgesDetail(imgApp.src);
+      const ms = Math.round(performance.now() - t0);
+      const pts = detalle.quad || [];
+      const bottom = pts.length ? Math.max(...pts.map((p) => p.y)) : null;
+      const bottomTxt = bottom == null ? "—"
+        : `${(+bottom).toFixed(3)} ${bottom >= 0.90 ? '<span class="ok">≥ 0.90 ✓ (criterio §6)</span>' : '<span class="warn">< 0.90 ✗</span>'}`;
+      // verificación cruzada contra el quad del worker del harness (kit §4-D)
+      const delta = lastCorners && pts.length
+        ? Math.max(...pts.map((p, i) => Math.max(Math.abs(p.x - lastCorners[i].x), Math.abs(p.y - lastCorners[i].y))))
+        : null;
+      let cruce;
+      if (delta != null && delta <= 0.01) {
+        cruce = `<span class="ok">coincide con el worker del harness (Δ máx ${(delta).toFixed(4)} ≤ 0.01)</span>`;
+      } else if (delta != null) {
+        cruce = `<span class="warn">DIFIERE del worker del harness (Δ máx ${(delta).toFixed(4)}) — rojo discontinuo en el canvas</span>`;
+      } else if (pts.length) {
+        cruce = `<span class="warn">el worker del harness NO propuso quad — el fallback fabricó el quad (el caso mesa-002 de campo: H3 confirmada)</span>`;
+      } else {
+        cruce = `<span class="warn">la API no devolvió quad</span>`;
+      }
+      const origenTxt = detalle.origen === "worker"
+        ? `<span class="ok">worker</span> — la cascada OpenCV ganó`
+        : `<span class="warn">sobel</span> — el FALLBACK fabricó el quad${bottom != null && bottom < 0.90 ? " (antes del fix P2: aquí vivía el falso rechazo INCOMPLETA de campo)" : ""}`;
+      out.innerHTML =
+        `origen: ${origenTxt}\n` +
+        `quad: ${formatQuad(pts)}\n` +
+        `bottom: ${bottomTxt}\n` +
+        `UMBRAL_PICO: ${coreMod.UMBRAL_PICO} (constante ÚNICA del core — §3-B)\n` +
+        `tiempo: ${ms} ms\n` +
+        `cruce vs worker: ${cruce}`;
+      if (pts.length && (delta == null || delta > 0.01)) dibujaQuadDetalle(pts);
+    } catch (err) {
+      out.innerHTML = `<span class="warn">ERROR en detectDocumentEdgesDetail: ${err && err.message ? err.message : err}</span>`;
+    }
+    btn.disabled = false;
+  }
+
   // ---------- wiring ----------
+  $("origenBtn").addEventListener("click", correrOrigen);
   $("file").addEventListener("change", (e) => e.target.files[0] && cargarArchivo(e.target.files[0]));
   const drop = $("drop");
   ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
