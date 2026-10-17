@@ -74,6 +74,7 @@ import { verificarCompletitud, type ResultadoCompletitud } from "./completitud";
 // KIT e14-gate-v2 (FASE G2): marcador OBLIGATORIO de votos — helper ÚNICO
 // compartido con el guard de completitud (motorTinta, cero duplicación).
 import { medirZonaVotos } from "./marcadores";
+import { registrarPipelineE14 } from "./informe/telemetria";
 // §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
 // import estático: Next resuelve el basePath /web-scanner del deploy estático.
 import actaSimUrl from "@/assets/acta-e14-real.jpg";
@@ -941,6 +942,44 @@ export class RealCoreBridge implements E14Bridge {
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
         `level:${calidad.level}})${evidenciaSim}`,
     );
+
+    // INFORME-TELEMETRÍA (solo observación — cero cambios de comportamiento):
+    // deja registradas las medidas exactas del pipeline para el informe TXT/JSON.
+    try {
+      registrarPipelineE14({
+        registrado: true,
+        fuente: opciones.fuente,
+        entradaArchivo: "archivo" in entrada,
+        ms,
+        quad,
+        sinRecorte,
+        cropInfo: { ...infoCrop },
+        calidad,
+        contEfectivo: contrasteEfectivoDe(calidad, ocrLegible),
+        filtroActa,
+        motor,
+        ocrChars: texto.length,
+        ocrValido: ocrTextIsValid(texto),
+        completa,
+        sospecha: verificacionResuelta?.sospecha ?? "",
+        tintaFilo: verificacionResuelta?.tintaFilo ?? false,
+        densidades: verificacionResuelta?.densidades ?? [],
+        fondo: verificacionResuelta?.fondo ?? false,
+        procesadaVacia,
+        votosDensidadPct: marcadores.densidadVotosPct,
+        votosSkipPag2,
+        votosOk: marcadoresOk,
+        recortada,
+        senalActa,
+        scoreFinal: score,
+        simular: opciones.simular === true,
+        scoreSimulado: opciones.scoreSimulado ?? null,
+        status: gate.status,
+        rechazo: rechazoFinal,
+      });
+    } catch {
+      /* el informe jamás rompe el pipeline */
+    }
 
     return this.construirActa(opciones, parcial, {
       fotoProcesada,
