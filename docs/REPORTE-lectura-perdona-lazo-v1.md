@@ -34,26 +34,40 @@ INCOMPLETA intacto. Copy del aviso 118 intacto. Cero cambios en core npm, chips 
 | §6.3 SIM (dev :3001, 412×850 — REGLA-PREVIEW respetada) | chips **8.2 / 7.0 / 4.3 idénticos** (desenlaces OPTIMA/ADVERTENCIA/RECHAZADA) · **CERO `lazo=perdonado` en SIM** (no-op demostrado en vivo: `esquinas=sim` → `ESQUINAS_OK` → `faltan=[]` → helper false) · el chip 7.0 MANTIENE `recortada=1` (faltaSeccion del texto as-is — la señal de secciones NUNCA se perdona, pitfall §9.1 verificado en runtime) |
 | §6.5 CI del PR | verificado al pushear (4/4 esperado — solo toca los 3 archivos del alcance) |
 
-### 3-a. §6.4 reproducción de campo — **PENDIENTE de re-subida (bloqueo de entrega, NO de código)**
+### 3-a. §6.4 reproducción de campo — **COMPLETADA (2026-10-17 18:3x, tras re-subida de los 2 ZIPs)**
 
-Los 2 ZIPs (`e14-diag-mesa-001-115643-i1.zip` / `e14-diag-mesa-002-115822-i2.zip`) **NO llegaron
-al sandbox** (`download/` = carpeta de generados; `upload/` solo los 3 INSTRUCCIONES). Estado honesto:
+Los 2 ZIPs de campo llegaron al sandbox y se re-corrieron por la **vía archivo** (input IMPORTAR → `alElegirArchivo` → fuente ARCHIVO) en dev :3001 sobre esta rama @ `2b99886` — pipeline completo del puesto (worker + rapidocr + banda + score + gate). El quad salió **idéntico a campo** en ambos (ver §4), así que ni siquiera aplica la nota de tolerancia del quad.
 
-- La **REGLA** queda demostrada headless con los textos OCR reales del zip1/zip2 (reconstruidos de
-  las citas verbatim del kit §1: 621 chars zip1 con MESA 001/SUMA TOTAL/KIT 399/código
-  710003993010102; 379 chars zip2 cortado en «TOTAL VOTOS INCINERADOS» sin SUMA/KIT/MESA) —
-  casos 1-2 del QA (§6.1), que el kit permite como gate: «Si algo del §6.4 no es reproducible… NO
-  disimular: documentarlo en el reporte y dejar el caso 1-2 del QA headless como gate».
-- El **desenlace de campo** (zip1 → OPTIMA/auto-envío con `lazo=perdonado`; zip2 → RECHAZADA sin
-  cambio) queda pendiente de la re-corrida con los `original.jpg` por la vía de archivo. La nota
-  honesta del kit §6.4 sigue vigente: la vía archivo re-corre el pipeline completo y el quad puede
-  diferir levemente — lo que se valida es la REGLA.
+**zip1 — mesa-001 (el caso objetivo): ADVERTENCIA 7.9 (campo) → OPTIMA 8.5 auto-envío (repro)**
+
+- Traza del bridge (completa, TODOS los tokens):
+
+```
+[e14] pipeline ARCHIVO/file total=9338ms (decode=670 detect=221 proceso=1537 calidad=146 ocr=6675 motor=worker ocrValido=true cabeceraE14=true completa=true senal=true vacia=false votos=7.6% lado=inf-izq lazo=perdonado esquinas=FALTA_bl borde=N|S|E|O tintaFilo=false franja=[0.5,0.0,0.0,5.3] fondo=false quad=[0.383,0.262 0.633,0.280 0.610,0.863 0.357,0.868] score=8.5 filtro=bw ocrIn=original ocr=rapidocr conf=0.94 det=1162ms rec=5117ms lectura=FUERTE anclas=9 piso=true clasif={dep:88,mun:335,zon:05,std:02,mesa:001,pag:1/2,tipo:T,nivel:AUTO,cod:710003993010102} crop=887x2586 metricas={sharpness:100 brightness:64 contrast:70 contEff:83.125 level:excellent})
+```
+
+- `lazo=perdonado` vivo · **SIN `recortada=1` y SIN cap 7.9** · score **8.5** (≥8.3 ✓) · `piso=true` · `nivel:AUTO` · UI: badge **«8.5/10 ÓPTIMA»** con KIT 399 · TRANSMISIÓN · MESA 001. CRITERIO §6.4-1: el desenlace ya NO es ADVERTENCIA por lazo ✓ (el mismo `esquinas=FALTA_bl` de campo ahora se perdona con la lectura FUERTE de 9 anclas).
+- Nota: esta traza es la PRIMERA en campo real con `lazo=perdonado` y `piso=true` a la vez — la línea del log final del merge debe conservar ambos tokens.
+
+**zip2 — mesa-002 (control): RECHAZADA 6.4 INCOMPLETA — SIN CAMBIO ✓**
+
+- Traza:
+
+```
+[e14] pipeline ARCHIVO/file total=7260ms (decode=574 detect=380 proceso=1205 calidad=40 ocr=4986 motor=worker ocrValido=true cabeceraE14=true completa=false senal=true vacia=false votos=13.6% recortada=1 lado=inf-izq esquinas=FALTA_bl+br borde=N|S|E|O tintaFilo=true franja=[3.5,8.3,0.6,34.9] fondo=false quad=[0.362,0.333 0.694,0.333 0.694,0.601 0.362,0.601] score=6.4 filtro=bw ocrIn=original ocr=rapidocr conf=0.95 det=1008ms rec=3769ms lectura=FUERTE anclas=9 piso=false clasif={sin-clasificar} crop=1062x1144 metricas={sharpness:100 brightness:67 contrast:72 contEff:87.5 level:excellent})
+```
+
+- `esquinas=FALTA_bl+br` (doble falta) + texto SIN `SUMA TOTAL` (cortado en INCINERADOS) → `faltaSeccion=true` → `pieDentro=false` → **NO perdona** (caso 2 del §5 en runtime real) · `recortada=1` se queda · **6.4 RECHAZADA** con banner «ACTA INCOMPLETA — ALÉJATE UN POCO» idéntico a campo. Pitfall §9.1 verificado con la señal de secciones: aunque `lectura=FUERTE anclas=9`, la falta de SECCIÓN nunca se perdona.
+
+**Veredicto:** la REGLA queda demostrada en las 2 vías — headless (13/13, §6.1) Y desenlace real de campo reproducido (esta sección).
 
 ## 4. Impacto esperado (evidencia del kit §1)
 
 La sesión de campo del 2026-10-17 (auto-envío 25%) habría quedado **50%** con esta regla: el zip1
 (ADVERTENCIA 7.9 por lazo inf-izq con sharpness 100 + lectura FUERTE 9/10 anclas + piso 8.5) pasa a
-OPTIMA → auto-envío. El zip2 sigue siendo RECHAZADA INCOMPLETA 6.4 (correcto).
+OPTIMA → auto-envío. El zip2 sigue siendo RECHAZADA INCOMPLETA 6.4 (correcto). **La repro §3-a lo
+confirmó en vivo con los fixtures: zip1 8.5 ÓPTIMA / zip2 6.4 RECHAZADA, quad byte a byte idéntico
+a campo en ambos.**
 
 ## 5. Contrato de entrega
 
@@ -61,7 +75,7 @@ OPTIMA → auto-envío. El zip2 sigue siendo RECHAZADA INCOMPLETA 6.4 (correcto)
 - [x] `scripts/qa-lectura-perdona.ts` con salida **13/13** (los 10 casos del §5; casos 1-2 con los
   textos OCR reales de los ZIPs según las citas del kit).
 - [x] `docs/REPORTE-lectura-perdona-lazo-v1.md` (este) + kit verbatim (md5 `2ea71442a2ed00dc11996af817204617`) + worklog + AGENTS.md.
-- [ ] §6.4 con fixtures — tras re-subida de los ZIPs (documentado §3-a; NO disimulado).
+- [x] §6.4 con fixtures — **COMPLETADA §3-a** (re-subida recibida; zip1 OPTIMA 8.5 con `lazo=perdonado`; zip2 RECHAZADA 6.4 sin cambio; determinismo quad byte a byte).
 
 ## 6. Nota de merge (§8 del kit)
 
