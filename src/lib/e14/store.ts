@@ -9,6 +9,7 @@
  */
 import { create } from "zustand";
 import { getBridge } from "./get-bridge";
+import { iniciarInformeCaptura } from "./informe/iniciar";
 import { rotateProcessedDataUrl } from "./image-utils";
 import { ocrTextIsValid } from "@jg-stevan/scanner-core/ocr";
 import type { PageFilter } from "@jg-stevan/scanner-core/types";
@@ -584,6 +585,15 @@ export const useE14Store = create<E14Store>((set, get) => {
           actasSesion: get().actasSesion + 1,
           analisisResuelto: true,
           archivoPendiente: null,
+        });
+        // INFORME-TELEMETRÍA (aditivo): comparativo OCR + informe TXT/JSON en 2.º
+        // plano — sin efecto en el flujo, las vistas ni el gate.
+        void iniciarInformeCaptura(acta, {
+          fuente: fuenteEfectiva,
+          intento,
+          maxIntentos: 4,
+          objetivo,
+          simular: simActiva,
         });
         // D7 (SPEC-rediseno-revision §7.5): contingencia automática al
         // AGOTAR intentos — el sistema escala solo (C4), sin botón manual:

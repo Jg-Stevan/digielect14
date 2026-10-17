@@ -1015,3 +1015,69 @@ PROFILER / snapA+TORCH_HINT+accept.
 - **Post-merge verificado en main `c7daf48`:** `candidatosCodigo1D` ×3 · `ocrBanda` ×4 (bridge) · `perdonadaSiPapelEntero` ×3 · `kitFuente` ×9 · `MESA_REGISTRO_DISCREPAN` ×3 — kit 120 vivo (`codigoUnicoE14` ×4) · `scripts/qa-consenso.ts` + AMBOS reportes presentes.
 - **Estado del flujo:** PRs #6/#7/#8/#9 TODOS mergeados — Tasks 116-122 en main. Sin PRs abiertos restantes.
 - **Pendiente:** QA física del dueño (AC7-AC10 con SUS capturas: Frankfurt sin pill/6.4, El Cairo KIT 399 real, SINKIT sigue condenada, encuadre al filo sin REPETIR FOTO) + G-A..G-D del kit 120. Registro kit→mesa: ampliar SOLO con actas oficiales. Decisiones abiertas C4/copy chip «10.0»/umbral votos — sin cambio. Sin nuevo kit pendiente de ejecución (esperar insumo del dueño).
+
+### [2026-10-17 00:55] — KIT informe-telemetria-ocr-v1 — Z.ai Code
+- **Hecho:** informe completo de telemetría (TXT/JSON) tras CADA captura,
+  generado en 2.º plano e invisible al operador (único efecto visible: la
+  píldora de descarga cuando YA está listo + auto-descarga). Incluye el
+  comparativo OCR en-dispositivo sobre la MISMA captura: 9 celdas
+  (motor actual × raw/text/gray/bw · Tesseract full-res × raw/text ·
+  RapidOCR PP-OCRv4 wasm × foto-completa/raw/bw) con presupuesto blando de
+  90 s y try/catch por celda, más la explicación completa del score
+  (re-deriva la cadena del puente: contEf piso §X, techos fair/poor/sin
+  señal, caps fondo/recortada/INCOMPLETA/SIN_VOTOS, override SIM) y las
+  conclusiones §5 con números de ESTA captura contrastadas con la
+  referencia de laboratorio embebida (Apéndice A del SPEC, verbatim).
+  TODO ADITIVO: pipeline/gate/score/store/pantallas byte a byte iguales
+  (contrato §1) — fallo del informe jamás rompe el flujo (try/catch +
+  evento informe/error).
+- **Archivos:** NUEVOS public/models/rapidocr/{ch_PP-OCRv4_det_infer.onnx,
+  ch_PP-OCRv4_rec_infer.onnx, ch_ppocr_mobile_v2.0_cls_infer.onnx,
+  ppocr_keys.txt} (sha256 verificados contra el SPEC) · public/vendor/
+  onnxruntime/{ort-wasm-simd-threaded.jsep.{wasm,mjs} §3 +
+  ort-wasm-simd-threaded.{wasm,mjs}} · src/lib/e14/informe/{telemetria,
+  analisis-texto, rapidocr, motores, matriz, referencia-lab, generar,
+  iniciar}.ts · src/components/e14/InformeDescarga.tsx. EDIT src/lib/e14/
+  scanner-core-bridge.ts (+1 import, +1 bloque try/catch §6.1), src/lib/e14/
+  store.ts (+1 import, +1 llamada §6.2), src/app/page.tsx (+1 import,
+  +1 componente §6.3), package.json/bun.lock (+onnxruntime-web@1.30.0),
+  docs/worklog.md (esta entrada).
+- **Decisiones:** det limit 1920/max = bench del dueño · postproceso DB en
+  JS puro (el build vendored de OpenCV no tiene minAreaRect: dilate 2×2 +
+  CCL 4-con + convex hull + min-area rect por barrido de aristas +
+  box_score_fast + unclip 1.6, convención TL,TR,BR,BL de get_mini_boxes) ·
+  ORT 1.30 con entrypoint onnxruntime-web/wasm §4.3 resuelve el par
+  NO-jsep → se copian AMBOS pares (desviación documentada del §3, que
+  decía "no copiar el no-jsep": sin él RapidOCR da 404 y no corre) ·
+  crops vía setTransform inverso [R|p0] → fuente→canvas (v1 tenía el
+  transform al revés: crops transparentes) · canales BGR (fidelidad
+  cv2/Paddle) · conf del CTC = prob del ONNX directamente (el output ya
+  sale con softmax; el doble softmax la aplastaba a 0) · dict 6622
+  ppocr_keys.txt con espacio en índices ≥6623 (C real del modelo 6625) ·
+  grayscale de la variante gray derivado por luma del "original" (el core
+  solo tiene original/text/bw; recorte-raw = "original", misma elección
+  §D8.3 del puente) · recortar/revelar NO generan informe nuevo (solo
+  capturas del flujo normal) · el anclaje §6.1 usa ocrValido:
+  ocrTextIsValid(texto) (el SPEC asumía una variable `ocrValido` que no
+  existe en scope — desviación mínima documentada, semántica idéntica al
+  log del puente) · desviación del API §4.1: el campo del PipelineInfo es
+  filtroActa (el bloque §6.1 lo inserta como shorthand — en el JSON se
+  emite como filtro).
+- **Cómo probar (QA §8):** `bun run lint` (0/0) · `bun run dev` (:3001) →
+  chip SIM óptima → esperar píldora (≤ 90 s) → descargar TXT+JSON → validar
+  §2 ms por etapa = console.info del puente byte a byte · §4 cadena del
+  score (en la chip baja: techo sin señal → 4.9 + override SIM) · §6 tabla
+  9 celdas con textos (1200 chars/celda en TXT, completos en JSON) · §8
+  conclusiones con NÚMEROS · red: solo ${base}/models/rapidocr/* y
+  ${base}/vendor/onnxruntime/* (cacheados; el 2.º informe no re-descarga) ·
+  IMPORTAR src/assets/acta-e14-real.jpg → celdas de los 3 motores y
+  actual/bw = ocrChars del pipeline. Pendiente (dispositivo del dueño,
+  N/A sandbox): §8.7 Galaxy A56.
+- **Commits:** 29f5003 · 71cdc94 (worklog) · bbc4b01 (sync worker: adopta
+  el detection-worker del lab — el merge del PR #3 de web-scanner de HOY
+  cambió el worker del lab (leaks A-04/A-05) y el gate worker-parity
+  comparaba contra web-scanner/main → rompía para todo PR nuevo de e14;
+  md5 82a0374d… → 6d801c2a…, cero cambios del kit)
+- **Pendiente/Bloqueado:** auditoría del dueño (PR draft — JAMÁS merge
+  desde aquí) · QA física §8.7 en Galaxy A56 (tiempos de etapa vs console
+  y tiempos de celda) · ciclo SW del kit PWA no aplica a este PR.
