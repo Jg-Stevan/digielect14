@@ -50,7 +50,10 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   // "public/vendor/**" + "public/scanner/**": assets del core copiados en L0
   // (opencv/detection-worker, mismos bytes que scanner-lab) — JS vendor
   // minificado, mismo patrón de ignores que apps/scanner-lab.
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**"]
+  // "lab/**/*.bundle.js": bundle ESM del core 0.4.0 para el panel «origen» del
+  // harness quad-repro (kit e14-quad-sobel-v1 §4-D) — ARTEFACTO de build del
+  // PR de Fase A (web-scanner #14), no código fuente: mismo criterio vendor.
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "lab/**/*.bundle.js"]
 }];
 
 export default eslintConfig;

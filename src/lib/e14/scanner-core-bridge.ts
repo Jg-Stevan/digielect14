@@ -32,12 +32,13 @@
  * → F-IMPORT: EXIF/12MP). El mock de la fase gráfica se retiró.
  */
 import {
-  detectDocumentEdges,
+  detectDocumentEdgesDetail,
   evaluateQuality,
   fileToCaptureDataUrl,
   loadImage,
   processImage,
 } from "@jg-stevan/scanner-core/image-processor";
+import type { OrigenQuad } from "@jg-stevan/scanner-core/image-processor";
 import { ocrTextIsValid } from "@jg-stevan/scanner-core/ocr";
 // KIT e14-motor-rapidocr-v1 (PROD-2 §3): motor de OCR de producción — módulo
 // compartido con el informe (singleton de sesión ÚNICO, pitfall §9.6). El
@@ -838,17 +839,24 @@ export class RealCoreBridge implements E14Bridge {
     //    rama SIMULACIÓN (ARCHIVO/CÁMARA corren detect byte a byte, AC15).
     const sinRecorte = "archivo" in entrada && entrada.sinRecorte === true;
     let quad: Quad;
+    // KIT e14-quad-sobel-v1 (P1 §4-B): quién fabricó el quad de verdad —
+    // "worker" (la cascada ganó) o "sobel" (el fallback, incluido el catch del
+    // propio Sobel con rect por defecto). null SOLO si ni siquiera corrió una
+    // detección (n/d jamás miente — misma filosofía del T-A).
+    let quadOrigen: OrigenQuad | null = null;
     const tDetect = performance.now();
     if (sinRecorte) {
       quad = QUAD_IDENTITY;
     } else {
       try {
-        quad = await conRampa(
-          detectDocumentEdges(fotoOriginal),
+        const detalle = await conRampa(
+          detectDocumentEdgesDetail(fotoOriginal),
           900,
           (f) => ({ etapa: "DETECTANDO", progreso: 0.5 + f * 0.4 }),
           emitir,
         );
+        quad = detalle.quad;
+        quadOrigen = detalle.origen;
       } catch {
         // El core SIEMPRE devuelve Quad; una EXCEPCIÓN aquí = imagen no
         // detectable → RECHAZADA ILEGIBLE inmediata (§5 paso 1, spec §7.5).
@@ -1249,6 +1257,7 @@ export class RealCoreBridge implements E14Bridge {
             filtro: filtroActa,
             crop: { w: infoCrop.w, h: infoCrop.h, fallback: infoCrop.fallback },
             quad,
+            quadOrigen,
           },
           tiempos: {
             procesoMs: ms.proceso,
@@ -1269,7 +1278,7 @@ export class RealCoreBridge implements E14Bridge {
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaAsis}${evidenciaBorde} ` +
-        `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
+        `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}]${quadOrigen ? ` origen=${quadOrigen}` : ""} ` +
         `score=${score} filtro=${filtroActa} ocrIn=${ocrIn} ` +
         // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor
         // de producción, junto al ocrIn= del PROD-1 (conf/det/rec del OCR
@@ -1374,6 +1383,11 @@ export class RealCoreBridge implements E14Bridge {
     quad: Quad,
     onProgreso?: (p: ProgresoAnalisis) => void,
     rotacionOverride?: number,
+    // KIT e14-quad-sobel-v1 (P1 §4-B): origen del quad cuando la detección
+    // corrió (mejorarResolución). El recorte MANUAL del editor (store) no lo
+    // pasa — el quad lo puso el usuario, ninguna detección corrió → undefined
+    // → token ausente (n/d no miente).
+    quadOrigen?: OrigenQuad | null,
   ): Promise<Acta> {
     const fotoOriginal = acta.fotoOriginal;
     if (!fotoOriginal) {
@@ -1399,7 +1413,7 @@ export class RealCoreBridge implements E14Bridge {
         });
       }, TIMEOUT_MS);
 
-      void this.pipelineRecorte(acta, fotoOriginal, quad, rotacion, emitir).then(
+      void this.pipelineRecorte(acta, fotoOriginal, quad, rotacion, emitir, quadOrigen).then(
         (actaNueva) => {
           if (vencido) return; // ya resolvió el timeout: el resultado se descarta
           clearTimeout(timer);
@@ -1438,9 +1452,15 @@ export class RealCoreBridge implements E14Bridge {
     //    Sobel del core — MISMA vía del pipeline de escaneo). Si no detecta
     //    (imagen sin bordes), quad identidad: la foto entera es el acta —
     //    degradación honesta (§0: sin datos reales no se inventa).
+    //    KIT e14-quad-sobel-v1 (P1 §4-B): el origen viaja con el quad — y en
+    //    el catch el origen es null (ni siquiera corrió el Sobel — n/d no
+    //    miente, misma filosofía del T-A).
     let quad: Quad;
+    let quadOrigen: OrigenQuad | null = null;
     try {
-      quad = await detectDocumentEdges(fotoNueva);
+      const detalle = await detectDocumentEdgesDetail(fotoNueva);
+      quad = detalle.quad;
+      quadOrigen = detalle.origen;
     } catch {
       quad = defaultQuad();
     }
@@ -1449,7 +1469,7 @@ export class RealCoreBridge implements E14Bridge {
     //    es la ORIGINAL del disparo (identidad); su fotoOriginal pasa a ser
     //    la full-res que aterrizó.
     const actaBase: Acta = { ...acta, fotoOriginal: fotoNueva };
-    return this.recortar(actaBase, quad, onProgreso);
+    return this.recortar(actaBase, quad, onProgreso, undefined, quadOrigen);
   }
 
   /** Pipeline §5 del RECORTE (sin decode/detección: la foto y el quad ya son
@@ -1461,6 +1481,9 @@ export class RealCoreBridge implements E14Bridge {
     quad: Quad,
     rotacion: number,
     emitir: (p: ProgresoAnalisis) => void,
+    // KIT e14-quad-sobel-v1 (P1 §4-B): origen del quad — null/undefined si la
+    // detección NO corrió (recorte manual del editor, catch de mejorar).
+    quadOrigen: OrigenQuad | null = null,
   ): Promise<Acta> {
     const ms = { proceso: 0, calidad: 0, ocr: 0, total: 0 };
     const inicio = performance.now();
@@ -1737,6 +1760,7 @@ export class RealCoreBridge implements E14Bridge {
             filtro,
             crop: { w: infoCrop.w, h: infoCrop.h, fallback: infoCrop.fallback },
             quad,
+            quadOrigen,
           },
           tiempos: {
             procesoMs: ms.proceso,
@@ -1755,7 +1779,7 @@ export class RealCoreBridge implements E14Bridge {
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte} ` +
-        `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] ` +
+        `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}]${quadOrigen ? ` origen=${quadOrigen}` : ""} ` +
         `score=${score} filtro=${filtro} ocrIn=${ocrIn} ` +
         // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor.
         `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +
