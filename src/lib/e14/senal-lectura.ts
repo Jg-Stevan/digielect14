@@ -87,3 +87,30 @@ export function senalDeLectura(
         : "DEBIL";
   return { nivel, chars, anclas };
 }
+
+/** KIT e14-lectura-perdona-lazo-v1 — ¿es el lazo (esquinas fiduciales) un falso
+ *  positivo según la LECTURA? «La lectura manda» (kit e14-score-lectura-v1)
+ *  aplicada al gate: un fiducial faltante cuyo LADO está demostrado dentro del
+ *  recorte por el OCR es falso positivo (margen corto del warp / sombra al
+ *  filo). Evidencia de campo (ZIP mesa-001, 2026-10-17): acta COMPLETA —KIT 399
+ *  y SUMA TOTAL leídos, sharpness 100— bloqueada SOLO por lazo inf-izq → cap
+ *  7.9 → ADVERTENCIA. El pie leído ES la prueba de que el fondo está dentro.
+ *
+ *  Regla (§3 del kit): por CADA esquina faltante, evidencia de SU lado —
+ *  tope (tl/tr): /E\s*-\s*14/i o /\b\d{15}\b/ · fondo (bl/br): !faltaSeccion
+ *  (P1: SUMA TOTAL; P≥2: FIRMA) Y /KIT[::\s.]*\d+/i. Perdón = TODAS la tienen.
+ *  faltaSeccionInferior (tinta ausente) NUNCA se perdona — eso no es un lazo.
+ *
+ *  PURO (sin DOM, sin imports) — testeable headless con bun (§6 del kit). */
+export function lazoPerdonadoPorLectura(
+  esquinas: { tl: boolean; tr: boolean; bl: boolean; br: boolean } | null,
+  texto: string,
+  faltaSeccion: boolean,
+): boolean {
+  if (!esquinas) return false;
+  const faltan = (["tl", "tr", "bl", "br"] as const).filter((k) => !esquinas[k]);
+  if (faltan.length === 0) return false;
+  const topeDentro = /E\s*-\s*14/i.test(texto) || /\b\d{15}\b/.test(texto);
+  const pieDentro = !faltaSeccion && /KIT[::\s.]*\d+/i.test(texto);
+  return faltan.every((k) => (k === "tl" || k === "tr" ? topeDentro : pieDentro));
+}
