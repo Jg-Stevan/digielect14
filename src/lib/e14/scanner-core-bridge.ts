@@ -91,10 +91,13 @@ import actaSimUrl from "@/assets/acta-e14-real.jpg";
 // ACTAS_SIM de abajo (§D8).
 import actaSimIntermediaUrl from "@/assets/acta-sim-intermedia.jpg";
 import actaSimBajaUrl from "@/assets/acta-sim-baja.jpg";
-import type { Acta, ActaFirma, ActaStatus, ProgresoAnalisis } from "./types";
+import type { Acta, ActaFirma, ActaStatus, DiagnosticoActa, ProgresoAnalisis } from "./types";
 import type { E14Bridge, OpcionesEscaneo } from "./bridge";
 // KIT e14-motor-rapidocr-v1 (PROD-2 §3): adaptador del motor de producción.
 import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
+// KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado justo
+// donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
+import { construirDiagnostico } from "./diagnostico";
 
 /** Timeout de seguridad global §5 (worker colgado en gama baja). */
 const TIMEOUT_MS = 15_000;
@@ -892,6 +895,10 @@ export class RealCoreBridge implements E14Bridge {
       identificada: clasificacion.nivel === "AUTO",
       conSenal: senalActa,
     });
+    // KIT e14-diagnostico-autoenvio-v1 (§3-A): score visual = bruto de
+    // scoreDeCalidad ANTES de los caps del sitio (escudo-fondo/recortada/
+    // incompleta/sin-votos) — el `final` es el que imprime el log.
+    const scoreVisual = score;
     // §D3 (SPEC-e14-simulacion-scores): inyección determinista del chip —
     // reemplaza el calculado DESPUÉS de scoreDeCalidad y ANTES del gate.
     // §G3 (KIT e14-gate-v2): SIN re-aplicación del piso de identificada
@@ -1003,6 +1010,74 @@ export class RealCoreBridge implements E14Bridge {
     // FASE S (§S.1.5): crop= bbox real usado por calidadDeActa (px) — WxH;
     // `full` si el fallback al frame completo se activó (diagnóstico en campo).
     const cropLog = infoCrop.fallback ? "full" : `${infoCrop.w}x${infoCrop.h}`;
+    // KIT e14-diagnostico-autoenvio-v1 (C1/§6-B): techos capturados con las
+    // MISMAS condiciones que ya aplicaron los caps — orden real de aplicación
+    // (techo-fair/poor/sin-senal de scoreDeCalidad → escudo-fondo → recortada
+    // → incompleta → sin-votos). Los de lectura-DEBIL/piso-FUERTE llegan con
+    // score-lectura (PR #13, §8 — campos aditivos).
+    const techosDiag: string[] = [];
+    if (calidad.level === "fair") techosDiag.push("techo-fair:7.9");
+    if (calidad.level === "poor") techosDiag.push("techo-poor:6.4");
+    if (!senalActa) techosDiag.push(`sin-senal:${TECHO_SIN_SENAL}`);
+    if (completa && verificacionResuelta?.fondo)
+      techosDiag.push(`escudo-fondo:${TECHO_ESCUDO_FONDO}`);
+    if (recortada) techosDiag.push(`recortada:${TECHO_ESCUDO_FONDO}`);
+    if (!completa) techosDiag.push("incompleta:6.4");
+    if (completa && !marcadoresOk) techosDiag.push("sin-votos:6.4");
+    // C1: el registro nace junto al log (todo en scope — §9.6). SIM nunca
+    // (§9.2). Observación PASIVA: si falla, el desenlace NO se toca (§9.7).
+    let diag: DiagnosticoActa | null = null;
+    if (!opciones.simular) {
+      try {
+        diag = construirDiagnostico({
+          actaId: "", // se parcha con el id REAL tras construirActa
+          intento: opciones.intento,
+          maxIntentos: opciones.maxIntentos,
+          status: gate.status,
+          rechazo: rechazoFinal,
+          scoreVisual,
+          scoreFinal: score,
+          techos: techosDiag,
+          metricas: {
+            sharpness: calidad.sharpness,
+            brightness: calidad.brightness,
+            contrast: calidad.contrast,
+            contrasteEfectivo: contrasteEfectivoDe(calidad, ocrLegible),
+          },
+          level: calidad.level,
+          lecturaChars: texto.length,
+          senalActa,
+          ocrValido: ocrTextIsValid(texto),
+          gate: {
+            completa,
+            fondo: verificacionResuelta?.fondo ?? false,
+            recortada,
+            ladoEsquina: ladoEsquina ?? null,
+            votos: {
+              densidadPct: marcadores.densidadVotosPct,
+              skipPag2: votosSkipPag2,
+              ok: marcadoresOk,
+            },
+            procesadaVacia,
+            clasifNivel: gate.clasificacion?.nivel ?? "—",
+          },
+          captura: {
+            motor,
+            filtro: filtroActa,
+            crop: { w: infoCrop.w, h: infoCrop.h, fallback: infoCrop.fallback },
+            quad,
+          },
+          tiempos: {
+            procesoMs: ms.proceso,
+            calidadMs: ms.calidad,
+            ocrMs: ms.ocr,
+            totalMs: ms.total,
+          },
+        });
+      } catch {
+        diag = null;
+      }
+    }
     console.info(
       `[e14] pipeline ${opciones.fuente}/${"archivo" in entrada ? "file" : "video-grab"} ` +
         `total=${Math.round(ms.total)}ms ` +
@@ -1021,7 +1096,7 @@ export class RealCoreBridge implements E14Bridge {
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
-        `level:${calidad.level}})${evidenciaSim}`,
+        `level:${calidad.level}})${evidenciaSim}${diag ? " diag=1" : ""}`,
     );
 
     // INFORME-TELEMETRÍA (solo observación — cero cambios de comportamiento):
@@ -1068,7 +1143,9 @@ export class RealCoreBridge implements E14Bridge {
       /* el informe jamás rompe el pipeline */
     }
 
-    return this.construirActa(opciones, parcial, {
+    // KIT e14-diagnostico-autoenvio-v1 (C1): adjuntar el registro con el id
+    // REAL del acta (el id nace en construirActa — parche post-hoc).
+    const acta = this.construirActa(opciones, parcial, {
       fotoProcesada,
       procesadaVacia,
       // KIT actas-vivas-paginas-v1 (FASE C): el acta lleva la bandera del
@@ -1090,6 +1167,11 @@ export class RealCoreBridge implements E14Bridge {
       rechazo: rechazoFinal,
       clasificacion: gate.clasificacion,
     });
+    if (diag) {
+      diag.actaId = acta.id;
+      acta.diagnostico = diag;
+    }
+    return acta;
   }
 
   /**
@@ -1332,6 +1414,9 @@ export class RealCoreBridge implements E14Bridge {
       identificada: clasificacion.nivel === "AUTO",
       conSenal: senalActa,
     });
+    // KIT e14-diagnostico-autoenvio-v1 (§3-A): score visual ANTES de los caps
+    // del sitio (misma convención que el escaneo).
+    const scoreVisual = score;
     // D10 — escudo anti-fondo (mismo criterio del escaneo): el rescate trae
     // fondo/sombra al filo → gate con TECHO 7.9 (nunca ÓPTIMA), sin copy.
     if (completa && verificacion.fondo) {
@@ -1384,6 +1469,71 @@ export class RealCoreBridge implements E14Bridge {
     // FASE S (§S.1.5): crop= bbox real usado por calidadDeActa (px) — WxH;
     // `full` si el fallback al frame completo se activó (diagnóstico en campo).
     const cropLog = infoCrop.fallback ? "full" : `${infoCrop.w}x${infoCrop.h}`;
+    // KIT e14-diagnostico-autoenvio-v1 (C1/§6-B): techos con las MISMAS
+    // condiciones que aplicaron los caps (orden real) — sitio recorte.
+    const techosDiag: string[] = [];
+    if (calidad.level === "fair") techosDiag.push("techo-fair:7.9");
+    if (calidad.level === "poor") techosDiag.push("techo-poor:6.4");
+    if (!senalActa) techosDiag.push(`sin-senal:${TECHO_SIN_SENAL}`);
+    if (completa && verificacion.fondo)
+      techosDiag.push(`escudo-fondo:${TECHO_ESCUDO_FONDO}`);
+    if (recortada) techosDiag.push(`recortada:${TECHO_ESCUDO_FONDO}`);
+    if (!completa) techosDiag.push("incompleta:6.4");
+    if (completa && !marcadoresOk) techosDiag.push("sin-votos:6.4");
+    // C1: registro del desenlace junto al log (§9.6). Guard extra §9.2: un
+    // recorte de un acta SIMULACION tampoco adjunta (doble guard con el store).
+    let diag: DiagnosticoActa | null = null;
+    if (acta.fuente !== "SIMULACION") {
+      try {
+        diag = construirDiagnostico({
+          actaId: acta.id, // el acta existe — identidad conservada (spread)
+          intento: acta.intento,
+          maxIntentos: acta.maxIntentos,
+          status: gate.status,
+          rechazo: rechazoFinal,
+          scoreVisual,
+          scoreFinal: score,
+          techos: techosDiag,
+          metricas: {
+            sharpness: calidad.sharpness,
+            brightness: calidad.brightness,
+            contrast: calidad.contrast,
+            contrasteEfectivo: contrasteEfectivoDe(calidad, ocrLegible),
+          },
+          level: calidad.level,
+          lecturaChars: texto.length,
+          senalActa,
+          ocrValido: ocrTextIsValid(texto),
+          gate: {
+            completa,
+            fondo: verificacion.fondo,
+            recortada,
+            ladoEsquina: ladoEsquina ?? null,
+            votos: {
+              densidadPct: marcadores.densidadVotosPct,
+              skipPag2: votosSkipPag2,
+              ok: marcadoresOk,
+            },
+            procesadaVacia,
+            clasifNivel: gate.clasificacion?.nivel ?? "—",
+          },
+          captura: {
+            motor,
+            filtro,
+            crop: { w: infoCrop.w, h: infoCrop.h, fallback: infoCrop.fallback },
+            quad,
+          },
+          tiempos: {
+            procesoMs: ms.proceso,
+            calidadMs: ms.calidad,
+            ocrMs: ms.ocr,
+            totalMs: ms.total,
+          },
+        });
+      } catch {
+        diag = null;
+      }
+    }
     console.info(
       `[e14] recorte ${acta.fuente} total=${Math.round(ms.total)}ms ` +
         `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
@@ -1398,7 +1548,7 @@ export class RealCoreBridge implements E14Bridge {
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
-        `level:${calidad.level}})`,
+        `level:${calidad.level}})${diag ? " diag=1" : ""}`,
     );
 
     // Acta ACTUALIZADA: identidad intacta (spread), campos reales nuevos y
@@ -1440,6 +1590,9 @@ export class RealCoreBridge implements E14Bridge {
       actaActualizada.titulo = titUbi.titulo;
       actaActualizada.ubicacion = titUbi.ubicacion;
     }
+    // KIT e14-diagnostico-autoenvio-v1 (C1): el desenlace del RECORTE viaja
+    // en el acta actualizada (el store decide ZIP/registro — C3).
+    if (diag) actaActualizada.diagnostico = diag;
     return actaActualizada;
   }
 

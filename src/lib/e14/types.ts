@@ -47,6 +47,58 @@ export interface ActaFirma {
   estado: "OK" | "NO_DETECTADO" | "TENUE";
 }
 
+// ---------- KIT e14-diagnostico-autoenvio-v1 (§3-A) ----------
+/** Registro estructurado del DESENLACE del pipeline («por qué no se envió
+ *  automáticamente»). Lo monta el bridge justo donde hoy escribe el log de
+ *  auditoría (UNA sola fuente de verdad — pitfall §9.6) y lo cuelga en
+ *  Acta.diagnostico. Observación PASIVA: nunca altera el desenlace (§2).
+ *  Campos aditivos §8: sharpnessHi/contrastPapel y lectura.nivel/anclas
+ *  llegan cuando score-lectura (PR #13) se mergee — mientras van null/"—"
+ *  (chars SIEMPRE real). */
+export interface DiagnosticoActa {
+  ts: string; // ISO
+  actaId: string;
+  intento: number;
+  maxIntentos: number;
+  status: ActaStatus; // el del DESENLACE (pre-decisión humana)
+  rechazo: Acta["rechazo"];
+  /** score visual = bruto de scoreDeCalidad ANTES de los caps del sitio;
+   *  final = el del log; techos en ORDEN de aplicación (techo-fair:7.9 ·
+   *  techo-poor:6.4 · sin-senal:4.9 · escudo-fondo:7.9 · recortada:7.9 ·
+   *  incompleta:6.4 · sin-votos:6.4 — lectura-DEBIL/piso-FUERTE llegan con
+   *  score-lectura, §8). */
+  score: { visual: number; final: number; techos: string[] };
+  metricas: {
+    sharpness: number;
+    brightness: number;
+    contrast: number;
+    /** v2 del kit score-lectura — null hasta que main la herede. */
+    sharpnessHi: number | null;
+    contrastPapel: number | null;
+    contrasteEfectivo: number;
+  };
+  level: string; // excellent|good|fair|poor
+  lectura: { nivel: string; anclas: number; chars: number };
+  senalActa: boolean;
+  ocrValido: boolean;
+  gate: {
+    completa: boolean;
+    fondo: boolean;
+    recortada: boolean;
+    ladoEsquina: string | null;
+    votos: { densidadPct: number | null; skipPag2: boolean; ok: boolean };
+    procesadaVacia: boolean;
+    clasifNivel: string;
+  };
+  captura: {
+    motor: string;
+    filtro: string;
+    crop: { w: number; h: number; fallback: boolean };
+    quad: Quad;
+  };
+  tiempos: { procesoMs: number; calidadMs: number; ocrMs: number; totalMs: number };
+}
+
 export interface Acta {
   id: string;
   titulo: string; // "ROMA - CONSULADO"
@@ -117,6 +169,10 @@ export interface Acta {
    * archivada en su mesa al envío; SUGERIDA/MANUAL → panel de corrección.
    */
   clasificacion?: ClasificacionE14;
+  /** KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado
+   *  por el bridge junto al log de auditoría. SIM nunca lo trae (§9.2 —
+   *  doble guard) y el ZIP solo nace con status ≠ OPTIMA (§1). */
+  diagnostico?: DiagnosticoActa;
 }
 
 // ---------- Control de mesas (vista ACTAS) ----------

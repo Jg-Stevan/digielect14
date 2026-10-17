@@ -37,6 +37,9 @@ import {
 import { QuadEditor } from "../QuadEditor";
 import { ZoomableVisor } from "@jg-stevan/scanner-ui";
 import { PanelClasificacion } from "../PanelClasificacion";
+// KIT e14-diagnostico-autoenvio-v1 (C4): red de seguridad §9.1 — re-descarga
+// del paquete ZIP si el navegador bloqueó la auto-descarga del desenlace.
+import { descargarPaqueteDiagnostico } from "@/lib/e14/diagnostico";
 import { Chip, PrimaryBtn, ToolbarBtn } from "../primitives";
 import {
   CopyIcon,
@@ -139,6 +142,8 @@ export function ReviewView() {
   // G4 (KIT camara-visor-v1): mismo patrón de feedback — 1.5 s en el botón
   // «Imagen» («DESCARGADA ✓» / «NO SE PUDO»), sin toast flotante.
   const [imagenDesc, setImagenDesc] = useState<"ok" | "err" | null>(null);
+  // KIT e14-diagnostico-autoenvio-v1 (C4): feedback del botón DIAGNÓSTICO ↓.
+  const [diagDesc, setDiagDesc] = useState<"ok" | "err" | null>(null);
   // Fuente: apps/scanner-lab/src/components/scanner/EditorView.tsx L1563-1578
   // (ocrStats — contadores del sheet de texto). ADAPTACIÓN: sin `matches`
   // (F-FIND excluido — e14 no tiene biblioteca buscable, §1 del spec).
@@ -410,7 +415,14 @@ export function ReviewView() {
     ) : status !== "ENVIADA" ? (
       // Resto de estados: Recortar · Rotar 90° · Imagen — UNA sola fila de 3
       // (grid-cols-3; la 4ª celda que forzaba segunda fila murió con la FASE A).
-      <div className="grid grid-cols-3 gap-2 w-full select-none">
+      // KIT e14-diagnostico-autoenvio-v1 (C4): con acta.diagnostico presente
+      // y status ≠ ENVIADA, 4ª celda compacta «DIAGNÓSTICO ↓» (grid-cols-4) —
+      // red de seguridad OBLIGATORIA §9.1 (re-descarga del ZIP del desenlace).
+      <div
+        className={`grid gap-2 w-full select-none ${
+          acta.diagnostico ? "grid-cols-4" : "grid-cols-3"
+        }`}
+      >
         <ToolbarBtn
           icon={<StitchCropIcon />}
           label="Recortar"
@@ -431,6 +443,24 @@ export function ReviewView() {
               : undefined
           }
         />
+        {acta.diagnostico && (
+          <ToolbarBtn
+            icon={<DownloadIcon />}
+            label={
+              diagDesc === "ok"
+                ? "Descargado ✓"
+                : diagDesc === "err"
+                  ? "No se pudo"
+                  : "Diagnóstico"
+            }
+            aria-label="Descargar paquete de diagnóstico ZIP"
+            onClick={() => {
+              const r = descargarPaqueteDiagnostico(acta);
+              setDiagDesc(r.ok ? "ok" : "err");
+              if (r.ok) setTimeout(() => setDiagDesc(null), 2500);
+            }}
+          />
+        )}
       </div>
     ) : null;
 
