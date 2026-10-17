@@ -19,9 +19,11 @@ lista exacta de lo que falta.
 | `lab/quad-repro.html` + `lab/quad-repro.js` | Harness §4-B: selector/drag&drop → `createImageBitmap` → worker relativo `./worker-copy/detection-worker.js?v=7` → protocolo REAL (§3): `ready` (probe), `{type:"detect", bitmap, ts}` con TRANSFER (re-creación por intento — pitfall §9.3), respuestas `result`/`busy`/`error` (busy = normal A-04/A-05), y `{type:"warp", quad:[8 fracciones]}` para el contra-evidencial (Fase 3, quad ideal manual editable). Dibuja quad + esquinas TL-TR-BR-BL numeradas; imprime el quad normalizado 0-1, el crop estimado con el MISMO cálculo bbox→px de `calidadDeActa` (bridge: margen +3%/lado clamp [0,1], min 8px → fallback frame completo, cap 2000 sin upscalar) y el ratio h/w vs 2.9 (referencia, NO ley — pitfall §9.7). Panel EN VIVO de trazas. |
 | `lab/worker-copy/detection-worker.js` | Copia instrumentada §4-C del worker `@4aa2e06` (header de 4 líneas con el sha del original). Trazas parseables `console.info("[quad-repro] {json}")` + `post({type:"quad-repro", traza})` (panel): **selectQuad** → cada candidato top-N `{area, ratioAspect, whiteness, validateOk, score}` + ganador + `polys/topN` (lista vacía/todos invalidados = H3 explícito) · **refineQuadFromLines** → `bad[]/fellBack[]/nFallback` (H1) · **handler detect** → `{corners, frameW, frameH, contourCount}`. CERO cambios de lógica (las trazas son aditivas — verificado con `new Function`, sintaxis OK). |
 | `lab/vendor` → `../public/vendor` (symlink) | El worker deriva los candidatos de opencv desde SU ubicación (`opencvCandidateUrls`: `../../vendor/` y `../vendor/` + CDN). Desde `lab/worker-copy/`, la ruta `../vendor/` = `lab/vendor/` → el symlink hace que la COPIA cargue el MISMO opencv self-hosted del repo. (El CDN `docs.opencv.org` responde 403 desde el sandbox — comprobado; el diseño del worker ya prevé la ruta `lab/vendor/`.) |
-| `lab/fixtures/README.md` | Procedencia verbatim del kit §4-A (CONSULADO 88 · EGIPTO · ZONA 05 PUESTO 02 · mesas 001/002 · Frankfurt KIT 399 · 2026-10-17) + los 2 archivos esperados con sus quads de referencia (control trapecio `[0.383,0.262 0.633,0.280 0.610,0.863 0.357,0.868]` ratio 2.92 · objetivo rect `[0.362,0.333 0.694,0.333 0.694,0.601 0.362,0.601]` ratio 1.08) + cuidados §9.9. Los JPGs: PENDIENTES. `lab/.gitignore` NO ignora `fixtures/` (solo `fotos/`) — sin ajuste necesario. |
+| `lab/fixtures/README.md` + `lab/fixtures/*.jpg` | Procedencia verbatim del kit §4-A (CONSULADO 88 · EGIPTO · ZONA 05 PUESTO 02 · mesas 001/002 · Frankfurt KIT 399 · 2026-10-17) + **los 2 JPGs COMPLETADOS con la re-subida del dueño** (bytes EXACTOS de campo — ZIP STORE sin re-encode, md5 en el README): `mesa-001-original.jpg` (1569176 B, `e285b04120550370a6133aeb8ef06df3`) y `mesa-002-original.jpg` (1677067 B, `125af1246c6eb159512ca643efd57d6a`). Sin EXIF (verificado — pitfall §9.6 OK). `lab/.gitignore` NO ignora `fixtures/` (solo `fotos/`). |
 | `lab/resultados/quad-repro-sanidad-rig.png` | Lámina de SANIDAD del rig (control con `src/assets/acta-e14-real.jpg` — NO es resultado de campo). |
-| `lab/README.md` §Quad-repro | Tabla H1-H4 × evidencia × veredicto (preparada — la columna de trazas se llena con los fixtures) + propuesta de fix rankeada EN MARCO (SCORING vs GENERACIÓN vs refine-fallback, según el criterio del kit §5-Fase 3) + cómo correr. |
+| `lab/resultados/quad-repro-mesa-001.{json,png}` | Resultado del CONTROL: quad `[0.383,0.262 0.633,0.280 0.610,0.863 0.357,0.868]` + crop 887×2586 — **byte a byte = campo**. Trazas: ganador pasada 1 (ratio 2.916, whiteness 0.638, score 0.3118, validateOk true) + modo crudo 3024×4032 (ganador 2.865). Lámina con el quad dibujado. |
+| `lab/resultados/quad-repro-mesa-002.{json,png}` | Resultado del OBJETIVO: worker **SIN QUAD** en todo modo (400px: 8 contornos, cascada agotada `ganador:null`; crudo: 106 contornos, top-5 bandas parciales todas inválidas) + **la CAUSA RAÍZ verificada numéricamente: el rect de campo = fallback Sobel del core** (réplica exacta: `[0.362,0.333 0.694,0.333 0.694,0.606 0.362,0.606]` vs campo `…0.601` — ±0.005 por el re-encode q0.92) + Fase 3 (warp ideal 1004×2568px con el contenido perdido). Lámina con el estado SIN QUAD + trazas + warp ideal. |
+| `lab/README.md` §Quad-repro | **Tabla H1-H4 × evidencia × veredicto LLENADA** + HALLAZGO de causa raíz (fallback Sobel del core, verificación numérica) + propuesta de fix rankeada (P1 observabilidad del origen / P2 Sobel-bottom / P3 generación worker) + cómo correr con la cadena de fidelidad. |
 
 ## 3. Sanidad del rig (AC §6.3 — «si el harness marca mal el control, el rig está mal»)
 
@@ -39,20 +41,20 @@ Corrida end-to-end en el sandbox con el acta real del repo (`src/assets/acta-e14
 
 **El rig funciona de punta a punta** (protocolo §3 completo: ready/detect/result/trazas/warp).
 
-## 4. Las 3 fases del procedimiento (§5) — estado
+## 4. Las 3 fases del procedimiento (§5) — **COMPLETADAS (2026-10-17 18:4x-18:5x, fixtures re-corridos)**
 
 | Fase | Estado |
 |---|---|
-| Fase 1 — repro mínimo (vía archivo del app) | **PENDIENTE de fixtures** (los ZIPs no llegaron). Nota del kit §5.1: si la vía archivo NO reproduce → H4 (diferencia vivo/archivo) es un hallazgo legítimo — el rig queda listo para ambas ramas. |
-| Fase 2 — instrumentación (clasificar H1-H3) | **PENDIENTE de fixtures** — la copia instrumentada y el panel ya emiten exactamente las trazas que deciden (fellBack por lado → H1; ganador y sus score/area/ratio → H2; polys/todos-invalidados → H3). |
-| Fase 3 — contra-evidencia (warp ideal) | **PENDIENTE de fixtures** — botón «Warp» + quad ideal manual ya operativos; decide SCORING vs GENERACIÓN (kit §5-F3). |
+| Fase 1 — repro mínimo (vía archivo del app) | **COMPLETADA**: campo = app dev :3001 = rig — quad byte a byte idéntico en los 3 sitios (zip1 trapecio `[0.383,0.262 …]` crop 887×2586 ratio 2.92 ✓ · zip2 rect corto `y_bottom=0.601 ≤ 0.65` → **REPRODUCE determinista** → H4 DESCARTADA). Detalle: el app baja la foto a 300×400 (`PROCESS_LONG_SIDE=400`) tras re-encode jpeg q0.92 — hallazgo de fidelidad del rig §lab/README. |
+| Fase 2 — instrumentación (clasificar H1-H3) | **COMPLETADA** (tabla llena en `lab/README.md` §Quad-repro; JSONs con las trazas en `lab/resultados/`): **H1 REFUTADA** (refine jamás corrió — no hubo ganador) · **H2 REFUTADA** (selectQuad eligió NADA: `ganador:null` en TODAS las pasadas) · **H3 CONFIRMADA** (ni existió candidato de papel completo — 400px y crudo) · **H4 DESCARTADA** (vía archivo reproduce). **HALLAZGO NUEVO de causa raíz: el rect de campo lo fabricó el `detectSobel` FALLBACK del core** (`detectDocumentEdges` → worker null → sobel; verificado: réplica del Sobel sobre el fixture = campo ±0.005 en bottom, y el `findEdgeY` se engancha a la banda NIVELACIÓN y≈0.60 en vez del papel y≈0.97). |
+| Fase 3 — contra-evidencia (warp ideal) | **COMPLETADA**: warp `{type:"warp"}` manual con el quad ideal del papel visible `[0.362,0.333 0.694,0.333 0.694,0.97 0.362,0.97]` → **1004×2568px** — la lámina muestra lo perdido: candidatos 1/2 con votos, VOTOS EN BLANCO/NULOS/NO MARCADOS y **SUMA TOTAL •17**. Score del candidato ideal en las trazas: **NI EXISTIÓ** → fix futuro = **GENERACIÓN** (kit §5-F3), con la capa fallback como P2 del ranking. |
 
-## 5. Criterios de aceptación (§6)
+## 5. Criterios de aceptación (§6) — TODOS CUBIERTOS
 
-1. Repro determinista del zip2 documentado → **pendiente de fixtures** (rig listo; H4 contemplado).
-2. Causa raíz a nivel función:línea → **pendiente de trazas** (la instrumentación existe y está validada en la sanidad).
-3. Control zip1 saneando el rig → **hecho por análogo** (acta real del repo: quad sano ratio 2.89 — el rig marca BIEN un control real; con el fixture zip1 se repite 1:1).
-4. Láminas legibles commiteadas → **sanidad commiteada** (`lab/resultados/quad-repro-sanidad-rig.png`); las de fixtures quedan pendientes.
+1. Repro determinista del zip2 documentado → **HECHO** (campo = app = rig byte a byte; H4 descartada).
+2. Causa raíz a nivel función:línea → **HECHA Y EXCEDIDA**: `detectDocumentEdges` (image-processor.js L485-490 del core) → `detectWithWorker` null (trazas) → **`detectSobel`** fabrica el rect (L533-597: `findEdgeY` bottom = máximo de energía = banda negra 0.60). Además de la capa worker (H3: generación sin candidato de papel completo).
+3. Control zip1 saneando el rig → **HECHO con el fixture real**: trapecio `[0.383,0.262 …]` ratio 2.92 crop 887×2586 — byte a byte = campo (y la sanidad previa con el acta del repo: ratio 2.89).
+4. Láminas legibles commiteadas → **HECHO**: `quad-repro-mesa-001.png` (control), `quad-repro-mesa-002.png` (SIN QUAD + trazas + warp ideal), `quad-repro-sanidad-rig.png`.
 5. CI del PR en verde → checks/Vercel esperados verdes; **parity ×2 en FAILURE por causa EXTERNA al kit** (ver §6) — el PR no toca ni un byte de producción (diff vs main = solo `lab/` + docs).
 
 ## 6. NOTA sobre el CI del PR (parity ×2 rojo — NO es culpa de este PR ni de T-A)
@@ -73,7 +75,7 @@ rebase de T-A/T-C lo hereda y el parity se pone verde solo.
 ## 8. Contrato de entrega
 
 - [x] PR `lab/quad-repro` → main, CI (checks/Vercel verde; parity rojo EXTERNO — §6, se arregla con el sync del dueño).
-- [ ] `lab/fixtures/` 2 JPGs — pendientes de re-subida (README con procedencia YA commiteado).
-- [x] `lab/quad-repro.html`+`js`, `lab/worker-copy/` con trazas, `lab/vendor/`, `lab/resultados/` (sanidad).
-- [x] `lab/README.md` §Quad-repro con la tabla H1-H4 × evidencia × veredicto (preparada) y la propuesta de fix en marco.
+- [x] `lab/fixtures/` 2 JPGs — **COMPLETADO** (re-subida recibida; md5 verificados; byte a byte = campo).
+- [x] `lab/quad-repro.html`+`js` (con fidelidad de cadena del app + warp manual Fase 3), `lab/worker-copy/` con trazas, `lab/vendor/`, `lab/resultados/` (sanidad + mesa-001 + mesa-002).
+- [x] `lab/README.md` §Quad-repro con la tabla H1-H4 × evidencia × veredicto (LLENADA) y la propuesta de fix rankeada.
 - [x] worklog + AGENTS.md + kit verbatim (md5 `965eb3ada50213b5b8d62eb952e404a1`) + este REPORTE.

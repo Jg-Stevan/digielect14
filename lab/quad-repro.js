@@ -28,6 +28,7 @@
   let worker = null, ready = false, ocupado = false;
   let bitmapBase = null;   // bitmap fuente (se re-crea por intento — el detect TRANSFIERE)
   let imgEl = null;        // para re-decodificar sin EXIF issues (los fixtures no traen EXIF — pitfall §9.6)
+  let imgApp = null;       // el <img> del dataURL q0.92 — la MISMA entrada que el app (fidelidad total)
   let lastCorners = null;  // quad normalizado devuelto
   let lastFrame = null;    // {w, h}
 
@@ -57,12 +58,41 @@
   }
 
   // ---------- fixture ----------
+  // FIDELIDAD TOTAL DE ENTRADA (hallazgo del rig — kit §5-Fase2): el app NO detecta
+  // sobre el archivo crudo. Cadena REAL (image-processor.js del core):
+  //   File → createImageBitmap({imageOrientation:"from-image"}) → canvas
+  //   (imageSmoothingQuality "high", sin escala — cap IMPORT_MAX_LONG_SIDE=4032
+  //   es no-op a 3024×4032) → canvas.toDataURL("image/jpeg", 0.92) — RE-ENCODE
+  //   (fileToCaptureDataUrl L183-227 → sourceToCappedJpegDataUrl L142-154) →
+  //   <img> del dataURL → createImageBitmap({resize 300×400, quality "low"})
+  //   (detector-client L5-14, PROCESS_LONG_SIDE=400) → worker.detect.
+  // El RE-ENCODE q0.92 cambia píxeles suficientes para que el candidato del
+  // quad corto de campo SOLO exista en esta cadena (mesa-002: crudo 3024×4032 →
+  // SIN quad; crudo 300×400 → SIN quad; cadena app → rect corto y_bottom=0.601).
+  async function cadenaApp(file) {
+    const bm = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const canvas = document.createElement("canvas");
+    canvas.width = bm.width; canvas.height = bm.height;
+    const ctx2 = canvas.getContext("2d");
+    ctx2.imageSmoothingQuality = "high";
+    ctx2.drawImage(bm, 0, 0, bm.width, bm.height, 0, 0, canvas.width, canvas.height);
+    bm.close();
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    return await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = rej;
+      im.src = dataUrl;
+    });
+  }
+
   async function cargarArchivo(file) {
     imgEl = new Image();
     imgEl.decoding = "sync";
     const url = URL.createObjectURL(file);
     await new Promise((res, rej) => { imgEl.onload = res; imgEl.onerror = rej; imgEl.src = url; });
     bitmapBase = await createImageBitmap(imgEl);
+    imgApp = await cadenaApp(file); // la MISMA cadena de entrada del app (fidelidad)
     $("detectBtn").disabled = !ready;
     $("warpBtn").disabled = true;
     lastCorners = null;
@@ -73,6 +103,7 @@
     datos.textContent = `fixture ${file.name} — ${bitmapBase.width}×${bitmapBase.height}px`;
     warpOut.textContent = "";
     lastFrame = { w: bitmapBase.width, h: bitmapBase.height };
+    $("warpBtn").disabled = !ready; // el warp MANUAL (Fase 3) no necesita quad previo
   }
   function ajustaCanvas() { cv.style.width = "100%"; cv.style.height = "auto"; }
 
@@ -82,11 +113,25 @@
     if (ocupado) return; // single-flight — busy es normal (A-04/A-05)
     ocupado = true;
     $("detectBtn").disabled = true;
-    const bmp = new ImageData(1, 1); // placeholder — el bitmap REAL va por transfer
-    createImageBitmap(imgEl).then((b) => {
-      lastFrame = { w: b.width, h: b.height };
+    // FIDELIDAD APP (hallazgo del rig, kit §5-Fase2): el core NO detecta sobre la
+    // foto cruda — detector-client.js L5-14 baja a PROCESS_LONG_SIDE=400 con
+    // createImageBitmap(source,{resizeWidth,resizeHeight,resizeQuality:"low"})
+    // ANTES del postMessage detect. El rig inicial pasaba el bitmap crudo y por eso
+    // el candidato ganador del campo no existía en ese pixel-grid (mesa-002: SIN
+    // quad con 3024×4032; rect corto y_bottom=0.601 con 300×400). El toggle crudo
+    // queda para DOCUMENTAR la diferencia (H4-resolución), no para el repro oficial.
+    const crudo = $("rawBitmap").checked;
+    const fuente = crudo ? imgEl : imgApp; // crudo = archivo; fidelidad = dataURL q0.92 del app
+    const W = fuente.naturalWidth, H = fuente.naturalHeight;
+    const s = 400 / Math.max(W, H); // PROCESS_LONG_SIDE — misma fórmula del core
+    const dims = { w: Math.max(1, Math.round(W * s)), h: Math.max(1, Math.round(H * s)) };
+    const opts = crudo ? undefined
+      : { resizeWidth: dims.w, resizeHeight: dims.h, resizeQuality: "low" };
+    createImageBitmap(fuente, opts).then((b) => {
+      const modo = crudo ? `CRUDO ${b.width}×${b.height}` : `fidelidad app ${b.width}×${b.height}`;
+      lastFrame = { w: W, h: H }; // crop/ratio SIEMPRE sobre frame completo (bridge L344)
+      ponEstado(`worker: detectando… (${modo})`); // ANTES del transfer — el bitmap queda detached
       worker.postMessage({ type: "detect", bitmap: b, ts: Date.now() }, [b]); // TRANSFER — pitfall §9.3
-      ponEstado("worker: detectando…");
     });
   }
 
@@ -100,10 +145,9 @@
     const w = (rx1 - rx0) * frameW, h = (ry1 - ry0) * frameH;
     const fallback = w < BBOX_MIN_PX || h < BBOX_MIN_PX;
     if (fallback) return { w: frameW, h: frameH, fallback: true };
-    // cap lado ≤2000 — NUNCA upscalar
-    const lado = Math.max(w, h);
-    const esc = lado > CROP_LADO_MAX ? CROP_LADO_MAX / lado : 1;
-    return { w: Math.round(w * esc), h: Math.round(h * esc), fallback: false };
+    // el REPORTE es el bbox REAL sin cap (bridge calidadDeActa: info.w/h = bbox.sw/sh
+    // L561-564 — el cap CROP_LADO_MAX=2000 solo limita el CANVAS de análisis, no el número)
+    return { w: Math.round(w), h: Math.round(h), fallback: false };
   }
 
   function ponResultado(m) {
@@ -113,7 +157,7 @@
     // redibujo la foto y el quad (corners plano 0-1 → puntos px del canvas)
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.drawImage(imgEl, 0, 0, cv.width, cv.height);
-    $("warpBtn").disabled = !pts;
+    $("warpBtn").disabled = false; // manual (Fase 3) siempre disponible con fixture
     if (!pts) {
       datos.innerHTML = `<span class="warn">SIN QUAD — detección no encontró acta (mira H3 en trazas: contourCount=${m.qualityInput && m.qualityInput.diag ? m.qualityInput.diag.contourCount : "?"}).</span>`;
       return;
@@ -145,17 +189,26 @@
       `contornos: ${m.qualityInput && m.qualityInput.diag ? m.qualityInput.diag.contourCount : "?"} · frame: ${f.w}×${f.h}`;
   }
 
+  // Quad «ideal» del zip2 (kit Fase 3 — dibujado a mano sobre el PAPEL VISIBLE
+  // del fixture mesa-002: top=borde superior del papel 0.333, bottom=borde del
+  // frame 0.97 — el papel sigue debajo y sale del encuadre, x=paper 0.362/0.694).
+  const IDEAL_ZIP2 = [{ x: 0.362, y: 0.333 }, { x: 0.694, y: 0.333 }, { x: 0.694, y: 0.97 }, { x: 0.362, y: 0.97 }];
+
   // ---------- warp (§4-B.4 + Fase 3) ----------
   function warp() {
-    if (!ready || !bitmapBase || !lastCorners) return;
+    if (!ready || !bitmapBase) return;
+    const manual = $("quadIdeal").checked;
+    // Fase 3: el zip2 puede NO tener quad del worker (SIN QUAD) — el warp manual
+    // es exactamente el contra-evidencial de ese caso → solo exige modo manual.
+    if (!lastCorners && !manual) return;
     if (ocupado) return;
     ocupado = true;
-    const manual = $("quadIdeal").checked;
     let corners = lastCorners;
     if (manual) {
       // quad «ideal» editable: el papel visible del zip2 (kit Fase 3) — se
       // edita a mano en el prompt (4 puntos x,y 0-1 separados por espacios).
-      const t = prompt("quad ideal (x0,y0 x1,y1 x2,y2 x3,y3 — 0-1, orden TL TR BR BL):", lastCorners.map((p) => `${(+p.x).toFixed(3)},${(+p.y).toFixed(3)}`).join(" "));
+      const base = lastCorners || IDEAL_ZIP2;
+      const t = prompt("quad ideal (x0,y0 x1,y1 x2,y2 x3,y3 — 0-1, orden TL TR BR BL):", base.map((p) => `${(+p.x).toFixed(3)},${(+p.y).toFixed(3)}`).join(" "));
       if (!t) { ocupado = false; return; }
       corners = t.trim().split(/\s+/).map((par) => { const [x, y] = par.split(",").map(Number); return { x, y }; });
     }

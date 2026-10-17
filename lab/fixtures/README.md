@@ -1,17 +1,14 @@
 # lab/fixtures — fotos de campo del rig quad-repro (KIT e14-quad-repro-v1 §4-A)
 
-**ESTADO: BLOQUEADO — los ZIPs NO llegaron al sandbox del agente** (2026-10-17: `upload/` solo
-trajo los 3 INSTRUCCIONES de la tanda T-A/T-B/T-C; `download/` es la carpeta de generados).
-El kit es tajante (§4-A/contrato): **el rig NO se ejecuta con fixtures inventados** — estos JPGs
-son los bytes EXACTOS que el pipeline vio en campo (ZIP empaquetado STORE sin re-encode, kit
-PROD-3 §3) y la detección debe ser determinista sobre ellos. **Pendiente: re-subida por el dueño.**
+**ESTADO: COMPLETADO — los 2 ZIPs de campo llegaron (2026-10-17 18:2x) y los `original.jpg` están
+aquí como BYTES EXACTOS** (ZIP empaquetado STORE sin re-encode, kit PROD-3 §3 — verificado md5
+abajo). El kit §4-A/contrato: el rig NO se ejecuta con fixtures inventados — estos son los bytes
+que el pipeline vio en campo.
 
-## Los 2 archivos esperados (nombres exactos del kit §4-A)
-
-| Archivo | Origen | Rol | quad esperado (del kit §1) |
-|---|---|---|---|
-| `mesa-001-original.jpg` (~1.5 MB) | `e14-diag-mesa-001-115643-i1.zip` → `original.jpg` | CONTROL (detección sana) | trapecio real con tilt `~[0.383,0.262 0.633,0.280 0.610,0.863 0.357,0.868]`, crop 887×2586 (ratio 2.92 ✓) |
-| `mesa-002-original.jpg` (~1.6 MB) | `e14-diag-mesa-002-115822-i2.zip` → `original.jpg` | OBJETIVO (el fallo a reproducir) | rect perfecto `~[0.362,0.333 0.694,0.333 0.694,0.601 0.362,0.601]` (y_bottom≈0.601), crop 1062×1144 (ratio 1.08 ≪ 2.9) |
+| Archivo | md5 | Rol | quad de campo (diagnostico.json) | repro rig/app |
+|---|---|---|---|---|
+| `mesa-001-original.jpg` (1569176 B) | `e285b04120550370a6133aeb8ef06df3` | CONTROL (detección sana) | trapecio con tilt `[0.383,0.262 0.633,0.280 0.610,0.863 0.357,0.868]`, crop 887×2586 (ratio 2.92 ✓) | **IDÉNTICO byte a byte** (rig fidelidad app y app en dev) |
+| `mesa-002-original.jpg` (1677067 B) | `125af1246c6eb159512ca643efd57d6a` | OBJETIVO (el fallo reproducido) | rect perfecto `[0.362,0.333 0.694,0.333 0.694,0.601 0.362,0.601]` (y_bottom≈0.601), crop 1062×1144 (ratio 1.08 ≪ 2.9) | **IDÉNTICO byte a byte** — y la CAUSA RAÍZ es el fallback Sobel del core (lab/README §Quad-repro → hallazgo) |
 
 ## Procedencia (kit §4-A — verbatim)
 
@@ -26,11 +23,15 @@ Actas de campo reales — mismos cuidados del repo: NO re-distribuir fuera del r
 procedencia anotada (este README). Los JPGs NO traen EXIF de cámara (verificable) — el repro
 no desincroniza por rotación.
 
-## Cómo correr (cuando lleguen)
+## Cómo correr (ya corrido — resultados en `lab/resultados/`)
 
 ```bash
 bash lab/setup_env.sh   # NO es necesario para el rig quad-repro (es JS del worker, no Python)
-bunx serve .            # raíz del repo → http://localhost:3000/lab/quad-repro.html (puerto 8xxx libre)
+python3 -m http.server 8123   # o bunx serve . — raíz del repo → http://localhost:8123/lab/quad-repro.html
 # → selector de archivo → lab/fixtures/mesa-001-original.jpg (control SANO)
 # → lab/fixtures/mesa-002-original.jpg (el objetivo — reproducir el rect corto)
 ```
+
+Nota de fidelidad (hallazgo del rig): el toggle **«bitmap CRUDO»** apagado (default) replica la
+cadena de ENTRADA completa del app (re-encode jpeg q0.92 + downscale 300×400 «low» del core —
+ver lab/README §Quad-repro); encendido queda para documentar la diferencia crudo-vs-app.

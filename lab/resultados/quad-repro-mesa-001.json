@@ -1,0 +1,27 @@
+{
+  "kit": "e14-quad-repro-v1",
+  "fixture": "lab/fixtures/mesa-001-original.jpg",
+  "rol": "CONTROL (detección sana)",
+  "procedencia": "e14-diag-mesa-001-115643-i1.zip → original.jpg · CONSULADO 88 · EGIPTO · ZONA 05 PUESTO 02 · MESA 001 · Frankfurt KIT 399 · 2026-10-17 16:56 campo",
+  "md5": "e285b04120550370a6133aeb8ef06df3",
+  "frame": { "w": 3024, "h": 4032 },
+  "modo": "fidelidad app (cadena completa: re-encode jpeg q0.92 + createImageBitmap 300x400 resizeQuality low)",
+  "resultado_rig": {
+    "corners_0_1": [0.383, 0.262, 0.633, 0.280, 0.610, 0.863, 0.357, 0.868],
+    "crop_estimado_bbox": { "w": 887, "h": 2586, "fallback": false },
+    "ratio_hw": 2.92,
+    "contourCount_400px": 7
+  },
+  "quad_campo_diagnostico": [0.383, 0.262, 0.633, 0.280, 0.610, 0.863, 0.357, 0.868],
+  "comparacion": "quad BYTE A BYTE idéntico al diagnostico.json de campo y al repro del app (dev :3001) — detección determinista sobre el fixture",
+  "trazas_selectQuad_fidelidad": [
+    { "fn": "detect", "corners": [0.38333332538604736, 0.26249998807907104, 0.6333333253860474, 0.2800000011920929, 0.6100000143051147, 0.862500011920929, 0.3566666543483734, 0.8675000071525574], "frameW": 300, "frameH": 400, "contourCount": 7 },
+    { "fn": "selectQuad", "polys": 1, "topN": 1, "cands": [{ "area": 18265, "ratioAspect": 2.916, "whiteness": 0.638, "validateOk": true, "score": 0.3118 }], "ganador": { "score": 0.3118, "area": 18265 }, "frameW": 300, "frameH": 400 }
+  ],
+  "trazas_selectQuad_crudo_3024x4032": [
+    { "fn": "detect", "corners": [0.3789682686328888, 0.2638888955116272, 0.6362434029579163, 0.2805059552192688, 0.6121031641960144, 0.86557537317276, 0.35482802987098694, 0.8685516119003296], "frameW": 3024, "frameH": 4032, "contourCount": 15 },
+    { "fn": "selectQuad", "polys": 1, "topN": 1, "cands": [{ "area": 1869867, "ratioAspect": 2.865, "whiteness": 0.636, "validateOk": true, "score": 0.3124 }], "ganador": { "score": 0.3124, "area": 1869867 }, "frameW": 3024, "frameH": 4032 },
+    { "fn": "selectQuad", "polys": 3, "topN": 3, "cands": [{ "area": 239145, "ratioAspect": 0.501, "whiteness": 0.642, "validateOk": false, "score": null }, { "area": 232455, "ratioAspect": 0.514, "whiteness": 0.663, "validateOk": false, "score": null }, { "area": 96285, "ratioAspect": 0.267, "whiteness": 0.66, "validateOk": false, "score": null }], "ganador": null, "frameW": 3024, "frameH": 4032 }
+  ],
+  "veredicto": "CONTROL SANO — el worker genera y valida el candidato del papel completo en la pasada 1 (ratio 2.916, validateOk true). El rig está bien y la detección también. Refuerza el veredicto de mesa-002: el fallo NO es del rig ni de la resolución."
+}
