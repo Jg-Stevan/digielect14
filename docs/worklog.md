@@ -1073,7 +1073,11 @@ PROFILER / snapA+TORCH_HINT+accept.
   IMPORTAR src/assets/acta-e14-real.jpg → celdas de los 3 motores y
   actual/bw = ocrChars del pipeline. Pendiente (dispositivo del dueño,
   N/A sandbox): §8.7 Galaxy A56.
-- **Commits:** 29f5003
+- **Commits:** 29f5003 · 71cdc94 (worklog) · bbc4b01 (sync worker: adopta
+  el detection-worker del lab — el merge del PR #3 de web-scanner de HOY
+  cambió el worker del lab (leaks A-04/A-05) y el gate worker-parity
+  comparaba contra web-scanner/main → rompía para todo PR nuevo de e14;
+  md5 82a0374d… → 6d801c2a…, cero cambios del kit)
 - **Pendiente/Bloqueado:** auditoría del dueño (PR draft — JAMÁS merge
   desde aquí) · QA física §8.7 en Galaxy A56 (tiempos de etapa vs console
   y tiempos de celda) · ciclo SW del kit PWA no aplica a este PR.
