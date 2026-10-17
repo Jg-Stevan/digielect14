@@ -79,6 +79,12 @@ import { verificarCompletitud, type ResultadoCompletitud } from "./completitud";
 // compartido con el guard de completitud (motorTinta, cero duplicación).
 import { medirZonaVotos } from "./marcadores";
 import { registrarPipelineE14 } from "./informe/telemetria";
+// KIT e14-score-lectura-v1: señal de LECTURA del score v2 (módulo puro — §4-A).
+import {
+  PISO_LECTURA_FUERTE,
+  TECHO_LECTURA_DEBIL,
+  senalDeLectura,
+} from "./senal-lectura";
 // §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
 // import estático: Next resuelve el basePath /web-scanner del deploy estático.
 import actaSimUrl from "@/assets/acta-e14-real.jpg";
@@ -284,9 +290,14 @@ const PISO_CONTRASTE_LEGIBLE = 80; // ≈ excellentQuality().contrast=84 del cor
  *  {sharpness:80 brightness:95 contrast:22} → 6.7 MODERADA de un acta
  *  clasificada AUTO). El contraste global del CRUDO no es evidencia de
  *  ilegibilidad cuando el OCR leyó texto válido → piso de acta legible.
- *  El OCR manda (principio §4.2 extendido). */
-function contrasteEfectivoDe(q: PageQuality, ocrLegible: boolean): number {
-  return ocrLegible ? Math.max(q.contrast, PISO_CONTRASTE_LEGIBLE) : q.contrast;
+ *  El OCR manda (principio §4.2 extendido).
+ *  KIT e14-score-lectura-v1 (C2): el spread de TINTA del papel
+ *  (`contrastPapel` — p95−p5 del recorte a hi-res) entra al max: rescata
+ *  actas borrosas-pero-legibles SIN depender del binario del OCR. El piso
+ *  existente QUEDA dentro del max (pitfall §9.6 — quitarlo es regresión
+ *  silenciosa en actas con tinta débil). */
+function contrasteEfectivoDe(q: PageQualityV2, ocrLegible: boolean): number {
+  return Math.max(q.contrast, q.contrastPapel, ocrLegible ? PISO_CONTRASTE_LEGIBLE : 0);
 }
 
 /** Mapeo §4.1: PageQuality del core → score 0-10 (1 decimal) con techos por
@@ -295,18 +306,24 @@ function contrasteEfectivoDe(q: PageQuality, ocrLegible: boolean): number {
  *  `conSenal` extiende el paquete — SIN señal de contenido del acta el score
  *  no describe una digitalización → techo 4.9 («score bajo»). */
 function scoreDeCalidad(
-  q: PageQuality,
+  q: PageQualityV2,
   senales?: { ocrLegible: boolean; identificada: boolean; conSenal?: boolean },
 ): number {
   const contrasteEf = contrasteEfectivoDe(q, senales?.ocrLegible ?? false);
-  const bruto = (q.sharpness * 0.4 + q.brightness * 0.3 + contrasteEf * 0.3) / 10;
+  // KIT e14-score-lectura-v1 (B2/C1): la nitidez del score v2 es la HI-RES
+  // (mediana de 9 tiles del Laplaciano a ~1000px — §4-B1). El 0 del fallback
+  // sin señal (degradación §5) cae a la del core (W=120) por el ||.
+  const sharpnessV2 = q.sharpnessHi || q.sharpness;
+  const bruto = (sharpnessV2 * 0.4 + q.brightness * 0.3 + contrasteEf * 0.3) / 10;
   let score10 = Math.round(bruto * 10) / 10;
   let level = q.level;
-  if (contrasteEf !== q.contrast) {
+  if (sharpnessV2 !== q.sharpness || contrasteEf !== q.contrast) {
     // Fuente: packages/scanner-core/src/image-processor.ts evaluateQuality —
     // fórmula y umbrales del level DUPLICADAS aquí (packages/ es intocable,
-    // regla de oro) SOLO para recalcular el techo con el contraste efectivo.
-    const scoreCore = q.sharpness * 0.45 + q.brightness * 0.25 + contrasteEf * 0.3;
+    // regla de oro) SOLO para recalcular el techo con las señales v2 (§3
+    // paso 2 del kit: misma fórmula/umbrales 80/62/45, solo cambia la
+    // entrada — sharpnessV2 + contrasteEfectivo).
+    const scoreCore = sharpnessV2 * 0.45 + q.brightness * 0.25 + contrasteEf * 0.3;
     level =
       scoreCore >= 80 ? "excellent" : scoreCore >= 62 ? "good" : scoreCore >= 45 ? "fair" : "poor";
   }
@@ -343,6 +360,121 @@ const BBOX_MIN_PX = 8;
 /** Cap del canvas del recorte: lado más largo ≤ 2000 px — NUNCA upscalar
  *  (§S.1.1; evaluateQuality baja a W=120 igual — costo: un drawImage). */
 const CROP_LADO_MAX = 2000;
+
+// ── KIT e14-score-lectura-v1 (C1 — nitidez de ALTA resolución) ──────────
+/** Lado largo del canvas de análisis hi-res (§3): costo <80 ms; el cap
+ *  CROP_LADO_MAX=2000 ya limita el recorte de origen (solo DOWNSCALE —
+ *  pitfall §9.1: NUNCA getImageData de la foto 12MP completa). */
+const HI_RES_LADO = 1000;
+/** MISMA normalización del core (evaluateQuality: σ(Laplaciano)×2.2 cap
+ *  100 — cambio solo de resolución, pitfall del kit §4-B1). */
+const LAP_NORM = 2.2;
+/** Spread de tinta del documento legible típico (§3): papel ~220 − tinta
+ *  ~60 = 160 → 100. Normaliza contrastPapel. */
+const PAPER_SPREAD_NORM = 160;
+
+/** KIT e14-score-lectura-v1 (§4-B1): PageQuality del core EXTENDIDO con las
+ *  2 señales hi-res del recorte. El tipo del core es INTOCABLE (pitfall
+ *  §9.7 — nunca modificar el paquete ni redeclarar el import). */
+interface PageQualityV2 extends PageQuality {
+  /** min(100, mediana de σ(Laplaciano) de 9 tiles 3×3 × 2.2) a ~1000px. */
+  sharpnessHi: number;
+  /** min(100, (p95−p5 del histograma de luminancia del recorte) × 100/160). */
+  contrastPapel: number;
+}
+
+/** Señales hi-res del recorte (§4-B1): Laplaciano 4-vecinos sobre gris;
+ *  MEDIANA (no promedio — pitfall §9.3: un reflejo especular inflaría el
+ *  promedio con su filo) de la varianza de 9 tiles 3×3;
+ *  sharpnessHi = min(100, σ_mediana×LAP_NORM). Histograma 256 bins del MISMO
+ *  gris para p5/p95 (percentiles por barrido acumulado — pitfall §9.2:
+ *  NUNCA sort de ~10⁶ píxeles); contrastPapel = min(100, (p95−p5)×100/160).
+ *  Un solo getImageData (willReadFrequently ya existe). Cualquier fallo →
+ *  0/0 (el score v2 degrada al comportamiento actual — §5 del kit). */
+function senalHiResDeCanvas(
+  origen: HTMLCanvasElement | HTMLImageElement,
+  wSrc: number,
+  hSrc: number,
+): { sharpnessHi: number; contrastPapel: number } {
+  try {
+    const lado = Math.max(wSrc, hSrc);
+    if (!lado || !Number.isFinite(lado)) return { sharpnessHi: 0, contrastPapel: 0 };
+    // Solo DOWNSCALE (§4-B1/pitfall §9.1): el recorte ya vive a ≤2000px, se
+    // deriva a ≤1000; si es más chico se queda tal cual (nunca upscale).
+    const escala = Math.min(1, HI_RES_LADO / lado);
+    const w = Math.max(1, Math.round(wSrc * escala));
+    const h = Math.max(1, Math.round(hSrc * escala));
+    const cv = document.createElement("canvas");
+    cv.width = w;
+    cv.height = h;
+    const ctx = cv.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return { sharpnessHi: 0, contrastPapel: 0 };
+    ctx.drawImage(origen, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    // Gris único (luminancia BT.601 como el core) + histograma 256 bins.
+    const gris = new Uint8ClampedArray(w * h);
+    const hist = new Uint32Array(256);
+    for (let i = 0, p = 0; i < gris.length; i++, p += 4) {
+      const g = ((data[p] * 299 + data[p + 1] * 587 + data[p + 2] * 114) / 1000) | 0;
+      gris[i] = g;
+      hist[g]++;
+    }
+    // Laplaciano 4-vecinos por tile (3×3 rejilla) → varianza → mediana.
+    const tw = Math.max(1, Math.floor(w / 3));
+    const th = Math.max(1, Math.floor(h / 3));
+    const vars: number[] = [];
+    for (let ty = 0; ty < 3; ty++) {
+      for (let tx = 0; tx < 3; tx++) {
+        const x0 = tx * tw;
+        const y0 = ty * th;
+        const x1 = tx === 2 ? w : x0 + tw;
+        const y1 = ty === 2 ? h : y0 + th;
+        let sum = 0;
+        let sumSq = 0;
+        let n = 0;
+        for (let y = y0 + 1; y < y1 - 1; y++) {
+          for (let x = x0 + 1; x < x1 - 1; x++) {
+            const i = y * w + x;
+            const lap = gris[i - 1] + gris[i + 1] + gris[i - w] + gris[i + w] - 4 * gris[i];
+            sum += lap;
+            sumSq += lap * lap;
+            n++;
+          }
+        }
+        if (n > 0) vars.push(sumSq / n - (sum / n) * (sum / n));
+      }
+    }
+    // Mediana de ≤9 varianzas (sort trivial — el pitfall §9.2 es del
+    // histograma de PÍXELES, no de estos 9 valores).
+    vars.sort((a, b) => a - b);
+    const medianaVar = vars.length > 0 ? vars[Math.floor(vars.length / 2)] : 0;
+    const sharpnessHi = Math.min(100, Math.sqrt(Math.max(0, medianaVar)) * LAP_NORM);
+    // p5/p95 por barrido acumulado del histograma (SIN sort — pitfall §9.2).
+    const total = w * h;
+    let acc = 0;
+    let p5 = 0;
+    let p95 = 255;
+    for (let b = 0; b < 256; b++) {
+      acc += hist[b];
+      if (acc >= total * 0.05) {
+        p5 = b;
+        break;
+      }
+    }
+    acc = 0;
+    for (let b = 0; b < 256; b++) {
+      acc += hist[b];
+      if (acc >= total * 0.95) {
+        p95 = b;
+        break;
+      }
+    }
+    const contrastPapel = Math.min(100, ((p95 - p5) * 100) / PAPER_SPREAD_NORM);
+    return { sharpnessHi, contrastPapel };
+  } catch {
+    return { sharpnessHi: 0, contrastPapel: 0 };
+  }
+}
 
 /** Bbox del acta en PÍXELES REALES desde el QUAD normalizado 0-1 (misma
  *  convención que ya consumen processImage y verificarCompletitud — TL,TR,BR,
@@ -393,7 +525,7 @@ async function calidadDeActa(
   fotoOriginal: string,
   quad: Quad,
   info?: InfoCrop,
-): Promise<PageQuality> {
+): Promise<PageQualityV2> {
   const marcarFallback = () => {
     if (info) {
       info.fallback = true;
@@ -422,10 +554,24 @@ async function calidadDeActa(
       info.w = bbox.sw;
       info.h = bbox.sh;
     }
-    return await evaluateQuality(canvas);
+    const calidad = await evaluateQuality(canvas);
+    // KIT e14-score-lectura-v1 (C1): señales hi-res del MISMO recorte ya
+    // dibujado (downscale a 1000px — un solo getImageData, <80 ms §3).
+    const extra = senalHiResDeCanvas(canvas, cw, ch);
+    return { ...calidad, ...extra };
   } catch {
     marcarFallback();
-    return evaluateQuality(fotoOriginal);
+    const q = await evaluateQuality(fotoOriginal);
+    // Fallback (§4-B1): señales hi-res del FRAME vía el MISMO helper (el
+    // drawImage del helper ya escala a 1000 — nunca getImageData de 12MP);
+    // si falla también → 0/0: el score v2 degrada al comportamiento actual.
+    try {
+      const img = await loadImage(fotoOriginal);
+      const extra = senalHiResDeCanvas(img, img.naturalWidth, img.naturalHeight);
+      return { ...q, ...extra };
+    } catch {
+      return { ...q, sharpnessHi: 0, contrastPapel: 0 };
+    }
   }
 }
 
@@ -892,6 +1038,21 @@ export class RealCoreBridge implements E14Bridge {
       identificada: clasificacion.nivel === "AUTO",
       conSenal: senalActa,
     });
+    // KIT e14-score-lectura-v1 (C3): ajuste por LECTURA — el OCR manda (§3):
+    // FUERTE (mesa+4 anclas o 6) sube el score a ≥8.5 (el piso vence al techo
+    // fair pero NUNCA al poor — level del core "poor" es evidencia física
+    // dura); DEBIL techo 5.9; MEDIA no toca. El texto es el POST-banda
+    // (ocrBanda ya sumó — pitfall §9.8; SIN llamada OCR nueva — costo 0).
+    // Va EXACTAMENTE aquí (§4-B3): tras scoreDeCalidad y ANTES de la
+    // inyección SIM (pitfall §9.5 — los chips 8.2/7.0/4.3 mandan) y de los
+    // caps posteriores (escudo fondo/recortada/gate siguen MANDANDO —
+    // pitfall §9.4). Mismo criterio en el pipelineRecorte (pitfall §9.9).
+    const senal = senalDeLectura(texto, clasificacion.parciales);
+    if (senal.nivel === "FUERTE" && calidad.level !== "poor") {
+      score = Math.max(score, PISO_LECTURA_FUERTE);
+    } else if (senal.nivel === "DEBIL") {
+      score = Math.min(score, TECHO_LECTURA_DEBIL);
+    }
     // §D3 (SPEC-e14-simulacion-scores): inyección determinista del chip —
     // reemplaza el calculado DESPUÉS de scoreDeCalidad y ANTES del gate.
     // §G3 (KIT e14-gate-v2): SIN re-aplicación del piso de identificada
@@ -1017,6 +1178,8 @@ export class RealCoreBridge implements E14Bridge {
         // de producción, junto al ocrIn= del PROD-1 (conf/det/rec del OCR
         // principal — capturados antes de la banda).
         `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +
+        // KIT e14-score-lectura-v1 (REBASE): señal de lectura v2 en la traza.
+        `lectura=${senal.nivel} anclas=${senal.anclas} piso=${score >= 8.5 && senal.nivel === "FUERTE"} ` +
         `clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
@@ -1332,6 +1495,17 @@ export class RealCoreBridge implements E14Bridge {
       identificada: clasificacion.nivel === "AUTO",
       conSenal: senalActa,
     });
+    // KIT e14-score-lectura-v1 (C3): MISMO ajuste por LECTURA del escaneo
+    // (§4-B3 — mismo criterio en re-análisis, pitfall §9.9). El texto es el
+    // POST-banda (consenso-frankfurt FASE 4); SIN llamada OCR nueva. Va
+    // ANTES de los caps posteriores: escudo fondo/recortada/gate siguen
+    // MANDANDO (pitfall §9.4 — una recortada con lectura FUERTE se queda ≤7.9).
+    const senal = senalDeLectura(texto, clasificacion.parciales);
+    if (senal.nivel === "FUERTE" && calidad.level !== "poor") {
+      score = Math.max(score, PISO_LECTURA_FUERTE);
+    } else if (senal.nivel === "DEBIL") {
+      score = Math.min(score, TECHO_LECTURA_DEBIL);
+    }
     // D10 — escudo anti-fondo (mismo criterio del escaneo): el rescate trae
     // fondo/sombra al filo → gate con TECHO 7.9 (nunca ÓPTIMA), sin copy.
     if (completa && verificacion.fondo) {
@@ -1394,6 +1568,8 @@ export class RealCoreBridge implements E14Bridge {
         `score=${score} filtro=${filtro} ocrIn=${ocrIn} ` +
         // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor.
         `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +
+        // KIT e14-score-lectura-v1 (REBASE): señal de lectura v2 en la traza.
+        `lectura=${senal.nivel} anclas=${senal.anclas} piso=${score >= 8.5 && senal.nivel === "FUERTE"} ` +
         `clasif={${fmtClasif(gate.clasificacion)}} ` +
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
