@@ -53,6 +53,11 @@
     <canvas id="cv" width="640" height="480"></canvas>
     <pre id="datos" class="kv">Sin fixture cargado.</pre>
     <pre id="warpOut"></pre>
+    <h2 style="margin-top:12px">Origen del quad — core 0.4.0 (P1+P2, kit e14-quad-sobel-v1)</h2>
+    <div class="fila">
+      <button id="origenBtn" disabled title="Primero cargar fixture">origen (core 0.4.0) sobre la MISMA entrada</button>
+    </div>
+    <pre id="origenOut" class="kv">Sin correr — carga un fixture y pulsa. Usa la API detectDocumentEdgesDetail del core (bundle ESM del PR de Fase A) sobre el MISMO dataURL q0.92 que el app.</pre>
   </section>
   <section>
     <h2>Trazas [quad-repro] (copia instrumentada)</h2>
@@ -61,6 +66,6 @@
     <pre id="estado" class="kv">worker: —</pre>
   </section>
 </main>
-<script src="./quad-repro.js?v=7"></script>
+<script src="./quad-repro.js?v=8"></script>
 </body>
 </html>
