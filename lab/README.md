@@ -164,6 +164,27 @@ Criterio de éxito futuro (para el kit PROD que resuelva): con el fixture mesa-0
 devolver quad con y_bottom ≥ 0.9 (o el fallback debe corregirlo) — la lámina
 `lab/resultados/quad-repro-mesa-002.png` (warp ideal) muestra el contenido que hoy se pierde.
 
+### Estado del fix (KIT e14-quad-sobel-v1 — P1+P2 IMPLEMENTADOS en core 0.4.0)
+
+P1+P2 viven EN el core por necesidad (el fallback Sobel es código del core) — flujo oficial del
+paquete: PR de Fase A en web-scanner (**#14 `fix/sobel-origen-bottom` @ `0517dc7`**, versión
+**0.3.0 → 0.4.0** — el repo ya estaba en 0.3.0, no en 0.1.0 como asumía el kit) → handoff del
+dueño (merge + `npm publish` 2FA) → Fase B en e14 (`feat/quad-origen-token`: bump `^0.4.0` +
+bridge 2 llamadas `detectDocumentEdgesDetail` + token `origen=` en la línea `quad=[...]` de las 2
+trazas — la línea congelada `senal=`/`level:` NO se toca — + `captura.quadOrigen` en types/
+diagnóstico + tarjeta «origen» en ESTE harness, solo lab).
+
+- **Tarjeta «origen» del harness** (botón bajo el warp): corre `detectDocumentEdgesDetail` del
+  bundle ESM del core 0.4.0 (`lab/scanner-core-0.4.0.bundle.js` — build del PR #14) sobre la
+  MISMA entrada que el app (dataURL q0.92 de `cadenaApp`), muestra `{origen, quad}`, el
+  **bottom** con el criterio §6 (≥ 0.90 ✓) y la **verificación cruzada** contra el quad del
+  worker-copy del harness (Δ ≤ 0.01 por lado = coincide; DIFIERE → rojo discontinuo en el
+  canvas; worker SIN quad → el fallback fabricó el quad — el caso mesa-002 de campo).
+- **Criterio de éxito §6**: mesa-002 → `origen:"sobel"` con **bottom ≥ 0.90** (ANTES del fix:
+  0.601) · mesa-001 → trapecio de campo preservado ±0.01 · acta-e14-real → la cascada worker
+  gana. Números de la validación de Fase A en el cuerpo del PR #14.
+- fixture de control añadido: `lab/fixtures/acta-e14-real.jpg` (procedencia en su README).
+
 ### Cómo correr (ya corrido — evidencia en `lab/resultados/`)
 
 ```bash

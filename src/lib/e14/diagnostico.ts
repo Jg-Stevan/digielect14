@@ -259,7 +259,10 @@ function renderDiagnosticoTxt(d: DiagnosticoActa): string {
     `- motor: ${d.captura.motor} · filtro: ${d.captura.filtro} · crop: ${d.captura.crop.fallback ? "full" : `${d.captura.crop.w}x${d.captura.crop.h}`}`,
   );
   L.push(
-    `- quad: [${d.captura.quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}]`,
+    // KIT e14-quad-sobel-v1 (P1 §4-C): origen del quad — EXTENSIÓN de la línea
+    // existente (no línea nueva). La flecha avisa cuando el quad lo fabricó el
+    // FALLBACK (worker sin ganador) — el dato que decide el futuro del P3.
+    `- quad: [${d.captura.quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] · origen: ${d.captura.quadOrigen ?? "n/d"}${d.captura.quadOrigen === "sobel" ? " ← fallback (worker sin ganador)" : ""}`,
   );
   L.push("");
   L.push("MÉTRICAS");

@@ -9,6 +9,7 @@ que el pipeline vio en campo.
 |---|---|---|---|---|
 | `mesa-001-original.jpg` (1569176 B) | `e285b04120550370a6133aeb8ef06df3` | CONTROL (detección sana) | trapecio con tilt `[0.383,0.262 0.633,0.280 0.610,0.863 0.357,0.868]`, crop 887×2586 (ratio 2.92 ✓) | **IDÉNTICO byte a byte** (rig fidelidad app y app en dev) |
 | `mesa-002-original.jpg` (1677067 B) | `125af1246c6eb159512ca643efd57d6a` | OBJETIVO (el fallo reproducido) | rect perfecto `[0.362,0.333 0.694,0.333 0.694,0.601 0.362,0.601]` (y_bottom≈0.601), crop 1062×1144 (ratio 1.08 ≪ 2.9) | **IDÉNTICO byte a byte** — y la CAUSA RAÍZ es el fallback Sobel del core (lab/README §Quad-repro → hallazgo) |
+| `acta-e14-real.jpg` (1417292 B) | `867b2ae9dd6457b207b1e691bbd366a9` | CONTROL de sanidad del rig (kit T-C) — añadida por e14-quad-sobel-v1 (§4-D/§6.3): la misma acta que Fase A copió al scanner-lab de web-scanner | quad sano con tilt (la cascada worker ganó — `origen:worker`) | sanidad del panel «origen» y del rig en cada corrida |
 
 ## Procedencia (kit §4-A — verbatim)
 

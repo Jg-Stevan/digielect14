@@ -102,6 +102,10 @@ export interface DiagnosticoActa {
     filtro: string;
     crop: { w: number; h: number; fallback: boolean };
     quad: Quad;
+    // KIT e14-quad-sobel-v1 (P1 §4-C): quién fabricó el quad de verdad.
+    // null SOLO si la detección NO corrió (recorte manual del editor, catch
+    // de mejorarResolución — n/d jamás miente, misma filosofía del T-A).
+    quadOrigen: "worker" | "sobel" | null;
   };
   tiempos: { procesoMs: number; calidadMs: number; ocrMs: number; totalMs: number };
 }
