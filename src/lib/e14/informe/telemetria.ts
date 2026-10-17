@@ -47,6 +47,11 @@ export interface PipelineInfo {
   contEfectivo: number | null;
   /** "bw"/"original" — el filtro con el que se procesó. */
   filtroActa: string;
+  /** KIT e14-ocr-lee-original-v1 (PROD-1 §4.4): filtro de la ENTRADA del OCR —
+   *  "original" (crudo del warp) | "original-as-is" (SIM) | "bw-fallback"
+   *  (la variante falló y el OCR leyó la bw). NO confundir con filtroActa:
+   *  ese describe la IMAGEN mostrada/guardada (pitfall §9.8 del kit). */
+  ocrInputFiltro: string;
   /** "worker"/"canvas"/"mock". */
   motor: string;
   ocrChars: number;
@@ -132,6 +137,7 @@ export function marcarPipelineNoRegistrado(motivo: string): void {
     calidad: null,
     contEfectivo: null,
     filtroActa: "",
+    ocrInputFiltro: "",
     motor: "",
     ocrChars: 0,
     ocrValido: false,
