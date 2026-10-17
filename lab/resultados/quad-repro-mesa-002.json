@@ -1,0 +1,58 @@
+{
+  "kit": "e14-quad-repro-v1",
+  "fixture": "lab/fixtures/mesa-002-original.jpg",
+  "rol": "OBJETIVO (el fallo a reproducir)",
+  "procedencia": "e14-diag-mesa-002-115822-i2.zip → original.jpg · CONSULADO 88 · EGIPTO · ZONA 05 PUESTO 02 · MESA 001 (intento 2, captura cercana) · Frankfurt KIT 399 · 2026-10-17 16:58 campo",
+  "md5": "125af1246c6eb159512ca643efd57d6a",
+  "frame": { "w": 3024, "h": 4032 },
+  "quad_campo_diagnostico": [0.362, 0.333, 0.694, 0.333, 0.694, 0.601, 0.362, 0.601],
+  "quad_app_repro_dev3001": [0.362, 0.333, 0.694, 0.333, 0.694, 0.601, 0.362, 0.601],
+  "comparacion_quad": "BYTE A BYTE idéntico (campo = app en dev :3001 por vía archivo) — el fallo ES determinista sobre esta imagen; H4 (vivo≠archivo) DESCARTADO",
+  "fase1_vía_archivo": {
+    "y_bottom": 0.601,
+    "criterio_kit": "y_bottom ≤ 0.65 → reproduce",
+    "resultado": "REPRODUCE — el papel visible llega a y≈0.97 y el quad se corta en 0.601 (banda NIVELACIÓN)"
+  },
+  "fase2_trazas_worker": {
+    "modo_fidelidad_400px": {
+      "contourCount": 8,
+      "pasadas_cascada": [
+        { "polys": 1, "cands": [{ "area": 1397, "ratioAspect": 14.048, "whiteness": 0, "validateOk": false, "score": null }], "ganador": null },
+        { "polys": 1, "cands": [{ "area": 1321, "ratioAspect": 14.048, "whiteness": 0, "validateOk": false, "score": null }], "ganador": null },
+        { "polys": 0, "cands": [], "ganador": null },
+        { "polys": 0, "cands": [], "ganador": null },
+        { "polys": 0, "cands": [], "ganador": null }
+      ],
+      "corners": null
+    },
+    "modo_crudo_3024x4032": {
+      "contourCount": 106,
+      "top_candidatos_repetidos": [
+        { "area": 435752, "ratioAspect": 0.517, "whiteness": 0.574, "validateOk": false },
+        { "area": 407591, "ratioAspect": 0.502, "whiteness": 0.617, "validateOk": false },
+        { "area": 396152, "ratioAspect": 0.468, "whiteness": 0.559, "validateOk": false },
+        { "area": 283655, "ratioAspect": 0.377, "whiteness": 0.649, "validateOk": false },
+        { "area": 153522, "ratioAspect": 0.225, "whiteness": 0.669, "validateOk": false }
+      ],
+      "ganador": null
+    },
+    "lectura": "EL WORKER NO DEVOLVIÓ QUAD EN NINGÚN MODO NI NINGUNA PASADA (ganador:null en TODAS). Los únicos candidatos top son BANDAS PARCIALES de las tablas del acta (ratio 0.2-0.5, todas validateOk:false). El papel completo JAMÁS fue candidato."
+  },
+  "hallazgo_raiz": {
+    "titulo": "El quad corto de campo NO salió del worker: es el FALLBACK SOBEL del core",
+    "cadena": "detectDocumentEdges (image-processor.js L485): detectWithWorker → null (trazas de arriba) → **detectSobel(src)** que SIEMPRE devuelve un rect",
+    "verificacion_numerica": {
+      "sobel_replica_sobre_el_fixture": [0.362, 0.333, 0.694, 0.333, 0.694, 0.606, 0.362, 0.606],
+      "quad_campo": [0.362, 0.333, 0.694, 0.333, 0.694, 0.601, 0.362, 0.601],
+      "diff": "idéntico a 3 decimales en left/right/top; bottom 0.606 vs 0.601 (±0.005 — el re-encode jpeg q0.92 del pipeline del app desplaza el pico de energía 1-2 filas del mapa Sobel a 160×213)"
+    },
+    "por_que_bottom_0.60": "findEdgeY(bottom) del Sobel busca la fila de MÁXIMA energía horizontal desde y=0.55H: la banda negra NIVELACIÓN DE LA MESA (y≈0.60) gana sobre el borde real del papel (y≈0.97, difuso contra el pupitre)"
+  },
+  "fase3_contraevidencia": {
+    "quad_ideal_manual": [0.362, 0.333, 0.694, 0.333, 0.694, 0.97, 0.362, 0.97],
+    "warp_resultado": "1004×2568px — lámina quad-repro-mesa-002.png",
+    "contenido_perdido": "candidatos 1 (PACTO Histórico •9) y 2 (Petirrojos/PATRIA •7), VOTOS EN BLANCO (•1), NULOS, NO MARCADOS y SUMA TOTAL (•17) — TODO dentro del frame, FUERA del quad del campo",
+    "score_candidato_ideal_en_trazas": "NI EXISTIÓ — ningún candidato de papel completo en ninguna pasada (selectQuad traces) → el fix futuro es de GENERACIÓN (collectQuadCandidates/canny), no de scoring"
+  },
+  "veredicto": "FALLO DETERMINISTA MULTI-CAPA: (1) el worker no genera/valida ningún candidato del papel completo sobre este frame (H3 confirmado, H1/H2 refutados — refine jamás corrió y selectQuad eligió NADA); (2) el fallback Sobel del core fabricó el rect perfecto de campo y su búsqueda del borde inferior se enganchó a la banda negra (y=0.60) en vez del papel (y=0.97)."
+}
