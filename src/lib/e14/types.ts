@@ -5,6 +5,7 @@
  */
 import type { PageFilter, Quad } from "@jg-stevan/scanner-core/types";
 import type { ClasificacionE14 } from "./clasificador";
+import type { NivelLectura } from "./senal-lectura";
 
 // ---------- Captura y análisis (SPEC fase lógica §3.1) ----------
 export type FuenteCaptura = "SIMULACION" | "CAMARA" | "ARCHIVO";
@@ -52,9 +53,11 @@ export interface ActaFirma {
  *  automáticamente»). Lo monta el bridge justo donde hoy escribe el log de
  *  auditoría (UNA sola fuente de verdad — pitfall §9.6) y lo cuelga en
  *  Acta.diagnostico. Observación PASIVA: nunca altera el desenlace (§2).
- *  Campos aditivos §8: sharpnessHi/contrastPapel y lectura.nivel/anclas
- *  llegan cuando score-lectura (PR #13) se mergee — mientras van null/"—"
- *  (chars SIEMPRE real). */
+ *  Campos aditivos §8 — KIT e14-diag-campos-aditivos-v1: DES-STUB. El
+ *  builder ya recibe sharpnessHi/contrastPapel REALES (calidadDeActa v2 de
+ *  main) y lectura.nivel/anclas de la señal del C3. Los TIPOS conservan
+ *  null/"—" SOLO para los registros viejos del localStorage e14-diag-v1
+ *  (cap 500 — §5 del kit T-B): los NUEVOS siempre traen valores reales. */
 export interface DiagnosticoActa {
   ts: string; // ISO
   actaId: string;
@@ -72,13 +75,17 @@ export interface DiagnosticoActa {
     sharpness: number;
     brightness: number;
     contrast: number;
-    /** v2 del kit score-lectura — null hasta que main la herede. */
+    /** v2 score-lectura (REAL desde el kit diag-campos-aditivos) — null
+     *  solo en registros PREVIOS al score v2 (localStorage cap 500). */
     sharpnessHi: number | null;
     contrastPapel: number | null;
     contrasteEfectivo: number;
   };
   level: string; // excellent|good|fair|poor
-  lectura: { nivel: string; anclas: number; chars: number };
+  /** KIT e14-diag-campos-aditivos-v1 (§4-D): "—" solo en registros previos
+   *  al score v2 (localStorage e14-diag-v1 — los viejos siguen siendo
+   *  válidos). Con el des-stub, los NUEVOS traen FUERTE/MEDIA/DEBIL. */
+  lectura: { nivel: NivelLectura | "—"; anclas: number; chars: number };
   senalActa: boolean;
   ocrValido: boolean;
   gate: {
