@@ -5,6 +5,7 @@
  */
 import type { PageFilter, Quad } from "@jg-stevan/scanner-core/types";
 import type { ClasificacionE14 } from "./clasificador";
+import type { NivelLectura } from "./senal-lectura";
 
 // ---------- Captura y análisis (SPEC fase lógica §3.1) ----------
 export type FuenteCaptura = "SIMULACION" | "CAMARA" | "ARCHIVO";
@@ -45,6 +46,64 @@ export interface ActaFirma {
   nombre: string;
   jurado: string;
   estado: "OK" | "NO_DETECTADO" | "TENUE";
+}
+
+// ---------- KIT e14-diagnostico-autoenvio-v1 (§3-A) ----------
+/** Registro estructurado del DESENLACE del pipeline («por qué no se envió
+ *  automáticamente»). Lo monta el bridge justo donde hoy escribe el log de
+ *  auditoría (UNA sola fuente de verdad — pitfall §9.6) y lo cuelga en
+ *  Acta.diagnostico. Observación PASIVA: nunca altera el desenlace (§2).
+ *  Campos aditivos §8 — KIT e14-diag-campos-aditivos-v1: DES-STUB. El
+ *  builder ya recibe sharpnessHi/contrastPapel REALES (calidadDeActa v2 de
+ *  main) y lectura.nivel/anclas de la señal del C3. Los TIPOS conservan
+ *  null/"—" SOLO para los registros viejos del localStorage e14-diag-v1
+ *  (cap 500 — §5 del kit T-B): los NUEVOS siempre traen valores reales. */
+export interface DiagnosticoActa {
+  ts: string; // ISO
+  actaId: string;
+  intento: number;
+  maxIntentos: number;
+  status: ActaStatus; // el del DESENLACE (pre-decisión humana)
+  rechazo: Acta["rechazo"];
+  /** score visual = bruto de scoreDeCalidad ANTES de los caps del sitio;
+   *  final = el del log; techos en ORDEN de aplicación (techo-fair:7.9 ·
+   *  techo-poor:6.4 · sin-senal:4.9 · escudo-fondo:7.9 · recortada:7.9 ·
+   *  incompleta:6.4 · sin-votos:6.4 — lectura-DEBIL/piso-FUERTE llegan con
+   *  score-lectura, §8). */
+  score: { visual: number; final: number; techos: string[] };
+  metricas: {
+    sharpness: number;
+    brightness: number;
+    contrast: number;
+    /** v2 score-lectura (REAL desde el kit diag-campos-aditivos) — null
+     *  solo en registros PREVIOS al score v2 (localStorage cap 500). */
+    sharpnessHi: number | null;
+    contrastPapel: number | null;
+    contrasteEfectivo: number;
+  };
+  level: string; // excellent|good|fair|poor
+  /** KIT e14-diag-campos-aditivos-v1 (§4-D): "—" solo en registros previos
+   *  al score v2 (localStorage e14-diag-v1 — los viejos siguen siendo
+   *  válidos). Con el des-stub, los NUEVOS traen FUERTE/MEDIA/DEBIL. */
+  lectura: { nivel: NivelLectura | "—"; anclas: number; chars: number };
+  senalActa: boolean;
+  ocrValido: boolean;
+  gate: {
+    completa: boolean;
+    fondo: boolean;
+    recortada: boolean;
+    ladoEsquina: string | null;
+    votos: { densidadPct: number | null; skipPag2: boolean; ok: boolean };
+    procesadaVacia: boolean;
+    clasifNivel: string;
+  };
+  captura: {
+    motor: string;
+    filtro: string;
+    crop: { w: number; h: number; fallback: boolean };
+    quad: Quad;
+  };
+  tiempos: { procesoMs: number; calidadMs: number; ocrMs: number; totalMs: number };
 }
 
 export interface Acta {
@@ -117,6 +176,10 @@ export interface Acta {
    * archivada en su mesa al envío; SUGERIDA/MANUAL → panel de corrección.
    */
   clasificacion?: ClasificacionE14;
+  /** KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado
+   *  por el bridge junto al log de auditoría. SIM nunca lo trae (§9.2 —
+   *  doble guard) y el ZIP solo nace con status ≠ OPTIMA (§1). */
+  diagnostico?: DiagnosticoActa;
 }
 
 // ---------- Control de mesas (vista ACTAS) ----------

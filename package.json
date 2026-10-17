@@ -12,6 +12,7 @@
   "dependencies": {
     "@jg-stevan/scanner-core": "^0.1.0",
     "@jg-stevan/scanner-ui": "^0.1.0",
+    "fflate": "^0.8.3",
     "framer-motion": "^12.23.2",
     "next": "^16.1.1",
     "onnxruntime-web": "1.30.0",
