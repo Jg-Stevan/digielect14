@@ -38,7 +38,11 @@ import {
   loadImage,
   processImage,
 } from "@jg-stevan/scanner-core/image-processor";
-import { ocrTextIsValid, requestOcr } from "@jg-stevan/scanner-core/ocr";
+import { ocrTextIsValid } from "@jg-stevan/scanner-core/ocr";
+// KIT e14-motor-rapidocr-v1 (PROD-2 §3): motor de OCR de producción — módulo
+// compartido con el informe (singleton de sesión ÚNICO, pitfall §9.6). El
+// requestOcr del core SOLO vive en motores.ts (celda «actual» de la matriz —
+// instrumento congelado, pitfall §9.2).
 import { defaultQuad } from "@jg-stevan/scanner-core/types";
 import type {
   PageFilter,
@@ -89,6 +93,8 @@ import actaSimIntermediaUrl from "@/assets/acta-sim-intermedia.jpg";
 import actaSimBajaUrl from "@/assets/acta-sim-baja.jpg";
 import type { Acta, ActaFirma, ActaStatus, ProgresoAnalisis } from "./types";
 import type { E14Bridge, OpcionesEscaneo } from "./bridge";
+// KIT e14-motor-rapidocr-v1 (PROD-2 §3): adaptador del motor de producción.
+import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
 
 /** Timeout de seguridad global §5 (worker colgado en gama baja). */
 const TIMEOUT_MS = 15_000;
@@ -462,6 +468,30 @@ async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | 
  * se descarta igual). NO re-OCR del acta completa. Fallo → "" (sin banda
  * nueva: la cascada sigue con el d9 del consenso — nunca condena).
  */
+// KIT e14-motor-rapidocr-v1 (PROD-2 §3/§4-C5): trazas del motor de producción
+// — conf/det/rec de la ÚLTIMA llamada reconocerRapidOcr. La banda del sello
+// y el re-OCR del editor también pasan por aquí: los pipelines capturan sus
+// valores justo tras su OCR PRINCIPAL (antes de la banda) para la traza.
+let ultimoOcrConf: number | null = null;
+let ultimoOcrDet = 0;
+let ultimoOcrRec = 0;
+
+/** Motor de producción (PROD-2): RapidOCR PP-OCRv4 sobre el recorte original.
+ *  Mismo contrato que requestOcr: texto + progreso 0→1. Sin fallback de motor
+ *  (pitfall §9.3): el fallo sigue el mismo camino controlado de hoy (§5 del
+ *  kit — texto vacío → gate decide). */
+async function reconocerRapidOcr(
+  dataUrl: string,
+  onProgress?: (p: number) => void,
+): Promise<string> {
+  const rt = await rapidOcrInit(); // singleton de sesión (pre-warm en bg)
+  const r = await rapidOcrReconocer(rt, dataUrl, onProgress);
+  ultimoOcrConf = r.confMedia; // para la traza (§4-C5)
+  ultimoOcrDet = r.msDet;
+  ultimoOcrRec = r.msRec;
+  return r.texto;
+}
+
 async function ocrBanda(fotoProcesada: string): Promise<string> {
   try {
     const img = await loadImage(fotoProcesada);
@@ -486,7 +516,11 @@ async function ocrBanda(fotoProcesada: string): Promise<string> {
       d.data[i + 2] = 255 - d.data[i + 2];
     }
     ctx.putImageData(d, 0, 0);
-    return await requestOcr(canvas.toDataURL("image/jpeg", 0.9), () => {});
+    // KIT e14-motor-rapidocr-v1 (PROD-2 §2-C3): la banda pasa al ÚNICO motor
+    // de producción — el canvas invertido ×2 ya es polaridad normal y
+    // RapidOCR lo lee (campos 6/6 en Frankfurt incluyen lo que aporta la
+    // banda). Escape hatch documentado (§5): revert puntual de C3.
+    return await reconocerRapidOcr(canvas.toDataURL("image/jpeg", 0.9));
   } catch {
     return ""; // fallo de decode/canvas/OCR → sin banda nueva (nunca condena)
   }
@@ -807,12 +841,18 @@ export class RealCoreBridge implements E14Bridge {
 
     // 5) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.1: el recorte
     //    SIN filtro — regla del dueño; la bw pasa a ser SOLO la imagen de
-    //    presentación/guardado; spa+eng local; progreso real 0→1).
+    //    presentación/guardado). KIT e14-motor-rapidocr-v1 (PROD-2 §2-C2):
+    //    motor RapidOCR PP-OCRv4; progreso REAL por lotes de rec (§2-C4).
     const tOcr = performance.now();
-    let texto = await requestOcr(fotoOcr, (p) => {
+    let texto = await reconocerRapidOcr(fotoOcr, (p) => {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     });
     ms.ocr = performance.now() - tOcr;
+    // PROD-2 (§4.2): capturar conf/det/rec del OCR principal ANTES de la
+    // banda (también corre RapidOCR y pisaría ultimoOcr* en la traza).
+    const confOcr = ultimoOcrConf;
+    const detOcr = ultimoOcrDet;
+    const recOcr = ultimoOcrRec;
     emitir({ etapa: "OCR", progreso: 1 });
     // KIT consenso-frankfurt-v1 (FASE 4, §5): banda dirigida — si el OCR
     // completo no leyó la banda (sello blanco-sobre-negro, §0-F4), SEGUNDA
@@ -1206,12 +1246,18 @@ export class RealCoreBridge implements E14Bridge {
     emitir({ etapa: "CALIDAD", progreso: 1 });
 
     // 3) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.2: recorte SIN
-    //    filtro con fallback idéntico al escaneo; gate §4.2; progreso real 0→1).
+    //    filtro con fallback idéntico al escaneo; gate §4.2). KIT
+    //    e14-motor-rapidocr-v1 (PROD-2 §2-C2): motor RapidOCR; progreso real
+    //    por lotes de rec (§2-C4).
     const tOcr = performance.now();
-    let texto = await requestOcr(fotoOcr, (p) => {
+    let texto = await reconocerRapidOcr(fotoOcr, (p) => {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     });
     ms.ocr = performance.now() - tOcr;
+    // PROD-2 (§4.2): capturar conf/det/rec del OCR principal antes de la banda.
+    const confOcr = ultimoOcrConf;
+    const detOcr = ultimoOcrDet;
+    const recOcr = ultimoOcrRec;
     emitir({ etapa: "OCR", progreso: 1 });
     // KIT consenso-frankfurt-v1 (FASE 4, §5): banda dirigida — MISMO helper
     // del escaneo (§4.4); el recorte no tiene SIM (siempre real).
@@ -1495,12 +1541,13 @@ export class RealCoreBridge implements E14Bridge {
           "original",
           acta.rotation ?? 0,
         );
-        return requestOcr(r.processed);
+        // PROD-2 (§2-C2): el re-OCR del editor pasa por el ÚNICO motor.
+        return reconocerRapidOcr(r.processed);
       } catch {
         /* cae al fallback de abajo */
       }
     }
-    return requestOcr(fotoProcesada); // comportamiento de hoy (fallback)
+    return reconocerRapidOcr(fotoProcesada); // comportamiento de hoy (fallback)
   }
 
   /** Firmas coherentes con el estado (misma regla del mock/§7.5):

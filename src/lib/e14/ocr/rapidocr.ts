@@ -1,5 +1,10 @@
 /**
- * rapidocr.ts — INFORME-TELEMETRÍA v1 (SPEC-informe-telemetria-ocr-v1 §4.3)
+ * rapidocr.ts — módulo compartido — motor de producción (PROD-2, kit
+ * e14-motor-rapidocr-v1) e instrumento del informe (SPEC-informe-telemetria-ocr-v1 §4.3).
+ *
+ * MOVE literal desde informe/rapidocr.ts (pitfall §9.8 del kit: mismo código,
+ * sin «reordenar» ni «limpiar» — diff auditable): único cambio de import
+ * (./telemetria → ../informe/telemetria) + pre-warm al final (§4.1-C5).
  *
  * RapidOCR PP-OCRv4 en el navegador — puerto fiel de rapidocr_onnxruntime
  * 1.4.4 (config del bench: det_limit_side_len=1920, det_limit_type='max').
@@ -12,7 +17,7 @@
  * Determinismo: executionProviders ["wasm"] (igual que el bench); WebGPU se
  * anota en el informe (infoDispositivo().webgpu) pero NO se usa.
  */
-import { evento } from "./telemetria";
+import { evento } from "../informe/telemetria";
 
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -665,9 +670,16 @@ async function inferDet(rt: RapidRuntime, src: HTMLImageElement): Promise<DetSal
 
 // ─── Reconocer (secuencia completa) ─────────────────────────────────────────
 
+/**
+ * Secuencia completa det→cls→rec. KIT e14-motor-rapidocr-v1 (PROD-2 §4.3-C4):
+ * `onProgress` OPCIONAL — tras cada lote de rec (6 líneas) reporta i/total
+ * (0→1). Sin callback: comportamiento byte a byte del instrumento (el informe
+ * NO lo pasa — matriz congelada).
+ */
 export async function rapidOcrReconocer(
   rt: RapidRuntime,
   dataUrl: string,
+  onProgress?: (p: number) => void,
 ): Promise<RapidOcrResultado> {
   const t0 = performance.now();
   const tTotal = performance.now();
@@ -751,6 +763,8 @@ export async function rapidOcrReconocer(
         lineas[lote[m].i] = { texto: texto.trim(), conf, box: boxesFuente[lote[m].i] };
       }
     }
+    // PROD-2 (§4.3-C4): progreso real por lotes de rec — i/total (0→1).
+    onProgress?.(Math.min(1, (k + lote.length) / orden.length));
   }
   const msRec = Math.round(performance.now() - t2);
 
@@ -781,3 +795,10 @@ export async function rapidOcrReconocer(
 export function notaWebgpu(dispositivo: { webgpu: boolean }): string | null {
   return dispositivo.webgpu ? "WebGPU disponible (futuro: EP webgpu) — hoy corre wasm (determinismo del comparativo)" : null;
 }
+
+// KIT e14-motor-rapidocr-v1 (PROD-2 §4.1-C5): pre-warm al importar el módulo
+// (el bridge lo importa → arranca ANTES de la primera captura SIN tocar
+// ScanView, intocable). Singleton compartido: producción e informe pagan la
+// carga (~1.1 s) UNA sola vez por sesión. Silencioso: si falla aquí, la
+// primera captura reintenta vía rapidOcrInit (reintentable).
+if (typeof window !== "undefined") void rapidOcrInit().catch(() => {});
