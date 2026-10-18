@@ -114,14 +114,27 @@ export function ActasView() {
 
   // Puesto mostrado: el real manda; en simulación (sin puesto real) el demo.
   const puestoActual: PuestoActual | null = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
-  const enSimulacion = !puestoReal && modoSimulacion;
+  // KIT e14-luz-sim-puntos-v1 (T-S): el SIM corre TAMBIÉN con puesto real
+  // (llena el puesto del acta escaneada — decisión del dueño ⑤). El guion
+  // vive en store.mesas (guionDePuesto); archivadas/puestoActual NUNCA se
+  // tocan (D6). Apagar devuelve la vista real exacta.
+  const enSimulacion = modoSimulacion;
 
   // Cantidad de mesas del puesto (countTable DIVIPOL §1). En simulación:
   // fija 3 (mesas del mock). Base en caché de módulo → consulta instantánea.
   useEffect(() => {
     let vivo = true;
     if (enSimulacion) {
-      setTotalMesas(3);
+      // KIT e14-luz-sim-puntos-v1 (T-S): con puesto real el encabezado
+      // muestra el total DIVIPOL REAL (el mismo del guion); sin real, 3.
+      if (puestoReal) {
+        const [dep, mun, zon, std] = puestoReal.clave.split("-");
+        cargarDivipol().then((base) => {
+          if (vivo) setTotalMesas(mesasDePuesto(base, dep, mun, zon, std));
+        });
+      } else {
+        setTotalMesas(3);
+      }
       return () => {
         vivo = false;
       };

@@ -27,9 +27,11 @@ import {
   tituloYUbicacionDe,
   type ClasificacionE14,
 } from "./clasificador";
+import { cargarDivipol, mesasDePuesto } from "./divipol";
 import {
   COLA_OFFLINE_INICIAL,
   SOLICITUDES_RESCANEO_INICIAL,
+  guionDePuesto,
   historialInicial,
   mesasIniciales,
   progresoInicial,
@@ -469,17 +471,39 @@ export const useE14Store = create<E14Store>((set, get) => {
     // KIT actas-vivas-paginas-v1 (FASE A): ENCENDER → guion FRESCO (seed
     // nuevo + SIM reiniciado — AC-SIM2); APAGAR → solo apaga. Overlay de
     // vista: no toca archivadas/puestoActual/historial/completadas (D6).
-    alternarModoSimulacion: () =>
-      set((s) =>
-        s.modoSimulacion
-          ? { modoSimulacion: false }
-          : {
-              modoSimulacion: true,
-              mesas: mesasIniciales(),
-              simCompleta: false,
-              simUltima: null,
-            },
-      ),
+    // KIT e14-luz-sim-puntos-v1 (T-S): ENCENDER → guion del PUESTO REAL del
+    // acta escaneada (puestoActual → DIVIPOL p.t mesas × 4 páginas, fresco
+    // — AC-SIM2). Sin puesto real o sin t DIVIPOL → seed demo (como hoy).
+    // APAGAR → solo apaga. Overlay de vista (Opción A): SOLO mesas/
+    // simCompleta/simUltima — D6 (jamás archivadas/puestoActual/historial).
+    alternarModoSimulacion: () => {
+      const encender = !get().modoSimulacion;
+      if (!encender) {
+        set({ modoSimulacion: false });
+        return;
+      }
+      // Puesto demo INMEDIATO (la vista nunca queda vacía mientras carga DIVIPOL).
+      set({
+        modoSimulacion: true,
+        mesas: mesasIniciales(),
+        simCompleta: false,
+        simUltima: null,
+      });
+      const puesto = get().puestoActual;
+      if (!puesto) return;
+      const [dep, mun, zon, std] = puesto.clave.split("-");
+      void cargarDivipol()
+        .then((base) => {
+          const total = mesasDePuesto(base, dep, mun, zon, std);
+          // El dueño pudo APAGAR durante la carga (base en caché ~instantáneo,
+          // pero el guard es obligatorio): solo aplica si sigue ON.
+          if (!total || !get().modoSimulacion) return;
+          set({ mesas: guionDePuesto(total), simCompleta: false, simUltima: null });
+        })
+        .catch(() => {
+          /* sin base → el guion demo ya está montado (degradación honesta) */
+        });
+    },
 
     // KIT actas-vivas-paginas-v1 (FASE A): SIM VIVO — cada tick «sube» un
     // acta al guion demo (proximaPagina YA existe con la prioridad
