@@ -101,12 +101,13 @@ export function ActasView() {
   const modoSimulacion = useE14Store((s) => s.modoSimulacion);
   const alternarModoSimulacion = useE14Store((s) => s.alternarModoSimulacion);
   // KIT actas-vivas-paginas-v1 (FASE A): guion VIVO del SIM (store) —
-  // avanzarSimulacion marca una página OK cada 5 s; el tick se detiene
-  // SOLO al completar el guion (simCompleta).
+  // avanzarSimulacion marca una página OK cada 5 s.
+  // KIT e14-esquinas-suaves-v1 (T-R): el TICK se SUBIÓ al shell (page.tsx) —
+  // corre en TODAS las vistas (en ACTAS se pausaba al navegar a RESUMEN).
+  // Aquí SOLO queda la lectura del guion (mesas/simCompleta/simUltima).
   const mesas = useE14Store((s) => s.mesas);
   const simCompleta = useE14Store((s) => s.simCompleta);
   const simUltima = useE14Store((s) => s.simUltima);
-  const avanzarSimulacion = useE14Store((s) => s.avanzarSimulacion);
   const online = useE14Store((s) => s.online);
   const alternarConexion = useE14Store((s) => s.alternarConexion);
   const [mesaAbierta, setMesaAbierta] = useState<string | null>(null);
@@ -215,15 +216,11 @@ export function ActasView() {
   );
   const paginasTotales = mesas.reduce((n, m) => n + m.paginas.length, 0);
 
-  // KIT actas-vivas-paginas-v1 (FASE A): tick del SIM VIVO — cada 5 s sube
-  // un acta (avanzarSimulacion en el store). Se detiene SOLO al completar
-  // el guion (AC-SIM1, sin ticks colgando); OFF→ON reinicia el guion en el
-  // store (AC-SIM2). Con puesto real no corre (real manda — AC-SIM4).
-  useEffect(() => {
-    if (!enSimulacion || simCompleta) return;
-    const t = window.setInterval(avanzarSimulacion, 5000);
-    return () => window.clearInterval(t);
-  }, [enSimulacion, simCompleta, avanzarSimulacion]);
+  // KIT e14-esquinas-suaves-v1 (T-R): el useEffect del tick del SIM VIVÍA
+  // AQUÍ (actas-vivas-paginas-v1 FASE A, L218-226) — se SUBIÓ al shell
+  // (page.tsx) para que el SIM corra en TODAS las vistas. QUITARLO de aquí
+  // es obligatorio: si se dejara, correría DOBLE (duplicado de mount).
+  // El pulso `animate-pulse-sync` del botón SIM se queda (solo visual).
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-brand-black flex flex-col">
