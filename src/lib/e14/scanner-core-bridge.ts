@@ -79,7 +79,6 @@ import { verificarCompletitud, type ResultadoCompletitud } from "./completitud";
 // KIT e14-gate-v2 (FASE G2): marcador OBLIGATORIO de votos — helper ÚNICO
 // compartido con el guard de completitud (motorTinta, cero duplicación).
 import { medirZonaVotos } from "./marcadores";
-import { registrarPipelineE14 } from "./informe/telemetria";
 // KIT e14-score-lectura-v1: señal de LECTURA del score v2 (módulo puro — §4-A).
 import {
   PISO_LECTURA_FUERTE,
@@ -1340,50 +1339,6 @@ export class RealCoreBridge implements E14Bridge {
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
         `level:${calidad.level}})${evidenciaSim}${diag ? " diag=1" : ""}`,
     );
-
-    // INFORME-TELEMETRÍA (solo observación — cero cambios de comportamiento):
-    // deja registradas las medidas exactas del pipeline para el informe TXT/JSON.
-    try {
-      registrarPipelineE14({
-        registrado: true,
-        fuente: opciones.fuente,
-        entradaArchivo: "archivo" in entrada,
-        ms,
-        quad,
-        sinRecorte,
-        cropInfo: { ...infoCrop },
-        calidad,
-        contEfectivo: contrasteEfectivoDe(calidad, ocrLegible),
-        filtroActa,
-        // PROD-1 (§4.4): la entrada del OCR queda auto-descripta en el informe.
-        ocrInputFiltro: ocrIn,
-        // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): el motor de OCR de
-        // producción queda auto-descripto (conf del OCR principal).
-        ocrMotor: "rapidocr-v4",
-        ocrConf: confOcr,
-        motor,
-        ocrChars: texto.length,
-        ocrValido: ocrTextIsValid(texto),
-        completa,
-        sospecha: verificacionResuelta?.sospecha ?? "",
-        tintaFilo: verificacionResuelta?.tintaFilo ?? false,
-        densidades: verificacionResuelta?.densidades ?? [],
-        fondo: verificacionResuelta?.fondo ?? false,
-        procesadaVacia,
-        votosDensidadPct: marcadores.densidadVotosPct,
-        votosSkipPag2,
-        votosOk: marcadoresOk,
-        recortada,
-        senalActa,
-        scoreFinal: score,
-        simular: opciones.simular === true,
-        scoreSimulado: opciones.scoreSimulado ?? null,
-        status: gate.status,
-        rechazo: rechazoFinal,
-      });
-    } catch {
-      /* el informe jamás rompe el pipeline */
-    }
 
     // KIT e14-diagnostico-autoenvio-v1 (C1): adjuntar el registro con el id
     // REAL del acta (el id nace en construirActa — parche post-hoc).

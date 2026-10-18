@@ -13,7 +13,6 @@ import { useEffect } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import { TopBar } from "@/components/e14/TopBar";
 import { BottomNav } from "@/components/e14/BottomNav";
-import { InformeDescarga } from "@/components/e14/InformeDescarga";
 import { ScanView } from "@/components/e14/screens/ScanView";
 import { AnalyzingView } from "@/components/e14/screens/AnalyzingView";
 import { ReviewView, ReviewCtas } from "@/components/e14/screens/ReviewView";
@@ -60,9 +59,6 @@ export default function Page() {
           {vista === "revision" && <ReviewCtas />}
         </BottomNav>
       )}
-
-      {/* INFORME-TELEMETRÍA: píldora de descarga (solo cuando el informe YA está listo) */}
-      <InformeDescarga />
     </div>
   );
 }

@@ -9,7 +9,6 @@
  */
 import { create } from "zustand";
 import { getBridge } from "./get-bridge";
-import { iniciarInformeCaptura } from "./informe/iniciar";
 import { rotateProcessedDataUrl } from "./image-utils";
 // KIT e14-diagnostico-autoenvio-v1 (C3): acumulador §5 + paquete ZIP §3.
 // El toast del kit no existe como sistema aquí (redesign-stitch D2 lo retiró):
@@ -628,15 +627,6 @@ export const useE14Store = create<E14Store>((set, get) => {
           actasSesion: get().actasSesion + 1,
           analisisResuelto: true,
           archivoPendiente: null,
-        });
-        // INFORME-TELEMETRÍA (aditivo): comparativo OCR + informe TXT/JSON en 2.º
-        // plano — sin efecto en el flujo, las vistas ni el gate.
-        void iniciarInformeCaptura(acta, {
-          fuente: fuenteEfectiva,
-          intento,
-          maxIntentos: 4,
-          objetivo,
-          simular: simActiva,
         });
         // D7 (SPEC-rediseno-revision §7.5): contingencia automática al
         // AGOTAR intentos — el sistema escala solo (C4), sin botón manual:
