@@ -109,6 +109,21 @@ import { construirDiagnostico } from "./diagnostico";
 
 /** Timeout de seguridad global §5 (worker colgado en gama baja). */
 const TIMEOUT_MS = 15_000;
+/** KIT e14-recorte-manual-v1 (T1): presupuesto del RECORTE manual — el warp
+ *  del editor mide 14–17.4 s en el equipo del dueño (OCR solo: 9.8–14.3 s),
+ *  al borde del límite de 15 s del escaneo. El timeout SIGUE RECHAZANDO
+ *  (gate/score intactos — §5); lo único que cambia es qué foto muestra el
+ *  acta resultante: el recorte ya horneado (parcial), no la foto vieja. */
+const RECORTE_TIMEOUT_MS = 30_000;
+/** KIT e14-recorte-manual-v1 (T1): lo que el pipeline del RECORTE ya horneó
+ *  cuando el presupuesto vence — campos del return normal que SOLO dependen
+ *  del warp (etapa 1). Vacío = el warp no alcanzó → acta vieja (igual a hoy). */
+type ParcialRecorte = {
+  fotoProcesada?: string;
+  procesadaVacia?: boolean;
+  quadDetectado?: Quad;
+  rotation?: number;
+};
 /** Techos/labels del mapeo §4 y el gate §4.2. */
 const DETALLE_ILEGIBLE = "CÓDIGO DE BARRAS Y CABECERA NO DETECTADOS";
 const DETALLE_TIMEOUT = "TIEMPO DE PROCESADO EXCEDIDO";
@@ -1433,6 +1448,12 @@ export class RealCoreBridge implements E14Bridge {
       return Promise.reject(new Error("SIN FOTO ORIGINAL PARA RECORTAR"));
     }
     const rotacion = rotacionOverride ?? acta.rotation ?? 0;
+    // KIT e14-recorte-manual-v1 (T1): acumulador del recorte YA HORNEADO —
+    // pipelineRecorte lo llena apenas el warp completa (patrón `parcial` del
+    // escaneo §5, A7); el timeout lo usa para que el acta RECHAZADA por
+    // tiempo muestre EL RECORTE NUEVO del dueño y no la foto anterior. Si el
+    // warp no alcanzó, parcial queda vacío → comportamiento actual.
+    const parcial: ParcialRecorte = {};
     let vencido = false; // tras el timeout no se emite más progreso (§5)
     const emitir = (p: ProgresoAnalisis) => {
       if (!vencido) onProgreso?.(p);
@@ -1443,16 +1464,21 @@ export class RealCoreBridge implements E14Bridge {
         vencido = true;
         // §5: el timeout NO rechaza la Promise — resuelve el acta RECHAZADA
         // controlada (el toast sale del flujo normal del store).
+        // KIT e14-recorte-manual-v1 (T1): `...parcial` trae el recorte ya
+        // horneado si el warp alcanzó a correr — el dueño ve SU recorte
+        // (puede re-aplicar/reintentar), no la foto anterior. Gate y score
+        // INTACTOS: sigue RECHAZADA ILEGIBLE por tiempo.
         resolve({
           ...acta,
+          ...parcial,
           score: 0,
           status: "RECHAZADA",
           rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_TIMEOUT },
           firmas: this.firmasPorStatus(acta.firmas, "RECHAZADA"),
         });
-      }, TIMEOUT_MS);
+      }, RECORTE_TIMEOUT_MS);
 
-      void this.pipelineRecorte(acta, fotoOriginal, quad, rotacion, emitir, quadOrigen, manual).then(
+      void this.pipelineRecorte(acta, fotoOriginal, quad, rotacion, emitir, quadOrigen, manual, parcial).then(
         (actaNueva) => {
           if (vencido) return; // ya resolvió el timeout: el resultado se descarta
           clearTimeout(timer);
@@ -1526,6 +1552,9 @@ export class RealCoreBridge implements E14Bridge {
     // KIT e14-esquinas-suaves-v1 (Q2): true SOLO desde el editor del store
     // (aplicarRecorte) — activa el ESCUDO-MANUAL del gate (abajo).
     manual = false,
+    // KIT e14-recorte-manual-v1 (T1): acumulador del recorte horneado — el
+    // timeout de recortar() resuelve con él (patrón `parcial` del escaneo).
+    parcial: ParcialRecorte,
   ): Promise<Acta> {
     const ms = { proceso: 0, calidad: 0, ocr: 0, total: 0 };
     const inicio = performance.now();
@@ -1562,6 +1591,12 @@ export class RealCoreBridge implements E14Bridge {
     ms.proceso = performance.now() - tProceso;
     emitir({ etapa: "REALZANDO", progreso: 1 });
     const fotoProcesada = resultado.processed;
+    // KIT e14-recorte-manual-v1 (T1): el warp COMPLETÓ — horneado al
+    // acumulador (el timeout de recortar() ya puede mostrar este recorte
+    // aunque calidad/OCR/gate no alcancen dentro del presupuesto).
+    parcial.fotoProcesada = fotoProcesada;
+    parcial.quadDetectado = quad;
+    parcial.rotation = rotacion;
     // PROD-1 (§4.2): entrada del OCR con fallback idéntico al escaneo (§5).
     // Con filtro "original" la procesada ES la entrada (ocrIn=original — reuse).
     let fotoOcr = fotoProcesada;
@@ -1574,6 +1609,10 @@ export class RealCoreBridge implements E14Bridge {
     // §D4 (SPEC-e14-score-ocr): tinta de la procesada re-recortada — mismo
     // criterio del pipeline (un crop sobre zona sin tinta → ORIGINAL).
     const procesadaVacia = await procesadaVaciaDataUrl(fotoProcesada);
+    // KIT e14-recorte-manual-v1 (T1): la tinta del recorte ya se midió —
+    // también al acumulador (ReviewView decide el swap de display con esto;
+    // el swap permanece — T3 solo cambia el aviso bajo la tarjeta).
+    parcial.procesadaVacia = procesadaVacia;
 
     // 2) Calidad de la página.
     //    KIT visor-accion-score-v1 (FASE S): MISMO cambio que el escaneo —
@@ -1921,6 +1960,11 @@ export class RealCoreBridge implements E14Bridge {
     // KIT e14-diagnostico-autoenvio-v1 (C1): el desenlace del RECORTE viaja
     // en el acta actualizada (el store decide ZIP/registro — C3).
     if (diag) actaActualizada.diagnostico = diag;
+    // KIT e14-recorte-manual-v1 (T3): recorte MANUAL con foto SIN TINTA —
+    // el acta carga el flag y REVISIÓN cambia el aviso bajo la tarjeta a
+    // «TU RECORTE SE APLICÓ — …». El swap de display permanece (§D4) y el
+    // umbral de tinta NO se toca (image-utils intacto — prohibido §2-T3.3).
+    if (manual && procesadaVacia) actaActualizada.recorteManualSinTinta = true;
     return actaActualizada;
   }
 
