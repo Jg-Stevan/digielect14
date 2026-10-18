@@ -1206,12 +1206,16 @@ export class RealCoreBridge implements E14Bridge {
     // log queda como hoy). `borde=` lados sospechosos ("S|E"), `tintaFilo=`
     // condena, `franja=` densidades de tinta en % por lado sospechoso (mismo
     // orden que borde) y `fondo=` escudo D10.
+    // KIT e14-esquinas-suaves-v1 (Q1): token `perdon=` añadido AL FINAL del
+    // segmento (tokens NUEVOS solo al final — la línea `senal=` queda byte a
+    // byte; perdón por PAR fiducial del lado — Q1).
     const evidenciaBorde =
       verificacionResuelta && verificacionResuelta.sospecha
         ? ` borde=${verificacionResuelta.sospecha}` +
           ` tintaFilo=${verificacionResuelta.tintaFilo}` +
           ` franja=[${verificacionResuelta.densidades.map((d) => d.toFixed(1)).join(",")}]` +
-          ` fondo=${verificacionResuelta.fondo}`
+          ` fondo=${verificacionResuelta.fondo}` +
+          (verificacionResuelta.perdonLado ? ` perdon=${verificacionResuelta.perdonLado}` : "")
         : "";
     // FASE S (§S.1.5): crop= bbox real usado por calidadDeActa (px) — WxH;
     // `full` si el fallback al frame completo se activó (diagnóstico en campo).
@@ -1406,6 +1410,10 @@ export class RealCoreBridge implements E14Bridge {
    * que escanearActa: resuelve un acta RECHAZADA ILEGIBLE controlada.
    * F4/D37: `rotacionOverride` (4º parámetro) hornea la rotación LOCAL del
    * editor — el retorno de pipelineRecorte fija `rotation: rotacionUsada`.
+   * KIT e14-esquinas-suaves-v1 (Q2): `manual` (6º parámetro, default false)
+   * marca el recorte del EDITOR (decisión CON VISTA — escudo-manual: la tinta
+   * al filo del crop manual nunca RECHAZA). Solo lo pasa el store
+   * (aplicarRecorte); mejorarResolución conserva el default (conservador).
    */
   recortar(
     acta: Acta,
@@ -1417,6 +1425,8 @@ export class RealCoreBridge implements E14Bridge {
     // pasa — el quad lo puso el usuario, ninguna detección corrió → undefined
     // → token ausente (n/d no miente).
     quadOrigen?: OrigenQuad | null,
+    // KIT e14-esquinas-suaves-v1 (Q2): recorte del editor = decisión CON VISTA.
+    manual = false,
   ): Promise<Acta> {
     const fotoOriginal = acta.fotoOriginal;
     if (!fotoOriginal) {
@@ -1442,7 +1452,7 @@ export class RealCoreBridge implements E14Bridge {
         });
       }, TIMEOUT_MS);
 
-      void this.pipelineRecorte(acta, fotoOriginal, quad, rotacion, emitir, quadOrigen).then(
+      void this.pipelineRecorte(acta, fotoOriginal, quad, rotacion, emitir, quadOrigen, manual).then(
         (actaNueva) => {
           if (vencido) return; // ya resolvió el timeout: el resultado se descarta
           clearTimeout(timer);
@@ -1513,6 +1523,9 @@ export class RealCoreBridge implements E14Bridge {
     // KIT e14-quad-sobel-v1 (P1 §4-B): origen del quad — null/undefined si la
     // detección NO corrió (recorte manual del editor, catch de mejorar).
     quadOrigen: OrigenQuad | null = null,
+    // KIT e14-esquinas-suaves-v1 (Q2): true SOLO desde el editor del store
+    // (aplicarRecorte) — activa el ESCUDO-MANUAL del gate (abajo).
+    manual = false,
   ): Promise<Acta> {
     const ms = { proceso: 0, calidad: 0, ocr: 0, total: 0 };
     const inicio = performance.now();
@@ -1620,6 +1633,13 @@ export class RealCoreBridge implements E14Bridge {
     const trazaEsq = trazaEsquinas(esquinas);
     const verificacion = await verificarCompletitud(quad, fotoProcesada, esquinas);
     const completa = verificacion.completa;
+    // KIT e14-esquinas-suaves-v1 (Q2): ESCUDO-MANUAL — `!completa` en un recorte
+    // MANUAL no rechaza: techo 7.9 (patrón del escudo D10). El operador VIO el
+    // papel; a lo sumo su crop cortó un poco de impresión y lo decide mirando.
+    // SIN_VOTOS y BAJO siguen mandando (contenido, no esquinas). Solo recorte:
+    // el escaneo conserva el veto completo (conservador en campo — Q1 lo relaja).
+    const vetoIncompleta = !completa && !manual;
+    const escudoManual = !completa && manual;
     // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) en el recorte — mismo
     // marcador obligatorio y MISMO criterio que el escaneo (helper ÚNICO,
     // §4.4): el recorte re-evalúa TODO el gate, los votos incluidos. Sin
@@ -1646,7 +1666,10 @@ export class RealCoreBridge implements E14Bridge {
     // (constancias) NO tiene zona de votos. Página desconocida → se mide
     // (conservador). Log: votos=skip-pag2 cuando aplique.
     const votosSkipPag2 = clasificacion.pagina?.index === 2;
-    const marcadoresOk = completa ? (votosSkipPag2 ? true : marcadores.hayVotos) : true;
+    // KIT e14-esquinas-suaves-v1 (Q2): con escudo-manual el gate de votos
+    // SIGUE corriendo (un rescate sin votos no pasa) — solo el veto del guard
+    // se degrada a techo; el veto por marcador obligatorio queda INTACTO.
+    const marcadoresOk = vetoIncompleta ? true : (votosSkipPag2 ? true : marcadores.hayVotos);
     const ocrLegible = ocrTextIsValid(texto);
     // §D1 (SPEC-e14-score-ocr): señal de contenido — mismo criterio §4.4
     // (helper único, AMBOS pipelines con el MISMO criterio).
@@ -1690,12 +1713,21 @@ export class RealCoreBridge implements E14Bridge {
     if (completa && verificacion.fondo) {
       score = Math.min(score, TECHO_ESCUDO_FONDO);
     }
+    // KIT e14-esquinas-suaves-v1 (Q2): escudo-MANUAL — el acta pasa al gate
+    // con TECHO 7.9 (ADVERTENCIA como máximo; el operador decide si repetir).
+    // Colocado JUNTO al escudo-fondo (antes del cap de `recortada`; los caps
+    // del sitio mandan sobre el piso-10 — §G3; orden de caps pitfall G3:
+    // techo fair/poor → sin-señal → piso-10 → escudo-fondo → escudo-manual
+    // → recortada → incompleta → sin-votos).
+    if (escudoManual) {
+      score = Math.min(score, TECHO_ESCUDO_FONDO);
+    }
     // KIT actas-vivas-paginas-v1 (FASE C): acta RECORTADA → techo 7.9 —
     // ADVERTENCIA, NO rechazo (mismo criterio del escaneo, helper ÚNICO §4.4).
     if (recortada) {
       score = Math.min(score, TECHO_ESCUDO_FONDO);
     }
-    const gate: ResultadoGate = !completa
+    const gate: ResultadoGate = vetoIncompleta
       ? {
           status:
             acta.intento >= acta.maxIntentos
@@ -1717,7 +1749,9 @@ export class RealCoreBridge implements E14Bridge {
             clasificacion: null,
           }
         : this.evaluarGate(score, texto, clasificacion, acta.intento, acta.maxIntentos);
-    if (!completa) score = Math.min(score, 6.4);
+    // KIT e14-esquinas-suaves-v1 (Q2): cap del veto SOLO cuando el veto es
+    // REAL (vetoIncompleta) — con escudo-manual el cap 7.9 ya aplicó arriba.
+    if (vetoIncompleta) score = Math.min(score, 6.4);
     if (completa && !marcadoresOk) score = Math.min(score, 6.4);
     // §D3 (SPEC-e14-score-ocr): sustitución BAJO sin señal — igual que el
     // escaneo (el recorte de una foto sin acta no fabrica señal).
@@ -1727,12 +1761,16 @@ export class RealCoreBridge implements E14Bridge {
 
     // §3c (GUARD-BORDE): log de auditoría del guard — SOLO con sospecha
     // geométrica (AC8). Mismos campos que el pipeline de escaneo.
+    // KIT e14-esquinas-suaves-v1 (Q1): token `perdon=` añadido AL FINAL del
+    // segmento (tokens NUEVOS solo al final — líneas `senal=`/`level:`
+    // intocables byte a byte).
     const evidenciaBordeRecorte =
       verificacion.sospecha
         ? ` borde=${verificacion.sospecha}` +
           ` tintaFilo=${verificacion.tintaFilo}` +
           ` franja=[${verificacion.densidades.map((d) => d.toFixed(1)).join(",")}]` +
-          ` fondo=${verificacion.fondo}`
+          ` fondo=${verificacion.fondo}` +
+          (verificacion.perdonLado ? ` perdon=${verificacion.perdonLado}` : "")
         : "";
     // FASE S (§S.1.5): crop= bbox real usado por calidadDeActa (px) — WxH;
     // `full` si el fallback al frame completo se activó (diagnóstico en campo).
@@ -1752,8 +1790,13 @@ export class RealCoreBridge implements E14Bridge {
     if (senal.nivel === "DEBIL") techosDiag.push("lectura-DEBIL:5.9");
     if (completa && verificacion.fondo)
       techosDiag.push(`escudo-fondo:${TECHO_ESCUDO_FONDO}`);
+    // KIT e14-esquinas-suaves-v1 (Q2): techo del escudo-manual (7.9) — junto
+    // al escudo-fondo, MISMO orden de aplicación de los caps.
+    if (escudoManual) techosDiag.push("escudo-manual:7.9");
     if (recortada) techosDiag.push(`recortada:${TECHO_ESCUDO_FONDO}`);
-    if (!completa) techosDiag.push("incompleta:6.4");
+    // KIT e14-esquinas-suaves-v1 (Q2): el token `incompleta:6.4` SOLO con el
+    // veto real (un recorte manual incompleto NO es INCOMPLETA — es escudo).
+    if (vetoIncompleta) techosDiag.push("incompleta:6.4");
     if (completa && !marcadoresOk) techosDiag.push("sin-votos:6.4");
     // C1: registro del desenlace junto al log (§9.6). Guard extra §9.2: un
     // recorte de un acta SIMULACION tampoco adjunta (doble guard con el store).
@@ -1821,7 +1864,7 @@ export class RealCoreBridge implements E14Bridge {
         `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte} ` +
+        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte}${manual ? " manual=1" : ""}${escudoManual ? " escudo-manual=1" : ""} ` +
         // KIT e14-luz-sim-puntos-v1 (T-D): piso-10 aplicado (grep-able).
         `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] piso10=${pisoPerfecto ? 1 : 0}${quadOrigen ? ` origen=${quadOrigen}` : ""} ` +
         `score=${score} filtro=${filtro} ocrIn=${ocrIn} ` +
