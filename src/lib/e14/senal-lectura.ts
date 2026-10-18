@@ -111,6 +111,12 @@ export function lazoPerdonadoPorLectura(
   const faltan = (["tl", "tr", "bl", "br"] as const).filter((k) => !esquinas[k]);
   if (faltan.length === 0) return false;
   const topeDentro = /E\s*-\s*14/i.test(texto) || /\b\d{15}\b/.test(texto);
-  const pieDentro = !faltaSeccion && /KIT[::\s.]*\d+/i.test(texto);
+  // KIT e14-esquinas-suaves-v1 (Q4): pieDentro = !faltaSeccion SIN exigir
+  // /KIT nnn/. La sección impresa del pie (SUMA TOTAL P1 / FIRMA P≥2) YA ES la
+  // prueba de que el fondo está dentro — exigir además el KIT leído condenaba
+  // actas cuyo kit solo llega por CÓDIGO/REGISTRO (kitFuente≠PIE: el sello de
+  // la banda no siempre imprime legible). faltaSeccionInferior sigue siendo
+  // innegociable (señal de tinta — NUNCA se perdona, §3 del kit lazo).
+  const pieDentro = !faltaSeccion;
   return faltan.every((k) => (k === "tl" || k === "tr" ? topeDentro : pieDentro));
 }

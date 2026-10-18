@@ -802,6 +802,10 @@ export const useE14Store = create<E14Store>((set, get) => {
           quad,
           (p) => set({ progresoAnalisis: p }),
           rotacionNueva,
+          undefined,
+          // KIT e14-esquinas-suaves-v1 (Q2): recorte del editor = decisión CON VISTA
+          // (escudo-manual: la tinta al filo del crop manual nunca RECHAZA).
+          true,
         );
         set({ actaActual: acta, progresoAnalisis: null });
         // G4 (KIT e14-gate-v2): flujo post-recorte NORMAL — el recorte
