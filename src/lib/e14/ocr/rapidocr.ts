@@ -1,10 +1,10 @@
 /**
  * rapidocr.ts — módulo compartido — motor de producción (PROD-2, kit
- * e14-motor-rapidocr-v1) e instrumento del informe (SPEC-informe-telemetria-ocr-v1 §4.3).
- *
- * MOVE literal desde informe/rapidocr.ts (pitfall §9.8 del kit: mismo código,
- * sin «reordenar» ni «limpiar» — diff auditable): único cambio de import
- * (./telemetria → ../informe/telemetria) + pre-warm al final (§4.1-C5).
+ * e14-motor-rapidocr-v1) — MOVE literal desde informe/rapidocr.ts
+ * (pitfall §9.8 del kit: mismo código, sin «reordenar» ni «limpiar»).
+ * KIT e14-fuera-informes-v1 (R-1.5): fuera la instrumentación del informe
+ * (import ../informe/telemetria + TODAS las llamadas evento() — el console
+ * info de celda queda; cero efecto en el OCR).
  *
  * RapidOCR PP-OCRv4 en el navegador — puerto fiel de rapidocr_onnxruntime
  * 1.4.4 (config del bench: det_limit_side_len=1920, det_limit_type='max').
@@ -14,10 +14,10 @@
  * min-area rect por barrido de aristas → box_score_fast → unclip →
  * esquinas TL,TR,BR,BL → mapeo inverso a coords de la fuente.
  *
- * Determinismo: executionProviders ["wasm"] (igual que el bench); WebGPU se
- * anota en el informe (infoDispositivo().webgpu) pero NO se usa.
+ * Determinismo: executionProviders ["wasm"] (igual que el bench); WebGPU
+ * disponible en el dispositivo queda anotado en el log del entorno pero NO
+ * se usa.
  */
-import { evento } from "../informe/telemetria";
 
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -87,7 +87,6 @@ export function rapidOcrInit(): Promise<RapidRuntime> {
 }
 
 async function initReal(): Promise<RapidRuntime> {
-  evento("rapidocr/init", "cargando onnxruntime-web wasm + 3 sesiones PP-OCRv4");
   const ort = (await import("onnxruntime-web/wasm")) as unknown as OrtModule;
   ort.env.wasm.wasmPaths = `${PUBLIC_BASE}/vendor/onnxruntime/`;
   ort.env.wasm.numThreads =
@@ -109,8 +108,6 @@ async function initReal(): Promise<RapidRuntime> {
   ]);
   if (!dictResp.ok) throw new Error(`ppocr_keys.txt HTTP ${dictResp.status}`);
   const dict = (await dictResp.text()).split("\n").filter((l) => l.length > 0);
-  if (dict.length !== 6622) evento("rapidocr/dict", `dict=${dict.length} líneas (esperadas 6622)`);
-  evento("rapidocr/init", "listo (sesiones det/cls/rec + dict)");
   return { ort, det, cls, rec, dict };
 }
 
@@ -216,10 +213,6 @@ function preDet(src: HTMLImageElement): { canvas: HTMLCanvasElement; ops: OpsDet
   const dw = round32(Math.floor(w * ratioDet));
   const detIn = canvasDe(canvasPadded, dw, dh);
 
-  evento(
-    "rapidocr/predet",
-    `fuente=${src.naturalWidth}x${src.naturalHeight} detIn=${dw}x${dh} padTop=${padTop} ratios=${ratioW.toFixed(4)}/${ratioH.toFixed(4)}`,
-  );
   return {
     canvas: detIn,
     ops: { w: dw, h: dh, ratioW, ratioH, padTop, ratioWDet: dw / w, ratioHDet: dh / h },
@@ -685,7 +678,6 @@ export async function rapidOcrReconocer(
   const tTotal = performance.now();
   const src = await loadImage(dataUrl);
   const { boxesFuente, msDet } = await inferDet(rt, src);
-  evento("rapidocr/det", `${boxesFuente.length} líneas · det=${msDet}ms`);
 
   if (boxesFuente.length === 0) {
     return { lineas: [], texto: "", confMedia: 0, msDet, msCls: 0, msRec: 0, nBoxes: 0 };
@@ -774,10 +766,6 @@ export async function rapidOcrReconocer(
     aceptadas.length === 0 ? 0 : aceptadas.reduce((s, l) => s + l.conf, 0) / aceptadas.length;
   console.info(
     `[e14-rapidocr] celda: det=${msDet}ms cls=${msCls}ms rec=${msRec}ms · ${boxesFuente.length} cajas · ${aceptadas.length} líneas · conf ${(confMedia * 100).toFixed(1)}% · ${Math.round(performance.now() - tTotal)}ms`,
-  );
-  evento(
-    "rapidocr/rec",
-    `texto=${texto.length} chars · conf=${(confMedia * 100).toFixed(1)} · cls=${msCls}ms rec=${msRec}ms · total=${Math.round(performance.now() - t0)}ms`,
   );
   return {
     lineas: aceptadas,
