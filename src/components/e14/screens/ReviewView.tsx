@@ -521,10 +521,12 @@ export function ReviewView() {
         </div>
 
         {/* KIT consenso-frankfurt-v1 (Task 122, FASE 5 §6.2): LÍNEA DE ID —
-            kit FINAL (pie/código/registro, §4.2) + tipo leído + página +
-            FUENTE real de la procedencia. Sin kit → «KIT ---» (nunca
-            inventar); tipo/página desconocidas → «---»/«-/-». El chip
-            MESA · POR KIT se conserva (§6.3: todo lo demás SIN CAMBIO). */}
+            kit FINAL (pie/código/registro, §4.2) + tipo leído + página.
+            Sin kit → «KIT ---» (nunca inventar); tipo/página desconocidas →
+            «---»/«-/-». El chip MESA · POR KIT se conserva (§6.3: todo lo
+            demás SIN CAMBIO).
+            KIT e14-esquinas-suaves-v1 (T-V): el sufijo de procedencia se
+            RETIRA — el dueño no lo lee. */}
         {(() => {
           const cl = acta.clasificacion;
           const kitTxt = cl?.kit != null ? `KIT ${cl.kit}` : "KIT ---";
@@ -532,25 +534,11 @@ export function ReviewView() {
           // Misma HONESTIDAD que el chip PÁG (§6.3): sin clasificación la
           // página mostrada sería la del HUECO asignado, no la LEÍDA → "-/-".
           const pagId = paginaIdentificada ? { index: paginaIdx, total: paginaTotal } : null;
-          const fuenteTxt =
-            cl?.kitFuente === "PIE"
-              ? "PIE"
-              : cl?.kitFuente === "CODIGO"
-                ? "CÓDIGO"
-                : cl?.kitFuente === "REGISTRO"
-                  ? "REGISTRO"
-                  : "---";
           const mesaPorKit = cl?.avisos?.includes("MESA_POR_KIT") ?? false;
           return (
             <div className="grid gap-2 w-full select-none">
               <Chip tone="neutral">
                 {`${kitTxt} · ${tipoId} · ${pagId ? `${pagId.index}/${pagId.total}` : "-/-"}`}
-                <span
-                  className="ml-1 text-[9px] font-bold tracking-[0.1em] text-gray-400"
-                  title="Procedencia del KIT: pie impreso (PIE) · código 1D (CÓDIGO) · registro KIT→mesa (REGISTRO)"
-                >
-                  {`· ${fuenteTxt}`}
-                </span>
               </Chip>
               {mesaPorKit && (
                 <Chip tone="neutral">

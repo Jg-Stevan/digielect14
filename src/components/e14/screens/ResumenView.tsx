@@ -6,16 +6,8 @@
  * historial de envíos con barra de acento por estado. Reactivo en vivo.
  */
 import { useE14Store } from "@/lib/e14/store";
-import { useState } from "react";
 import type { HistorialRow } from "@/lib/e14/types";
 import { PUESTO_SIMULADO } from "@/lib/e14/seed";
-// KIT e14-diagnostico-autoenvio-v1 (C5): card COMPORTAMIENTO — tasa de
-// auto-envío + causas top + export ZIP (§5). Datos de reporteComportamiento()
-// (localStorage — re-cálculo en montaje, ligero §6-F).
-import {
-  exportarReporteComportamientoZip,
-  reporteComportamiento,
-} from "@/lib/e14/diagnostico";
 import { SegmentedBar } from "../primitives";
 
 function badgeEstado(estado: HistorialRow["estado"]) {
@@ -55,17 +47,6 @@ export function ResumenView() {
 
   const pct = Math.round((completadas / asignadasHoy) * 100);
   const ultimaActividad = historial[0]?.hora ?? "—";
-
-  // KIT e14-diagnostico-autoenvio-v1 (C5): re-cálculo en render/montaje (§6-F
-  // — ligero). La fuente vive en localStorage (e14-diag-v1) — el card se
-  // refresca al navegar a RESUMEN (cada montaje re-ejecuta).
-  const rep = reporteComportamiento();
-  const [exportando, setExportando] = useState<"ok" | "err" | null>(null);
-  const exportar = () => {
-    const r = exportarReporteComportamientoZip();
-    setExportando(r.ok ? "ok" : "err");
-    if (r.ok) setTimeout(() => setExportando(null), 2500);
-  };
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-brand-black flex flex-col">
@@ -122,48 +103,11 @@ export function ResumenView() {
           </div>
         </div>
 
-        {/* KIT e14-diagnostico-autoenvio-v1 (C5): COMPORTAMIENTO — la métrica
-            del dueño (tasa de auto-envío) + 3 causas top con barra proporcional
-            + export ZIP (JSON+TXT). SIM no registra — solo desenlaces reales. */}
-        <section className="bg-brand-surface border border-brand-border p-3 flex flex-col gap-2.5 rounded-2xl" aria-label="Comportamiento del puesto">
-          <div className="flex justify-between items-center">
-            <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">COMPORTAMIENTO</span>
-            <span className="font-mono text-[10px] text-gray-500 tabular-nums">{rep.total} desenlaces</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-extrabold tabular-nums text-brand-green">{rep.tasaPct}%</span>
-            <span className="text-xs text-gray-400">auto-envío ({rep.autoEnviadas}/{rep.total})</span>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {rep.causasTop.map((c) => (
-              <div key={c.causa} className="flex flex-col gap-0.5">
-                <div className="flex justify-between gap-2 items-baseline">
-                  <span className="font-mono text-[11px] text-white truncate" title={c.causa}>{c.causa}</span>
-                  <span className="font-mono text-[11px] text-gray-400 tabular-nums shrink-0">{c.n}</span>
-                </div>
-                <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-amber-400" style={{ width: `${Math.max(4, c.pct)}%` }} />
-                </div>
-              </div>
-            ))}
-            {rep.causasTop.length === 0 && (
-              <span className="text-[11px] text-gray-500">Sin desenlaces no-auto registrados aún.</span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={exportar}
-            className={`w-full py-2 rounded-xl border font-mono font-bold text-[10px] uppercase tracking-wider transition-all tap-action ${
-              exportando === "ok"
-                ? "border-brand-green/60 text-brand-green"
-                : exportando === "err"
-                  ? "border-red-500/60 text-red-400"
-                  : "border-brand-border text-gray-300 hover:bg-white/5"
-            }`}
-          >
-            {exportando === "ok" ? "EXPORTADO ✓" : exportando === "err" ? "NO SE PUDO" : "EXPORTAR REPORTE"}
-          </button>
-        </section>
+        {/* KIT e14-esquinas-suaves-v1 (T-C): la sección COMPORTAMIENTO
+            (tasa de auto-envío + causas top + EXPORTAR REPORTE) se RETIRA —
+            mandato del dueño §0.4. El acumulador/registrarDesenlace del store
+            siguen vivos (el C4 de REVISIÓN y los ZIP de campo no dependían
+            de esta vista); diagnostico.ts SIN CAMBIOS. */}
 
         {/* Historial de envíos */}
         <div className="flex flex-col gap-2">
