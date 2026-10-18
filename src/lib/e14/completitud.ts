@@ -58,7 +58,13 @@ const MARGEN_BORDE = 0.001;
 /** COBERTURA mínima del quad (shoelace). Con área <30% NO se puede verificar
  *  que el acta esté completa → TODOS los lados quedan sospechosos (D2: con el
  *  brazo cobertura no se sabe dónde corta). */
-const AREA_MINIMA = 0.3;
+// KIT e14-esquinas-suaves-v1 (Q3): 0.30 → 0.25 — ALINEADA con QUAD_MIN_AREA_
+// RATIO=0.25 del detection-worker (el worker ya considera válido desde 25%).
+// El header documentaba la «VENTANA DE MUERTE 25-30%»: actas completas a
+// distancia cómoda quedaban sospechosas en 25-30% y morían. Hoy la sospecha
+// solo dispara el análisis de tinta, pero seguía generando medición/ruido de
+// log gratuito. 25-30% vuelve a ser quad SANO (D4: camino feliz, costo 0).
+const AREA_MINIMA = 0.25;
 
 // ── Análisis de tinta al filo (D5) ──
 /** Franja EXTERIOR medida: 0-2% del lado (mínimo 3 px — fotos chicas). */
@@ -99,6 +105,9 @@ export interface ResultadoCompletitud {
   densidades: number[];
   /** Escudo D10 activado: alguna franja sospechosa ≥85% (fondo/sombra). */
   fondo: boolean;
+  // KIT e14-esquinas-suaves-v1 (Q1): lados perdonados por par fiducial
+  // ("N|O") — evidencia para el log (token perdon=). "" si no hubo perdón.
+  perdonLado: string;
 }
 
 /** Área del cuadrilátero (shoelace — robusta al orden de las esquinas).
@@ -261,6 +270,19 @@ function perdonadaSiPapelEntero(
   return r;
 }
 
+// KIT e14-esquinas-suaves-v1 (Q1): ¿el LADO sospechoso tiene su PAR fiducial
+// completo? Las marcas viven DENTRO del papel (y 2.2-5.2% sup · 97.6-97.9%
+// inf) — ambas visibles = el borde de ese lado está demostrado dentro del
+// cuadro. Un recorte REAL de ese lado cortaría las marcas (no existen las 4
+// marcas en un recorte real — FASE 2; por lado es la misma prueba).
+function ladoConParFiducial(lado: Lado, e: EsquinasActa | null | undefined): boolean {
+  if (!e) return false;
+  if (lado === "N") return e.tl && e.tr;
+  if (lado === "S") return e.bl && e.br;
+  if (lado === "O") return e.tl && e.bl;
+  return e.tr && e.br; // E
+}
+
 /**
  * GUARD-BORDE (D1) — tabla de decisión §2:
  *  | Geometría                          | Tinta al filo        | Resultado            |
@@ -285,7 +307,14 @@ export async function verificarCompletitud(
   const sospechosos = cobertura ? ORDEN_LADOS : porBorde;
   if (sospechosos.length === 0) {
     // Quad sano: la sospecha se levanta sin análisis (D4 — camino feliz).
-    return { completa: true, sospecha: "", tintaFilo: false, densidades: [], fondo: false };
+    return {
+      completa: true,
+      sospecha: "",
+      tintaFilo: false,
+      densidades: [],
+      fondo: false,
+      perdonLado: "",
+    };
   }
   const sospecha = sospechosos.join("|");
   const analisis = await medirTintaAlFilo(fotoProcesada, sospechosos);
@@ -293,26 +322,51 @@ export async function verificarCompletitud(
     // §7 (warp degenerado / decode imposible): la sospecha geométrica SE
     // MANTIENE como condena, igual que hoy (comportamiento del PR #33) —
     // salvo 4 fiduciales presentes (FASE 2: papel entero demostrado).
+    // KIT e14-esquinas-suaves-v1 (Q1): rama degenerada SIN cambio — sin
+    // medición no hay perdón por lado (conservador); el perdón total 4/4
+    // de FASE 2 se conserva aquí.
     return perdonadaSiPapelEntero(
-      { completa: false, sospecha, tintaFilo: true, densidades: [], fondo: false },
+      {
+        completa: false,
+        sospecha,
+        tintaFilo: true,
+        densidades: [],
+        fondo: false,
+        perdonLado: "",
+      },
       esquinas,
     );
   }
   // D10 primero (escudo): franja ≥85% = fondo/sombra incluida por el warp —
-  // ese lado NO condena (el fondo llena TODA la franja, un renglón cortado
-  // jamás llega a uniformidad). Condena (D5): algún lado con densidad ≥20%
-  // (y <85%) = tinta impresa continua cortada al filo.
+  // ese lado NO condena. Condena (D5): densidad ≥20% — PERO KIT e14-esquinas-
+  // suaves-v1 (Q1): el LADO con su par fiducial presente se PERDONA (papel
+  // demostrado entero — la tinta al filo es del impreso, no del recorte).
   let tintaFilo = false;
   let fondo = false;
-  for (const d of analisis.densidades) {
+  const perdonados: string[] = [];
+  for (let i = 0; i < sospechosos.length; i++) {
+    const d = analisis.densidades[i];
     if (d >= UMBRAL_FONDO * 100) {
       fondo = true;
       continue;
     }
-    if (d >= UMBRAL_TINTA_FILO * 100) tintaFilo = true;
+    if (d < UMBRAL_TINTA_FILO * 100) continue;
+    if (ladoConParFiducial(sospechosos[i], esquinas)) {
+      perdonados.push(sospechosos[i]);
+      continue;
+    }
+    tintaFilo = true;
   }
-  return perdonadaSiPapelEntero(
-    { completa: !tintaFilo, sospecha, tintaFilo, densidades: analisis.densidades, fondo },
-    esquinas,
-  );
+  // KIT e14-esquinas-suaves-v1 (Q1): el perdón por lado RELAJA al perdón
+  // total 4/4 de FASE 2 (queda subsumido — si TODOS los lados quedan
+  // perdonados, tintaFilo=false → completa). `perdonadaSiPapelEntero` NO se
+  // borra: la usa la rama degenerada (!analisis.utilizable).
+  return {
+    completa: !tintaFilo,
+    sospecha,
+    tintaFilo,
+    densidades: analisis.densidades,
+    fondo,
+    perdonLado: perdonados.join("|"),
+  };
 }
