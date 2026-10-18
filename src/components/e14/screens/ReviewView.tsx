@@ -713,10 +713,16 @@ export function ReviewView() {
         )}
 
         {/* §D4: nota tenue del respaldo — la tarjeta muestra la ORIGINAL
-            porque la procesada salió vacía. */}
+            porque la procesada salió vacía.
+            KIT e14-recorte-manual-v1 (T3): tras un recorte MANUAL el swap
+            YA NO se lee como «mi recorte no se aplicó» — el acta carga
+            recorteManualSinTinta y el aviso lo dice honesto. El swap de
+            display permanece; el umbral de tinta NO cambia (A5). */}
         {mostrandoOriginal && (
           <p className="text-center font-mono text-[9px] font-bold tracking-[0.18em] text-gray-400 uppercase">
-            SE MUESTRA LA FOTO ORIGINAL
+            {acta.recorteManualSinTinta
+              ? "TU RECORTE SE APLICÓ — LA FOTO SALIÓ SIN TINTA SUFICIENTE; SE MUESTRA LA ORIGINAL"
+              : "SE MUESTRA LA FOTO ORIGINAL"}
           </p>
         )}
 

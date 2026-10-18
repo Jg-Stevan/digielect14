@@ -163,6 +163,13 @@ export interface Acta {
    *  enderezado) cuando el recorte lo detectó la señal de esquinas; null si
    *  el recorte vino SOLO del OCR de secciones del kit 118 o 4/4 presentes. */
   recorteLado?: string | null;
+  /** KIT e14-recorte-manual-v1 (T3): el recorte MANUAL se aplicó (warp del
+   *  editor completado) pero la foto procesada salió SIN TINTA SUFICIENTE
+   *  (procesadaVacia) — REVISIÓN muestra la ORIGINAL con el aviso honesto
+   *  «TU RECORTE SE APLICÓ…» (el dueño no debe creer que su recorte falló).
+   *  Solo lo marca el pipeline del RECORTE con manual=true; el umbral de
+   *  tinta NO cambia (image-utils intacto). */
+  recorteManualSinTinta?: boolean;
   /** texto detectado (debug/verificación). */
   ocrTexto?: string;
   /** métricas del core 0-100. */
