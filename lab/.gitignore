@@ -1,7 +1,0 @@
-# FILTROS-1 — artefactos locales NO versionados (kit §2: modelos/fotos al repo PROHIBIDO)
-fotos/
-out/
-cache/
-__pycache__/
-*.pyc
-resultados/*.zip
