@@ -1960,6 +1960,11 @@ export class RealCoreBridge implements E14Bridge {
     // KIT e14-diagnostico-autoenvio-v1 (C1): el desenlace del RECORTE viaja
     // en el acta actualizada (el store decide ZIP/registro — C3).
     if (diag) actaActualizada.diagnostico = diag;
+    // KIT e14-recorte-manual-v1 (T3): recorte MANUAL con foto SIN TINTA —
+    // el acta carga el flag y REVISIÓN cambia el aviso bajo la tarjeta a
+    // «TU RECORTE SE APLICÓ — …». El swap de display permanece (§D4) y el
+    // umbral de tinta NO se toca (image-utils intacto — prohibido §2-T3.3).
+    if (manual && procesadaVacia) actaActualizada.recorteManualSinTinta = true;
     return actaActualizada;
   }
 
