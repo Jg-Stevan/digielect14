@@ -14,6 +14,9 @@
  */
 import type { Acta, ProgresoAnalisis, FuenteCaptura, TipoPagina } from "./types";
 import type { PageFilter, Quad } from "@jg-stevan/scanner-core/types";
+// KIT e14-esquinas-suaves-v1 (Q2): origen del quad en el contrato del
+// recorte (ver comentario del contrato — el flag manual viaja con él).
+import type { OrigenQuad } from "@jg-stevan/scanner-core/image-processor";
 
 /** Página de mesa a la que apunta el próximo escaneo (D7: vive en el store). */
 export interface PaginaObjetivo {
@@ -61,6 +64,13 @@ export interface E14Bridge {
     quad: Quad,
     onProgreso?: (p: ProgresoAnalisis) => void,
     rotacionOverride?: number,
+    // KIT e14-esquinas-suaves-v1 (Q2): `quadOrigen` (n/d si el quad lo puso el
+    // usuario) y `manual` (recorte del EDITOR — escudo-manual del Q2) viajan
+    // por el contrato para que el flag llegue COMPLETO al pipelineRecorte. Si
+    // el composite no lo reenviara, `manual=true` del store se perdería en la
+    // delegación y el escudo jamás se activaría (razonamiento del cambio).
+    quadOrigen?: OrigenQuad | null,
+    manual?: boolean,
   ): Promise<Acta>;
   /**
    * F2 (§F2.2, D36): re-procesa la foto con el filtro elegido — IGUAL que
@@ -118,6 +128,10 @@ export class CompositeBridge implements E14Bridge {
     quad: Quad,
     onProgreso?: (p: ProgresoAnalisis) => void,
     rotacionOverride?: number,
+    quadOrigen?: OrigenQuad | null,
+    // KIT e14-esquinas-suaves-v1 (Q2): el composite REENVÍA manual (default
+    // false — el escaneo/mejorar conservan el comportamiento conservador).
+    manual = false,
   ): Promise<Acta> {
     if (!this.real) {
       return Promise.reject(new Error("FUENTE REAL NO IMPLEMENTADA (L2)"));
@@ -126,7 +140,7 @@ export class CompositeBridge implements E14Bridge {
     if (!acta.fotoOriginal) {
       return Promise.reject(new Error("RECORTAR NO APLICA SIN FOTO REAL"));
     }
-    return this.real.recortar(acta, quad, onProgreso, rotacionOverride);
+    return this.real.recortar(acta, quad, onProgreso, rotacionOverride, quadOrigen, manual);
   }
 
   revelar(acta: Acta, filtro: PageFilter): Promise<Acta> {

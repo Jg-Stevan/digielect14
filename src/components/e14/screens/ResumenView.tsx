@@ -6,16 +6,8 @@
  * historial de envíos con barra de acento por estado. Reactivo en vivo.
  */
 import { useE14Store } from "@/lib/e14/store";
-import { useState } from "react";
 import type { HistorialRow } from "@/lib/e14/types";
 import { PUESTO_SIMULADO } from "@/lib/e14/seed";
-// KIT e14-diagnostico-autoenvio-v1 (C5): card COMPORTAMIENTO — tasa de
-// auto-envío + causas top + export ZIP (§5). Datos de reporteComportamiento()
-// (localStorage — re-cálculo en montaje, ligero §6-F).
-import {
-  exportarReporteComportamientoZip,
-  reporteComportamiento,
-} from "@/lib/e14/diagnostico";
 import { SegmentedBar } from "../primitives";
 
 function badgeEstado(estado: HistorialRow["estado"]) {
@@ -42,10 +34,14 @@ function badgeEstado(estado: HistorialRow["estado"]) {
 }
 
 export function ResumenView() {
-  const completadas = useE14Store((s) => s.completadas);
-  const asignadasHoy = useE14Store((s) => s.asignadasHoy);
-  const colaOffline = useE14Store((s) => s.colaOffline);
-  const solicitudesRescaneo = useE14Store((s) => s.solicitudesRescaneo);
+  // KIT e14-esquinas-suaves-v1 (T-R): los números salen del GUION VIVO
+  // (store.mesas — el mismo que ACTAS): real (registrarEnvio marca OK) y SIM
+  // (avanzarSimulacion marca OK cada 5 s) escriben el MISMO guion → RESUMEN
+  // refleja ambos en vivo. D6: SOLO lectura — nunca se escribe estado aquí.
+  // Los selectores de seed (completadas/asignadasHoy/colaOffline/
+  // solicitudesRescaneo) quedan como estado interno del store (registrarEnvio
+  // y contingencia C4 los usan) — RESUMEN deja de leerlos.
+  const mesas = useE14Store((s) => s.mesas);
   const historial = useE14Store((s) => s.historial);
   // PUESTO ACTUAL (kit actas-resumen-puesto-v2): el real manda; en simulación
   // (sin puesto real) el demo — MISMO puesto que muestra ACTAS en todo momento.
@@ -53,19 +49,37 @@ export function ResumenView() {
   const modoSimulacion = useE14Store((s) => s.modoSimulacion);
   const puestoMostrado = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
 
-  const pct = Math.round((completadas / asignadasHoy) * 100);
+  const totalPaginas = mesas.reduce((n, m) => n + m.paginas.length, 0);
+  const paginasOk = mesas.reduce(
+    (n, m) => n + m.paginas.filter((p) => p.estado === "OK").length,
+    0,
+  );
+  const paginasRescaneo = mesas.reduce(
+    (n, m) => n + m.paginas.filter((p) => p.estado === "RESCANEO").length,
+    0,
+  );
+  const pendientes = totalPaginas - paginasOk;
+  const pct = totalPaginas > 0 ? Math.round((paginasOk / totalPaginas) * 100) : 0;
   const ultimaActividad = historial[0]?.hora ?? "—";
 
-  // KIT e14-diagnostico-autoenvio-v1 (C5): re-cálculo en render/montaje (§6-F
-  // — ligero). La fuente vive en localStorage (e14-diag-v1) — el card se
-  // refresca al navegar a RESUMEN (cada montaje re-ejecuta).
-  const rep = reporteComportamiento();
-  const [exportando, setExportando] = useState<"ok" | "err" | null>(null);
-  const exportar = () => {
-    const r = exportarReporteComportamientoZip();
-    setExportando(r.ok ? "ok" : "err");
-    if (r.ok) setTimeout(() => setExportando(null), 2500);
-  };
+  // KIT e14-esquinas-suaves-v1 (T-R): ÚLTIMOS ENVÍOS durante SIM — filas
+  // DERIVADAS del guion (recorrido en orden de llenado, más reciente primero
+  // — el tick llena secuencialmente). El historial REAL (envíos de capturas
+  // reales, contingencias) se muestra EXACTAMENTE como hoy con SIM OFF.
+  const filas: HistorialRow[] = modoSimulacion
+    ? mesas
+        .flatMap((m) =>
+          m.paginas
+            .filter((p) => p.estado === "OK")
+            .map((p) => ({
+              id: `sim-${m.id}-${p.tipo}-${p.pagina}`,
+              titulo: `${m.id} · ${p.tipo} P${p.pagina}`,
+              estado: "ENVIADO" as const,
+              hora: "SIM",
+            })),
+        )
+        .reverse()
+    : historial;
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-brand-black flex flex-col">
@@ -77,7 +91,9 @@ export function ResumenView() {
       </header>
 
       <div className="flex-grow flex flex-col gap-6 px-4 pt-4 pb-6 max-w-md mx-auto w-full">
-        {/* Puesto actual — REAL (última clasificación archivada) o SIMULADO. */}
+        {/* Puesto actual — REAL (última clasificación archivada) o SIMULADO.
+            KIT e14-esquinas-suaves-v1 (T-R): la ruta suma el conteo de mesas
+            del guion vivo (el MISMO que llena ACTAS). */}
         <section className="flex justify-between items-end border-b border-brand-border pb-2">
           <div className="flex flex-col gap-1">
             <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">PUESTO ACTUAL</span>
@@ -86,13 +102,14 @@ export function ResumenView() {
             </h2>
             {puestoMostrado && (
               <span className="font-mono text-xs text-gray-400">
-                {`${puestoMostrado.municipio} > ZONA ${puestoMostrado.zona} > PUESTO ${puestoMostrado.puesto}`}
+                {`${puestoMostrado.municipio} > ZONA ${puestoMostrado.zona} > PUESTO ${puestoMostrado.puesto} · ${mesas.length} MESAS`}
               </span>
             )}
           </div>
         </section>
 
-        {/* Progreso del puesto */}
+        {/* Progreso del puesto — KIT e14-esquinas-suaves-v1 (T-R): derivado
+            del guion vivo (páginas OK / páginas totales). */}
         <div className="bg-brand-surface border border-brand-border p-3 flex flex-col gap-2 rounded-2xl">
           <div className="flex justify-between items-center">
             <span className="text-sm font-bold text-white">
@@ -100,79 +117,52 @@ export function ResumenView() {
               <span className="font-mono font-extrabold text-brand-green">{pct}%</span>
             </span>
           </div>
-          <SegmentedBar total={asignadasHoy} filled={completadas} tone="ok" />
+          <SegmentedBar total={totalPaginas} filled={paginasOk} tone="ok" />
           <span className="text-sm text-gray-400">
-            Has completado {completadas} de {asignadasHoy} páginas asignadas hoy.
+            Has completado {paginasOk} de {totalPaginas} páginas del puesto.
           </span>
         </div>
 
-        {/* Tarjetas de estadística */}
+        {/* Tarjetas de estadística — KIT e14-esquinas-suaves-v1 (T-R):
+            pendientes/rescaneo DERIVADOS del guion (tonos amber/red intactos). */}
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-brand-surface border border-brand-border p-2.5 flex flex-col gap-1 rounded-2xl">
             <span className="font-mono text-3xl font-extrabold tabular-nums text-amber-400">
-              {String(colaOffline).padStart(2, "0")}
+              {String(pendientes).padStart(2, "0")}
             </span>
-            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-gray-400">PENDIENTES EN COLA (OFFLINE)</span>
+            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-gray-400">PÁGINAS PENDIENTES</span>
           </div>
           <div className="bg-brand-surface border border-brand-border p-2.5 flex flex-col gap-1 rounded-2xl">
             <span className="font-mono text-3xl font-extrabold tabular-nums text-red-500">
-              {String(solicitudesRescaneo).padStart(2, "0")}
+              {String(paginasRescaneo).padStart(2, "0")}
             </span>
-            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-gray-400">SOLICITUD DE RESCANEO</span>
+            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-gray-400">PÁGINAS EN RESCANEO</span>
           </div>
         </div>
 
-        {/* KIT e14-diagnostico-autoenvio-v1 (C5): COMPORTAMIENTO — la métrica
-            del dueño (tasa de auto-envío) + 3 causas top con barra proporcional
-            + export ZIP (JSON+TXT). SIM no registra — solo desenlaces reales. */}
-        <section className="bg-brand-surface border border-brand-border p-3 flex flex-col gap-2.5 rounded-2xl" aria-label="Comportamiento del puesto">
-          <div className="flex justify-between items-center">
-            <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">COMPORTAMIENTO</span>
-            <span className="font-mono text-[10px] text-gray-500 tabular-nums">{rep.total} desenlaces</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-extrabold tabular-nums text-brand-green">{rep.tasaPct}%</span>
-            <span className="text-xs text-gray-400">auto-envío ({rep.autoEnviadas}/{rep.total})</span>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {rep.causasTop.map((c) => (
-              <div key={c.causa} className="flex flex-col gap-0.5">
-                <div className="flex justify-between gap-2 items-baseline">
-                  <span className="font-mono text-[11px] text-white truncate" title={c.causa}>{c.causa}</span>
-                  <span className="font-mono text-[11px] text-gray-400 tabular-nums shrink-0">{c.n}</span>
-                </div>
-                <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-amber-400" style={{ width: `${Math.max(4, c.pct)}%` }} />
-                </div>
-              </div>
-            ))}
-            {rep.causasTop.length === 0 && (
-              <span className="text-[11px] text-gray-500">Sin desenlaces no-auto registrados aún.</span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={exportar}
-            className={`w-full py-2 rounded-xl border font-mono font-bold text-[10px] uppercase tracking-wider transition-all tap-action ${
-              exportando === "ok"
-                ? "border-brand-green/60 text-brand-green"
-                : exportando === "err"
-                  ? "border-red-500/60 text-red-400"
-                  : "border-brand-border text-gray-300 hover:bg-white/5"
-            }`}
-          >
-            {exportando === "ok" ? "EXPORTADO ✓" : exportando === "err" ? "NO SE PUDO" : "EXPORTAR REPORTE"}
-          </button>
-        </section>
+        {/* KIT e14-esquinas-suaves-v1 (T-C): la sección COMPORTAMIENTO
+            (tasa de auto-envío + causas top + EXPORTAR REPORTE) se RETIRA —
+            mandato del dueño §0.4. El acumulador/registrarDesenlace del store
+            siguen vivos (el C4 de REVISIÓN y los ZIP de campo no dependían
+            de esta vista); diagnostico.ts SIN CAMBIOS. */}
 
-        {/* Historial de envíos */}
+        {/* Historial de envíos — KIT e14-esquinas-suaves-v1 (T-R): con SIM
+            ON las filas son DERIVADAS del guion (SIMULACIÓN — no toca el
+            historial real); con SIM OFF, el historial real como siempre. */}
         <div className="flex flex-col gap-2">
           <div className="flex justify-between items-center">
-            <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">ÚLTIMOS ENVÍOS (HISTORIAL)</span>
-            <span className="font-mono text-xs text-gray-400">ÚLT. ACT.: {ultimaActividad}</span>
+            <div className="flex flex-col">
+              <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">ÚLTIMOS ENVÍOS (HISTORIAL)</span>
+              {modoSimulacion && (
+                <span className="text-[10px] text-gray-500">(SIMULACIÓN — no toca el historial real)</span>
+              )}
+            </div>
+            <span className="font-mono text-xs text-gray-400">
+              {modoSimulacion ? `SIM ${paginasOk}/${totalPaginas}` : `ÚLT. ACT.: ${ultimaActividad}`}
+            </span>
           </div>
           <div className="flex flex-col max-h-96 overflow-y-auto thin-scroll rounded-xl border border-brand-border">
-            {historial.map((fila) => {
+            {filas.map((fila) => {
               const badge = badgeEstado(fila.estado);
               return (
                 <div

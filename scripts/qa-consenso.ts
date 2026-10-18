@@ -372,13 +372,19 @@ check("presupuesto de integral+búsqueda (bun) ≤ 30 ms", dtMs <= 30, `${dtMs.t
 // ── AC5 — verificarCompletitud: los fiduciales perdonan ──
 console.log("\nAC5 · verificarCompletitud (quad al filo + tinta ~30% del stub):");
 const perdonada = await verificarCompletitud(QUAD_FILO, "data:image/jpeg;base64,stub", ESQUINAS_OK);
+// KIT e14-esquinas-suaves-v1 (Q1): el perdón por lado RELAJA al 4/4 — con
+// las 4 fiduciales CADA lado tiene su par → TODOS perdonados: tintaFilo
+// queda false (antes: true conservado como evidencia por
+// perdonadaSiPapelEntero) y la evidencia vive en `perdonLado="N|S|E|O"`
+// (token perdon= del log). Misma decisión (completa=true).
 check(
-  "4 fiduciales + tinta al filo → completa=true (sospecha/densidades/fondo al log)",
+  "4 fiduciales + tinta al filo → completa=true (perdon=N|S|E|O — Q1: perdón por lado)",
   perdonada.completa === true &&
     perdonada.sospecha === "N|S|E|O" &&
-    perdonada.tintaFilo === true &&
+    perdonada.tintaFilo === false &&
     perdonada.densidades.length === 4 &&
-    perdonada.fondo === false,
+    perdonada.fondo === false &&
+    perdonada.perdonLado === "N|S|E|O",
   JSON.stringify(perdonada),
 );
 const hoy = await verificarCompletitud(QUAD_FILO, "data:image/jpeg;base64,stub", null);

@@ -96,17 +96,21 @@ caso(
   lazoPerdonadoPorLectura({ tl: false, tr: true, bl: false, br: true }, OCR_ZIP2, false),
   false,
 );
-// §5.7 — SUMA TOTAL legible pero KIT ilegible (corte por el medio del margen)
-// → false → cap 7.9 ADVERTENCIA (degradación conservadora).
+// KIT e14-esquinas-suaves-v1 (Q4) — SUMA TOTAL legible pero KIT ilegible
+// (corte por el medio del margen) → PERDÓN: la sección impresa del pie
+// (SUMA TOTAL P1 / FIRMA P≥2) YA ES la prueba de que el fondo está dentro;
+// exigir además /KIT nnn/ condenaba actas cuyo kit solo llega por
+// CÓDIGO/REGISTRO (kitFuente≠PIE). Antes (kit lectura-perdona §5.7): false
+// → cap 7.9 ADVERTENCIA (degradación conservadora) — Q4 lo relaja.
 caso(
   7,
-  "SUMA TOTAL sin KIT (corte medio) → sin perdón",
+  "SUMA TOTAL sin KIT (corte medio) → perdón (Q4: la sección es la prueba)",
   lazoPerdonadoPorLectura(
     { tl: true, tr: true, bl: false, br: true },
     OCR_ZIP1.replace("KIT: 399", "KIT: ---"),
     false,
   ),
-  false,
+  true,
 );
 // §5.8 — página 2: faltaSeccion = falta FIRMA → fondo NO perdonado; con FIRMA
 // leída + KIT (el pie P2 trae KIT) → perdonado. Página desconocida → faltaSeccion
