@@ -2,7 +2,7 @@
  * Seed EXACTO de los diseños (SPEC §6.4) — el primer render de ACTAS y
  * RESUMEN debe calcar los mocks del zip v2.
  */
-import type { HistorialRow, Mesa, ProgresoPuesto } from "./types";
+import type { HistorialRow, Mesa, MesaPagina, ProgresoPuesto } from "./types";
 
 /** MESA 01 COMPLETADA · MESA 02 EN PROCESO · MESA 03 PENDIENTE (§6.4). */
 export function mesasIniciales(): Mesa[] {
@@ -41,6 +41,28 @@ export function mesasIniciales(): Mesa[] {
       ],
     },
   ];
+}
+
+/** KIT e14-luz-sim-puntos-v1 (T-S): guion del PUESTO REAL — 1..N mesas
+ *  DIVIPOL (p.t) × 4 páginas (DELEGADOS P1/P2 + TRANSMISIÓN P1/P2), todo
+ *  PENDIENTE. El SIM lo llena a la vista con avanzarSimulacion (overlay
+ *  D6: jamás escribe archivadas/puestoActual). Mismo shape que
+ *  mesasIniciales — ActasView no distingue. */
+export function guionDePuesto(totalMesas: number): Mesa[] {
+  return Array.from({ length: Math.max(1, totalMesas) }, (_, i) => {
+    const paginas: MesaPagina[] = [
+      { tipo: "DELEGADOS", pagina: 1, estado: "PENDIENTE" },
+      { tipo: "DELEGADOS", pagina: 2, estado: "PENDIENTE" },
+      { tipo: "TRANSMISIÓN", pagina: 1, estado: "PENDIENTE" },
+      { tipo: "TRANSMISIÓN", pagina: 2, estado: "PENDIENTE" },
+    ];
+    return {
+      id: `MESA ${String(i + 1).padStart(2, "0")}`,
+      estado: "PENDIENTE" as const,
+      progresoPct: 0,
+      paginas,
+    };
+  });
 }
 
 /** Puesto demo del MODO SIMULACIÓN (look clásico del mock §6.4). SOLO
