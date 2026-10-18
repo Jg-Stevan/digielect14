@@ -9,12 +9,7 @@
  */
 import { create } from "zustand";
 import { getBridge } from "./get-bridge";
-import { iniciarInformeCaptura } from "./informe/iniciar";
 import { rotateProcessedDataUrl } from "./image-utils";
-// KIT e14-diagnostico-autoenvio-v1 (C3): acumulador §5 + paquete ZIP §3.
-// El toast del kit no existe como sistema aquí (redesign-stitch D2 lo retiró):
-// el feedback es la traza [e14] diag= del módulo + el botón C4 de REVISIÓN.
-import { descargarPaqueteDiagnostico, registrarDesenlace } from "./diagnostico";
 import { ocrTextIsValid } from "@jg-stevan/scanner-core/ocr";
 import type { PageFilter } from "@jg-stevan/scanner-core/types";
 import type { PaginaObjetivo } from "./bridge";
@@ -629,15 +624,6 @@ export const useE14Store = create<E14Store>((set, get) => {
           analisisResuelto: true,
           archivoPendiente: null,
         });
-        // INFORME-TELEMETRÍA (aditivo): comparativo OCR + informe TXT/JSON en 2.º
-        // plano — sin efecto en el flujo, las vistas ni el gate.
-        void iniciarInformeCaptura(acta, {
-          fuente: fuenteEfectiva,
-          intento,
-          maxIntentos: 4,
-          objetivo,
-          simular: simActiva,
-        });
         // D7 (SPEC-rediseno-revision §7.5): contingencia automática al
         // AGOTAR intentos — el sistema escala solo (C4), sin botón manual:
         // fila de historial. Con intento < max NO hay historial (aún es
@@ -667,11 +653,6 @@ export const useE14Store = create<E14Store>((set, get) => {
       if (actaActual.status === "OPTIMA") {
         const hora = bridge.horaEnvio();
         registrarEnvio(tituloPaginaActual());
-        // KIT e14-diagnostico-autoenvio-v1 (§5/§7.3): el desenlace OPTIMA
-        // entra al acumulador (denominador de la tasa) SIN ZIP (§1) — el
-        // guard SIM vive en registrarDesenlace (acta simulada no trae
-        // diagnostico adjunto).
-        registrarDesenlace(get().actaActual!);
         set({
           actaActual: {
             ...get().actaActual!,
@@ -697,13 +678,6 @@ export const useE14Store = create<E14Store>((set, get) => {
         // rechazo ya vive PERSISTENTE en la REVISIÓN (píldora de estado +
         // banner + píldora flotante de la tarjeta con el motivo REAL:
         // INCOMPLETA/BAJO/GENÉRICO — D1/PR #33). Sin toast.
-      }
-      // KIT e14-diagnostico-autoenvio-v1 (C3): desenlace no-OPTIMA →
-      // acumular + descargar el paquete ZIP del POR QUÉ (trigger §1). SIM
-      // nunca (§9.2 — doble guard: sin diagnostico adjunto no hay nada).
-      if (actaActual.diagnostico) {
-        registrarDesenlace(actaActual);
-        descargarPaqueteDiagnostico(actaActual);
       }
       set({ vista: "revision" });
     },
@@ -834,9 +808,6 @@ export const useE14Store = create<E14Store>((set, get) => {
         if (acta.status === "OPTIMA") {
           const hora = bridge.horaEnvio();
           registrarEnvio(tituloPaginaActual());
-          // KIT e14-diagnostico-autoenvio-v1 (§5): el rescate OPTIMA también
-          // cuenta (autoEnviada:true — denominador/numerador de la tasa).
-          if (acta.diagnostico) registrarDesenlace(acta);
           set({
             actaActual: {
               ...get().actaActual!,
@@ -851,12 +822,6 @@ export const useE14Store = create<E14Store>((set, get) => {
         }
         // El desenlace (SIGUE RECHAZADA / SIN_VOTOS / ADVERTENCIA…) vive
         // PERSISTENTE en la píldora de estado de la REVISIÓN (§4.3).
-        // KIT e14-diagnostico-autoenvio-v1 (C3): else del path de recorte →
-        // acumular + ZIP (mismo trigger §1 que la captura).
-        if (acta.diagnostico) {
-          registrarDesenlace(acta);
-          descargarPaqueteDiagnostico(acta);
-        }
         // KIT e14-recorte-manual-v1 (T2): resolvió (incluye el timeout-
         // controlado — el acta RECHAZADA por tiempo ya muestra el recorte
         // horneado, T1). El editor SÍ se cierra.

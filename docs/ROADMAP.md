@@ -123,3 +123,10 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T1 — Presupuesto propio del recorte (30 s) + patrón `parcial`: el timeout RECHAZA pero MUESTRA el recorte ya horneado (nunca la foto vieja). Escaneo intocable.
 - [x] T2 — El fallo del recorte deja de ser silencioso: `errorRecorte` + píldora en REVISIÓN + `aplicarRecorte` booleano; el editor NO se cierra en error duro (D42).
 - [x] T3 — Recorte manual sin tinta → aviso honesto «TU RECORTE SE APLICÓ — …» (swap §D4 intacto, umbral de tinta intacto).
+
+## CHORE — e14-fuera-informes-v1 (2026-10-18): fuera los informes automáticos
+
+- [x] R-1 — INFORME-TELEMETRÍA v1 fuera completo (informe/ ×7 + InformeDescarga + hook B2 + try-block B8 + evento() de rapidocr) (D43).
+- [x] R-2 — Auto-descarga del ZIP de diagnóstico fuera (consumers B1/B3/B4/B5; diagnostico.ts recortado a construirDiagnostico; fflate fuera de deps).
+- [x] R-3 — Botón manual «Diagnóstico» fuera; barra de REVISIÓN grid-cols-3 fijo.
+- [x] R-4 — `acta.diagnostico` dormante verificado (traza diag=1 intacta).
