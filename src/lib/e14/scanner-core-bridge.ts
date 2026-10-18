@@ -312,7 +312,12 @@ function contrasteEfectivoDe(q: PageQualityV2, ocrLegible: boolean): number {
  *  no describe una digitalización → techo 4.9 («score bajo»). */
 function scoreDeCalidad(
   q: PageQualityV2,
-  senales?: { ocrLegible: boolean; identificada: boolean; conSenal?: boolean },
+  senales?: {
+    ocrLegible: boolean;
+    identificada: boolean;
+    conSenal?: boolean;
+    pisoPerfecto?: boolean;
+  },
 ): number {
   const contrasteEf = contrasteEfectivoDe(q, senales?.ocrLegible ?? false);
   // KIT e14-score-lectura-v1 (B2/C1): la nitidez del score v2 es la HI-RES
@@ -321,6 +326,14 @@ function scoreDeCalidad(
   const sharpnessV2 = q.sharpnessHi || q.sharpness;
   const bruto = (sharpnessV2 * 0.4 + q.brightness * 0.3 + contrasteEf * 0.3) / 10;
   let score10 = Math.round(bruto * 10) / 10;
+  // KIT e14-luz-sim-puntos-v1 (T-D): piso de LECTURA PERFECTA — lectura
+  // FUERTE con ≥8/10 anclas + nitidez hi-res ≥90 + tinta de papel ≥75 =
+  // evidencia dura de acta bien capturada; el BRILLO bajo (interior/vidrio/
+  // sombra) deja de castigar. Va ANTES de los caps (lección §G3: el piso
+  // JAMÁS vence a los techos — recortada/incompleta/sin-votos/sin-senal
+  // siguen mandando después; aquí el único cap posterior posible es
+  // fair/poor y las condiciones ya lo excluyen por construcción).
+  if (senales?.pisoPerfecto) score10 = 10;
   let level = q.level;
   if (sharpnessV2 !== q.sharpness || contrasteEf !== q.contrast) {
     // Fuente: packages/scanner-core/src/image-processor.ts evaluateQuality —
@@ -1051,10 +1064,23 @@ export class RealCoreBridge implements E14Bridge {
     // §D1 (SPEC-e14-score-ocr): señal de CONTENIDO del acta — alimenta el
     // score (techo 4.9 sin señal) y el desenlace §D3 (rechazo BAJO).
     const senalActa = senalDeContenido(texto, clasificacion);
+    // KIT e14-luz-sim-puntos-v1 (T-D): `senal` se sube aquí (antes vivía
+    // tras scoreDeCalidad) — es PURA (misma entrada → misma salida) y el
+    // piso-10 necesita las anclas dentro del scoreDeCalidad. El bloque C3
+    // de abajo queda idéntico leyendo esta misma const.
+    const senal = senalDeLectura(texto, clasificacion.parciales);
+    // KIT e14-luz-sim-puntos-v1 (T-D): LAS 4 condiciones de §4.1. Todas o
+    // ninguna (conservador — G3).
+    const pisoPerfecto =
+      senal.nivel === "FUERTE" &&
+      senal.anclas >= 8 &&
+      calidad.sharpnessHi >= 90 &&
+      calidad.contrastPapel >= 75;
     let score = scoreDeCalidad(calidad, {
       ocrLegible,
       identificada: clasificacion.nivel === "AUTO",
       conSenal: senalActa,
+      pisoPerfecto,
     });
     // KIT e14-diagnostico-autoenvio-v1 (§3-A): score visual = bruto de
     // scoreDeCalidad ANTES de los caps del sitio (escudo-fondo/recortada/
@@ -1071,7 +1097,9 @@ export class RealCoreBridge implements E14Bridge {
     // inyección SIM (pitfall §9.5 — los chips 8.2/7.0/4.3 mandan) y de los
     // caps posteriores (escudo fondo/recortada/gate siguen MANDANDO —
     // pitfall §9.4). Mismo criterio en el pipelineRecorte (pitfall §9.9).
-    const senal = senalDeLectura(texto, clasificacion.parciales);
+    // KIT e14-luz-sim-puntos-v1 (T-D): la declaración de `senal` se SUBIÓ
+    // (ahora vive antes de scoreDeCalidad — el piso-10 necesita las anclas
+    // dentro del score). Este bloque C3 queda byte a byte leyendo esa const.
     if (senal.nivel === "FUERTE" && calidad.level !== "poor") {
       score = Math.max(score, PISO_LECTURA_FUERTE);
     } else if (senal.nivel === "DEBIL") {
@@ -1278,7 +1306,8 @@ export class RealCoreBridge implements E14Bridge {
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaAsis}${evidenciaBorde} ` +
-        `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}]${quadOrigen ? ` origen=${quadOrigen}` : ""} ` +
+        // KIT e14-luz-sim-puntos-v1 (T-D): piso-10 aplicado (grep-able).
+        `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] piso10=${pisoPerfecto ? 1 : 0}${quadOrigen ? ` origen=${quadOrigen}` : ""} ` +
         `score=${score} filtro=${filtroActa} ocrIn=${ocrIn} ` +
         // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor
         // de producción, junto al ocrIn= del PROD-1 (conf/det/rec del OCR
@@ -1622,10 +1651,23 @@ export class RealCoreBridge implements E14Bridge {
     // §D1 (SPEC-e14-score-ocr): señal de contenido — mismo criterio §4.4
     // (helper único, AMBOS pipelines con el MISMO criterio).
     const senalActa = senalDeContenido(texto, clasificacion);
+    // KIT e14-luz-sim-puntos-v1 (T-D): `senal` se sube aquí (antes vivía
+    // tras scoreDeCalidad) — es PURA (misma entrada → misma salida) y el
+    // piso-10 necesita las anclas dentro del scoreDeCalidad. El bloque C3
+    // de abajo queda idéntico leyendo esta misma const.
+    const senal = senalDeLectura(texto, clasificacion.parciales);
+    // KIT e14-luz-sim-puntos-v1 (T-D): LAS 4 condiciones de §4.1. Todas o
+    // ninguna (conservador — G3).
+    const pisoPerfecto =
+      senal.nivel === "FUERTE" &&
+      senal.anclas >= 8 &&
+      calidad.sharpnessHi >= 90 &&
+      calidad.contrastPapel >= 75;
     let score = scoreDeCalidad(calidad, {
       ocrLegible,
       identificada: clasificacion.nivel === "AUTO",
       conSenal: senalActa,
+      pisoPerfecto,
     });
     // KIT e14-diagnostico-autoenvio-v1 (§3-A): score visual ANTES de los caps
     // del sitio (misma convención que el escaneo). ORDEN del merge (kit
@@ -1636,7 +1678,8 @@ export class RealCoreBridge implements E14Bridge {
     // POST-banda (consenso-frankfurt FASE 4); SIN llamada OCR nueva. Va
     // ANTES de los caps posteriores: escudo fondo/recortada/gate siguen
     // MANDANDO (pitfall §9.4 — una recortada con lectura FUERTE se queda ≤7.9).
-    const senal = senalDeLectura(texto, clasificacion.parciales);
+    // KIT e14-luz-sim-puntos-v1 (T-D): misma subida de `senal` del escaneo
+    // (§4.4 del kit — EXACTAMENTE el mismo patrón en pipelineRecorte).
     if (senal.nivel === "FUERTE" && calidad.level !== "poor") {
       score = Math.max(score, PISO_LECTURA_FUERTE);
     } else if (senal.nivel === "DEBIL") {
@@ -1779,7 +1822,8 @@ export class RealCoreBridge implements E14Bridge {
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
         `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
         `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte} ` +
-        `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}]${quadOrigen ? ` origen=${quadOrigen}` : ""} ` +
+        // KIT e14-luz-sim-puntos-v1 (T-D): piso-10 aplicado (grep-able).
+        `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] piso10=${pisoPerfecto ? 1 : 0}${quadOrigen ? ` origen=${quadOrigen}` : ""} ` +
         `score=${score} filtro=${filtro} ocrIn=${ocrIn} ` +
         // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor.
         `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +

@@ -769,7 +769,13 @@ export function ReviewView() {
       {editando && acta.fotoOriginal ? (
         <QuadEditor
           fotoOriginal={acta.fotoOriginal}
-          quadInicial={acta.quadDetectado ?? defaultQuad()}
+          // KIT e14-luz-sim-puntos-v1 (T-E): RECHAZADA = la detección ya
+          // falló una vez (importadas: franja Sobel degenerada — ZIPs A56)
+          // → NO se devuelve al dueño el quad fracasado como punto de
+          // partida: el marco completo (puntos a arrastrar al papel).
+          // ADVERTENCIA conserva quadDetectado (la detección acertó el
+          // marco; solo hay que corregir una esquina).
+          quadInicial={acta.status === "RECHAZADA" ? defaultQuad() : (acta.quadDetectado ?? defaultQuad())}
           rotation={acta.rotation ?? 0}
           aplicando={recortando}
           onCancelar={() => setEditando(false)}
