@@ -39,6 +39,11 @@ import {
 
 export type Vista = "escanear" | "analizando" | "revision" | "actas" | "resumen";
 
+// KIT e14-recorte-manual-v1 (T2): copy del aviso cuando el pipeline del
+// RECORTE falla (error duro). Mismo tono corto/sin guía del repo (D1/gate-v2);
+// se pinta como píldora en REVISIÓN — no hay toasts (redesign-stitch D2).
+const MSG_RECORTE_FALLIDO = "NO SE PUDO RECORTAR — INTENTA DE NUEVO";
+
 /** §D3 (SPEC-e14-simulacion-scores): banda de un chip de calidad del mock.
  *  Los ids SON los del mock (ScanView §5) y el mapeo dueño es fijo:
  *  la completa = óptima · la cortada = intermedio · la borrosa = bajo. */
@@ -81,6 +86,11 @@ interface E14Store {
   analisisResuelto: boolean;
   /** L5 §7.5: true mientras el bridge re-corre el pipeline del RECORTE. */
   recortando: boolean;
+  /** KIT e14-recorte-manual-v1 (T2): aviso visible cuando el pipeline del
+   *  recorte FALLA (error duro — el catch silencioso se acabó). El catch
+   *  sólo avisa: no cambia el gate ni el score. `null` = sin error; se
+   *  limpia al iniciar un recorte y a los ~6 s (píldora en REVISIÓN). */
+  errorRecorte: string | null;
   /** F2 §F2.2: true mientras el bridge re-procesa la foto con un filtro. */
   revelando: boolean;
   actasSesion: number;
@@ -162,8 +172,11 @@ interface E14Store {
    * bridge.recortar re-ejecuta el pipeline con el quad manual (F5-MANUAL) y
    * NO consume intento. F4/D37: `rotacionNueva` hornea la rotación LOCAL
    * del editor (undefined = conserva acta.rotation). Toast según resultado.
+   * KIT e14-recorte-manual-v1 (T2): devuelve `true` si el recorte RESOLVIÓ
+   * (éxito o timeout-controlado — el acta se actualizó) y `false` en error
+   * duro (el editor NO se cierra — REVISIÓN pinta `errorRecorte`).
    */
-  aplicarRecorte: (quad: Quad, rotacionNueva?: number) => Promise<void>;
+  aplicarRecorte: (quad: Quad, rotacionNueva?: number) => Promise<boolean>;
   /**
    * F2 (§F2.2, D36): cambia el filtro del acta — bridge.revelar re-procesa
    * la foto (SOLO processImage, sin re-OCR/re-calidad — igual que
@@ -452,6 +465,8 @@ export const useE14Store = create<E14Store>((set, get) => {
     progresoAnalisis: null,
     analisisResuelto: false,
     recortando: false,
+    // KIT e14-recorte-manual-v1 (T2): sin error de recorte al arrancar.
+    errorRecorte: null,
     revelando: false,
     actasSesion: 0,
     mesas: mesasIniciales(),
@@ -789,10 +804,11 @@ export const useE14Store = create<E14Store>((set, get) => {
     aplicarRecorte: async (quad, rotacionNueva) => {
       const { actaActual } = get();
       if (!actaActual?.fotoOriginal) {
-        return;
+        return false;
       }
-      if (get().recortando) return;
-      set({ recortando: true, progresoAnalisis: null });
+      if (get().recortando) return false;
+      // KIT e14-recorte-manual-v1 (T2): cada intento NACE sin error previo.
+      set({ recortando: true, progresoAnalisis: null, errorRecorte: null });
       try {
         // RecorTE manual → pipeline §5 re-ejecutado con F5-MANUAL; el acta
         // conserva identidad (intento/fuente/paginación) — rescate sin intento.
@@ -829,7 +845,9 @@ export const useE14Store = create<E14Store>((set, get) => {
             },
             vista: "revision",
           });
-          return;
+          // KIT e14-recorte-manual-v1 (T2): resolvió (éxito) — el editor
+          // puede cerrarse.
+          return true;
         }
         // El desenlace (SIGUE RECHAZADA / SIN_VOTOS / ADVERTENCIA…) vive
         // PERSISTENTE en la píldora de estado de la REVISIÓN (§4.3).
@@ -839,8 +857,23 @@ export const useE14Store = create<E14Store>((set, get) => {
           registrarDesenlace(acta);
           descargarPaqueteDiagnostico(acta);
         }
-      } catch {
-        set({ progresoAnalisis: null });
+        // KIT e14-recorte-manual-v1 (T2): resolvió (incluye el timeout-
+        // controlado — el acta RECHAZADA por tiempo ya muestra el recorte
+        // horneado, T1). El editor SÍ se cierra.
+        return true;
+      } catch (err) {
+        // KIT e14-recorte-manual-v1 (T2): el fallo DEJA DE SER SILENCIOSO —
+        // razonable en consola + aviso visible con el mecanismo del repo
+        // (sin toasts — redesign-stitch D2 los retiró): píldora en REVISIÓN.
+        // El editor NO se cierra (onAplicar cierra solo con `true`) — el
+        // dueño reintenta SIN perder su quad. El gate/score no cambian.
+        console.error("[e14] aplicarRecorte falló:", err);
+        set({ progresoAnalisis: null, errorRecorte: MSG_RECORTE_FALLIDO });
+        // Auto-limpieza ~6 s (guard por mensaje: no borra un error MÁS NUEVO).
+        setTimeout(() => {
+          if (get().errorRecorte === MSG_RECORTE_FALLIDO) set({ errorRecorte: null });
+        }, 6000);
+        return false;
       } finally {
         set({ recortando: false });
       }

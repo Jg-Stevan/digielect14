@@ -124,6 +124,9 @@ export function ReviewView() {
   const recortando = useE14Store((s) => s.recortando);
   const revelando = useE14Store((s) => s.revelando);
   const aplicarRecorte = useE14Store((s) => s.aplicarRecorte);
+  // KIT e14-recorte-manual-v1 (T2): fallo del recorte VISIBLE — píldora sobre
+  // el editor (que NO se cierra en error duro).
+  const errorRecorte = useE14Store((s) => s.errorRecorte);
   const rotarFoto = useE14Store((s) => s.rotarFoto);
   const cambiarFiltro = useE14Store((s) => s.cambiarFiltro);
   const reconocerTextoActa = useE14Store((s) => s.reconocerTextoActa);
@@ -768,10 +771,31 @@ export function ReviewView() {
           aplicando={recortando}
           onCancelar={() => setEditando(false)}
           onAplicar={(quad, rotacion) => {
-            void aplicarRecorte(quad, rotacion).then(() => setEditando(false));
+            // KIT e14-recorte-manual-v1 (T2): el editor SOLO se cierra si el
+            // recorte resolvió (éxito o timeout-controlado → `true`). En
+            // error duro queda ABIERTO — la píldora avisa y el dueño
+            // reintenta SIN perder su quad (antes el .then cerraba SIEMPRE).
+            void aplicarRecorte(quad, rotacion).then((ok) => {
+              if (ok) setEditando(false);
+            });
           }}
         />
       ) : null}
+
+      {/* KIT e14-recorte-manual-v1 (T2): el fallo del recorte DEJA DE SER
+          SILENCIOSO — píldora del estilo existente (tono crit), fija SOBRE
+          el overlay del editor (z-[60] > z-50 del QuadEditor) porque el
+          editor NO se cierra en error duro. Se limpia sola (~6 s) o al
+          reintentar. role=alert para screen readers. */}
+      {errorRecorte && (
+        <div
+          role="alert"
+          data-testid="error-recorte"
+          className="fixed top-24 left-1/2 z-[60] -translate-x-1/2 animate-editor-enter font-mono font-extrabold text-[9px] uppercase tracking-wider px-2.5 py-1.5 rounded bg-[#E52222] text-white shadow-xl whitespace-nowrap max-w-[92%] truncate"
+        >
+          {errorRecorte}
+        </div>
+      )}
 
       {/* ── F2 (§F2.2) — SHEET DE FILTROS (copia del lab, re-vestida con
           tokens Stitch: ok-tint → brand-green, surface-1 → brand-surface). */}
