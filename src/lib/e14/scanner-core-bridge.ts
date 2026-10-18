@@ -35,7 +35,6 @@ import {
   detectDocumentEdgesDetail,
   evaluateQuality,
   fileToCaptureDataUrl,
-  loadImage,
   processImage,
 } from "@jg-stevan/scanner-core/image-processor";
 import type { OrigenQuad } from "@jg-stevan/scanner-core/image-processor";
@@ -61,7 +60,10 @@ import {
   tipoDeBanda,
   type ClasificacionE14,
 } from "./clasificador";
-import { procesadaVaciaDataUrl } from "./image-utils";
+// KIT e14-optimizacion-v1 (T1): los 4 decodes del bridge (calidad ×2,
+// esquinas, banda) pasan por el memo FIFO tope 2 de image-utils — misma
+// imagen, una sola decodificación por dataURL del acta en vuelo.
+import { loadImageMemo, procesadaVaciaDataUrl } from "./image-utils";
 // KIT identificacion-codigo-v1 (FASE F, Task 120): marcas fiduciales de
 // esquina sobre el crop ya enderezado — señal «sin recortar» que ve los
 // recortes SUPERIORES que faltaSeccionInferior (kit 118, solo inferior) no ve.
@@ -566,7 +568,7 @@ async function calidadDeActa(
     }
   };
   try {
-    const img = await loadImage(fotoOriginal);
+    const img = await loadImageMemo(fotoOriginal);
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     if (!w || !h) throw new Error("sin dimensiones");
@@ -598,7 +600,7 @@ async function calidadDeActa(
     // drawImage del helper ya escala a 1000 — nunca getImageData de 12MP);
     // si falla también → 0/0: el score v2 degrada al comportamiento actual.
     try {
-      const img = await loadImage(fotoOriginal);
+      const img = await loadImageMemo(fotoOriginal);
       const extra = senalHiResDeCanvas(img, img.naturalWidth, img.naturalHeight);
       return { ...q, ...extra };
     } catch {
@@ -620,7 +622,7 @@ async function calidadDeActa(
 async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | null> {
   if (!foto) return null;
   try {
-    const img = await loadImage(foto);
+    const img = await loadImageMemo(foto);
     const canvas = document.createElement("canvas");
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
@@ -672,7 +674,7 @@ async function reconocerRapidOcr(
 
 async function ocrBanda(fotoProcesada: string): Promise<string> {
   try {
-    const img = await loadImage(fotoProcesada);
+    const img = await loadImageMemo(fotoProcesada);
     const W = img.naturalWidth;
     const H = img.naturalHeight;
     if (!W || !H) return "";

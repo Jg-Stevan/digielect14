@@ -44,7 +44,9 @@
  * forzado — AC7). packages/ y detection-worker.js SIN tocar (D8).
  */
 import type { Quad } from "@jg-stevan/scanner-core/types";
-import { loadImage } from "@jg-stevan/scanner-core/image-processor";
+// KIT e14-optimizacion-v1 (T1): decode memoizado — loadImage del package pasa
+// por el memo FIFO tope 2 de image-utils (misma firma, mismo decode).
+import { loadImageMemo } from "./image-utils";
 // KIT consenso-frankfurt-v1 (FASE 2, §3): las esquinas fiduciales del kit
 // identificacion-codigo-v1 perdonan la sospecha geométrica. Mismo paquete
 // src — SIN ciclo: integridad no importa completitud.
@@ -165,7 +167,7 @@ export async function motorTinta(fotoProcesada: string): Promise<MotorTinta> {
     densidadDe: () => 0,
   };
   try {
-    const img = await loadImage(fotoProcesada);
+    const img = await loadImageMemo(fotoProcesada);
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     if (!w || !h) return noUtilizable;
