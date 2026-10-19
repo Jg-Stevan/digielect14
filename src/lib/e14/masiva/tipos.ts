@@ -21,6 +21,9 @@ export interface FilaMasiva {
   motivo?: string | null;
   thumb?: string; // dataURL JPEG ≤320px, ~20-40 KB
   enviadaAuto?: boolean; // ÓPTIMA → envío automático del runner
+  /** KIT e14-masiva-ux-v1 (T3): el envío quedó «EN COLA» (offline —
+   *  acta.hashSha256 === "EN COLA"); se drena al reactivar conexión. */
+  envioEnCola?: boolean;
   error?: string | null; // estado ERROR (decode/IDB/pipeline)
 }
 

@@ -95,6 +95,9 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
     motivo: acta?.rechazo?.tipo ?? null,
     thumb: r.thumb,
     enviadaAuto: r.acta?.status === "ENVIADA" && !!r.acta?.enviadoAutomaticamente,
+    // KIT e14-masiva-ux-v1 (T3.2): el estado de envío se deriva DEL REGISTRO
+    // (kit-literal: hashSha256 === "EN COLA") — sobrevive la recarga.
+    envioEnCola: acta?.hashSha256 === "EN COLA",
     // KIT e14-masiva-ux-v1 (T2): el motivo corto de las filas ERROR sin
     // acta (guards de extracción/formato) sobrevive la recarga.
     error:
@@ -109,6 +112,41 @@ function patchFila(id: string, patch: Partial<FilaMasiva>): void {
   useMasivaStore.setState({
     filas: filas.map((f) => (f.id === id ? { ...f, ...patch } : f)),
   });
+}
+
+/** KIT e14-masiva-ux-v1 (T3.2): al reactivar la conexión la cola offline del
+ *  flujo se drena (alternarConexion del store principal — INTACTO, fuera de
+ *  la whitelist §1). Aquí se refrescan las filas MASIVA que quedaron «EN
+ *  COLA»: el acta en IDB pasa de hashSha256 "EN COLA" a un hash demo (mismo
+ *  formato que el drenaje del flujo normal) y la fila pinta «ENVIADA».
+ *  La llama MasivaView al detectar el toggle offline→online. */
+export async function refrescarEnviosTrasDrenaje(): Promise<void> {
+  const enCola = useMasivaStore
+    .getState()
+    .filas.filter((f) => f.estado === "LISTA" && f.envioEnCola);
+  for (const fila of enCola) {
+    try {
+      const registro = await leerRegistro(fila.id);
+      if (registro.acta?.hashSha256 !== "EN COLA") continue;
+      await guardarRegistro({
+        ...registro,
+        acta: { ...registro.acta, hashSha256: hashDrenaje() },
+      });
+      patchFila(fila.id, { envioEnCola: false });
+    } catch {
+      /* IDB caído → la fila queda «EN COLA» (honesto; reintento al recargar) */
+    }
+  }
+}
+
+/** Espejo del hashMock del store principal (3 líneas — hash demo de 12 hex,
+ *  mismo formato visible en REVISIÓN/RESUMEN tras el drenaje). Sin import:
+ *  store.ts NO está en la whitelist §1 de este kit. */
+function hashDrenaje(): string {
+  const hex = Array.from({ length: 12 }, () =>
+    "0123456789abcdef"[Math.floor(Math.random() * 16)],
+  ).join("");
+  return `${hex}…`;
 }
 
 export const useMasivaStore = create<MasivaStore>((set, get) => ({
@@ -274,6 +312,10 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
         thumb,
         enviadaAuto:
           actaNueva.status === "ENVIADA" && !!actaNueva.enviadoAutomaticamente,
+        // KIT e14-masiva-ux-v1 (T3.2): el envío manual desde REVISIÓN ya
+        // hornea hashSha256 (registrarEnvio — actaFuente === actaActual);
+        // la fila lo proyecta.
+        envioEnCola: actaNueva.hashSha256 === "EN COLA",
         error: null,
       });
     } catch {
@@ -314,17 +356,23 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
         if (!acta || acta.status !== "ADVERTENCIA") continue;
         // La MISMA vía que el envío manual del flujo normal (T3.3) —
         // historial + completadas + hueco archivado + cola offline.
+        // KIT e14-masiva-ux-v1 (T3.2): si la conexión estaba OFFLINE el
+        // envío va a la cola → hashSha256 "EN COLA" (la fila pinta «EN
+        // COLA» y refrescarEnviosTrasDrenaje la drena al reconectar).
+        const onlineAlEnviar = useE14Store.getState().online;
         useE14Store.getState().registrarEnvioMasiva(acta);
         const actaEnviada: Acta = {
           ...acta,
           status: "ENVIADA",
           enviadoAutomaticamente: getBridge().horaEnvio(),
+          ...(onlineAlEnviar ? {} : { hashSha256: "EN COLA" }),
         };
         await guardarRegistro({ ...registro, acta: actaEnviada });
         patchFila(fila.id, {
           statusActa: "ENVIADA",
           score: actaEnviada.score,
           motivo: null,
+          envioEnCola: actaEnviada.hashSha256 === "EN COLA",
         });
       } catch {
         /* una fila que falla NO detiene el lote (sigue con la siguiente) */
