@@ -39,6 +39,12 @@ export type Vista = "escanear" | "analizando" | "revision" | "actas" | "resumen"
 // se pinta como píldora en REVISIÓN — no hay toasts (redesign-stitch D2).
 const MSG_RECORTE_FALLIDO = "NO SE PUDO RECORTAR — INTENTA DE NUEVO";
 
+/** KIT e14-optimizacion-v1 (T5): ids de acta ya contados en motivosNoEnvio —
+ *  el recorte re-evaluado (analisisCompletado corre 2× con el mismo acta)
+ *  no duplica. En memoria de sesión: se resetea al recargar, igual que el
+ *  historial (kit §3-T5 — PROHIBIDO persistir). */
+const contadosNoEnvio = new Set<string>();
+
 /** §D3 (SPEC-e14-simulacion-scores): banda de un chip de calidad del mock.
  *  Los ids SON los del mock (ScanView §5) y el mapeo dueño es fijo:
  *  la completa = óptima · la cortada = intermedio · la borrosa = bajo. */
@@ -112,6 +118,11 @@ interface E14Store {
   colaOffline: number;
   solicitudesRescaneo: number;
   historial: HistorialRow[];
+  /** KIT e14-optimizacion-v1 (T5): contador en memoria de sesión «por qué
+   *  no se envió» — espejo PASIVO de desenlaces YA ocurridos. Sin
+   *  persistencia (igual que historial): se resetea al recargar. Claves:
+   *  advertencia:<techo> · revision:clasif-<nivel> · rechazo:<tipo>. */
+  motivosNoEnvio: Record<string, number>;
 
   navegar: (vista: Vista) => void;
   /** MODO SIMULACIÓN (regla del dueño): alterna el toggle «SIM» de ACTAS.
@@ -475,6 +486,8 @@ export const useE14Store = create<E14Store>((set, get) => {
     colaOffline: COLA_OFFLINE_INICIAL,
     solicitudesRescaneo: SOLICITUDES_RESCANEO_INICIAL,
     historial: historialInicial(),
+    // KIT e14-optimizacion-v1 (T5): contador de sesión arranca vacío.
+    motivosNoEnvio: {},
 
     navegar: (vista) => set({ vista }),
 
@@ -662,6 +675,30 @@ export const useE14Store = create<E14Store>((set, get) => {
           vista: "revision",
         });
         return;
+      }
+      // KIT e14-optimizacion-v1 (T5): contador «por qué no se envió» —
+      // espejo pasivo de desenlaces YA ocurridos (todas las ramas
+      // no-OPTIMA). SOLO aquí (kit §3-T5): el recorte re-evaluado no
+      // duplica (Set contadosNoEnvio por id). Sin ZIP, sin persistencia,
+      // el gate SIN tocar (medir antes de calibrar — AUDITORIA-e14 §4).
+      if (!contadosNoEnvio.has(actaActual.id)) {
+        let clave: string | null = null;
+        if (actaActual.status === "ADVERTENCIA") {
+          const techo = actaActual.diagnostico?.score?.techos[0];
+          clave = techo ? `advertencia:${techo}` : "advertencia:sin-diag";
+        } else if (actaActual.status === "EN_REVISION_HUMANA") {
+          const nivel = actaActual.clasificacion?.nivel;
+          clave = nivel ? `revision:clasif-${nivel}` : "revision:sin-diag";
+        } else if (actaActual.status === "RECHAZADA") {
+          clave = `rechazo:${actaActual.rechazo?.tipo.toLowerCase() ?? "desconocido"}`;
+        }
+        if (clave) {
+          contadosNoEnvio.add(actaActual.id);
+          const actuales = get().motivosNoEnvio;
+          set({
+            motivosNoEnvio: { ...actuales, [clave]: (actuales[clave] ?? 0) + 1 },
+          });
+        }
       }
       if (actaActual.status === "RECHAZADA") {
         const fila: HistorialRow = {
