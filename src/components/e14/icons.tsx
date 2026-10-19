@@ -24,17 +24,6 @@ export const CloudCheckIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
   </svg>
 );
 
-export const CloudOffIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-2 fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M17.5 17H6a4 4 0 0 1-1.2-7.8A6 6 0 0 1 16.7 6.6M3 3l18 18" />
-  </svg>
-);
 
 export const CameraNavIcon = ({ className = "w-4 h-4" }: IconProps) => (
   <svg className={`${className} fill-current`} viewBox="0 0 24 24" aria-hidden>
@@ -43,28 +32,6 @@ export const CameraNavIcon = ({ className = "w-4 h-4" }: IconProps) => (
   </svg>
 );
 
-/** ACTAS del nav — SPEC-e14-cyber-neon §9: documento OUTLINE strokeWidth 1.8
- *  (trazo claro #C7CEDA, bien visible — no apagado). */
-export const DocumentNavIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-[1.8] fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" />
-    <path d="M14 2v6h6" />
-    <path d="M9 13h6" />
-    <path d="M9 17h4" />
-  </svg>
-);
-
-export const GridNavIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg className={`${className} fill-current`} viewBox="0 0 24 24" aria-hidden>
-    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />
-  </svg>
-);
 
 /** RESUMEN del nav — SPEC-e14-cyber-neon §9: icono NUEVO «GridIcon» =
  *  cuadrícula 2×2 de 4 cuadritos redondeados (7×7, rx 2, gap 3px),
@@ -124,17 +91,6 @@ export const RotateIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
   </svg>
 );
 
-export const FullscreenIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-2 fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-  </svg>
-);
 
 export const ChevronDownIcon = ({ className = "w-4 h-4" }: IconProps) => (
   <svg
@@ -224,27 +180,6 @@ export const EyeIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
   >
     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
     <circle cx="12" cy="12" r="3" />
-  </svg>
-);
-
-/** Linterna del flash (L3 — silueta de linterna, mismo patrón SVG inline). */
-export const FlashIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg className={`${className} fill-current`} viewBox="0 0 24 24" aria-hidden>
-    <path d="M6 2h12a1 1 0 0 1 1 1v3.5a3 3 0 0 1-.88 2.12L15 11.5V21a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-9.5L5.88 8.62A3 3 0 0 1 5 6.5V3a1 1 0 0 1 1-1zm1 2v2.5a1 1 0 0 0 .29.71L10 10h4l2.71-2.79A1 1 0 0 0 17 6.5V4H7zm3 8v7h1.5v-7H10z" />
-    <path d="M8.5 5.5h2l.5 2-1.5 1.5L8.5 7.5z" />
-  </svg>
-);
-
-/** Encuadre de escaneo (L3 — toggle AUTO del visor, 4 esquinas del lab Scan). */
-export const ScanFrameIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-2 fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
   </svg>
 );
 
@@ -353,71 +288,6 @@ export const MapPinIcon = ({ className = "w-4 h-4" }: IconProps) => (
   </svg>
 );
 
-/** PlusCircle (D6 SPEC-rediseno-chrome-3-estados — CTA «SEGUIR ESCANEANDO»
- *  de ENVIADA: el icono ⊕ del mock «score alto»; trazo calca el
- *  `circle-plus` de lucide, mismo patrón SVG inline del archivo). */
-export const PlusCircleIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-2 fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <circle cx="12" cy="12" r="10" />
-    <path d="M8 12h8" />
-    <path d="M12 8v8" />
-  </svg>
-);
-
-/** Plus (SPEC-e14-cyber-neon §8 — «+» del CTA «SEGUIR ESCANEANDO»:
- *  círculo negro a la izquierda del bloque de texto, trazo grueso 3). */
-export const PlusIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-[3] fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M12 5v14M5 12h14" />
-  </svg>
-);
-
-/** X (SPEC-e14-cyber-neon §10 — ✕ de la barra de rechazo: círculo crit
- *  sólido con X negra strokeWidth 3, espejo del check de envío). */
-export const XIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-[3] fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M18 6L6 18M6 6l12 12" />
-  </svg>
-);
-
-/** UserKey (D6-bis SPEC-rediseno-chrome-3-estados Rev. 3 — botón «REVISIÓN
- *  HUMANA»: glifo persona + llave de la imagen QR de referencia del dueño;
- *  busto a la izquierda (cabeza circular + hombros) y llave vertical a la
- *  derecha (anillo redondo, tallo y un diente), mismo patrón SVG inline). */
-export const UserKeyIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-2 fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <circle cx="8" cy="7.5" r="3.5" />
-    <path d="M2.5 20.5a5.5 5.5 0 0 1 11 0" />
-    <circle cx="17.5" cy="7.5" r="3" />
-    <path d="M17.5 10.5v10" />
-    <path d="M17.5 16.5h3.5" />
-  </svg>
-);
-
 /** FolderInput (SPEC-e14-cyber-neon-captura §1/§8 — botón IMPORTAR de la fila
  *  de disparo: carpeta con flecha entrando; trazo calca el `folder-input` de
  *  lucide, strokeWidth 1.8 como pide la spec). */
@@ -447,41 +317,6 @@ export const BoltIcon = ({ className = "w-4 h-4" }: IconProps) => (
     aria-hidden
   >
     <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
-  </svg>
-);
-
-/** FocusFrame (SPEC-e14-cyber-neon-captura §1/§4 — botón HUD ámbar superior
- *  derecho: 4 brackets de enfoque + punto central (retícula de cámara pro);
- *  strokeWidth 2, hereda el color ámbar del botón). */
-export const FocusFrameIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-2 fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
-    <circle cx="12" cy="12" r="1.6" />
-  </svg>
-);
-
-/** FileDoc (SPEC-e14-cyber-neon-captura §1/§8 — icono del OBTURADOR: el mock
- *  sustituye el círculo liso por un documento con líneas (es un escáner de
- *  actas); trazo calca el `file-text` de lucide, strokeWidth 1.8). */
-export const FileDocIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-[1.8] fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-    <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-    <path d="M10 9H8" />
-    <path d="M16 13H8" />
-    <path d="M16 17H8" />
   </svg>
 );
 
@@ -670,18 +505,6 @@ export const StitchRotateIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
       strokeLinecap="round"
       strokeLinejoin="round"
     />
-  </svg>
-);
-
-/** Pantalla completa de la fila de acciones (mock, strokeWidth 2). */
-export const StitchFullscreenIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current fill-none shrink-0`}
-    strokeWidth="2"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
