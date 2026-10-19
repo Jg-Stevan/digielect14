@@ -183,3 +183,12 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T3 — Docs: REPORTE + D50 + esta entrada + worklog + AGENTS.
 - [x] T4 — PR DRAFT (merge solo con orden del dueño).
 - [ ] Del dueño: merge · redeploy manual en Vercel (`docs/DEPLOY-vercel.md` §2) + Ctrl+Shift+R · validar la eliminación del frío en SU entorno: `[e14-prowarm] listo` al montar MASIVA y 1.ª acta real SIN el pico de 35.9 s (comparable a caliente 8.3 s).
+## BENCH-REC-INT8 — e14-bench-rec-int8-v1 (2026-10-19): banco int8 del rec (SOLO evidencia, cero producción)
+
+- [x] T1 — `tools/bench-rec-int8/cuantizar.py`: cuantización dinámica del rec (QUInt8 — fallback §3-T2.7 tras salida degenerada de QInt8, hallazgo doble-verificado CPU EP + wasm EP) con paso previo oficial de ORT (`quant_pre_process` skip_symbolic_shape); artifact local ignorado por `.gitignore` (`tools/bench-rec-int8/*.onnx`).
+- [x] T2 — `tools/bench-rec-int8/bench.html` standalone (sin build): EP wasm idéntico a producción (wasmPaths vendido byte-idéntico, SIMD, numThreads COI), corpus sintético determinista de 60 líneas estilo acta, pre/post réplica exacta de `rapidocr.ts` (lote 6 por ratio, W=floor(48·max(320/48,r)), NCHW BGR (x/255−0.5)/0.5, CTC greedy), protocolo caliente+medida, tabla + «DESCARGAR JSON» manual.
+- [x] T3 — `tools/bench-rec-int8/README.md` (reproducción exacta + umbrales GO/NO-GO).
+- [x] Evidencia (2 núcleos, HeadlessChrome 155, numThreads=2): peso −73.5% (10.35→2.75 MiB) · speedup 0.96× (❌ ≥1.3×) · texto idéntico 10% (❌ ≥99%) · Δconf 13.198 pts (❌ ≤0.5) → **VEREDICTO NO-GO (3/3 criterios)** — int8 pierde dígitos de acta (809→89, 2004→26θ4, 48:08→4:08). Determinismo: 2 corridas con texto EXACTO y ms ±10%.
+- [x] Docs: REPORTE + esta entrada + worklog + AGENTS (DECISIONS.md INTACTO por diseño del kit).
+- [x] PR DRAFT (merge solo con orden del dueño; `tools/` no entra en el build — lint/tsc/build OK y diff de producción VACÍO verificado).
+- [ ] Del dueño: correr el banco en SU máquina (4 núcleos/8 GB/Chrome 155) y decidir si archiva la idea int8 del rec o pide otro kit con otra variante (fp16/modelo menor — fuera de alcance aquí).
