@@ -13,11 +13,23 @@
  * el store del flujo normal solo ve las 3 acciones de integración (T3).
  */
 import { getBridge } from "../get-bridge";
+// KIT e14-masiva-ux-v1 (T4): tipo con el presupuesto de timeout opcional
+// (intersección LOCAL en el bridge — kit §1 prohíbe tocar bridge.ts).
+import type { OpcionesEscaneoConTimeout } from "../scanner-core-bridge";
 import { useE14Store } from "../store";
 import { guardarRegistro, leerRegistro } from "./cola";
 import { useMasivaStore } from "./store";
 import { paginaDeActa, type FilaMasiva, type RegistroMasiva } from "./tipos";
 import type { ProgresoAnalisis } from "../types";
+
+/** KIT e14-masiva-ux-v1 (T4): presupuesto del pipeline en MASIVA — 120 s.
+ *  Masiva es cola de fondo (no bloquea la UI): con multihilo el pipeline
+ *  real tarda ~21 s (informe Vercel del dueño 19/10) y el default de 15 s
+ *  falsamente RECHAZADA cada acta con el resultado real descartándose (y el
+ *  runner solapando N pipelines compitiendo por CPU). El flujo individual
+ *  sigue en 15 s (default de escanearActa); el timeout REAL (>120 s) sigue
+ *  resolviendo RECHAZADA «TIEMPO DE PROCESADO EXCEDIDO». */
+const TIMEOUT_MASIVA_MS = 120_000;
 
 /** Throttle del progreso (~200 ms — kit §4 regla 3): el OCR emite decenas
  *  de eventos por etapa; la bandeja solo necesita el último. */
@@ -104,14 +116,18 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
     // genérico (OpcionesEscaneo.archivo espera File — A5).
     if (!(archivo instanceof File)) throw new Error("ARCHIVO_FUERA_DE_LA_COLA");
 
-    const acta = await getBridge().escanearActa({
+    // T4: variable tipada con la intersección (sin excess-check de literal —
+    // el parámetro de la interfaz E14Bridge sigue siendo OpcionesEscaneo).
+    const opcionesMasiva: OpcionesEscaneoConTimeout = {
       objetivo: null, // A4 — la clasificación REAL manda (viene del OCR)
       intento: 1, // A6 — semántica de PRIMERA captura
       maxIntentos: 4, // fallos → RECHAZADA repetible / rescate por recorte manual
       fuente: "ARCHIVO", // A5 — MASIVA SIEMPRE archivo
       archivo,
       onProgreso: (p) => progresoThrottled(fila.id, p),
-    });
+      timeoutMs: TIMEOUT_MASIVA_MS, // T4 — ver constante (individual: 15 s intacto)
+    };
+    const acta = await getBridge().escanearActa(opcionesMasiva);
 
     // Desenlace → la MISMA vía que el flujo normal (T3.3/T3.2). El envío
     // automático reutiliza registrarEnvio (historial + completadas + hueco
