@@ -17,6 +17,7 @@ import {
   type FiltroMasiva,
 } from "@/lib/e14/masiva/store";
 import type { FilaMasiva } from "@/lib/e14/masiva/tipos";
+import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
 import { StitchStackIcon } from "../icons";
 
 /** Píldora de estado de una fila — paleta de estado del repo
@@ -92,6 +93,13 @@ export function MasivaView() {
   useEffect(() => {
     void cargarFilas().then(() => sincronizarAlVolver());
   }, [cargarFilas, sincronizarAlVolver]);
+
+  // KIT e14-prowarm-ocr-v1 (T2): pre-warm del OCR al montar MASIVA — el dueño
+  // prepara la cola y el wasm queda caliente ANTES de pulsar PROCESAR.
+  // Fire-and-forget: sin UI, sin toasts (D2), sin estados (§0.7).
+  useEffect(() => {
+    void rapidOcrPrecalentar();
+  }, []);
 
   // Confirmación inline de 2 toques — se desarma sola (kit §6, sin window.confirm).
   useEffect(() => {
