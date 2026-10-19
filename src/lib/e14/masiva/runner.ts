@@ -136,12 +136,18 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
     let actaFinal = acta;
     let enviadaAuto = false;
     if (acta.status === "OPTIMA") {
+      // KIT e14-masiva-ux-v1 (T3.2): el envío respeta la conexión del momento
+      // (misma semántica que registrarEnvio para actaActual): OFFLINE →
+      // hashSha256 "EN COLA" — la fila pinta «EN COLA» y refrescarEnviosTrasDrenaje
+      // la drena al reconectar. Online → el hash lo maneja el flujo normal.
+      const onlineAlEnviar = useE14Store.getState().online;
+      useE14Store.getState().registrarEnvioMasiva(acta);
       actaFinal = {
         ...acta,
         status: "ENVIADA",
         enviadoAutomaticamente: getBridge().horaEnvio(),
+        ...(onlineAlEnviar ? {} : { hashSha256: "EN COLA" }),
       };
-      useE14Store.getState().registrarEnvioMasiva(acta);
       enviadaAuto = true;
     } else {
       useE14Store.getState().contarMotivoNoEnvioActa(acta);
@@ -168,6 +174,7 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
       motivo: actaFinal.rechazo?.tipo ?? null,
       thumb,
       enviadaAuto,
+      envioEnCola: actaFinal.hashSha256 === "EN COLA", // KIT e14-masiva-ux-v1 (T3.2)
       error: null,
     });
   } catch (err) {
