@@ -100,16 +100,15 @@ export function MasivaView() {
     return () => window.clearTimeout(t);
   }, [vaciarArmado]);
 
-  // KIT e14-masiva-ux-v1 (T3.2): al reactivar la conexión (toggle
-  // offline→online) la cola offline del flujo se drena — refrescar las
-  // filas MASIVA que quedaron «EN COLA». Solo TRANSICIÓN (el montaje con
-  // online=true no toca nada).
+  // KIT e14-masiva-ux-v1 (T3.2): reconciliar filas «EN COLA» contra la
+  // conexión actual — tanto al montar (el toggle pudo usarse en REVISIÓN o
+  // la app recargarse: online=true + hashSha256 "EN COLA" ⇒ el drenaje ya
+  // ocurrió en el store principal, la fila solo pinta tarde) como en el
+  // toggle offline→online con la vista viva. Idempotente (solo toca filas
+  // con hashSha256 === "EN COLA" que sigan así en IDB).
   const online = useE14Store((s) => s.online);
-  const previaOnline = useRef(online);
   useEffect(() => {
-    const antes = previaOnline.current;
-    previaOnline.current = online;
-    if (!antes && online) void refrescarEnviosTrasDrenaje();
+    if (online) void refrescarEnviosTrasDrenaje();
   }, [online]);
 
   const pendientes = filas.filter((f) => f.estado === "PENDIENTE").length;
