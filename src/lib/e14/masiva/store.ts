@@ -19,6 +19,10 @@ import {
   vaciar as vaciarCola,
 } from "./cola";
 import { hacerThumb, iniciarRunner, pausarRunner } from "./runner";
+// KIT e14-masiva-ux-v1 (T2): clasificación/extracción de archivos — las
+// deps pesadas (fflate/node-unrar-js) viven DETRÁS de extraerArchivo con
+// import diferido (D47): el bundle inicial no las carga.
+import { extraerArchivo, pareceImagenMasiva } from "./archivos";
 import {
   paginaDeActa,
   type EstadoEntrada,
@@ -91,7 +95,12 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
     motivo: acta?.rechazo?.tipo ?? null,
     thumb: r.thumb,
     enviadaAuto: r.acta?.status === "ENVIADA" && !!r.acta?.enviadoAutomaticamente,
-    error: r.estado === "ERROR" ? (r.acta ? null : "ERROR DE COLA") : null,
+    // KIT e14-masiva-ux-v1 (T2): el motivo corto de las filas ERROR sin
+    // acta (guards de extracción/formato) sobrevive la recarga.
+    error:
+      r.estado === "ERROR"
+        ? (r.error ?? (r.acta ? null : "ERROR DE COLA"))
+        : null,
   };
 }
 
@@ -128,35 +137,90 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
   },
 
   agregarFiles: async (files) => {
-    const imagenes = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    if (!imagenes.length) return;
-    // Filas PENDIENTES AL INSTANTE (kit §6) con ids temporales — el runner
-    // las salta mientras la copia a IDB está en vuelo («GUARDANDO N…»).
+    // KIT e14-masiva-ux-v1 (T2.3): clasificación — imágenes (MIME o
+    // extensión, HEIC incluido) pasan directo; .zip/.rar se EXTRAEN
+    // client-side (import diferido D47 — extraer NO procesa nada, solo
+    // encola: D45 intacto); lo demás → fila ERROR FORMATO_NO_SOPORTADO
+    // (ya no se descarta en silencio).
+    const lista = Array.from(files);
+    if (!lista.length) return;
+    const imagenes: File[] = [];
+    const errores: { nombre: string; motivo: string }[] = [];
+    for (const f of lista) {
+      if (pareceImagenMasiva(f)) {
+        imagenes.push(f);
+      } else if (/\.(zip|rar)$/i.test(f.name)) {
+        try {
+          const resultado = await extraerArchivo(f);
+          imagenes.push(...resultado.archivos);
+          errores.push(...resultado.errores);
+        } catch (err) {
+          errores.push({
+            nombre: f.name,
+            motivo: (
+              err instanceof Error ? err.message : "PROTEGIDO_O_CORRUPTO"
+            ).slice(0, 48),
+          });
+        }
+      } else {
+        errores.push({ nombre: f.name || "ARCHIVO", motivo: "FORMATO_NO_SOPORTADO" });
+      }
+    }
+    if (!imagenes.length && !errores.length) return;
     const base = Date.now();
+    // Filas PENDIENTES AL INSTANTE (kit carga-masiva §6) con ids temporales
+    // — el runner las salta mientras la copia a IDB está en vuelo.
     const temps = imagenes.map((file, i) => ({
       id: `masiva-temp-${base}-${i}`,
       nombre: file.name || `FOTO_${i + 1}`,
       agregadaEn: base + i,
       estado: "PENDIENTE" as EstadoEntrada,
     }));
+    // Filas ERROR (T2): motivo corto ≤48 — persisten en IDB (la bandeja
+    // sobrevive la recarga; no hay datos que procesar).
+    const filasError = errores.map((e, i) => ({
+      id: `masiva-err-${base}-${i}`,
+      nombre: e.nombre,
+      agregadaEn: base + imagenes.length + i,
+      estado: "ERROR" as EstadoEntrada,
+      error: e.motivo,
+    }));
     set({
-      filas: [...get().filas, ...temps],
+      filas: [...get().filas, ...temps, ...filasError],
       guardando: get().guardando + imagenes.length,
     });
     try {
-      const ids = await agregarLote(imagenes);
-      // Swap de ids temp → reales (mismo orden del lote).
-      set({
-        filas: get().filas.map((f) => {
-          const idx = temps.findIndex((t) => t.id === f.id);
-          return idx === -1 ? f : { ...f, id: ids[idx] };
-        }),
-        guardando: Math.max(0, get().guardando - imagenes.length),
-        colaDisponible: true,
-      });
+      if (imagenes.length) {
+        const ids = await agregarLote(imagenes);
+        // Swap de ids temp → reales (mismo orden del lote).
+        set({
+          filas: get().filas.map((f) => {
+            const idx = temps.findIndex((t) => t.id === f.id);
+            return idx === -1 ? f : { ...f, id: ids[idx] };
+          }),
+          guardando: Math.max(0, get().guardando - imagenes.length),
+          colaDisponible: true,
+        });
+      } else {
+        set({ guardando: Math.max(0, get().guardando - imagenes.length) });
+      }
+      for (const fila of filasError) {
+        try {
+          await guardarRegistro({
+            id: fila.id,
+            nombre: fila.nombre,
+            agregadaEn: fila.agregadaEn,
+            estado: "ERROR",
+            error: fila.error,
+          });
+        } catch {
+          /* IDB caído: la fila vive SOLO en memoria (honesto) */
+        }
+      }
     } catch {
       // El lote NO entró a IDB: filas temporales fuera + píldora de fallback
-      // (errores de IDB NUNCA tumban la UI — kit §3).
+      // (errores de IDB NUNCA tumban la UI — kit carga-masiva §3). Las filas
+      // ERROR quedan en memoria — su motivo ES la información.
       const tempIds = new Set(temps.map((t) => t.id));
       set({
         filas: get().filas.filter((f) => !tempIds.has(f.id)),

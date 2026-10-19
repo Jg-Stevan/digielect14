@@ -36,6 +36,9 @@ export interface RegistroMasiva {
    *  persiste junto al registro para pintar la bandeja tras recargar —
    *  mismo dataURL ≤320px (~20-40 KB), sigue durmiendo en IDB, no en RAM. */
   thumb?: string;
+  /** KIT e14-masiva-ux-v1 (T2): motivo corto de las filas ERROR SIN acta
+   *  (guards de extracción/formato — PROTEGIDO_O_CORRUPTO, etc.). */
+  error?: string;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del
