@@ -10,7 +10,12 @@
  * (redesign-stitch D2): píldoras/banner. Listas largas: max-h + overflow-y-auto.
  */
 import { useEffect, useRef, useState } from "react";
-import { useMasivaStore, type FiltroMasiva } from "@/lib/e14/masiva/store";
+import { useE14Store } from "@/lib/e14/store";
+import {
+  refrescarEnviosTrasDrenaje,
+  useMasivaStore,
+  type FiltroMasiva,
+} from "@/lib/e14/masiva/store";
 import type { FilaMasiva } from "@/lib/e14/masiva/tipos";
 import { StitchStackIcon } from "../icons";
 
@@ -26,8 +31,15 @@ function pildoraDe(f: FilaMasiva): { label: string; clases: string } {
       return { label: "ERROR", clases: "border-red-500/60 text-red-400 bg-red-500/10" };
     case "LISTA": {
       const s = f.statusActa;
-      if (s === "ENVIADA")
-        return { label: "ENVIADA", clases: "border-brand-green/60 text-brand-green bg-brand-green/10" };
+      if (s === "ENVIADA") {
+        // KIT e14-masiva-ux-v1 (T3.3): la fila DISTINGUE envío real vs en
+        // cola por offline, y auto vs manual. Paleta de estado del repo.
+        if (f.envioEnCola)
+          return { label: "EN COLA", clases: "border-amber-400/60 text-amber-400 bg-amber-400/10" };
+        return f.enviadaAuto
+          ? { label: "ENVIADA AUTO", clases: "border-brand-green/60 text-brand-green bg-brand-green/10" }
+          : { label: "ENVIADA", clases: "border-brand-green/60 text-brand-green bg-brand-green/10" };
+      }
       if (s === "OPTIMA")
         return { label: "ÓPTIMA", clases: "border-brand-green/60 text-brand-green" };
       if (s === "ADVERTENCIA")
@@ -88,12 +100,33 @@ export function MasivaView() {
     return () => window.clearTimeout(t);
   }, [vaciarArmado]);
 
+  // KIT e14-masiva-ux-v1 (T3.2): reconciliar filas «EN COLA» contra la
+  // conexión actual — tanto al montar (el toggle pudo usarse en REVISIÓN o
+  // la app recargarse: online=true + hashSha256 "EN COLA" ⇒ el drenaje ya
+  // ocurrió en el store principal, la fila solo pinta tarde) como en el
+  // toggle offline→online con la vista viva. Idempotente (solo toca filas
+  // con hashSha256 === "EN COLA" que sigan así en IDB).
+  const online = useE14Store((s) => s.online);
+  useEffect(() => {
+    if (online) void refrescarEnviosTrasDrenaje();
+  }, [online]);
+
   const pendientes = filas.filter((f) => f.estado === "PENDIENTE").length;
   const terminadas = filas.filter((f) => f.estado === "LISTA" || f.estado === "ERROR").length;
   const advertenciasPend = filas.filter(
     (f) => f.estado === "LISTA" && f.statusActa === "ADVERTENCIA",
   ).length;
   const hayCola = filas.length > 0;
+
+  // KIT e14-masiva-ux-v1 (T3.4): conteos del encabezado del lote — el dueño
+  // ve de un vistazo si «se pudo enviar» y qué queda pendiente.
+  const enviadas = filas.filter(
+    (f) => f.estado === "LISTA" && f.statusActa === "ENVIADA" && !f.envioEnCola,
+  ).length;
+  const enCola = filas.filter(
+    (f) => f.estado === "LISTA" && f.statusActa === "ENVIADA" && f.envioEnCola,
+  ).length;
+  const errores = filas.filter((f) => f.estado === "ERROR").length;
 
   const visibles =
     filtro === "TODAS"
@@ -201,7 +234,9 @@ export function MasivaView() {
             id="masiva-archivos"
             type="file"
             multiple
-            accept="image/*"
+            // KIT e14-masiva-ux-v1 (T2.5): imágenes + HEIC/HEIF + comprimidos.
+            // El filtro REAL vive en el store (pareceImagenMasiva + extraerArchivo).
+            accept="image/*,.heic,.heif,.zip,.rar"
             className="sr-only"
             onChange={(e) => {
               void agregarFiles(Array.from(e.target.files ?? []));
@@ -252,6 +287,19 @@ export function MasivaView() {
           </div>
         )}
 
+        {/* KIT e14-masiva-ux-v1 (T2.4): mismo aviso que ScanView (F-HEIC) —
+            solo cuando la fila en curso sea HEIC/HEIF (el decode corre dentro
+            del pipeline, fileToCaptureDataUrl del core). Sin toasts (D2). */}
+        {filaActiva && /\.(heic|heif)$/i.test(filaActiva.nombre) && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="rounded-xl border border-amber-400/60 bg-amber-400/10 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wider text-amber-400"
+          >
+            CONVIRTIENDO HEIC… LA CONVERSIÓN PUEDE TARDAR UNOS SEGUNDOS
+          </p>
+        )}
+
         {/* ---------- BANDEJA: FILTROS + LOTE ---------- */}
         {hayCola && (
           <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar por estado">
@@ -270,6 +318,14 @@ export function MasivaView() {
                 {label}
               </button>
             ))}
+            {/* KIT e14-masiva-ux-v1 (T3.4): conteos del lote — mismo estilo
+                que los filtros (texto pequeño mono uppercase). */}
+            <span
+              className="font-mono text-[10px] uppercase tracking-wider text-gray-500"
+              aria-label={`Conteos: ${enviadas} enviadas, ${enCola} en cola, ${pendientes} pendientes, ${errores} errores`}
+            >
+              ENVIADAS {enviadas} · EN COLA {enCola} · PENDIENTES {pendientes} · ERRORES {errores}
+            </span>
             {advertenciasPend > 0 && !corriendo && (
               <button
                 type="button"

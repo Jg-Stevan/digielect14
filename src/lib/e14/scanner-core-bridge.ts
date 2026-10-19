@@ -38,6 +38,13 @@ import {
   processImage,
 } from "@jg-stevan/scanner-core/image-processor";
 import type { OrigenQuad } from "@jg-stevan/scanner-core/image-processor";
+// KIT e14-masiva-ux-v1 (T1): mecanismo de warm-up del worker OpenCV que ya
+// expone el core (el mismo que ScanView.tsx:757 invoca al montar) — la
+// detección al importar espera al worker en vez de caer al Sobel de una.
+import {
+  getScannerWorker,
+  warmUpScannerWorker,
+} from "@jg-stevan/scanner-core/detector-client";
 import { ocrTextIsValid } from "@jg-stevan/scanner-core/ocr";
 // KIT e14-motor-rapidocr-v1 (PROD-2 §3): motor de OCR de producción — módulo
 // compartido con el informe (singleton de sesión ÚNICO, pitfall §9.6). El
@@ -125,6 +132,11 @@ type ParcialRecorte = {
   quadDetectado?: Quad;
   rotation?: number;
 };
+/** KIT e14-masiva-ux-v1 (T1): tope de cada espera del warm-up del worker
+ *  OpenCV en la detección (1ª espera antes del intento + 1ª antes del
+ *  reintento — §3-T1). Vencido el tope se continúa como hoy (fallback
+ *  Sobel): la espera JAMÁS bloquea el pipeline más de 5 s por paso. */
+const TOPE_ESPERA_WORKER_MS = 5_000;
 /** Techos/labels del mapeo §4 y el gate §4.2. */
 const DETALLE_ILEGIBLE = "CÓDIGO DE BARRAS Y CABECERA NO DETECTADOS";
 const DETALLE_TIMEOUT = "TIEMPO DE PROCESADO EXCEDIDO";
@@ -706,6 +718,38 @@ async function ocrBanda(fotoProcesada: string): Promise<string> {
   }
 }
 
+/** KIT e14-masiva-ux-v1 (T1): ¿el worker OpenCV está listo para detectar?
+ *  Si no, espera su warm-up con TOPE (warmUpScannerWorker/waitReady del
+ *  core — nunca tumba el pipeline: false = continuar como hoy, fallback
+ *  Sobel manda). SSR/worker muerto → false inmediato. */
+async function esperarWorkerCaliente(topeMs: number): Promise<boolean> {
+  try {
+    const cliente = getScannerWorker();
+    if (cliente?.isReady) return true;
+    warmUpScannerWorker(); // crea/reanima el worker si no existe (idempotente)
+    const activo = getScannerWorker();
+    if (!activo) return false;
+    return await Promise.race([
+      activo.waitReady(),
+      new Promise<boolean>((res) => setTimeout(() => res(false), topeMs)),
+    ]);
+  } catch {
+    return false;
+  }
+}
+
+/** KIT e14-masiva-ux-v1 (T4): opciones con presupuesto de timeout OPCIONAL.
+ *  Intersección LOCAL — el kit §1 prohíbe tocar `bridge.ts` (casa de
+ *  OpcionesEscaneo): el default 15_000 sigue mandando (escaneo individual
+ *  INTACTO) y MASIVA pasa 120_000. La bivariance de métodos TS admite el
+ *  método con el parámetro más ancho (class implements E14Bridge sigue
+ *  compilando; los callers pasan la variable tipada — sin excess-check). */
+export type OpcionesEscaneoConTimeout = OpcionesEscaneo & {
+  /** Presupuesto total del pipeline para ESTA llamada (ms). Ausente =
+   *  TIMEOUT_MS (15_000) — comportamiento actual byte a byte. */
+  timeoutMs?: number;
+};
+
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
 interface ResultadoGate {
   status: ActaStatus;
@@ -764,7 +808,7 @@ function conRampa<T>(
 export class RealCoreBridge implements E14Bridge {
   private contador = 0;
 
-  async escanearActa(opciones: OpcionesEscaneo): Promise<Acta> {
+  async escanearActa(opciones: OpcionesEscaneoConTimeout): Promise<Acta> {
     // Resolución de la entrada (L3 §5 CAMARA + F1 SIMULACIÓN):
     //  · CAMARA + archivo (ZSL/captureSmart/iOS) → MISMO pipeline que ARCHIVO.
     //  · CAMARA sin archivo + frameActual (video vivo) → grab síncrono.
@@ -819,7 +863,13 @@ export class RealCoreBridge implements E14Bridge {
             rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_TIMEOUT },
           }),
         );
-      }, TIMEOUT_MS);
+        // KIT e14-masiva-ux-v1 (T4): presupuesto OPCIONAL por llamada —
+        // default 15_000 (escaneo individual INTACTO, kit §3-T4.1); MASIVA
+        // pasa 120_000 (cola de fondo: con multihilo el pipeline real tarda
+        // ~21 s y el vencimiento a 15 s falsamente RECHAZADA cada acta con
+        // el resultado real descartándose — §2 del kit). El timeout REAL
+        // (>120 s) sigue resolviendo RECHAZADA con el mismo texto.
+      }, opciones.timeoutMs ?? TIMEOUT_MS);
 
       this.pipeline(opciones, entrada, parcial, emitir).then(
         (acta) => {
@@ -873,17 +923,41 @@ export class RealCoreBridge implements E14Bridge {
     // propio Sobel con rect por defecto). null SOLO si ni siquiera corrió una
     // detección (n/d jamás miente — misma filosofía del T-A).
     let quadOrigen: OrigenQuad | null = null;
+    // KIT e14-masiva-ux-v1 (T1): trazabilidad del arreglo en el log — si
+    // corrió el reintento (§3-T1.2). Solo AÑADIR campos al final del
+    // formato (los instrumentos del dueño lo parsean).
+    let detectReintento = false;
     const tDetect = performance.now();
     if (sinRecorte) {
       quad = QUAD_IDENTITY;
     } else {
       try {
-        const detalle = await conRampa(
+        // T1.1: worker frío → esperar su warm-up con tope de 5 s (mecanismo
+        // del core — el mismo que ScanView invoca al montar). Si a los 5 s
+        // no está listo, continuar como hoy (no bloquear más).
+        await esperarWorkerCaliente(TOPE_ESPERA_WORKER_MS);
+        let detalle = await conRampa(
           detectDocumentEdgesDetail(fotoOriginal),
           900,
           (f) => ({ etapa: "DETECTANDO", progreso: 0.5 + f * 0.4 }),
           emitir,
         );
+        // T1.2: el fallback Sobel FABRICÓ el quad (worker frío/ocupado) →
+        // esperar de nuevo (tope 5 s) y reintentar UNA sola vez. Si el
+        // reintento viene del worker, manda ese quad; si no, conservar el
+        // quad original (comportamiento actual — kit §3-T1.2).
+        if (detalle.origen === "sobel") {
+          const caliente = await esperarWorkerCaliente(TOPE_ESPERA_WORKER_MS);
+          if (caliente) {
+            detectReintento = true;
+            try {
+              const reintento = await detectDocumentEdgesDetail(fotoOriginal);
+              if (reintento.origen === "worker") detalle = reintento;
+            } catch {
+              /* reintento falló → quad original (kit §3-T1.2) */
+            }
+          }
+        }
         quad = detalle.quad;
         quadOrigen = detalle.origen;
       } catch {
@@ -1339,7 +1413,11 @@ export class RealCoreBridge implements E14Bridge {
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
-        `level:${calidad.level}})${evidenciaSim}${diag ? " diag=1" : ""}`,
+        `level:${calidad.level}})${evidenciaSim}${diag ? " diag=1" : ""}` +
+        // KIT e14-masiva-ux-v1 (T1.3): quién fabricó el quad EN la detección
+        // del pipeline + si corrió el reintento post-Sobel (campos AÑADIDOS
+        // al final — formato previo intacto).
+        `${quadOrigen ? ` detectOrigen=${quadOrigen}` : ""}${detectReintento ? " detectReintento=1" : ""}`,
     );
 
     // KIT e14-diagnostico-autoenvio-v1 (C1): adjuntar el registro con el id
