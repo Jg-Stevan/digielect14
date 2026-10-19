@@ -784,11 +784,9 @@ export async function rapidOcrReconocer(
   };
 }
 
-/** Nota para el informe: WebGPU disponible (futuro: EP webgpu) — NO se usa
- *  para mantener el determinismo del comparativo (§4.3 del SPEC). */
-export function notaWebgpu(dispositivo: { webgpu: boolean }): string | null {
-  return dispositivo.webgpu ? "WebGPU disponible (futuro: EP webgpu) — hoy corre wasm (determinismo del comparativo)" : null;
-}
+// KIT e14-optimizacion-v1 (T4): notaWebgpu BORRADA — residuo del informe
+// (kit fuera-informes retiró a sus consumidores; 0 refs en src/, verificado
+// con rg). WebGPU sigue anotado, no usado (EP wasm fijo, determinismo).
 
 // KIT e14-motor-rapidocr-v1 (PROD-2 §4.1-C5): pre-warm al importar el módulo
 // (el bridge lo importa → arranca ANTES de la primera captura SIN tocar
