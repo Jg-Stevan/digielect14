@@ -166,3 +166,11 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T3 — Estado de envío por fila: «EN COLA» (offline, hashSha256 kit-literal) / «ENVIADA AUTO» / «ENVIADA» + contadores `ENVIADAS · EN COLA · PENDIENTES · ERRORES` + drenaje al reconectar (y al montar — reconciliación idempotente).
 - [x] T4 — `timeoutMs?` en escanearActa (default 15 s individual INTACTO) · masiva 120 s (D48): con multihilo el pipeline real ~21 s ya no vence a los 15 s con resultado descartado; secuencial estricto D45.
 - [ ] Del dueño: RAR con imágenes (aquí no hay `rar`) · HEIC real de iPhone · lote lento ~21 s en SU PC (T4 real) · offline real (avión).
+
+## INFORME — e14-informe-analisis-v1 (2026-10-20): informe de análisis de rechazos en ZIP local (D49)
+
+- [x] T1 — `src/lib/e14/informe.ts` (puro): `generarInformeZip()` — informe.json (sin dataURLs) + informe.txt + carpetas actas/ con original/procesada byte-idénticos + ficha.json completa; secuencial uno-a-la-vez; tope 250 MB/50 actas; `COLA_VACIA` descriptivo.
+- [x] T2 — Botón «INFORME ↓» en RESUMEN (hueco del retirado EXPORTAR REPORTE): disabled con cola vacía (chequeo al montar), GENERANDO… + píldora status, LISTO ✓ 1.5 s, alert ≤48 en fallo — sin toasts (D2), 44px, import diferido (D49).
+- [x] T3 — Docs: REPORTE + D49 + esta entrada + worklog + AGENTS.
+- [x] T4 — PR DRAFT (merge solo con orden del dueño).
+- [ ] Del dueño: merge · prueba con jornada real completa (100+ fotos) · validar el tope de 250 MB si la jornada es muy pesada.
