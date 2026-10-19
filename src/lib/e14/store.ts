@@ -14,6 +14,9 @@ import { ocrTextIsValid } from "@jg-stevan/scanner-core/ocr";
 import type { PageFilter } from "@jg-stevan/scanner-core/types";
 import type { PaginaObjetivo } from "./bridge";
 import type { Acta, FuenteCaptura, HistorialRow, Mesa, ProgresoAnalisis, TipoPagina } from "./types";
+// KIT e14-carga-masiva-v1 (T3.4): solo la capa de DATOS de la cola (sin
+// dependencia del mini-store — cero ciclos de import).
+import { leerRegistro } from "./masiva/cola";
 import type { Quad } from "@jg-stevan/scanner-core/types";
 import {
   claveDeMesa,
@@ -32,7 +35,9 @@ import {
   progresoInicial,
 } from "./seed";
 
-export type Vista = "escanear" | "analizando" | "revision" | "actas" | "resumen";
+// KIT e14-carga-masiva-v1 (T3.1): vista MASIVA — módulo separado (orquestación
+// en src/lib/e14/masiva/, D-masiva-módulo-separado); aquí SOLO la unión.
+export type Vista = "escanear" | "analizando" | "revision" | "actas" | "resumen" | "masiva";
 
 // KIT e14-recorte-manual-v1 (T2): copy del aviso cuando el pipeline del
 // RECORTE falla (error duro). Mismo tono corto/sin guía del repo (D1/gate-v2);
@@ -123,6 +128,11 @@ interface E14Store {
    *  persistencia (igual que historial): se resetea al recargar. Claves:
    *  advertencia:<techo> · revision:clasif-<nivel> · rechazo:<tipo>. */
   motivosNoEnvio: Record<string, number>;
+  /** KIT e14-carga-masiva-v1 (T3.4): REVISIÓN abierta desde la bandeja
+   *  MASIVA (abrirActaMasiva) — BottomNav pinta MASIVA activo (y ESCANEAR
+   *  no). Default false; se pone false en dispararEscaneo y al navegar a
+   *  "escanear". Solo presentación: jamás cambia el flujo de REVISIÓN. */
+  masivaOrigen: boolean;
 
   navegar: (vista: Vista) => void;
   /** MODO SIMULACIÓN (regla del dueño): alterna el toggle «SIM» de ACTAS.
@@ -195,6 +205,21 @@ interface E14Store {
    * (títulos en mayúsculas = estilo de toasts e14, descripciones verbatim).
    */
   reconocerTextoActa: () => Promise<void>;
+  /** KIT e14-carga-masiva-v1 (T3.2): contador «por qué no se envió»
+   *  EXTRAÍDO de analisisCompletado (A2) — la lógica y las claves quedan
+   *  byte-idénticas (mismo contadosNoEnvio, mismo incremento). Lo llama el
+   *  flujo normal (analisisCompletado) Y el runner MASIVA. */
+  contarMotivoNoEnvioActa: (acta: Acta) => void;
+  /** KIT e14-carga-masiva-v1 (T3.3): envío automático de una ÓPTIMA
+   *  MASIVA — reutiliza el registrarEnvio interno (A3) con el título de ESA
+   *  acta (mismo formato que tituloPaginaActual). NO toca actaActual (el
+   *  flujo normal sigue igual). */
+  registrarEnvioMasiva: (acta: Acta) => void;
+  /** KIT e14-carga-masiva-v1 (T3.4): abre un acta de la bandeja MASIVA en
+   *  REVISIÓN (cargada de IDB vía módulo masiva) — recorte manual, filtros
+   *  y envío manual intactos: todo lo que ya existe opera sobre
+   *  actaActual. */
+  abrirActaMasiva: (id: string) => Promise<void>;
   /**
    * KIT camara-visor-v1 (G3 — upgrade silencioso del lab L1789-1842):
    * re-procesa el acta con la foto FULL-RES del sensor que aterrizó en
@@ -382,8 +407,13 @@ let rotandoFotoEnVuelo = false;
 export const useE14Store = create<E14Store>((set, get) => {
   const bridge = getBridge();
 
-  const registrarEnvio = (tituloPagina: string) => {
+  // KIT e14-carga-masiva-v1 (T3.3): `actaEnvio` — el envío MASIVA trae SU
+  // acta (archiva SU hueco en ACTAS); el flujo normal sigue usando
+  // actaActual. El hash del envío queda SOLO en el acta del flujo normal
+  // (masiva jamás toca actaActual). Sin `actaEnvio`: byte-idéntico a antes.
+  const registrarEnvio = (tituloPagina: string, actaEnvio?: Acta) => {
     const { online, historial, completadas, mesas, paginaObjetivo, actaActual, archivadas } = get();
+    const actaFuente = actaEnvio ?? actaActual;
     const hora = bridge.horaHistorial();
     const fila: HistorialRow = {
       id: `h-${Date.now()}`,
@@ -418,13 +448,13 @@ export const useE14Store = create<E14Store>((set, get) => {
     // silencioso (mismo acta, mismos datos).
     let archivadasNuevas = archivadas;
     let puestoNuevo: PuestoActual | null = null;
-    if (actaActual?.clasificacion?.nivel === "AUTO") {
+    if (actaFuente?.clasificacion?.nivel === "AUTO") {
       const r = archivarHueco(
         archivadas,
-        actaActual.clasificacion,
+        actaFuente.clasificacion,
         // KIT actas-vivas-paginas-v1 (FASE C): el estado del hueco lo pone el
         // desenlace de la captura que se archiva (ADVERTENCIA → RESCANEO).
-        actaActual.status === "ADVERTENCIA",
+        actaFuente.status === "ADVERTENCIA",
       );
       archivadasNuevas = r.nuevas;
       puestoNuevo = r.puesto;
@@ -437,9 +467,25 @@ export const useE14Store = create<E14Store>((set, get) => {
       archivadas: archivadasNuevas,
       // PUESTO ACTUAL (kit actas-resumen-puesto-v2): el del archivo AUTO manda.
       puestoActual: puestoNuevo ?? get().puestoActual,
-      actaActual: actaActual ? { ...actaActual, hashSha256: hash } : actaActual,
+      actaActual:
+        actaFuente === actaActual && actaActual
+          ? { ...actaActual, hashSha256: hash }
+          : actaActual,
     });
     return { online, hora };
+  };
+
+  // KIT e14-carga-masiva-v1 (T3.3): espejo de tituloPaginaActual para un
+  // acta FUERA del flujo (A3 — mismo formato). Con clasificación AUTO el
+  // título trae página (respétala); sin AUTO → título/tipo que trae el
+  // acta (honesto, SIN MESA inventada — la clasificación es la que manda).
+  const tituloDeActa = (acta: Acta): string => {
+    const c = acta.clasificacion;
+    if (c?.nivel === "AUTO" && c.puesto && c.mesa !== null && c.tipo) {
+      const p = c.pagina == null ? "PÁG ?" : c.pagina.index === 1 ? "P1" : "P2";
+      return `${c.puesto.nombre} · MESA ${c.mesa} — ${tipoPaginaDe(c.tipo)} ${p}`;
+    }
+    return acta.titulo ? `${acta.titulo} — ${acta.tipo}` : "ACTA SIN CLASIFICAR";
   };
 
   const tituloPaginaActual = (): string => {
@@ -488,8 +534,11 @@ export const useE14Store = create<E14Store>((set, get) => {
     historial: historialInicial(),
     // KIT e14-optimizacion-v1 (T5): contador de sesión arranca vacío.
     motivosNoEnvio: {},
+    // KIT e14-carga-masiva-v1 (T3.4): la app NO arranca desde MASIVA.
+    masivaOrigen: false,
 
-    navegar: (vista) => set({ vista }),
+    navegar: (vista) =>
+      set({ vista, ...(vista === "escanear" ? { masivaOrigen: false } : {}) }),
 
     // KIT actas-vivas-paginas-v1 (FASE A): ENCENDER → guion FRESCO (seed
     // nuevo + SIM reiniciado — AC-SIM2); APAGAR → solo apaga. Overlay de
@@ -598,7 +647,7 @@ export const useE14Store = create<E14Store>((set, get) => {
       // al picker en vez de reventar el pipeline sin archivo). El aviso vive
       // ahora en la franja del visor de ScanView (pre-check de la vista).
       if (fuenteEfectiva === "ARCHIVO" && !archivoPendiente) {
-        set({ vista: "escanear" });
+        set({ vista: "escanear", masivaOrigen: false });
         return;
       }
       // L3: la fuente CÁMARA necesita una captura (foto ZSL/nativa ya en el
@@ -606,7 +655,7 @@ export const useE14Store = create<E14Store>((set, get) => {
       // visor (la cámara se reinicia al reactivar la vista) — espejo de D23.
       // (aviso en la franja del visor de ScanView, §4 del redesign-stitch)
       if (fuenteEfectiva === "CAMARA" && !archivoPendiente && !framePendiente) {
-        set({ vista: "escanear" });
+        set({ vista: "escanear", masivaOrigen: false });
         return;
       }
       const objetivo = proximaPagina(mesas);
@@ -615,6 +664,8 @@ export const useE14Store = create<E14Store>((set, get) => {
         actaActual: null,
         progresoAnalisis: null,
         analisisResuelto: false,
+        // KIT e14-carga-masiva-v1 (T3.4): una captura nueva NUNCA es de MASIVA.
+        masivaOrigen: false,
       });
       try {
         const acta = await bridge.escanearActa({
@@ -676,30 +727,12 @@ export const useE14Store = create<E14Store>((set, get) => {
         });
         return;
       }
-      // KIT e14-optimizacion-v1 (T5): contador «por qué no se envió» —
-      // espejo pasivo de desenlaces YA ocurridos (todas las ramas
-      // no-OPTIMA). SOLO aquí (kit §3-T5): el recorte re-evaluado no
-      // duplica (Set contadosNoEnvio por id). Sin ZIP, sin persistencia,
-      // el gate SIN tocar (medir antes de calibrar — AUDITORIA-e14 §4).
-      if (!contadosNoEnvio.has(actaActual.id)) {
-        let clave: string | null = null;
-        if (actaActual.status === "ADVERTENCIA") {
-          const techo = actaActual.diagnostico?.score?.techos[0];
-          clave = techo ? `advertencia:${techo}` : "advertencia:sin-diag";
-        } else if (actaActual.status === "EN_REVISION_HUMANA") {
-          const nivel = actaActual.clasificacion?.nivel;
-          clave = nivel ? `revision:clasif-${nivel}` : "revision:sin-diag";
-        } else if (actaActual.status === "RECHAZADA") {
-          clave = `rechazo:${actaActual.rechazo?.tipo.toLowerCase() ?? "desconocido"}`;
-        }
-        if (clave) {
-          contadosNoEnvio.add(actaActual.id);
-          const actuales = get().motivosNoEnvio;
-          set({
-            motivosNoEnvio: { ...actuales, [clave]: (actuales[clave] ?? 0) + 1 },
-          });
-        }
-      }
+      // KIT e14-optimizacion-v1 (T5), extraído a contarMotivoNoEnvioActa por
+      // e14-carga-masiva-v1 (T3.2): contador «por qué no se envió» — espejo
+      // pasivo de desenlaces YA ocurridos (todas las ramas no-OPTIMA). SOLO
+      // aquí (kit §3-T5): el recorte re-evaluado no duplica (Set
+      // contadosNoEnvio por id). Claves byte-idénticas al refactor.
+      get().contarMotivoNoEnvioActa(actaActual);
       if (actaActual.status === "RECHAZADA") {
         const fila: HistorialRow = {
           id: `h-${Date.now()}`,
@@ -985,6 +1018,56 @@ export const useE14Store = create<E14Store>((set, get) => {
         /* silencioso: el upgrade JAMÁS rompe nada (el acta queda como está) */
       } finally {
         set({ revelando: false });
+      }
+    },
+
+    // ---------- KIT e14-carga-masiva-v1 (T3): integración mínima ----------
+
+    contarMotivoNoEnvioActa: (acta) => {
+      // Lógica EXTRAÍDA de analisisCompletado (kit e14-optimizacion-v1 T5,
+      // A2) por e14-carga-masiva-v1 (T3.2) — MISMAS claves, mismo Set
+      // anti-dup por id, mismo incremento: byte-idéntico (kit §5-T3.2).
+      if (contadosNoEnvio.has(acta.id)) return;
+      let clave: string | null = null;
+      if (acta.status === "ADVERTENCIA") {
+        const techo = acta.diagnostico?.score?.techos[0];
+        clave = techo ? `advertencia:${techo}` : "advertencia:sin-diag";
+      } else if (acta.status === "EN_REVISION_HUMANA") {
+        const nivel = acta.clasificacion?.nivel;
+        clave = nivel ? `revision:clasif-${nivel}` : "revision:sin-diag";
+      } else if (acta.status === "RECHAZADA") {
+        clave = `rechazo:${acta.rechazo?.tipo.toLowerCase() ?? "desconocido"}`;
+      }
+      if (clave) {
+        contadosNoEnvio.add(acta.id);
+        const actuales = get().motivosNoEnvio;
+        set({
+          motivosNoEnvio: { ...actuales, [clave]: (actuales[clave] ?? 0) + 1 },
+        });
+      }
+    },
+
+    registrarEnvioMasiva: (acta) => {
+      // T3.3: la MISMA vía del envío real (registrarEnvio interno — A3) con
+      // el título de ESA acta (mismo formato que tituloPaginaActual —
+      // tituloDeActa). NO toca actaActual (actaFuente ≠ actaActual dentro
+      // de registrarEnvio); mesas queda intacta (paginaObjetivo no es de
+      // MASIVA). El marcaje status ENVIADA + horaEnvio lo hornea el runner
+      // en la copia que persiste (kit §5-T3.3).
+      registrarEnvio(tituloDeActa(acta), acta);
+    },
+
+    abrirActaMasiva: async (id) => {
+      // T3.4: acta de IDB → REVISIÓN con flag de origen. REVISIÓN funciona
+      // INTACTA (recorte manual, filtros, envío manual — todo opera sobre
+      // actaActual). Al volver, el mini-store MASIVA sincroniza la fila
+      // (sincronizarAlVolver — F5: el acta conserva identidad).
+      try {
+        const registro = await leerRegistro(id);
+        if (!registro.acta) return; // sin desenlace aún — nada que abrir
+        set({ actaActual: registro.acta, vista: "revision", masivaOrigen: true });
+      } catch {
+        /* registro ausente/IDB caído → la bandeja queda como está (kit §3) */
       }
     },
   };
