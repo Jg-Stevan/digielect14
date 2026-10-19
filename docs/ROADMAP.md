@@ -130,3 +130,13 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] R-2 — Auto-descarga del ZIP de diagnóstico fuera (consumers B1/B3/B4/B5; diagnostico.ts recortado a construirDiagnostico; fflate fuera de deps).
 - [x] R-3 — Botón manual «Diagnóstico» fuera; barra de REVISIÓN grid-cols-3 fijo.
 - [x] R-4 — `acta.diagnostico` dormante verificado (traza diag=1 intacta).
+
+## PERF — e14-optimizacion-v1 (2026-10-18): velocidad + higiene + contador de motivos
+
+- [x] T1 — Memo de decodificación FIFO tope 2 (`loadImageMemo`): la misma dataURL del acta en vuelo se decodifica UNA vez (bridge ×4 + completitud + image-utils); rapidocr intacto.
+- [x] T2 — ORT `proxy=true`: det/cls/rec al worker interno — el progreso deja de congelarse 10-14 s (misma fidelidad, revertible 1 línea).
+- [x] T3 — Fuera `ort-wasm-simd-threaded.jsep.{wasm,mjs}` (−28.3 MB de repo; runtime jamás los pide).
+- [x] T4 — Higiene: `notaWebgpu` + 13 iconos sin uso fuera.
+- [x] T5 — Contador de sesión «POR QUÉ NO SE ENVIO» (D44): medir antes de calibrar; gate intocable.
+- [ ] T6 — EXPERIMENTO det 1920→1280: espera aprobación del dueño en el PR + validación con ZIPs de campo en su equipo (commit separado revertible).
+- [ ] Plan de carga masiva (AUDITORIA §8.4): con el código limpio y medido — módulo nuevo de orquestación, cero dependencias.
