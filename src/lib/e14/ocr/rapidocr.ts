@@ -86,6 +86,48 @@ export function rapidOcrInit(): Promise<RapidRuntime> {
   return rtSingleton;
 }
 
+// KIT e14-prowarm-ocr-v1 (T1): pre-warm REAL de la sesión RapidOCR —
+// rapidOcrInit() crea las sesiones pero NUNCA infiere; la 1.ª acta real
+// pagaba ~27 s de frío (35.9 s OCR vs 8.3 s caliente, informe 19/10).
+// Esto corre UNA inferencia dummy sobre canvas sintético por det+cls+rec
+// y DESCARTA el resultado (§0.2). NUNCA llamar aquí a reconocerRapidOcr
+// del bridge (contaminaría ultimoOcr* — §0.3): rapidOcrReconocer directo.
+let prewarmHecho: Promise<boolean> | null = null;
+
+export function rapidOcrPrecalentar(): Promise<boolean> {
+  if (prewarmHecho) return prewarmHecho; // 1 sola vez por carga de página
+  prewarmHecho = (async () => {
+    try {
+      const rt = await rapidOcrInit(); // MISMO singleton — el calor queda
+      const c = document.createElement("canvas");
+      c.width = 640;
+      c.height = 480;
+      const ctx = ctxDe(c);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 640, 480);
+      ctx.fillStyle = "#000000";
+      ctx.font = "bold 48px monospace";
+      ctx.fillText("E14 WARM-UP", 40, 120);
+      ctx.font = "bold 36px monospace";
+      ctx.fillText("PUESTO 01 20261019123055", 40, 240);
+      ctx.fillText("TRANSMISION 98.7% 15:30:22", 40, 340);
+      const dataUrl = c.toDataURL("image/png");
+      const r = await rapidOcrReconocer(rt, dataUrl); // resultado DESCARTADO
+      console.info(
+        `[e14-prowarm] listo det=${r.msDet}ms cls=${r.msCls}ms rec=${r.msRec}ms · ${r.nBoxes} cajas · ${r.lineas.length} líneas`,
+      );
+      return true;
+    } catch (e) {
+      // Frío como hoy: el pipeline NO depende de esto (fallback honesto).
+      console.info(
+        `[e14-prowarm] fallo (continua como hoy): ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return false;
+    }
+  })();
+  return prewarmHecho;
+}
+
 async function initReal(): Promise<RapidRuntime> {
   const ort = (await import("onnxruntime-web/wasm")) as unknown as OrtModule;
   ort.env.wasm.wasmPaths = `${PUBLIC_BASE}/vendor/onnxruntime/`;
