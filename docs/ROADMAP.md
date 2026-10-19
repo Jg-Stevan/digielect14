@@ -149,3 +149,12 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T4 — MasivaView (dropzone drag&drop, bandeja con filtros/estados, VACIAR 2 toques, ENVIAR ADVERTENCIAS en lote) + ítem MASIVA en nav (StitchStackIcon) + regla de origen.
 - [x] Identidad de desenlace §7.2 verificada: misma foto → mismo desenlace por IMPORTAR y por MASIVA (8.5/7.9/4.6 exactos).
 - [ ] FUERA DE ALCANCE v1 (kit §9): export ZIP/CSV · concurrencia >1 · re-intentos automáticos de RECHAZADAS · OCR por zona · cola en la nube.
+
+## VERCEL-PERF — e14-vercel-perf-v1 (2026-10-19): demo multihilo en Vercel (D46)
+
+- [x] T1 — `vercel.json`: build estático con `NEXT_PUBLIC_BASE_PATH=/digielect14` (paridad GH Pages) + headers `COOP: same-origin` / `COEP: require-corp` en `/(.*)` — activa `crossOriginIsolated` → `numThreads = min(4, cores)` de rapidocr (T2 del kit optimizacion) SIN tocar código. Deploy manual conservado.
+- [x] T2 — Verificación local: lint 0 · tsc 0 · build estático OK · servidor con headers exactos → `crossOriginIsolated=true`, 0 bloqueos COEP, pipeline completo con desenlace idéntico (8.2 ÓPTIMA auto-envío, cod 710007453010102).
+- [x] T3 — Docs: REPORTE + D46 + esta entrada + worklog + AGENTS.
+- [x] T4 — PR DRAFT (merge solo con orden del dueño).
+- [ ] Post-merge (dueño, PLAN §6): deploy en Vercel (dashboard o `bunx vercel deploy --prod`) → inspector (`E14.informe()`) sobre las 2-3 actas de la línea base → comparar vs GH Pages (34-68 s / rec 23-34 s, mono-hilo).
+- [ ] Opción pendiente de decisión: fase 2 Electron/nativo (solo si la demo web no alcanza).
