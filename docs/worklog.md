@@ -1310,3 +1310,11 @@ PROFILER / snapA+TORCH_HINT+accept.
 - **Commits:** `4a093dd` T1 vercel.json · (este) docs — rama `feat/e14-vercel-perf-v1` → **PR DRAFT** (PROHIBIDO merge/push a main, kit §0).
 - **Cómo probar (local):** `BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH=/digielect14 bunx next build` + servidor con COOP/COEP → `/digielect14/` → consola `crossOriginIsolated === true` → escanear acta → pipeline normal. **Post-merge (dueño, PLAN §6):** importar repo en Vercel (build lee TODO de vercel.json) → `https://<proyecto>.vercel.app/digielect14/` → inspector → escanear las actas de la línea base → `E14.informe()` → comparar vs GH Pages.
 - **Pendiente del dueño:** merge del PR · deploy Vercel + medición con inspector · decidir si la demo web alcanza o hace falta fase 2 (Electron/nativo).
+
+### [2026-10-19 14:2x (Bogotá)] — Deploy real PLAN §6 ejecutado (post-merge PR #26) — rama `fix/e14-vercel-framework-v1` — Z.ai Code
+
+- El dueño pidió el deploy con token Vercel. PR #26 YA MERGEADO → main sync a `dcaf5c6`. Primer deploy CLI `--prod`: build compiló pero falló (`NEXT_NO_ROUTES_MANIFEST`) — el preset Next auto-detectado exige `.next/routes-manifest.json` inexistente en `output: "export"`.
+- 3 desviaciones SOLO-CONFIG en `vercel.json` (commits `223ac20` + 2): `"framework": null` · rewrites `/digielect14{,/:path*} → /,/:path*` (out/ vive en la raíz del dominio) · rewrite exacto del slash-final. Cero código de la app.
+- **PRODUCCIÓN VERIFICADA:** https://digielect14.vercel.app/digielect14/ → HTTP 200 + COOP/COEP · `crossOriginIsolated === true` · 0 errores/0 bloqueos · SIM 8.2 ÓPTIMA ENVIADO AUTOMÁTICAMENTE (`motor=worker`, cod 710007453010102 byte-idéntico). Evidencia: captura en la carpeta humo del agente + traza en el PR.
+- REPORTE §8 anexado (tabla de desviaciones 1/2/3) + esta entrada. Proyecto `digielect14` en la cuenta jg-stevan (CLI; directorio linkeado `.vercel/` sin commitear).
+- **Cómo redeployar:** `bunx vercel deploy --prod` desde la raíz (main YA tiene el fix tras mergear este PR — hasta entonces el deploy usa la rama).
