@@ -5,9 +5,13 @@
  * segmentada de 12), tarjetas de estadística (cola offline / rescaneos) e
  * historial de envíos con barra de acento por estado. Reactivo en vivo.
  */
+import { useEffect, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import type { HistorialRow } from "@/lib/e14/types";
 import { PUESTO_SIMULADO } from "@/lib/e14/seed";
+// KIT e14-informe-analisis-v1 (T2): chequeo barato de la cola masiva al
+// montar — decide el disabled del botón INFORME ↓ (cola.ts INTOCABLE).
+import { listarRegistros } from "@/lib/e14/masiva/cola";
 import { SegmentedBar } from "../primitives";
 
 function badgeEstado(estado: HistorialRow["estado"]) {
@@ -51,6 +55,58 @@ export function ResumenView() {
   const puestoReal = useE14Store((s) => s.puestoActual);
   const modoSimulacion = useE14Store((s) => s.modoSimulacion);
   const puestoMostrado = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
+
+  // KIT e14-informe-analisis-v1 (T2): botón INFORME ↓ — reintroducción POR
+  // PEDIDO EXPLÍCITO del dueño (19/10) del análisis en ZIP (original +
+  // procesada byte-idénticas + fichas de la COLA MASIVA). §0.2: NADA se
+  // descarga solo — SIEMPRE detrás de este botón. Sin toasts (D2):
+  // píldora role=status/alert + feedback en el propio botón.
+  const [colaVacia, setColaVacia] = useState(true);
+  const [generando, setGenerando] = useState(false);
+  const [listo, setListo] = useState(false);
+  const [motivo, setMotivo] = useState<string | null>(null);
+
+  // Chequeo SOLO al montar (kit T2.2 — barato): IDB caída → tratada como
+  // vacía (el informe no puede nacer; mismo fallback honesto de MASIVA).
+  useEffect(() => {
+    let vivo = true;
+    listarRegistros()
+      .then((registros) => {
+        if (vivo) setColaVacia(registros.length === 0);
+      })
+      .catch(() => {
+        if (vivo) setColaVacia(true);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const generarInforme = async () => {
+    if (generando || colaVacia) return;
+    setGenerando(true);
+    setListo(false);
+    setMotivo(null);
+    try {
+      // D49: imports DIFERIDOS (patrón D47 de archivos.ts) — el generador
+      // del ZIP y la descarga del core NO pesan en el bundle inicial.
+      const [{ generarInformeZip }, { downloadBlob }] = await Promise.all([
+        import("@/lib/e14/informe"),
+        import("@jg-stevan/scanner-core/pdf-export"),
+      ]);
+      const { blob, nombre } = await generarInformeZip();
+      downloadBlob(blob, nombre);
+      setListo(true);
+      window.setTimeout(() => setListo(false), 1500); // patrón ReviewView
+    } catch (err) {
+      // Motivo corto ≤48 (patrón fallback IDB de MasivaView) — sin toasts.
+      const crudo = err instanceof Error ? err.message : String(err);
+      const corto = crudo.replace(/\s+/g, " ").trim().slice(0, 48);
+      setMotivo((corto || "NO SE PUDO GENERAR").toUpperCase());
+    } finally {
+      setGenerando(false);
+    }
+  };
 
   const totalPaginas = mesas.reduce((n, m) => n + m.paginas.length, 0);
   const paginasOk = mesas.reduce(
@@ -171,6 +227,48 @@ export function ResumenView() {
             mandato del dueño §0.4. El acumulador/registrarDesenlace del store
             siguen vivos (el C4 de REVISIÓN y los ZIP de campo no dependían
             de esta vista); diagnostico.ts SIN CAMBIOS. */}
+
+        {/* KIT e14-informe-analisis-v1 (T2): INFORME ↓ en el hueco del
+            retirado EXPORTAR REPORTE — forma nueva pedida por el dueño
+            (19/10): ZIP local (sin red) con original+procesada de las
+            actas problema de la COLA MASIVA. Nada se descarga solo (§0.2):
+            SIEMPRE este botón. Sin toasts (D2). */}
+        <section className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              void generarInforme();
+            }}
+            disabled={colaVacia || generando || listo}
+            aria-label="Generar informe de análisis (ZIP)"
+            className="min-h-[44px] px-6 rounded-xl bg-brand-green text-black font-mono text-[11px] font-extrabold uppercase tracking-wider shadow-[0_0_10px_rgba(0,230,118,0.2)] hover:brightness-110 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
+          >
+            {listo
+              ? "LISTO ✓"
+              : generando
+                ? "GENERANDO…"
+                : colaVacia
+                  ? "INFORME ↓ (COLA VACÍA)"
+                  : "INFORME ↓"}
+          </button>
+          {generando && (
+            <p
+              role="status"
+              aria-live="polite"
+              className="inline-block rounded-full border border-brand-borderdim px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-gray-300"
+            >
+              GENERANDO INFORME…
+            </p>
+          )}
+          {motivo && (
+            <p
+              role="alert"
+              className="rounded-xl border border-amber-400/60 bg-amber-400/10 px-3.5 py-2.5 font-mono text-[11px] font-bold uppercase tracking-wider text-amber-400"
+            >
+              {motivo}
+            </p>
+          )}
+        </section>
 
         {/* Historial de envíos — KIT e14-esquinas-suaves-v1 (T-R): con SIM
             ON las filas son DERIVADAS del guion (SIMULACIÓN — no toca el
