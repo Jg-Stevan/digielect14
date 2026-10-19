@@ -192,3 +192,13 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] Docs: REPORTE + esta entrada + worklog + AGENTS (DECISIONS.md INTACTO por diseño del kit).
 - [x] PR DRAFT (merge solo con orden del dueño; `tools/` no entra en el build — lint/tsc/build OK y diff de producción VACÍO verificado).
 - [ ] Del dueño: correr el banco en SU máquina (4 núcleos/8 GB/Chrome 155) y decidir si archiva la idea int8 del rec o pide otro kit con otra variante (fp16/modelo menor — fuera de alcance aquí).
+
+## ORIENTACION-AUTO — e14-orientacion-auto-v1 (2026-10-19): probe de orientación por confianza de rec (D51)
+
+**Problema:** las 12 RECHAZADAS del informe 19/10 (tira Consulado de Egipto KIT 399) están físicamente rotadas 90°/180° en la foto — el OCR lee de lado → sin anclas → rechazo y reproceso humano (volver a fotografiar).
+
+**Solución:** `probeOrientacion()` en `src/lib/e14/orientacion.ts` (NUEVO) — det (el MISMO singleton) + K=8 crops (3 líneas más largas + 5 repartidas) + rec CRUDO por rotación candidata; `score(r)=anclas·2+conf·(chars/40)`, guard absoluto (no inventar), MARGEN 1.5 sobre score(0), atajos por forma de tira, budget 4000 ms, SIM omitido. Al aplicar: girar `fotoOcr`+`fotoProcesada` (q0.92) ANTES del OCR/esquinas/gate. Traza propia `[e14] orientacion …`.
+
+**Verificado (sandbox, tira real KIT 399):** sana → `aplicado=0` e 8.5 idéntico · girada 90/180/270 → `aplicado=1` (score probe 8.60/8.58/8.37, anclas=3) → **8.5 AUTO las tres** · SIM 8.2/7.0/4.3 exactos con 0 trazas · lint/tsc/build limpios · zona prohibida VACÍA.
+
+**Pendiente:** AC-2 del dueño (las 6 fotos del informe en su equipo) — bloqueante para merge final, no para el PR. Los otros 2 kits del mega-kit (tiempos: B1-B5) van por los Agentes 2/3 en paralelo.
