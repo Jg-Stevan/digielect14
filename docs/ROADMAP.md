@@ -174,3 +174,12 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T3 — Docs: REPORTE + D49 + esta entrada + worklog + AGENTS.
 - [x] T4 — PR DRAFT (merge solo con orden del dueño).
 - [ ] Del dueño: merge · prueba con jornada real completa (100+ fotos) · validar el tope de 250 MB si la jornada es muy pesada.
+
+## PROWARM-OCR — e14-prowarm-ocr-v1 (2026-10-19): pre-warm REAL de RapidOCR (cero frío en la 1.ª acta)
+
+- [x] T1 — `rapidOcrPrecalentar()` (rapidocr.ts): UNA inferencia dummy sobre canvas SINTÉTICO 640×480 por det+cls+rec sobre el singleton `rapidOcrInit()`, resultado DESCARTADO (§0.2 — nunca `reconecerRapidOcr` del bridge, `ultimoOcr*` intocables); flag de módulo = 1× por carga; fallo → log + `false` (frío como hoy, init reintentable).
+- [x] T2/T2b — Disparo al montar MASIVA (fire-and-forget, sin UI §0.7) + diferido 2 s en ScanView con clearTimeout (idempotente entre ambos por el flag).
+- [x] V — lint 0-0 · tsc 0 · build OK · SIM 8.2/7.0/4.3 exactos · traza del pipeline intacta (mismo quad/cod/score 8.5, pre-warm NO sumado) · 1 sola traza `[e14-prowarm]` por carga · fallo controlado (onnx bloqueado → fallback honesto + recuperación del pipeline) · bundle +830 B en chunk existente (main chunk idéntico) · heap +8.5 MB movidos a antes de la 1.ª acta.
+- [x] T3 — Docs: REPORTE + D50 + esta entrada + worklog + AGENTS.
+- [x] T4 — PR DRAFT (merge solo con orden del dueño).
+- [ ] Del dueño: merge · redeploy manual en Vercel (`docs/DEPLOY-vercel.md` §2) + Ctrl+Shift+R · validar la eliminación del frío en SU entorno: `[e14-prowarm] listo` al montar MASIVA y 1.ª acta real SIN el pico de 35.9 s (comparable a caliente 8.3 s).
