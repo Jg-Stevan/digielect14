@@ -62,3 +62,6 @@ dev.log
 # Artefactos locales de auditoría/diseño (fuera del producto)
 /tmp-audit/
 /download/
+
+# KIT bench e14-rec-int8-v1 (T1): artifacts locales del banco — NO commitear
+tools/bench-rec-int8/*.onnx
