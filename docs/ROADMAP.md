@@ -140,3 +140,12 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T5 — Contador de sesión «POR QUÉ NO SE ENVIO» (D44): medir antes de calibrar; gate intocable.
 - [ ] T6 — EXPERIMENTO det 1920→1280: espera aprobación del dueño en el PR + validación con ZIPs de campo en su equipo (commit separado revertible).
 - [ ] Plan de carga masiva (AUDITORIA §8.4): con el código limpio y medido — módulo nuevo de orquestación, cero dependencias.
+
+## MASIVA — e14-carga-masiva-v1 (2026-10-19): cola de fotos desktop-first (AUDITORIA §8.4)
+
+- [x] T1 — Tipos + cola persistente IndexedDB VANILLA (DB `e14-masiva-v1`; File+acta en IDB, filas livianas en RAM; `recuperarCola` anti-zombis).
+- [x] T2 — Runner SECUENCIAL singleton (1 foto a la vez; MISMO `escanearActa`; progreso throttled; thumb 320; auto-pausa al abrir acta) + mini-store zustand MASIVA.
+- [x] T3 — Integración mínima aditiva al store principal: Vista+"masiva" · T5 extraído a `contarMotivoNoEnvioActa` (byte-idéntico) · `registrarEnvioMasiva` (registrarEnvio real) · `abrirActaMasiva`+`masivaOrigen`.
+- [x] T4 — MasivaView (dropzone drag&drop, bandeja con filtros/estados, VACIAR 2 toques, ENVIAR ADVERTENCIAS en lote) + ítem MASIVA en nav (StitchStackIcon) + regla de origen.
+- [x] Identidad de desenlace §7.2 verificada: misma foto → mismo desenlace por IMPORTAR y por MASIVA (8.5/7.9/4.6 exactos).
+- [ ] FUERA DE ALCANCE v1 (kit §9): export ZIP/CSV · concurrencia >1 · re-intentos automáticos de RECHAZADAS · OCR por zona · cola en la nube.
