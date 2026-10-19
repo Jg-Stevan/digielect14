@@ -83,3 +83,29 @@ Los pasos de deploy están en **PLAN §6** (importar el repo en Vercel o
 los ejecuta. Después: abrir `https://<proyecto>.vercel.app/digielect14/` →
 inspector → `crossOriginIsolated === true` → escanear las 2-3 actas de la línea
 base → `E14.informe()` → comparar con GH Pages (34-68 s / rec 23-34 s).
+
+## 8. Post-merge — deploy real del dueño (2026-10-19, tarea del dueño con token Vercel)
+
+El kit se mergeó (PR #26) y el dueño pidió ejecutar PLAN §6. El deploy real reveló
+**3 desviaciones operativas** sobre el JSON literal del kit — todas solo-config,
+cero código de la app:
+
+| # | (1) Se quiso | (2) Qué impidió | (3) Se hizo | (4) Impacto |
+|---|---|---|---|---|
+| 1 | Deploy con el JSON literal | Vercel auto-detectó el preset Next.js y exigió `.next/routes-manifest.json` — inexistente en `output: "export"` (el build compiló pero el deployment falló `NEXT_NO_ROUTES_MANIFEST`) | `"framework": null` (preset fuera; buildCommand verbatim + salida estática) | El JSON ya no es literal al kit; comportamiento idéntico al diseñado |
+| 2 | URL `/digielect14/` | `out/` se sirve en la raíz del dominio (GH Pages mapea `/digielect14/` → artifact; Vercel no) — `/digielect14/` daba 404 y los assets `/digielect14/_next/…` también | `rewrites: /digielect14 → / · /digielect14/ → / · /digielect14/:path* → /:path*` | Ruta canónica intacta; assets 200; la raíz del dominio también sirve la app |
+| 3 | — | El patrón `:path*` no matchea slash-final con path vacío (`/digielect14/` 404 aun con rewrites) | Rewrite exacto `/digielect14/` | Ídem |
+
+**Verificación en PRODUCCIÓN** (https://digielect14.vercel.app/digielect14/):
+- Headers COOP/COEP presentes (`curl -I` ✓) · `self.crossOriginIsolated === true` ✓
+- 0 errores de página · 0 bloqueos COEP/CORP en consola · app renderizada completa
+- Acta SIM: pipeline completo `motor=worker … score=8.2 … nivel:AUTO
+  cod:710007453010102` (det=1601ms · rec=6988ms · conf 93.3%) → **8.2/10 ÓPTIMA +
+  ENVIADO AUTOMÁTICAMENTE** — byte-idéntico a la línea base.
+- Pendiente del dueño: medición real con `e14-inspector.js` en SU PC (4 cores →
+  numThreads 4) vs línea base GH Pages (rec 23-34 s).
+
+**Proyecto Vercel:** `digielect14` (cuenta jg-stevan) — creado por CLI; el build
+lee TODO de `vercel.json`; auto-deploy de main sigue apagado
+(`deploymentEnabled.main: false`); redeploy manual = `bunx vercel deploy --prod`
+desde la raíz (directorio ya linkeado en `.vercel/` — NO commitear).
