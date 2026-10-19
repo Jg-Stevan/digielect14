@@ -94,7 +94,13 @@ async function initReal(): Promise<RapidRuntime> {
       ? Math.min(4, navigator.hardwareConcurrency || 1)
       : 1;
   ort.env.wasm.simd = true;
-  ort.env.wasm.proxy = false;
+  // KIT e14-optimizacion-v1 (T2, hallazgo #2 de AUDITORIA-e14-v1): proxy=true
+  // migra det/cls/rec al worker interno de ORT — la inferencia (9.8-14.3 s)
+  // deja de bloquear el main thread y el progreso de ANALIZANDO deja de
+  // congelarse. MISMO EP wasm (opts de abajo), MISMO wasm, MISMO resultado.
+  // numThreads queda como está: 1 en GH Pages (no hay SAB) — el proxy NO
+  // requiere SAB. Revertible en 1 línea si la verificación falla (kit §3-T2.2).
+  ort.env.wasm.proxy = true;
 
   const opts = { executionProviders: ["wasm"] };
   const [det, cls, rec, dictResp] = await Promise.all([
@@ -778,11 +784,9 @@ export async function rapidOcrReconocer(
   };
 }
 
-/** Nota para el informe: WebGPU disponible (futuro: EP webgpu) — NO se usa
- *  para mantener el determinismo del comparativo (§4.3 del SPEC). */
-export function notaWebgpu(dispositivo: { webgpu: boolean }): string | null {
-  return dispositivo.webgpu ? "WebGPU disponible (futuro: EP webgpu) — hoy corre wasm (determinismo del comparativo)" : null;
-}
+// KIT e14-optimizacion-v1 (T4): notaWebgpu BORRADA — residuo del informe
+// (kit fuera-informes retiró a sus consumidores; 0 refs en src/, verificado
+// con rg). WebGPU sigue anotado, no usado (EP wasm fijo, determinismo).
 
 // KIT e14-motor-rapidocr-v1 (PROD-2 §4.1-C5): pre-warm al importar el módulo
 // (el bridge lo importa → arranca ANTES de la primera captura SIN tocar

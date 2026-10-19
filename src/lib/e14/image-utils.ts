@@ -32,6 +32,27 @@ function encodePngDataUrl(canvas: HTMLCanvasElement): Promise<string> {
 
 import { loadImage } from "@jg-stevan/scanner-core/image-processor";
 
+/** KIT e14-optimizacion-v1 (T1): memo de decodificación FIFO tope 2 — la
+ *  MISMA dataURL del acta en vuelo se decodifica UNA vez aunque 4-5 etapas
+ *  del pipeline la pidan (tinta/vacía/completitud/banda/calidad). Tope 2 =
+ *  solo el acta en vuelo: RAM acotada (lección L7 de hidratación/RAM), el
+ *  acta siguiente desaloja a la anterior automáticamente. Determinismo: la
+ *  imagen devuelta es el MISMO decode que haría loadImage — cero cambio de
+ *  comportamiento. */
+const memoImagenes = new Map<string, HTMLImageElement>();
+export async function loadImageMemo(url: string): Promise<HTMLImageElement> {
+  const hit = memoImagenes.get(url);
+  if (hit) return hit;
+  const img = await loadImage(url);
+  memoImagenes.set(url, img);
+  while (memoImagenes.size > 2) {
+    const masVieja = memoImagenes.keys().next().value;
+    if (masVieja === undefined) break;
+    memoImagenes.delete(masVieja);
+  }
+  return img;
+}
+
 /**
  * §D4 (SPEC-e14-score-ocr) — cobertura de TINTA de la foto PROCESADA.
  * El realce por defecto es B/N adaptativo (Bradley-Roth + despeckle del
@@ -52,7 +73,7 @@ const TINTA_FRACCION_MINIMA = 0.005;
 
 export async function procesadaVaciaDataUrl(url: string): Promise<boolean> {
   try {
-    const img = await loadImage(url);
+    const img = await loadImageMemo(url);
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     if (!w || !h) return false;
@@ -84,7 +105,7 @@ export async function rotateProcessedDataUrl(
   url: string,
   deg: number
 ): Promise<{ url: string; thumb: string; w: number; h: number }> {
-  const img = await loadImage(url);
+  const img = await loadImageMemo(url);
   const w = img.naturalWidth;
   const h = img.naturalHeight;
   if (!w || !h) throw new Error("imagen sin dimensiones");

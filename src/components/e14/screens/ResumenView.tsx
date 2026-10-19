@@ -43,6 +43,9 @@ export function ResumenView() {
   // y contingencia C4 los usan) — RESUMEN deja de leerlos.
   const mesas = useE14Store((s) => s.mesas);
   const historial = useE14Store((s) => s.historial);
+  // KIT e14-optimizacion-v1 (T5): contador de sesión «por qué no se envió»
+  // (espejo pasivo del store — memoria de sesión, sin persistencia).
+  const motivosNoEnvio = useE14Store((s) => s.motivosNoEnvio);
   // PUESTO ACTUAL (kit actas-resumen-puesto-v2): el real manda; en simulación
   // (sin puesto real) el demo — MISMO puesto que muestra ACTAS en todo momento.
   const puestoReal = useE14Store((s) => s.puestoActual);
@@ -139,6 +142,29 @@ export function ResumenView() {
             <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-gray-400">PÁGINAS EN RESCANEO</span>
           </div>
         </div>
+
+        {/* KIT e14-optimizacion-v1 (T5): «POR QUÉ NO SE ENVIO — SESIÓN» —
+            espejo PASIVO de desenlaces ya ocurridos (store.motivosNoEnvio,
+            memoria de sesión: se resetea al recargar a propósito). Sin ZIP,
+            sin descargas, el gate sin tocar — instrumento para calibrar con
+            datos (AUDITORIA-e14 §4). Sin motivos → no se pinta nada. */}
+        {Object.keys(motivosNoEnvio).length > 0 && (
+          <div className="bg-brand-surface border border-brand-border p-3 flex flex-col gap-2 rounded-2xl">
+            <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">
+              POR QUÉ NO SE ENVIO — SESIÓN
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(motivosNoEnvio).map(([clave, n]) => (
+                <span
+                  key={clave}
+                  className="px-2.5 py-0.5 border border-brand-border text-gray-300 font-mono text-[11px] rounded-full whitespace-nowrap"
+                >
+                  {clave} ×{n}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* KIT e14-esquinas-suaves-v1 (T-C): la sección COMPORTAMIENTO
             (tasa de auto-envío + causas top + EXPORTAR REPORTE) se RETIRA —
