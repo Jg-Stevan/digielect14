@@ -18,6 +18,8 @@ import { AnalyzingView } from "@/components/e14/screens/AnalyzingView";
 import { ReviewView, ReviewCtas } from "@/components/e14/screens/ReviewView";
 import { ActasView } from "@/components/e14/screens/ActasView";
 import { ResumenView } from "@/components/e14/screens/ResumenView";
+// KIT e14-carga-masiva-v1 (T4): vista MASIVA (módulo separado, desktop-first).
+import { MasivaView } from "@/components/e14/screens/MasivaView";
 
 export default function Page() {
   const vista = useE14Store((s) => s.vista);
@@ -51,6 +53,9 @@ export default function Page() {
           {vista === "revision" && <ReviewView />}
           {vista === "actas" && <ActasView />}
           {vista === "resumen" && <ResumenView />}
+          {/* KIT e14-carga-masiva-v1 (T4): MASIVA en la grilla de vistas —
+              TopBar queda como está (solo REVISIÓN), scroll propio. */}
+          {vista === "masiva" && <MasivaView />}
         </div>
       </main>
 
