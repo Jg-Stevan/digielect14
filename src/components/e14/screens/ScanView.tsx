@@ -90,6 +90,7 @@ import { CameraFrameLoop, type FrameLoopTelemetry } from "@jg-stevan/scanner-cor
 import { SHUTTER_SCORE } from "@jg-stevan/scanner-core/quality";
 import type { Quad } from "@jg-stevan/scanner-core/types";
 import { useE14Store, type BandaSim } from "@/lib/e14/store";
+import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
 import type { Acta } from "@/lib/e14/types";
 import {
   CameraNavIcon,
@@ -755,6 +756,11 @@ export function ScanView() {
   // §9: precarga OpenCV.js del worker sin bloquear la UI.
   useEffect(() => {
     warmUpScannerWorker();
+    // KIT e14-prowarm-ocr-v1 (T2b): pre-warm del OCR diferido 2 s (app recién
+    // abierta — no competir con la carga). Idempotente: si MASIVA ya calentó,
+    // rapidOcrPrecalentar() resuelve al instante (flag de módulo).
+    const t = window.setTimeout(() => void rapidOcrPrecalentar(), 2000);
+    return () => window.clearTimeout(t);
   }, []);
 
   // §C → §6.3 (redesign-stitch): Escape cierra el selector de modo;
