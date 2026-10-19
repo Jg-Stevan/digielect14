@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIT bench e14-rec-int8-v1 — banco int8 del rec PP-OCRv4 (SOLO banco, cero producción)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: #0c0c0d; color: #e4e4e7;
+    font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 22px 0 8px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .06em; }
+  .sub { color: #a1a1aa; margin: 0 0 18px; font-size: 12.5px; }
+  .caja { border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; background: #131316; margin-bottom: 14px; }
+  .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; padding: 10px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #3f3f46; background: #1f1f23; color: #e4e4e7; min-height: 44px;
+  }
+  button:hover:not(:disabled) { background: #2d2d33; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #btn-descargar { border-color: #3f6212; background: #1a2e05; color: #bef264; }
+  #btn-descargar:hover:not(:disabled) { background: #274008; }
+  .estado { margin: 10px 0 0; white-space: pre-wrap; }
+  .ok { color: #a3e635; } .mal { color: #f87171; } .info { color: #d4d4d8; } .warn { color: #fbbf24; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { border: 1px solid #27272a; padding: 6px 10px; text-align: left; font-size: 13px; }
+  th { background: #18181b; color: #a1a1aa; font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .veredicto { font-size: 22px; font-weight: 700; padding: 10px 18px; border-radius: 10px; display: inline-block; margin-top: 8px; }
+  .veredicto.go { background: #1a2e05; color: #a3e635; border: 1px solid #3f6212; }
+  .veredicto.nogo { background: #2e0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+  .veredicto.bloq { background: #2e2305; color: #fbbf24; border: 1px solid #713f12; }
+  pre#log {
+    max-height: 240px; overflow-y: auto; font-size: 12px; color: #a1a1aa;
+    background: #0f0f11; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin: 8px 0 0;
+  }
+  pre#log::-webkit-scrollbar { width: 8px; }
+  pre#log::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  .detalle-tabla { max-height: 360px; overflow-y: auto; }
+  code { color: #bef264; }
+</style>
+</head>
+<body>
+<h1>KIT bench e14-rec-int8-v1 — Cuantización int8 del rec PP-OCRv4</h1>
+<p class="sub">SOLO banco de pruebas (instrumento de medición, cero producción) · EP wasm idéntico al de producción
+(<code>public/vendor/onnxruntime/</code>) · corpus sintético determinista de 60 líneas · protocolo: pasada caliente descartada + pasada medida.</p>
+
+<div class="caja">
+  <div class="fila">
+    <button id="btn-correr" type="button">▶ REPETIR CORRIDA</button>
+    <button id="btn-descargar" type="button" disabled>⬇ DESCARGAR JSON</button>
+    <span id="meta" class="info"></span>
+  </div>
+  <p id="estado" class="estado info">Cargando ORT-web…</p>
+</div>
+
+<h2>Resultados</h2>
+<div class="caja" id="caja-resultados"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Detalle línea a línea (mismo orden para ambos modelos)</h2>
+<div class="caja detalle-tabla" id="caja-detalle"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Log</h2>
+<pre id="log"></pre>
+
+<script type="module">
+import * as ort from "../../node_modules/onnxruntime-web/dist/ort.wasm.min.mjs";
+
+// ─── Config del banco (réplica fiel de src/lib/e14/ocr/rapidocr.ts) ──────────
+const URL_FP32 = "../../public/models/rapidocr/ch_PP-OCRv4_rec_infer.onnx";
+const URL_INT8 = "./ch_PP-OCRv4_rec_int8.onnx"; // artifact local de T1 (NO commiteado)
+const URL_DICT = "../../public/models/rapidocr/ppocr_keys.txt";
+const TEXT_SCORE = 0.5; // umbral de aceptación del motor de producción
+const TAM_LOTE = 6;     // rec por lotes de 6 (rapidocr.ts:734-761)
+const SEMILLA = 0xe14be6c5; // corpus determinista (cero aleatoriedad de ejecución)
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls = "info") => {
+  const linea = document.createElement("div");
+  if (cls) linea.className = cls;
+  linea.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $("log").appendChild(linea);
+  $("log").scrollTop = $("log").scrollHeight;
+};
+const setEstado = (msg, cls = "info") => { $("estado").textContent = msg; $("estado").className = `estado ${cls}`; };
+
+// ─── PRNG determinista (mulberry32, seed fija) ───────────────────────────────
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const entero = (rnd, min, max) => min + Math.floor(rnd() * (max - min + 1));
+const digitos = (rnd, n) => Array.from({ length: n }, () => entero(rnd, 0, 9)).join("");
+
+// ─── Corpus sintético: 60 líneas estilo acta (texto dibujado en canvas —
+//     SINTÉTICO, cero fotos reales, kit §0.7). MISMAS imágenes para ambos
+//     modelos: se generan UNA vez antes de correr cualquier modelo. ──────────
+const FUENTES = ['"Courier New", monospace', "Consolas, monospace", "monospace"];
+const TAMANOS = [28, 32, 36, 40, 44];
+
+function plantillas(rnd) {
+  const dd = (n) => digitos(rnd, n);
+  const fecha = `${dd(2)}/${dd(2)}/20${dd(2)}`;
+  const hora = `${dd(2)}:${dd(2)}`;
+  return [
+    `ACTA ${dd(3)} DE ${dd(4)} - MESA ${dd(2)}`,
+    `PUESTO ${dd(5)} MUNICIPIO ${dd(3)} DEPARTAMENTO ${dd(2)}`,
+    `FECHA ${fecha} HORA ${hora}`,
+    `TRANSMISION ${dd(6)} ${dd(4)} ESTADO OK`,
+    `CODIGO E14 ${dd(13)}`,
+    `TOTAL VOTOS ${dd(4)} ${dd(4)} ${dd(3)} ${dd(2)}`,
+    `TESTIGO ${dd(5)} FIRMA ${dd(6)} ${dd(2)}`,
+    `URNA ${dd(4)} - SUFRAGIOS ${dd(4)} - BLANCOS ${dd(3)}`,
+    `CANDIDATO ${dd(3)} VOTOS ${dd(4)} PUESTO ${dd(2)}`,
+    `DIGIELECT VERIF ${dd(2)}:${dd(2)}:${dd(2)} LOTE ${dd(3)}`,
+  ];
+}
+
+function generarCorpus() {
+  const rnd = mulberry32(SEMILLA);
+  const corpus = [];
+  for (let i = 0; i < 60; i++) {
+    const plantilla = plantillas(rnd)[i % 10];
+    const tamano = TAMANOS[i % TAMANOS.length];
+    const fuente = FUENTES[i % FUENTES.length];
+    const medidor = document.createElement("canvas").getContext("2d");
+    medidor.font = `${tamano}px ${fuente}`;
+    const ancho = Math.ceil(medidor.measureText(plantilla).width) + 16;
+    const alto = Math.ceil(tamano * 1.35) + 8;
+    const cv = document.createElement("canvas");
+    cv.width = ancho; cv.height = alto;
+    const ctx = cv.getContext("2d", { willReadFrequently: true });
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, ancho, alto);
+    ctx.fillStyle = "#000000";
+    ctx.font = `${tamano}px ${fuente}`;
+    ctx.textBaseline = "middle";
+    ctx.fillText(plantilla, 8, alto / 2);
+    corpus.push({ canvas: cv, esperado: plantilla });
+  }
+  return corpus;
+}
+
+// ─── Pre/post IDÉNTICOS al motor de producción (rapidocr.ts:470-545) ─────────
+// tensor NCHW, resize punto-fijo a h=48 con pad de ceros a la derecha,
+// canales BGR, normalización (x/255 - 0.5)/0.5.
+function ctxDe(canvas) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("canvas 2d no disponible");
+  return ctx;
+}
+
+function tensorDeCanvases(canvases, targetW) {
+  const b = canvases.length;
+  const data = new Float32Array(b * 3 * 48 * targetW);
+  for (let i = 0; i < b; i++) {
+    const c = canvases[i];
+    const ctx = ctxDe(c);
+    const { width: cw, height: ch } = c;
+    const img = ctx.getImageData(0, 0, cw, ch);
+    const rw = Math.min(Math.max(1, Math.ceil((48 * cw) / ch)), targetW);
+    for (let y = 0; y < 48; y++) {
+      const sy = Math.min(ch - 1, Math.floor((y * ch) / 48));
+      for (let x = 0; x < rw; x++) {
+        const sx = Math.min(cw - 1, Math.floor((x * cw) / rw));
+        const idx = (sy * cw + sx) * 4;
+        const o = i * 3 * 48 * targetW + y * targetW + x;
+        data[o] = (img.data[idx + 2] / 255 - 0.5) / 0.5; // B
+        data[o + 48 * targetW] = (img.data[idx + 1] / 255 - 0.5) / 0.5; // G
+        data[o + 2 * 48 * targetW] = (img.data[idx] / 255 - 0.5) / 0.5; // R
+      }
+    }
+  }
+  return new ort.Tensor("float32", data, [b, 3, 48, targetW]);
+}
+
+// CTC greedy: argmax por t; colapsar repetidos; ignorar blank (0);
+// 1..dict.length → dict[idx-1]; resto → " "; conf = media de las probs de los
+// tokens seleccionados (el ONNX del rec ya sale con softmax — igual que el motor).
+function ctcDecode(tensor, dict) {
+  const dims = tensor.dims;
+  const T = dims[1];
+  const C = dims[2];
+  const data = tensor.data;
+  let texto = "";
+  let sumaConf = 0;
+  let cuenta = 0;
+  let ultimo = -1;
+  for (let t = 0; t < T; t++) {
+    const base = t * C;
+    let mejor = 0;
+    let mejorV = -Infinity;
+    for (let c = 0; c < C; c++) {
+      const v = data[base + c];
+      if (v > mejorV) { mejorV = v; mejor = c; }
+    }
+    if (mejor !== 0 && mejor !== ultimo) {
+      const prob = mejorV;
+      if (mejor <= dict.length) texto += dict[mejor - 1];
+      else texto += " ";
+      sumaConf += prob;
+      cuenta++;
+    }
+    ultimo = mejor;
+  }
+  return { texto, conf: cuenta === 0 ? 0 : sumaConf / cuenta };
+}
+
+// Rec por lotes de 6 ordenados por ratio w/h — réplica de rapidocr.ts:734-761
+// (W = floor(48 · max(320/48, ratios del lote)); el resize individual ocurre
+// dentro de tensorDeCanvases con pad de ceros).
+async function correrRec(session, crops, dict, { decodificar }) {
+  const t0 = performance.now();
+  const resultados = new Array(crops.length);
+  const orden = crops
+    .map((c, i) => ({ i, ratio: c.canvas.width / c.canvas.height }))
+    .sort((a, b) => a.ratio - b.ratio);
+  for (let k = 0; k < orden.length; k += TAM_LOTE) {
+    const lote = orden.slice(k, k + TAM_LOTE);
+    const maxRatio = Math.max(320 / 48, ...lote.map((o) => o.ratio));
+    const W = Math.floor(48 * maxRatio);
+    const tensor = tensorDeCanvases(lote.map((o) => crops[o.i].canvas), W);
+    const res = await session.run({ [session.inputNames[0]]: tensor });
+    const out = res[session.outputNames[0]];
+    if (!decodificar) continue;
+    for (let m = 0; m < lote.length; m++) {
+      const dims = out.dims;
+      const sub = {
+        dims: [1, dims[1], dims[2]],
+        data: out.data.subarray(m * dims[1] * dims[2], (m + 1) * dims[1] * dims[2]),
+        type: out.type,
+      };
+      resultados[lote[m].i] = ctcDecode(sub, dict);
+    }
+  }
+  return { ms: performance.now() - t0, resultados };
+}
+
+const confMedia = (resultados) =>
+  resultados.reduce((s, r) => s + r.conf, 0) / resultados.length;
+const aceptadas = (resultados) =>
+  resultados.filter((r) => r.conf >= TEXT_SCORE && r.texto.trim().length > 0).length;
+const accGT = (resultados, corpus) =>
+  (100 * resultados.filter((r, i) => r.texto.trim() === corpus[i].esperado).length) / corpus.length;
+
+// ─── Corrida principal ───────────────────────────────────────────────────────
+let ultimoJson = null;
+
+async function correr() {
+  $("btn-correr").disabled = true;
+  $("btn-descargar").disabled = true;
+  $("caja-resultados").innerHTML = '<p class="info">Corriendo…</p>';
+  $("caja-detalle").innerHTML = '<p class="info">Corriendo…</p>';
+  $("log").innerHTML = "";
+  ultimoJson = null;
+
+  try {
+    // EP idéntico a producción (rapidocr.ts:92-110): wasmPaths vendido, SIMD,
+    // numThreads = min(4, cores) SOLO con SAB+COI (igual que el motor).
+    // NOTA: la ruta relativa del kit («../../public/vendor/onnxruntime/») es
+    // relativa a la PÁGINA; el build ESM de ORT resuelve wasmPaths contra la
+    // URL del módulo (node_modules/onnxruntime-web/dist/), lo que producía
+    // /node_modules/public/vendor/… (error capturado en la 1ª corrida). Se
+    // hace explícita la resolución desde la página — mismo directorio vendido.
+    ort.env.wasm.wasmPaths = new URL("../../public/vendor/onnxruntime/", location.href).href;
+    const coi = typeof SharedArrayBuffer !== "undefined" && self.crossOriginIsolated;
+    const numThreads = coi ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+    ort.env.wasm.numThreads = numThreads;
+    ort.env.wasm.simd = true;
+    // Nota: el motor pone proxy=true para no bloquear el main thread; aquí no
+    // afecta a las cifras (solo a quién ejecuta la inferencia) y el kit no lo
+    // exige — se omite y se documenta en el README.
+    log(`ORT-web ${(ort.env && ort.env.versions && ort.env.versions["onnxruntime-web"]) || "?"} · wasmPaths=vendido · numThreads=${numThreads} · COI=${coi} · cores=${navigator.hardwareConcurrency}`);
+
+    setEstado("Cargando dict CTC y corpus…");
+    const dictResp = await fetch(URL_DICT);
+    if (!dictResp.ok) throw new Error(`ppocr_keys.txt HTTP ${dictResp.status}`);
+    const dict = (await dictResp.text()).split("\n").filter((l) => l.length > 0);
+    log(`Dict CTC: ${dict.length} entradas`);
+    const corpus = generarCorpus();
+    log(`Corpus sintético: ${corpus.length} líneas (seed fija ${SEMILLA}) — mismas imágenes y orden para ambos modelos`);
+
+    // Sesión fp32
+    setEstado("Creando sesión fp32…");
+    const tCreaF = performance.now();
+    const sesFp32 = await ort.InferenceSession.create(URL_FP32, { executionProviders: ["wasm"] });
+    log(`Sesión fp32 creada en ${Math.round(performance.now() - tCreaF)} ms (EP wasm)`);
+
+    // Sesión int8 (si falla: capturar error EXACTO → BLOQUEADA + baseline fp32)
+    let sesInt8 = null;
+    let errorInt8 = null;
+    setEstado("Creando sesión int8…");
+    const tCreaI = performance.now();
+    try {
+      sesInt8 = await ort.InferenceSession.create(URL_INT8, { executionProviders: ["wasm"] });
+      log(`Sesión int8 creada en ${Math.round(performance.now() - tCreaI)} ms (EP wasm)`, "ok");
+    } catch (e) {
+      errorInt8 = e && e.message ? e.message : String(e);
+      log(`FALLO al crear sesión int8: ${errorInt8}`, "mal");
+      log("Kit T2.7: si MatMulInteger u otro op no está soportado en EP wasm, regenerar el artifact con QuantType.QUInt8 (cuantizar.py) y repetir; si también falla → BLOQUEADA documentada (hallazgo válido).", "warn");
+    }
+
+    const correrModelo = async (sesion, etiqueta) => {
+      log(`${etiqueta}: pasada 1 (caliente, descartada)…`);
+      await correrRec(sesion, corpus.map((c) => c), dict, { decodificar: false });
+      log(`${etiqueta}: pasada 2 (medida)…`);
+      const { ms, resultados } = await correrRec(sesion, corpus, dict, { decodificar: true });
+      log(`${etiqueta}: ${ms.toFixed(1)} ms total · ${(ms / corpus.length).toFixed(2)} ms/línea · conf media ${(confMedia(resultados) * 100).toFixed(2)}%`);
+      return { ms, resultados };
+    };
+
+    const rF = await correrModelo(sesFp32, "fp32");
+    let rI = null;
+    if (sesInt8) rI = await correrModelo(sesInt8, "int8");
+
+    if (rI) {
+      // Comparación texto-a-texto línea a línea en el MISMO orden
+      let identicas = 0;
+      const detalle = corpus.map((c, i) => {
+        const f = rF.resultados[i];
+        const q = rI.resultados[i];
+        const igual = f.texto.trim() === q.texto.trim();
+        if (igual) identicas++;
+        return { i, esperado: c.esperado, fp32: { texto: f.texto.trim(), conf: +f.conf.toFixed(4) }, int8: { texto: q.texto.trim(), conf: +q.conf.toFixed(4) }, identico: igual };
+      });
+      const pctIdentico = (100 * identicas) / corpus.length;
+      const confF = confMedia(rF.resultados);
+      const confI = confMedia(rI.resultados);
+      const deltaConf = (confF - confI) * 100; // puntos porcentuales (0-100)
+      const msLF = rF.ms / corpus.length;
+      const msLI = rI.ms / corpus.length;
+      const speedup = msLF / msLI;
+      // Umbrales kit §2: GO = velocidad ≥ 1.3× · texto idéntico ≥ 99% · |Δconf| ≤ 0.5 puntos
+      const go = speedup >= 1.3 && pctIdentico >= 99 && Math.abs(deltaConf) <= 0.5;
+
+      ultimoJson = {
+        hardware: `${navigator.hardwareConcurrency} núcleos lógicos (navigator.hardwareConcurrency)`,
+        navegador: navigator.userAgent,
+        numThreads,
+        corpus: corpus.length,
+        fp32: {
+          msTotal: +rF.ms.toFixed(1),
+          msPorLinea: +msLF.toFixed(3),
+          confMedia: +confF.toFixed(4),
+          lineasAceptadasTEXT05: aceptadas(rF.resultados),
+          accTextoGT: +accGT(rF.resultados, corpus).toFixed(2),
+        },
+        int8: {
+          msTotal: +rI.ms.toFixed(1),
+          msPorLinea: +msLI.toFixed(3),
+          confMedia: +confI.toFixed(4),
+          lineasAceptadasTEXT05: aceptadas(rI.resultados),
+          accTextoGT: +accGT(rI.resultados, corpus).toFixed(2),
+        },
+        comparacion: {
+          pctTextoIdéntico: +pctIdentico.toFixed(2),
+          deltaConf: +deltaConf.toFixed(3),
+          lineasIdenticas: identicas,
+          speedup: +speedup.toFixed(3),
+        },
+        umbrales: { velocidadMin: "1.3x", textoIdenticoMin: "99%", deltaConfMaxPuntos: 0.5 },
+        verdicto: go ? "GO" : "NO-GO",
+        ortWeb: (ort.env && ort.env.versions && ort.env.versions["onnxruntime-web"]) || "?",
+        ep: "wasm (vendido public/vendor/onnxruntime/, byte-idéntico a onnxruntime-web 1.30.0)",
+        crossOriginIsolated: coi,
+        fecha: new Date().toISOString(),
+        detalle,
+      };
+      pintarResultados(ultimoJson);
+      window.__benchJson = ultimoJson; // lectura programática de evidencia (el botón sigue siendo el canal manual)
+      $("btn-descargar").disabled = false;
+      setEstado(go ? "Corrida completa — veredicto GO según umbrales del kit." : "Corrida completa — veredicto NO-GO según umbrales del kit.", go ? "ok" : "warn");
+    } else {
+      // fp32-only como línea base (kit §0.3) + BLOQUEADA
+      ultimoJson = {
+        hardware: `${navigator.hardwareConcurrency} núcleos lógicos (navigator.hardwareConcurrency)`,
+        navegador: navigator.userAgent,
+        numThreads,
+        corpus: corpus.length,
+        fp32: {
+          msTotal: +rF.ms.toFixed(1),
+          msPorLinea: +(rF.ms / corpus.length).toFixed(3),
+          confMedia: +confMedia(rF.resultados).toFixed(4),
+          lineasAceptadasTEXT05: aceptadas(rF.resultados),
+          accTextoGT: +accGT(rF.resultados, corpus).toFixed(2),
+        },
+        int8: null,
+        int8Error: errorInt8,
+        comparacion: null,
+        verdicto: "BLOQUEADA",
+        nota: "Sesión int8 no se pudo crear en EP wasm — ver int8Error. Kit T2.7: intentar QUInt8 (cuantizar.py) y repetir; si también falla, es un hallazgo válido: int8 no viable en EP wasm hoy.",
+        fecha: new Date().toISOString(),
+      };
+      pintarBaselineFp32(ultimoJson);
+      window.__benchJson = ultimoJson;
+      $("btn-descargar").disabled = false;
+      setEstado("BLOQUEADA: sesión int8 no pudo crearse — baseline fp32-only medida (kit §0.3).", "warn");
+    }
+    try { sesFp32.release?.(); sesInt8?.release?.(); } catch { /* noop */ }
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    setEstado(`ERROR: ${msg}`, "mal");
+    log(`ERROR: ${msg}`, "mal");
+    console.error(e);
+  } finally {
+    $("btn-correr").disabled = false;
+  }
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function pintarBaselineFp32(j) {
+  $("caja-resultados").innerHTML = `
+    <table>
+      <tr><th>Modelo</th><th>ms total</th><th>ms/línea</th><th>conf media</th><th>aceptadas (TEXT_SCORE 0.5)</th><th>% texto vs GT</th></tr>
+      <tr><td>fp32 (10.35 MiB)</td><td class="num">${j.fp32.msTotal}</td><td class="num">${j.fp32.msPorLinea}</td><td class="num">${(j.fp32.confMedia * 100).toFixed(2)}%</td><td class="num">${j.fp32.lineasAceptadasTEXT05}/60</td><td class="num">${j.fp32.accTextoGT}%</td></tr>
+      <tr><td>int8</td><td colspan="5" class="mal">BLOQUEADA — ${esc(j.int8Error || "error desconocido")}</td></tr>
+    </table>
+    <div class="veredicto bloq">BLOQUEADA</div>`;
+  $("caja-detalle").innerHTML = '<p class="info">Sin comparación: int8 no corrió.</p>';
+}
+
+function pintarResultados(j) {
+  const cls = j.verdicto === "GO" ? "go" : "nogo";
+  $("caja-resultados").innerHTML = `
+    <table>
+      <tr><th>Modelo</th><th>ms total</th><th>ms/línea</th><th>conf media</th><th>aceptadas (TEXT_SCORE 0.5)</th><th>% texto vs GT</th></tr>
+      <tr><td>fp32 (10.35 MiB)</td><td class="num">${j.fp32.msTotal}</td><td class="num">${j.fp32.msPorLinea}</td><td class="num">${(j.fp32.confMedia * 100).toFixed(2)}%</td><td class="num">${j.fp32.lineasAceptadasTEXT05}/60</td><td class="num">${j.fp32.accTextoGT}%</td></tr>
+      <tr><td>int8 (2.75 MiB)</td><td class="num">${j.int8.msTotal}</td><td class="num">${j.int8.msPorLinea}</td><td class="num">${(j.int8.confMedia * 100).toFixed(2)}%</td><td class="num">${j.int8.lineasAceptadasTEXT05}/60</td><td class="num">${j.int8.accTextoGT}%</td></tr>
+    </table>
+    <table>
+      <tr><th>speedup (ms/línea fp32 ÷ int8)</th><th>texto idéntico</th><th>Δconf (puntos)</th><th>umbrales kit §2</th></tr>
+      <tr>
+        <td class="num">${j.comparacion.speedup}×</td>
+        <td class="num">${j.comparacion.pctTextoIdéntico}% (${j.comparacion.lineasIdenticas}/60)</td>
+        <td class="num">${j.comparacion.deltaConf}</td>
+        <td>≥1.3× · ≥99% idéntico · |Δconf| ≤ 0.5</td>
+      </tr>
+    </table>
+    <div class="veredicto ${cls}">${j.verdicto}</div>`;
+  const filas = j.detalle.map((d) => `
+    <tr style="${d.identico ? "" : "background:#2e0a0a;"}">
+      <td class="num">${d.i}</td><td>${esc(d.esperado)}</td>
+      <td>${esc(d.fp32.texto)} <span class="info">(${(d.fp32.conf * 100).toFixed(1)}%)</span></td>
+      <td>${esc(d.int8.texto)} <span class="info">(${(d.int8.conf * 100).toFixed(1)}%)</span></td>
+      <td>${d.identico ? '<span class="ok">✓</span>' : '<span class="mal">✗</span>'}</td>
+    </tr>`).join("");
+  $("caja-detalle").innerHTML = `
+    <table>
+      <tr><th>#</th><th>esperado (GT)</th><th>fp32</th><th>int8</th><th>¿idéntico?</th></tr>
+      ${filas}
+    </table>`;
+}
+
+$("btn-descargar").addEventListener("click", () => {
+  if (!ultimoJson) return;
+  const blob = new Blob([JSON.stringify(ultimoJson, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bench-rec-int8-resultado.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("btn-correr").addEventListener("click", () => void correr());
+
+$("meta").textContent = `UA: ${navigator.userAgent}`;
+void correr();
+</script>
+</body>
+</html>
