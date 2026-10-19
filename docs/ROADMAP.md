@@ -158,3 +158,11 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T4 — PR DRAFT (merge solo con orden del dueño).
 - [ ] Post-merge (dueño, PLAN §6): deploy en Vercel (dashboard o `bunx vercel deploy --prod`) → inspector (`E14.informe()`) sobre las 2-3 actas de la línea base → comparar vs GH Pages (34-68 s / rec 23-34 s, mono-hilo).
 - [ ] Opción pendiente de decisión: fase 2 Electron/nativo (solo si la demo web no alcanza).
+
+## MASIVA-UX — e14-masiva-ux-v1 (2026-10-19): detección al importar + formatos + estados de envío
+
+- [x] T1 — Detección al importar espera el worker OpenCV (tope 5 s, mecanismo warmUp/waitReady del core) + 1 reintento si el quad vino de Sobel; log `detectOrigen=`/`detectReintento=1` (solo añadidos al final). Editor manual y SIM intocados.
+- [x] T2 — Masiva acepta ZIP/RAR/HEIC: fflate + node-unrar-js con import DIFERIDO (D47 — bundle eager +0.41 %) · guards PROTEGIDO_O_CORRUPTO / SIN_IMAGENES_DENTRO / ARCHIVO_ANIDADO / LIMITE_500_POR_COMPRIMIDO / FORMATO_NO_SOPORTADO como filas ERROR · aviso «CONVIRTIENDO HEIC…» · accept ampliado.
+- [x] T3 — Estado de envío por fila: «EN COLA» (offline, hashSha256 kit-literal) / «ENVIADA AUTO» / «ENVIADA» + contadores `ENVIADAS · EN COLA · PENDIENTES · ERRORES` + drenaje al reconectar (y al montar — reconciliación idempotente).
+- [x] T4 — `timeoutMs?` en escanearActa (default 15 s individual INTACTO) · masiva 120 s (D48): con multihilo el pipeline real ~21 s ya no vence a los 15 s con resultado descartado; secuencial estricto D45.
+- [ ] Del dueño: RAR con imágenes (aquí no hay `rar`) · HEIC real de iPhone · lote lento ~21 s en SU PC (T4 real) · offline real (avión).
