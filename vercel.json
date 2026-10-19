@@ -10,8 +10,9 @@
   "buildCommand": "BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH=/digielect14 bun run build",
   "outputDirectory": "out",
   "rewrites": [
-    { "source": "/digielect14/:path*", "destination": "/:path*" },
-    { "source": "/digielect14", "destination": "/" }
+    { "source": "/digielect14", "destination": "/" },
+    { "source": "/digielect14/", "destination": "/" },
+    { "source": "/digielect14/:path*", "destination": "/:path*" }
   ],
   "headers": [
     {
