@@ -1577,6 +1577,12 @@ export class RealCoreBridge implements E14Bridge {
             calidadMs: ms.calidad,
             ocrMs: ms.ocr,
             totalMs: ms.total,
+            // D61 — KIT e14-tiempos-ocultos-v1 (T2): decode/detect YA se medían
+            // (ms.decode/ms.detect de este pipeline, hoy en la traza de consola)
+            // — ahora PERSISTEN. null honesto si la fase no corrió (video-grab
+            // sin archivo → decode=0; sinRecorte → detect=0) — jamás inventar.
+            decodeMs: ms.decode > 0 ? Math.round(ms.decode) : null,
+            detectMs: ms.detect > 0 ? Math.round(ms.detect) : null,
           },
         });
       } catch {
@@ -2165,6 +2171,11 @@ export class RealCoreBridge implements E14Bridge {
             calidadMs: ms.calidad,
             ocrMs: ms.ocr,
             totalMs: ms.total,
+            // D61 — KIT e14-tiempos-ocultos-v1 (T2): esta ruta (recorte manual
+            // del editor) NO mide decode/detect (su `ms` local solo trae
+            // proceso/calidad/ocr/total) — null honesto, jamás inventar.
+            decodeMs: null,
+            detectMs: null,
           },
         });
       } catch {
