@@ -304,3 +304,15 @@ Problema (kit §0): D63-B y D63-C añaden trazas de escaneo (`skewGrados`, `desk
 - [x] Entrega documental (CERO diff `src/` `public/`): REPORTE (auditoría §2 + mapeo kit↔faltante §3 + por qué no implementar hoy §4 + plan de desbloqueo con gate checklist §5 + sketch de implementación §5.1 + plantilla ANTES/DESPUÉS §5.2) + fila D63-D en DECISIONS + rama `feat/e14-informe-trazas-escaneo-v1` RESERVADA desde `f78a8f6`.
 - [ ] Desbloqueo (dueño/orquestador): ejecutar D63-A (línea ESCANEOS en el informe), D63-B y D63-C (trazas en productores + types) y re-ejecutar D63-D tras el gate del REPORTE §5 paso 2 (el kit dice «se corre AL FINAL»).
 - [ ] Del dueño: lote mixto real (fotos + escaneos) → trazas solo donde hay datos y fotos sin ruido extra · líneas previas byte a byte salvo añadidos al final · lint 0 · merge del PR (el agente NUNCA mergea).
+
+## DECODE-UNICO-PRECALOR — e14-decode-unico-precalor-v1 (2026-10-20, D66, AGENTE 3): un solo master a escala de trabajo + precalor en la espera
+
+Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de procesoMs — decode a resolución completa + re-escalados múltiples; HEIC paga wasm aunque el navegador pueda nativo; la cola espera sin hacer nada (p50 366 s).
+
+- [x] T1 — `maestroDeImagen(blob)`: UN decodificado a la escala de trabajo DOCUMENTADA 4032 (R4 sin cambio) + runner alimenta el bridge con el master (fallback honesto: original); origen/pre-proceso (D63-A/B) siguen sobre el ORIGINAL.
+- [x] T2 — HEIC nativo primero (`origenDecode:"nativo"`) + reserva wasm `heic2any` 0.0.4 deferida D47 (`origenDecode:"wasm"`) — fallback jamás se borra.
+- [x] T3 — `precalor.ts`: 3 masters FIFO en cola ociosa, flag transitorio `precalentada` (jamás IDB), chip PREPARADA, cancelación (QUITAR/VACIAR/DUPLICADA), pausa en lote, D45 intacto; prefetch D61 re-apuntado a masters.
+- [x] T4 — trazas `decodeMs/origenDecode/precalentada/precalorMs` + 2 líneas aditivas de informe (formato literal del kit) + json/ficha con spread condicional.
+- [x] Gates: tsc 0 · lint 0 · build OK · humo navegador completo (precalor en espera 229/143/37 ms · consumo decode=0 precalentada=true · decode del bridge 342/130/36 ms · cancelación QUITAR/DUPLICADA · SIM 8.2 intacto · chip 360 px · informe byte a byte).
+- [ ] Desviación de base documentada: D65 no existe aún (0 commits/ramas/PRs) — kit autocontenido sobre `2483c42`; convivencia con el futuro watchdog D65 por append-only.
+- [ ] Del dueño: A/B 16/16 veredictos (lote 20261019, corrida 162728, ±0.3 — divergencia = NO-GO y revertir) · tiempos reales JPG/HEIC (registrar qué máquinas dan decode nativo) · 26 actas de memoria · merge (el agente NUNCA mergea).
