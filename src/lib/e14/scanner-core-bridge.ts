@@ -116,6 +116,10 @@ import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
 // (escaneo y pipelineRecorte). SIM OMITIDO (guard — chips 8.2/7.0/4.3
 // intactos, §2.2); JAMÁS lanza (catch interno — el pipeline no depende, §5).
 import { probeOrientacion, rotarDataUrl } from "./orientacion";
+// KIT e14-ocr-escalonado-v1 (§2): caps del det-preprocess (op4) expuestos por
+// el motor + decisión/elegir del módulo PURO nuevo (testable headless — bun).
+import { DET_CAP_PROD, DET_CAP_RAPIDO } from "./ocr/rapidocr";
+import { anclasDe, elegirMejor, necesitaSegunda } from "./ocr-escalonado";
 // KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado justo
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
@@ -689,6 +693,111 @@ async function reconocerRapidOcr(
   return r.texto;
 }
 
+/** OCR principal de un pipeline — KIT e14-ocr-escalonado-v1 (§2): 1.ª pasada
+ *  con det cap RÁPIDO (1280, ~0.44× del det) → si la lectura sale débil,
+ *  re-OCR completo a 1920 y QUEDARSE CON EL MEJOR (anclas de ANCLAS_LECTURA,
+ *  luego conf — NUNCA automáticamente la 2.ª, §2.4). Sesión ÚNICA (§2.1): el
+ *  cap es del preprocess (op4), no del modelo — el singleton no cambia.
+ *  · SIM: OMITIDO (§3) — flujo de hoy a 1920, UNA pasada, 0 trazas (chips
+ *    8.2/7.0/4.3 intactos por construcción).
+ *  · Presupuesto (§3): el timeout EXISTENTE del pipeline manda — si la 1.ª
+ *    pasada lo consume, NO hay 2.ª (sin presupuestos nuevos).
+ *  · Progreso (§3): la 2.ª pasada reusa el MISMO emit de OCR (ANALIZANDO no
+ *    se queda colgado).
+ *  · Traza (§2.5) en línea PROPIA — append-only, parseable por el rastreador
+ *    (sin línea en SIM):
+ *      [e14] ocr-escalonado pasada1=1280 lectura=DEBIL reocr=1 elegido=1920 anclas1=2 anclas2=9 ms1=8200 ms2=14100
+ *      [e14] ocr-escalonado pasada1=1280 lectura=FUERTE reocr=0 elegido=1280 anclas1=7 ms1=8200
+ *  · ultimoOcr* (§4.2 PROD-2): quedan con la pasada ELEGIDA — la traza
+ *    ocr=rapidocr del pipeline describe el texto que el downstream consume.
+ *  El downstream (banda condicional, clasificación, gate, diagnostico,
+ *  ultimoOcr*) consume SOLO el texto elegido (§2.4) — el caller recibe el
+ *  texto ya resuelto y las métricas de la pasada elegida. */
+interface OcrEscalonadoSalida {
+  texto: string;
+  conf: number | null;
+  detMs: number;
+  recMs: number;
+}
+
+/** Pasada con métricas para elegirMejor (§2.4) — el ganador viaja por
+ *  REFERENCIA con su cap (1280|1920) para la traza elegido= y ultimoOcr*. */
+interface PasadaEscalonada {
+  texto: string;
+  conf: number;
+  detMs: number;
+  recMs: number;
+  cap: number;
+}
+
+async function reconocerRapidOcrEscalonado(
+  fotoOcr: string,
+  onProgress: (p: number) => void,
+  escalonado: {
+    /** true → SIM: flujo de hoy a 1920, una pasada, 0 trazas (§3). */
+    simular: boolean;
+    /** Presupuesto del pipeline (timeout EXISTENTE, §3 — sin nuevos). */
+    presupuestoMs: number;
+    /** performance.now del INICIO del pipeline (base del presupuesto). */
+    inicioMs: number;
+  },
+): Promise<OcrEscalonadoSalida> {
+  const rt = await rapidOcrInit(); // sesión ÚNICA (§2.1 — pre-warm en bg)
+  if (escalonado.simular) {
+    // SIM: EXACTAMENTE el flujo de hoy (det 1920, una pasada, 0 trazas).
+    const r = await rapidOcrReconocer(rt, fotoOcr, onProgress);
+    ultimoOcrConf = r.confMedia;
+    ultimoOcrDet = r.msDet;
+    ultimoOcrRec = r.msRec;
+    return { texto: r.texto, conf: r.confMedia, detMs: r.msDet, recMs: r.msRec };
+  }
+  // 1.ª pasada — det cap RÁPIDO (1280) → cls → rec (igual que hoy, §2.2).
+  const t1 = performance.now();
+  const r1 = await rapidOcrReconocer(rt, fotoOcr, onProgress, { detCap: DET_CAP_RAPIDO });
+  const ms1 = Math.round(performance.now() - t1);
+  const senal1 = senalDeLectura(r1.texto);
+  // §2.3 decisión + §3 presupuesto (el timeout existente manda): vencido →
+  // NO hay 2.ª (mismo desenlace que hoy: el timeout del pipeline resuelve).
+  const tocaSegunda =
+    necesitaSegunda(r1.texto) &&
+    performance.now() - escalonado.inicioMs < escalonado.presupuestoMs;
+  let elegido: PasadaEscalonada = {
+    texto: r1.texto,
+    conf: r1.confMedia,
+    detMs: r1.msDet,
+    recMs: r1.msRec,
+    cap: DET_CAP_RAPIDO,
+  };
+  let ms2: number | null = null;
+  let anclas2: number | null = null;
+  if (tocaSegunda) {
+    // 2.ª pasada — det cap PROD (1920) → cls → rec (§2.4); MISMO emit de
+    // progreso (§3). Elegir el MEJOR — NUNCA automáticamente la 2.ª.
+    const t2 = performance.now();
+    const r2 = await rapidOcrReconocer(rt, fotoOcr, onProgress, { detCap: DET_CAP_PROD });
+    ms2 = Math.round(performance.now() - t2);
+    anclas2 = anclasDe(r2.texto);
+    const ganadora = elegirMejor(
+      { texto: r1.texto, conf: r1.confMedia, detMs: r1.msDet, recMs: r1.msRec, cap: DET_CAP_RAPIDO },
+      { texto: r2.texto, conf: r2.confMedia, detMs: r2.msDet, recMs: r2.msRec, cap: DET_CAP_PROD },
+    );
+    elegido = ganadora; // MISMA referencia — la ganadora trae sus métricas
+  }
+  // ultimoOcr* = la pasada ELEGIDA (§2.4 — el downstream la describe).
+  ultimoOcrConf = elegido.conf;
+  ultimoOcrDet = elegido.detMs;
+  ultimoOcrRec = elegido.recMs;
+  // Traza propia (§2.5 — línea PROPIA, append-only; SIN línea en SIM).
+  console.info(
+    `[e14] ocr-escalonado pasada1=${DET_CAP_RAPIDO} lectura=${senal1.nivel} ` +
+      `reocr=${ms2 != null ? 1 : 0} elegido=${elegido.cap} anclas1=${anclasDe(r1.texto)}` +
+      (ms2 != null
+        ? ` anclas2=${anclas2} ms1=${ms1} ms2=${ms2}`
+        : ` ms1=${ms1}`),
+  );
+  return { texto: elegido.texto, conf: elegido.conf, detMs: elegido.detMs, recMs: elegido.recMs };
+}
+
 async function ocrBanda(fotoProcesada: string): Promise<string> {
   try {
     const img = await loadImageMemo(fotoProcesada);
@@ -1122,18 +1231,33 @@ export class RealCoreBridge implements E14Bridge {
 
     // 5) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.1: el recorte
     //    SIN filtro — regla del dueño; la bw pasa a ser SOLO la imagen de
-    //    presentación/guardado). KIT e14-motor-rapidocr-v1 (PROD-2 §2-C2):
-    //    motor RapidOCR PP-OCRv4; progreso REAL por lotes de rec (§2-C4).
+    //    presentación/guardado). KIT e14-ocr-escalonado-v1 (§2): OCR
+    //    ESCALONADO — 1.ª pasada det 1280 → re-OCR 1920 SOLO si la lectura
+    //    sale débil, el MEJOR manda (el gate JAMÁS ve un texto degradado si
+    //    el 1920 lo salva); SIM: flujo de hoy a 1920, 0 trazas (§3). Motor
+    //    RapidOCR PP-OCRv4 (PROD-2 §2-C2); progreso REAL por lotes de rec
+    //    (§2-C4) — la 2.ª pasada reusa el MISMO emit (§3).
     const tOcr = performance.now();
-    let texto = await reconocerRapidOcr(fotoOcr, (p) => {
-      emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
-    });
+    const ocrEsc = await reconocerRapidOcrEscalonado(
+      fotoOcr,
+      (p) => {
+        emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
+      },
+      {
+        simular: opciones.simular === true,
+        // §3 presupuesto: el timeout EXISTENTE del pipeline manda (masiva
+        // pasa 120_000 por OpcionesEscaneoConTimeout; default 15 s).
+        presupuestoMs: (opciones as OpcionesEscaneoConTimeout).timeoutMs ?? TIMEOUT_MS,
+        inicioMs: inicio,
+      },
+    );
+    let texto = ocrEsc.texto;
     ms.ocr = performance.now() - tOcr;
-    // PROD-2 (§4.2): capturar conf/det/rec del OCR principal ANTES de la
-    // banda (también corre RapidOCR y pisaría ultimoOcr* en la traza).
-    const confOcr = ultimoOcrConf;
-    const detOcr = ultimoOcrDet;
-    const recOcr = ultimoOcrRec;
+    // PROD-2 (§4.2): conf/det/rec de la pasada ELEGIDA — capturados ANTES de
+    // la banda (también corre RapidOCR y pisaría ultimoOcr* en la traza).
+    const confOcr = ocrEsc.conf;
+    const detOcr = ocrEsc.detMs;
+    const recOcr = ocrEsc.recMs;
     emitir({ etapa: "OCR", progreso: 1 });
     // KIT consenso-frankfurt-v1 (FASE 4, §5): banda dirigida — si el OCR
     // completo no leyó la banda (sello blanco-sobre-negro, §0-F4), SEGUNDA
@@ -1698,17 +1822,30 @@ export class RealCoreBridge implements E14Bridge {
 
     // 3) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.2: recorte SIN
     //    filtro con fallback idéntico al escaneo; gate §4.2). KIT
-    //    e14-motor-rapidocr-v1 (PROD-2 §2-C2): motor RapidOCR; progreso real
-    //    por lotes de rec (§2-C4).
+    //    e14-ocr-escalonado-v1 (§2): MISMO OCR ESCALONADO del escaneo — el
+    //    manual también merece el ahorro (§2). El recorte NO tiene SIM
+    //    (siempre real; guard fuente SIMULACION = mismo del diag §9.2).
+    //    Motor RapidOCR (PROD-2 §2-C2); progreso real por lotes (§2-C4).
     const tOcr = performance.now();
-    let texto = await reconocerRapidOcr(fotoOcr, (p) => {
-      emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
-    });
+    const ocrEsc = await reconocerRapidOcrEscalonado(
+      fotoOcr,
+      (p) => {
+        emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
+      },
+      {
+        simular: acta.fuente === "SIMULACION",
+        // §3 presupuesto: el timeout EXISTENTE del recorte manda
+        // (RECORTE_TIMEOUT_MS — T1 recorte-manual); sin presupuestos nuevos.
+        presupuestoMs: RECORTE_TIMEOUT_MS,
+        inicioMs: inicio,
+      },
+    );
+    let texto = ocrEsc.texto;
     ms.ocr = performance.now() - tOcr;
-    // PROD-2 (§4.2): capturar conf/det/rec del OCR principal antes de la banda.
-    const confOcr = ultimoOcrConf;
-    const detOcr = ultimoOcrDet;
-    const recOcr = ultimoOcrRec;
+    // PROD-2 (§4.2): conf/det/rec de la pasada ELEGIDA, antes de la banda.
+    const confOcr = ocrEsc.conf;
+    const detOcr = ocrEsc.detMs;
+    const recOcr = ocrEsc.recMs;
     emitir({ etapa: "OCR", progreso: 1 });
     // KIT consenso-frankfurt-v1 (FASE 4, §5): banda dirigida — MISMO helper
     // del escaneo (§4.4); el recorte no tiene SIM (siempre real).
