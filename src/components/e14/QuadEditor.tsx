@@ -106,6 +106,11 @@ export function QuadEditor({
 }: QuadEditorProps) {
   // ── Estado local (lab ~L310–420, parte CROP) ─────────────────────────────
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  // FIX (auditoría 2-b #14): estado de error del decode — antes un fallo de
+  // loadImage dejaba «Decodificando foto…» ETERNO (solo CANCELAR sacaba al
+  // usuario, sin explicación). MensajeReadout es el patrón existente del
+  // editor para avisos inline; aquí vive como estado para el placeholder.
+  const [falloDecode, setFalloDecode] = useState(false);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [displayQuad, setDisplayQuad] = useState<Quad>(() => quadInicial);
   // F4/D37: rotación LOCAL (inicial = prop) — solo llega al acta al APLICAR;
@@ -144,6 +149,7 @@ export function QuadEditor({
   useEffect(() => {
     let cancelled = false;
     setNatural(null);
+    setFalloDecode(false);
     loadImage(fotoOriginal)
       .then((img) => {
         if (!cancelled) {
@@ -154,7 +160,10 @@ export function QuadEditor({
         }
       })
       .catch(() => {
-        if (!cancelled) setNatural(null);
+        if (!cancelled) {
+          setNatural(null);
+          setFalloDecode(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -441,11 +450,24 @@ export function QuadEditor({
           className="relative flex h-full w-full items-center justify-center"
         >
           {!fit || !natural ? (
-            <div className="flex flex-col items-center gap-3" aria-label="Cargando imagen">
-              <span className="block h-7 w-7 rounded-full border-[3px] border-brand-border border-t-brand-green animate-spin" />
-              <span className="font-mono text-[10px] tracking-widest text-gray-500 uppercase">
-                Decodificando foto…
-              </span>
+            <div className="flex flex-col items-center gap-3" aria-label={falloDecode ? "Error decodificando" : "Cargando imagen"}>
+              {falloDecode ? (
+                <>
+                  <span className="font-mono text-[10px] tracking-widest text-red-400 uppercase text-center">
+                    NO SE PUDO DECODIFICAR LA FOTO
+                  </span>
+                  <span className="font-mono text-[10px] tracking-wider text-gray-500 uppercase text-center">
+                    CANCELA Y VUELVE A CAPTURAR EL ACTA
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="block h-7 w-7 rounded-full border-[3px] border-brand-border border-t-brand-green animate-spin" />
+                  <span className="font-mono text-[10px] tracking-widest text-gray-500 uppercase">
+                    Decodificando foto…
+                  </span>
+                </>
+              )}
             </div>
           ) : (
             <div
