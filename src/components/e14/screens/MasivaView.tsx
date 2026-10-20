@@ -88,6 +88,7 @@ export function MasivaView() {
     enviarLote,
     setFiltro,
     procesarIgual,
+    reintentar, // D59 — KIT e14-info-acta-filas-v1 (T4)
   } = useMasivaStore.getState();
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -406,7 +407,25 @@ export function MasivaView() {
 
                   {/* Nombre + estado/motivo */}
                   <div className="min-w-0 flex-1">
-                    <p className="font-mono text-[11px] font-bold text-white uppercase truncate">
+                    {/* D59 — KIT e14-info-acta-filas-v1 (T4): línea de título
+                        ENCIMA del nombre con la info reconocida del acta
+                        (idea del dueño, mockup Stitch corregido — paleta del
+                        repo: brand-green mono). Fila sin infoTitulo queda
+                        EXACTAMENTE como hoy (cero regresión); null = sin
+                        datos → no se pinta nada (jamás inventar). */}
+                    {f.infoTitulo && (
+                      <p
+                        className="font-mono text-[11px] font-bold uppercase tracking-wider text-brand-green truncate"
+                        title={f.infoTitulo}
+                      >
+                        {f.infoTitulo}
+                      </p>
+                    )}
+                    <p
+                      className={`font-mono text-[11px] font-bold uppercase truncate ${
+                        f.estado === "ERROR" ? "text-red-300" : "text-white"
+                      }`}
+                    >
                       {f.nombre}
                     </p>
                     <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
@@ -477,6 +496,20 @@ export function MasivaView() {
                         className="min-h-[44px] min-w-[44px] px-2.5 rounded-lg border border-brand-border text-gray-300 font-mono text-[10px] font-bold uppercase tracking-wider hover:border-brand-green hover:text-brand-green focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
                       >
                         ABRIR
+                      </button>
+                    )}
+                    {/* D59 — KIT e14-info-acta-filas-v1 (T4): «REINTENTAR» del
+                        mockup en filas ERROR — re-encola (PENDIENTE) para que
+                        PROCESAR la procese; SIN_ARCHIVO_ORIGINAL si el
+                        registro no trae el archivo original (honesto). */}
+                    {f.estado === "ERROR" && (
+                      <button
+                        type="button"
+                        onClick={() => void reintentar(f.id)}
+                        aria-label={`Reintentar ${f.nombre}: re-encolar para procesar`}
+                        className="min-h-[44px] px-2.5 rounded-lg border border-red-500/40 text-red-300 font-mono text-[10px] font-bold uppercase tracking-wider hover:border-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                      >
+                        REINTENTAR
                       </button>
                     )}
                     <button
