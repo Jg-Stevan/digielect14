@@ -35,6 +35,11 @@ export interface FilaMasiva {
   /** KIT e14-masiva-tiempos-v1 (PR-1): id de la fila ORIGINAL cuando la fila
    *  está DUPLICADA (Hamming ≤ 6) — el runner copia SU resultado. */
   dupOf?: string | null;
+  /** D59 — KIT e14-info-acta-filas-v1 (T1): título compuesto con la info
+   *  reconocida del acta (idea del dueño, mockup Stitch corregido).
+   *  string|null: null = sin datos → la fila solo pinta el nombre de archivo
+   *  (honestidad, jamás inventar). */
+  infoTitulo?: string | null;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
@@ -56,6 +61,10 @@ export interface RegistroMasiva {
    *  recarga (la fila sigue DUPLICADA y el runner puede copiar igual). */
   hashDedup?: string;
   dupOf?: string;
+  /** D59 — KIT e14-info-acta-filas-v1 (T1): el título compuesto PERSISTE
+   *  junto al registro (misma desviación aditiva documentada de thumb) —
+   *  la bandeja lo repinta tras recargar sin re-procesar nada. */
+  infoTitulo?: string | null;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del
@@ -63,4 +72,32 @@ export interface RegistroMasiva {
  *  (honestidad del kit actas-vivas-paginas-v1, FASE B). */
 export function paginaDeActa(acta: Acta): string {
   return acta.pagina ? `${acta.pagina.index}/${acta.pagina.total}` : "-/-";
+}
+
+/** D59 — KIT e14-info-acta-filas-v1 (T1): título compuesto con la info
+ *  reconocida del acta (idea del dueño, mockup Stitch corregido) —
+ *  "335 EGIPTO - EL CAIRO CONSULADO - DELEGADOS - MESA 001 - PÁG 1 DE 2".
+ *  NO exige pipeline nuevo: todos los trozos YA existen en
+ *  Acta.clasificacion (ClasificacionE14): departamento {codigo,nombre} ·
+ *  puesto.nombre (fallback: acta.titulo) · tipo · mesa (number, zero-pad 3
+ *  — mismo estilo del chip REVISIÓN «MESA 012»; fallback: ubicacion.mesa
+ *  numérica) · pagina {index,total} (fallback: acta.pagina).
+ *  string|null: null = sin datos → la fila solo pinta el nombre de archivo
+ *  (honestidad del repo: jamás inventar — PÁG «-/-» cuando es null). */
+export function tituloDeActa(acta: Acta): string | null {
+  const c = acta.clasificacion;
+  const partes: string[] = [];
+  const depto = c?.departamento
+    ? [c.departamento.codigo, c.departamento.nombre].filter(Boolean).join(" ").trim()
+    : null;
+  if (depto) partes.push(depto);
+  const puesto = c?.puesto?.nombre?.trim() || acta.titulo?.trim() || null;
+  if (puesto) partes.push(puesto);
+  if (c?.tipo) partes.push(c.tipo);
+  const mesa = c?.mesa ?? (/^\d+$/.test(acta.ubicacion?.mesa ?? "") ? Number(acta.ubicacion.mesa) : null);
+  if (mesa != null) partes.push(`MESA ${String(mesa).padStart(3, "0")}`);
+  const pag = c?.pagina ?? acta.pagina;
+  if (pag) partes.push(`PÁG ${pag.index} DE ${pag.total}`);
+  const t = partes.join(" - ").toUpperCase();
+  return t.length > 0 ? t : null; // sin clasificación ni título → null
 }
