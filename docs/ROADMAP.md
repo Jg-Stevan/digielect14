@@ -219,3 +219,15 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] V — E2E con foto REAL del dueño (Galaxy A56): OCR 94% · AUTO `88·120·15·02·012` · score 8.5 · ÓPTIMA auto-enviada · RECARGA restaura jornada+acta ENVIADA con fotos · REINICIAR fresco · MASIVA OK · 0 errores consola · lint 0 · tsc 0.
 - [x] T — Docs: REPORTE + D54/D55 + esta entrada + docs/worklog + AGENTS. (Arreglos de auditoría del PR: `package.json` dev restaurado byte a byte + worklog de sandbox fuera del repo.)
 - [ ] Del dueño: auditar/mergeear PR #38 · decidir D48 (timeout MASIVA 120 s) · probar instalación PWA + offline en SU teléfono (SW exige https) · `unzipSync`→async si el despliegue lo exige.
+
+## MASIVA-TIEMPOS — e14-masiva-tiempos-v1 (2026-10-20, AGENTE 2 terminado por orden del dueño): dedup + prefetch (B1 + B5)
+
+Mandato: «8 de las 16 actas del informe eran duplicados (.heic+.jpg) — cada uno pagó OCR completo» + «ocultar el decode HEIC tras el OCR de la fila anterior».
+
+- [x] T1 (PR-1) — `masiva/dedup.ts` (NUEVO): dhash 64-bit (9×8 gradiente horizontal) sobre thumb 320 (`hacerThumb` reuso) desde la MISMA vía del pipeline (`fileToCaptureDataUrl` — EXIF/HEIC → gemelas .heic/.jpg mismo hash) + `hamming64`.
+- [x] T2 (PR-1) — Cadena FIFO al encolar (`cadenaDedup` en store, fire-and-forget): hash persistente + marca `DUPLICADA` (persistente IDB) con Hamming ≤ 6 + guards anti-zombi. Runner: copia del resultado de la original (<1 s, traza `dupOf=`) con fallback honesto a reproceso completo.
+- [x] T3 (PR-1) — UI: píldora DUPLICADA + `≡ original` + botón «PROCESAR IGUAL» + conteo DUPLICADAS + PROCESAR habilitado con solo-duplicadas.
+- [x] T4 (PR-2) — Prefetch decode N+1 durante OCR de N: memo `WeakMap<File>` transparente en el ÚNICO call site del bridge + `precargarDecodeArchivo` + slot de 1 en el runner (conservado en filas dup; stopFlag lo respeta; fallo → re-decode como hoy).
+- [x] T5 — Verificación E2E arnés: gemelas cross-formato (jpg↔png, jpg↔webp) marcadas al instante; copias 42-141 ms con desenlace idéntico; `decode=0 ms` (HIT) en filas 2..N; pausa/reanudación + archivo corrupto (ERROR honesto, sin crash); identidad sana=8.5 AUTO en los 3 caminos. lint 0 · tsc 0 · build OK (cada rama sola).
+- [x] T6 — Docs: REPORTE (evidencia verbatim + 3 desviaciones documentadas) + D52 + AGENTS + worklog.
+- [ ] Del dueño: merge PR-1 → PR-2 (apilada) · AC-B1 con sus gemelas reales .heic+.jpg en su equipo · medir el ahorro B5 con HEIC reales (aquí jpg 0.3-0.5 s/acta ocultos; HEIC esperado 1-2 s).
