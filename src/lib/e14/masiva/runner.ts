@@ -22,7 +22,7 @@ import { precargarDecodeArchivo, type OpcionesEscaneoConTimeout } from "../scann
 import { useE14Store } from "../store";
 import { guardarRegistro, leerRegistro } from "./cola";
 import { useMasivaStore } from "./store";
-import { paginaDeActa, type FilaMasiva, type RegistroMasiva } from "./tipos";
+import { paginaDeActa, tituloDeActa, type FilaMasiva, type RegistroMasiva } from "./tipos";
 import type { ProgresoAnalisis } from "../types";
 
 /** KIT e14-masiva-ux-v1 (T4): presupuesto del pipeline en MASIVA — 120 s.
@@ -133,6 +133,9 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
       estado: "LISTA",
       acta: actaCopia,
       thumb: original.thumb,
+      // D59 — KIT e14-info-acta-filas-v1 (T2): la gemela ES el mismo acta →
+      // mismo título (honesto — copia el desenlace, copia la info).
+      infoTitulo: tituloDeActa(actaCopia),
       hashDedup: registro.hashDedup,
       dupOf: fila.dupOf,
     };
@@ -147,6 +150,7 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
       score: actaCopia.score,
       nivel: actaCopia.clasificacion?.nivel ?? null,
       pagina: paginaDeActa(actaCopia),
+      infoTitulo: tituloDeActa(actaCopia), // D59 — KIT e14-info-acta-filas-v1 (T2)
       motivo: actaCopia.rechazo?.tipo ?? null,
       thumb: original.thumb,
       enviadaAuto: actaCopia.status === "ENVIADA" && !!actaCopia.enviadoAutomaticamente,
@@ -272,6 +276,9 @@ async function procesarUno(
       estado: "LISTA",
       acta: actaFinal,
       thumb,
+      // D59 — KIT e14-info-acta-filas-v1 (T2): título con la info reconocida
+      // del desenlace REAL (persiste — desviación aditiva de thumb).
+      infoTitulo: tituloDeActa(actaFinal),
     };
     // FIX M14 (auditoría 2-c): persistencia fallida TRAS el envío — la fila
     // NO pasa a ERROR (el acta SÍ se transmitió; una fila ERROR invita a
@@ -295,6 +302,7 @@ async function procesarUno(
       score: actaFinal.score,
       nivel: actaFinal.clasificacion?.nivel ?? null,
       pagina: paginaDeActa(actaFinal),
+      infoTitulo: tituloDeActa(actaFinal), // D59 — KIT e14-info-acta-filas-v1 (T2)
       motivo: actaFinal.rechazo?.tipo ?? null,
       thumb,
       enviadaAuto,
@@ -308,7 +316,14 @@ async function procesarUno(
     // FIX M8-b (auditoría 2-c): el guard anti-zombi TAMBIÉN en el catch —
     // re-persistir el registro de una fila QUITADA lo revivía al recargar.
     if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return;
-    marcarFila(fila.id, { estado: "ERROR", error: motivoCorto(err), thumb: undefined });
+    // D59 — KIT e14-info-acta-filas-v1 (T2): la fila ERROR NUNCA muestra
+    // título viejo (infoTitulo: null — limpiar en el catch).
+    marcarFila(fila.id, {
+      estado: "ERROR",
+      error: motivoCorto(err),
+      infoTitulo: null,
+      thumb: undefined,
+    });
     if (registro) {
       try {
         await guardarRegistro({ ...registro, estado: "ERROR" });
