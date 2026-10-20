@@ -252,12 +252,18 @@ async function procesarUno(
     // MISMAS claves.
     let actaFinal = acta;
     let enviadaAuto = false;
+    // D61 — KIT e14-tiempos-ocultos-v1 (T3): coste del ENVÍO del desenlace —
+    // registrarEnvioMasiva (hash + historial + completadas + hueco archivado +
+    // cola offline; la sección síncrona del envío). SOLO hay envío real ONLINE:
+    // offline/EN COLA y no-OPTIMA → campo OMITIDO (jamás 0 falso — kit §2-T3).
+    let envioMs: number | null = null;
     if (acta.status === "OPTIMA") {
       // KIT e14-masiva-ux-v1 (T3.2): el envío respeta la conexión del momento
       // (misma semántica que registrarEnvio para actaActual): OFFLINE →
       // hashSha256 "EN COLA" — la fila pinta «EN COLA» y refrescarEnviosTrasDrenaje
       // la drena al reconectar. Online → el hash lo maneja el flujo normal.
       const onlineAlEnviar = useE14Store.getState().online;
+      const tEnvio = onlineAlEnviar ? performance.now() : 0;
       useE14Store.getState().registrarEnvioMasiva(acta);
       actaFinal = {
         ...acta,
@@ -266,8 +272,21 @@ async function procesarUno(
         ...(onlineAlEnviar ? {} : { hashSha256: "EN COLA" }),
       };
       enviadaAuto = true;
+      if (onlineAlEnviar) envioMs = Math.round(performance.now() - tEnvio);
     } else {
       useE14Store.getState().contarMotivoNoEnvioActa(acta);
+    }
+    // D61 (T3): parche INMUTABLE del diagnóstico con envioMs — MISMO patrón
+    // del parche esperaMs de D57 (spread, solo si diagnostico != null). Va
+    // ANTES de construir registroListo → viaja en la PRIMERA persistencia.
+    if (envioMs != null && actaFinal.diagnostico != null) {
+      actaFinal = {
+        ...actaFinal,
+        diagnostico: {
+          ...actaFinal.diagnostico,
+          tiempos: { ...actaFinal.diagnostico.tiempos, envioMs },
+        },
+      };
     }
 
     const thumb = await hacerThumb(acta.fotoProcesada ?? acta.fotoOriginal);
@@ -287,13 +306,49 @@ async function procesarUno(
     // Reintento MÍNIMO: estado LISTA + desenlace liviano, SIN el acta
     // completa (la causa típica del fallo es quota — el registro con acta
     // de ~15 MB no cabe; el liviano sí).
+    // D61 — KIT e14-tiempos-ocultos-v1 (T3): la MISMA ventana mide ahora la
+    // persistencia del desenlace (guardarRegistro principal + fallback
+    // liviano — kit §2-T3): persistMs = coste REAL del write que el usuario
+    // experimenta. Si ambos writes fallan, el campo se OMITE (sin dato —
+    // jamás inventar).
+    let persistMs: number | null = null;
+    const tPersist = performance.now();
     try {
       await guardarRegistro(registroListo);
+      persistMs = Math.round(performance.now() - tPersist);
     } catch {
       try {
         await guardarRegistro({ ...registro, estado: "LISTA", thumb });
+        persistMs = Math.round(performance.now() - tPersist);
       } catch {
-        /* IDB caída del todo — la fila vive honesta en memoria (LISTA) */
+        /* IDB caída del todo — la fila vive honesta en memoria (LISTA);
+           persistMs se omite (sin dato — jamás inventar). */
+      }
+    }
+    // D61 (T3) — re-save de INSTRUMENTO (FUERA del desenlace): persistMs nace
+    // DEL write que lo mide (paradoja del instrumento — no puede viajar dentro
+    // de él). Con el valor ya medido, parchea el diagnóstico (patrón inmutable
+    // de esperaMs) y re-persiste para que sobreviva la recarga (kit T5 — IDB).
+    // Best-effort y SILENCIOSO: si falla, IDB se queda con el write 1 —
+    // desenlace INTACTO (sin este campo; honesto). El liviano del fallback no
+    // lleva acta → sin diagnóstico → no hay nada que parchear (omitido).
+    if (persistMs != null && registroListo.acta?.diagnostico != null) {
+      try {
+        await guardarRegistro({
+          ...registroListo,
+          acta: {
+            ...registroListo.acta,
+            diagnostico: {
+              ...registroListo.acta.diagnostico,
+              tiempos: {
+                ...registroListo.acta.diagnostico.tiempos,
+                persistMs,
+              },
+            },
+          },
+        });
+      } catch {
+        /* el write 1 manda — persistMs viaja solo si este re-save cabe */
       }
     }
     marcarFila(fila.id, {
