@@ -86,6 +86,98 @@ export const PROBE_K_CROPS = 8;
  *  saturan la señal; el MARGEN compara igual en 0..10). */
 const TOPE_SCORE = 10;
 
+// ─── KIT e14-probe-adaptativo-v1 (D62 T1): ganador persistente del sondeo ───
+// El patrón del escáner/fotógrafo del dueño es consistente (lote 15:04: CCW →
+// ganador rot=270): con el ganador sondeado ANTES que el resto, cada acta
+// rotada se ahorra una pasada completa (~2-4 s). Persistencia en localStorage
+// (clave e14-probe-ganador-v1) con try/catch TOTAL — modo privado / cuota /
+// SSR / ambiente sin storage ⇒ sin ganador ⇒ comportamiento de hoy byte a
+// byte (el probe JAMÁS tumba el pipeline, §5).
+
+const CLAVE_GANADOR = "e14-probe-ganador-v1";
+const ANILLO_TOPE = 10;
+
+/** [D62-anillo-inicio]
+ * Anillo de los ÚLTIMOS 10 desenlaces del probe con aplicado=1 (solo rot 90/
+ * 180/270 — 0 nunca se aplica). El ganador se DERIVA del anillo: la rot más
+ * frecuente; empate ⇒ la de desenlace más reciente. Formato compacto
+ * [{"rot":270,"ts":<epoch>}…] — el kit pedía ~100 bytes con {rot,ts,n}
+ * agregado; el anillo es lo mínimo que respeta la ventana de 10 + empate
+ * (un agregado solo no puede expulsar al 11.º más viejo) — ver REPORTE §4. */
+interface DesenlaceRot {
+  rot: Rotacion;
+  ts: number;
+}
+
+function anilloGanadorLeer(): DesenlaceRot[] {
+  try {
+    const raw = localStorage.getItem(CLAVE_GANADOR);
+    if (raw == null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const anillo: DesenlaceRot[] = [];
+    for (const e of parsed) {
+      if (e && typeof e === "object") {
+        const r = (e as { rot?: unknown }).rot;
+        const t = (e as { ts?: unknown }).ts;
+        if ((r === 90 || r === 180 || r === 270) && typeof t === "number") {
+          anillo.push({ rot: r, ts: t });
+        }
+      }
+    }
+    return anillo.slice(-ANILLO_TOPE); // anillo: solo los últimos 10
+  } catch {
+    return [];
+  }
+}
+
+/** Ganador actual del anillo (más frecuente; empate ⇒ más reciente) o null.
+ *  La recencia se deriva de la POSICIÓN en el anillo (el último índice es el
+ *  desenlace más nuevo) — robusta aunque dos desenlaces caigan en el mismo
+ *  ms (Date.now()). */
+function ganadorPersistente(): Rotacion | null {
+  try {
+    const anillo = anilloGanadorLeer();
+    if (anillo.length === 0) return null;
+    const freq = new Map<Rotacion, { n: number; ultimaPos: number }>();
+    anillo.forEach((d, i) => {
+      const f = freq.get(d.rot);
+      if (f) {
+        f.n += 1;
+        f.ultimaPos = i;
+      } else {
+        freq.set(d.rot, { n: 1, ultimaPos: i });
+      }
+    });
+    let ganador: Rotacion | null = null;
+    for (const [rot, f] of freq) {
+      if (ganador === null) {
+        ganador = rot;
+        continue;
+      }
+      const g = freq.get(ganador)!;
+      if (f.n > g.n || (f.n === g.n && f.ultimaPos > g.ultimaPos)) ganador = rot;
+    }
+    return ganador;
+  } catch {
+    return null;
+  }
+}
+
+/** Registrar UN desenlace aplicado (aplicado=1). Un fallo del probe (catch →
+ * null), el caso vacío o aplicado=0 NUNCA escriben (kit T1.4). */
+function anilloGanadorRegistrar(rot: Rotacion): void {
+  try {
+    const anillo = anilloGanadorLeer();
+    anillo.push({ rot, ts: Date.now() });
+    while (anillo.length > ANILLO_TOPE) anillo.shift(); // expulsa el más viejo
+    localStorage.setItem(CLAVE_GANADOR, JSON.stringify(anillo));
+  } catch {
+    // sin storage (modo privado/cuota): el sondeo sigue con el orden de hoy
+  }
+}
+/** [D62-anillo-fin] */
+
 /** Dimensiones de canvas o imagen (para girar tanto crops como dataURLs). */
 function dimsDe(s: HTMLCanvasElement | HTMLImageElement): { w: number; h: number } {
   return s instanceof HTMLCanvasElement
@@ -175,9 +267,18 @@ export async function probeOrientacion(
     const scores: Partial<Record<Rotacion, number>> = {};
     const anclas: Partial<Record<Rotacion, number>> = {};
     const conf: Partial<Record<Rotacion, number>> = {};
-    // Orden de sondeo (§2.1 paso 3): 0° SIEMPRE primero (baseline del MARGEN)
-    // y luego el desafiante probable según la forma de la tira.
-    const orden: Rotacion[] = h > w ? [0, 180, 90, 270] : [0, 90, 270, 180];
+    // Orden de sondeo (§2.1 paso 3): 0° SIEMPRE primero (baseline del MARGEN;
+    // el atajo T1 de lectura-sana depende de él — INTACTO) y luego el
+    // desafiante probable según la forma de la tira.
+    // D62 T1 — orden ADAPTATIVO: con ganador persistente (aplicado=1 reciente)
+    // se sondea [0, ganador, resto…] (el resto conserva el orden actual minus
+    // ganador); sin ganador ⇒ el orden de HOY sin cambio (rama h > w respetada).
+    const gan = ganadorPersistente();
+    const base: Rotacion[] = h > w ? [0, 180, 90, 270] : [0, 90, 270, 180];
+    const orden: Rotacion[] =
+      gan === null || gan === 0
+        ? base
+        : [0, gan, ...base.filter((r) => r !== 0 && r !== gan)];
     let mejor: Rotacion | null = null;
     // D56 §3 T4 — por qué terminó el sondeo (solo para la traza, aditivo).
     let corte: "sana" | "presupuesto" | "completo" = "completo";
@@ -226,12 +327,15 @@ export async function probeOrientacion(
     const aplicado =
       mejor !== null && (scores[mejor] ?? 0) >= (scores[0] ?? 0) + MARGEN_ORIENTACION;
     const rot: Rotacion = aplicado ? mejor! : 0;
+    // D62 T1.4 — el anillo SOLO registra desenlaces APLICADOS (aplicado=1);
+    // fallo del probe (catch), vacío y aplicado=0 NUNCA escriben.
+    if (aplicado) anilloGanadorRegistrar(rot);
     const ms = Math.round(performance.now() - t0);
     const probeTxt = (Object.keys(scores) as unknown as Rotacion[])
       .map((r) => `${r}:${(scores[r] ?? 0).toFixed(2)}`)
       .join(",");
     console.info(
-      `[e14] orientacion crop=${w}x${h} rot=${rot} probe={${probeTxt}} anclas${rot}=${anclas[rot] ?? 0} conf${rot}=${(conf[rot] ?? 0).toFixed(2)} aplicado=${aplicado ? 1 : 0} ms=${ms} cortes=${corte}`,
+      `[e14] orientacion crop=${w}x${h} rot=${rot} probe={${probeTxt}} anclas${rot}=${anclas[rot] ?? 0} conf${rot}=${(conf[rot] ?? 0).toFixed(2)} aplicado=${aplicado ? 1 : 0} ms=${ms} cortes=${corte} orden=${orden.join(",")} gan=${gan ?? "-"}`,
     );
     return { rot, aplicado, scores, anclas, conf, ms };
   } catch {
