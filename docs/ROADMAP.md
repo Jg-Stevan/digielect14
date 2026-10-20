@@ -275,3 +275,15 @@ Mandato: informe del dueño 20/10 07:42 (17 actas, 17 ENVIADAS, 0 rechazos) con 
 - [x] FORENSE pag=None (solo reporte): cadena causal completa con citas (clasificador.ts L533-560 · bridge L1377-1381 piso 8.5 · evaluarGate L2244-2281 no mira página · store.ts L539 «PÁG ?» + L377-393 hueco primer-libre) — riesgo de integridad: pág-2 real archivada en P1 y reemplazada por la P1 real (pérdida silenciosa del consolidado); foto parcial DESCARTADA (caps 7.9 no aplicaron); fix D62 SOLO PROPUESTA.
 - [x] T4 — Docs: DECISIONS D58 (SOLO-EVIDENCIA) + esta entrada + REPORTE (evidencia completa + continuidad) + línea AGENTS.md + worklog.
 - [ ] Del dueño: correr B5 y B7 con las 9 fotos reales (171125, 170755, 171446, 171454, 171500, 171506, 171512, 171518 — input local, NUNCA se commitean) → cierra NO-GO B5 físico y DESBLOQUEA D61 · buscar trazas `dedup … marcada/sin-original` en sus capturas (decide hash vs ORDEN) · decidir D62 (auto-envío con página null).
+
+## INFO-ACTA-FILAS — e14-info-acta-filas-v1 (2026-10-20, D59): la fila MASIVA muestra la info reconocida del acta (idea del dueño, mockup Stitch corregido)
+
+Mandato: cada fila de la bandeja MASIVA pinta, encima del nombre de archivo, `DEPTO - PUESTO - TIPO - MESA nnn - PÁG n DE m` — cero pipeline nuevo: todo ya existe en `Acta.clasificacion`; sin datos → sin título (jamás inventar). Filas ERROR ganan REINTENTAR (re-encolar, NO auto-procesa — D45).
+
+- [x] T1 — `tipos.ts`: `infoTitulo?: string|null` (FilaMasiva + RegistroMasiva, persiste — desviación aditiva de thumb) + `tituloDeActa()` junto a `paginaDeActa` (cero imports).
+- [x] T2 — `runner.ts`: los 3 desenlaces alimentan el título (dedup copia el de su original · pipeline completo `tituloDeActa(actaFinal)` · catch ERROR → null).
+- [x] T3 — `store.ts`: mapping `filaDeRegistro` (sobrevive la recarga) + `reintentar(id)` (guard ERROR + no-corriendo; sin archivo → `SIN_ARCHIVO_ORIGINAL`; persistente; NO auto-procesa).
+- [x] T4 — `MasivaView.tsx`: título verde mono truncate + `title` attr encima del nombre; nombre `text-red-300` en ERROR; botón REINTENTAR (border-red-500/40, aria-label, ≥44px). Zonas D60 intocadas (`agregarFiles`, accept, hints).
+- [x] T5 — Gates: tsc 0 · lint 0 · build estático OK. Navegador (1280×800 y 390×844, lote real mesa001/mesa002/sana + gemela + límites): título verde completo en ENVIADAS (8.5 AUTO), DUPLICADAS heredan el título, ERROR con archivo ciclo REINTENTAR→PENDIENTE→PROCESAR→ERROR, ERROR sin archivo → SIN_ARCHIVO_ORIGINAL, recarga repinta todo desde IDB, 0 errores de consola.
+- [x] T6 — Docs: REPORTE (errores del mockup NO replicados + hallazgos §4) + D59 + esta entrada + línea AGENTS.md + worklog.
+- [ ] Del dueño: lote de las 13 actas del informe 15:04 en SU equipo (las fotos nunca salen del sandbox) · revisar REPORTE §4-B (fallback de plantilla ACTA_MOCK en sin-clasificar — ajuste futuro del BRIDGE, no del kit) · merge.
