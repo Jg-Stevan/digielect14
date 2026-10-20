@@ -1222,8 +1222,13 @@ export class RealCoreBridge implements E14Bridge {
     // MISMO guard. Al aplicar se giran fotoOcr Y fotoProcesada (re-encode
     // JPEG q0.92, §2.1 paso 4) para que el acta visible/guardada quede
     // derecha; JAMÁS lanza (catch interno — el pipeline no depende, §5).
+    // D57 — KIT e14-instrumentos-espera-v1 (T2): coste del probe persistido
+    // en el diagnóstico (aditivo — la traza de consola D51 ya existe; esto la
+    // vuelve permanente en la ficha). null si el probe no corrió (SIM o error).
+    let probeMsOrientacion: number | null = null;
     if (!opciones.simular) {
       const probe = await probeOrientacion(fotoOcr);
+      if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
       if (probe?.aplicado) {
         fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
         fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
@@ -1578,6 +1583,12 @@ export class RealCoreBridge implements E14Bridge {
         diag = null;
       }
     }
+    // D57 — KIT e14-instrumentos-espera-v1 (T2): orientacionProbeMs al
+    // diagnóstico — asignación DEFENSIVA (jamás lanza; sin diagnóstico → se
+    // omite — kit §4-T2). ADITIVO: no toca score/status/gate/tiempos.
+    if (diag != null && probeMsOrientacion != null) {
+      diag.orientacionProbeMs = probeMsOrientacion;
+    }
     console.info(
       `[e14] pipeline ${opciones.fuente}/${"archivo" in entrada ? "file" : "video-grab"} ` +
         `total=${Math.round(ms.total)}ms ` +
@@ -1843,8 +1854,12 @@ export class RealCoreBridge implements E14Bridge {
     // Aquí no hay SIM (el recorte siempre es real). Al aplicar se giran
     // fotoOcr Y fotoProcesada y el acumulador `parcial` (horneado temprano,
     // kit recorte-manual) se actualiza con la YA derecha.
+    // D57 — KIT e14-instrumentos-espera-v1 (T2): MISMO instrumento del escaneo
+    // — coste del probe persistido en el diagnóstico (aditivo, defensivo).
+    let probeMsOrientacion: number | null = null;
     {
       const probe = await probeOrientacion(fotoOcr);
+      if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
       if (probe?.aplicado) {
         fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
         fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
@@ -2155,6 +2170,12 @@ export class RealCoreBridge implements E14Bridge {
       } catch {
         diag = null;
       }
+    }
+    // D57 — KIT e14-instrumentos-espera-v1 (T2): orientacionProbeMs al
+    // diagnóstico — asignación DEFENSIVA (jamás lanza; sin diagnóstico → se
+    // omite — kit §4-T2). ADITIVO: no toca score/status/gate/tiempos.
+    if (diag != null && probeMsOrientacion != null) {
+      diag.orientacionProbeMs = probeMsOrientacion;
     }
     console.info(
       `[e14] recorte ${acta.fuente} total=${Math.round(ms.total)}ms ` +
