@@ -109,21 +109,21 @@ export interface FilaInforme {
    *  "cortado" | "no-encontrado". null = no evaluado (fotos, SIM, registros
    *  previos a D63-C) — jamás inventar. */
   gateMarco: "completo" | "cortado" | "no-encontrado" | null;
-  // ─── D65 — KIT e14-progreso-watchdog-dedup-v1: trazas aditivas (T1.4/T2.3) ───
-  /** (T1) intentos consumidos por el watchdog (0/1/2). null = registro
-   *  pre-D65 o fila que no corrió pipeline (gemela copiada) — jamás inventar. */
-  watchdog: number | null;
-  /** (T1) etapa del pipeline al morir el ÚLTIMO intento vencido
-   *  ("decodificando" | "deteccion" | "ocr" | "verificacion"). */
-  etapaAlMorir: string | null;
-  /** (T1) duración (ms) del intento que murió (hoy era null y escondía los
-   *  ~175 s — kit §0). null = sin dato. */
-  elapsedMs: number | null;
-  /** (T2) traza del dedup v2 POR CONTENIDO: "v2" = gemela matcheada;
-   *  "sin-match" = hasheada sin gemela. null = pre-D65 o hash falló. */
-  dedup: "v2" | "sin-match" | null;
-  /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
-  dedupDistancia: number | null;
+  // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
+  /** D66 (T4): ms SOLO del decodificado a MASTER (0 = precalentada — el
+   *  decode vivió en el precalor; null = sin master: fallback/ERROR/
+   *  registros previos — jamás inventar). Top-level, SEPARADO de
+   *  tiempos.decodeMs (D61 — decode del archivo por el bridge). */
+  decodeMs: number | null;
+  /** D66 (T4): quién fabricó el master — decode nativo o reserva wasm.
+   *  null = sin master. */
+  origenDecode: "nativo" | "wasm" | null;
+  /** D66 (T4): el desenlace nació de un master PRECALENTADO (provenance —
+   *  persiste en el registro, a diferencia del flag transitorio de fila). */
+  precalentada: boolean;
+  /** D66 (T4): ms totales del precalor para esta fila (solo precalentadas;
+   *  null = no precalentada). */
+  precalorMs: number | null;
   /** ¿El acta trae diagnóstico completo? (base de detección/tiempos). */
   tieneDiagnostico: boolean;
   /** ¿Esta fila lleva carpeta en actas/ (T1.3)? */
@@ -251,14 +251,14 @@ function filaLiviana(reg: RegistroMasiva): FilaInforme {
     skewGrados: diag?.skewGrados ?? null,
     deskewMs: diag?.deskewMs ?? null,
     gateMarco: diag?.gate?.gateMarco ?? null,
-    // D65 — trazas del watchdog y del dedup v2 (viven EN el registro, no en
-    // el diagnóstico — kit T1.4/T2.3). null si el registro no las trae
-    // (pre-D65, gemela copiada, hash falló — jamás inventar).
-    watchdog: reg.watchdog ?? null,
-    etapaAlMorir: reg.etapaAlMorir ?? null,
-    elapsedMs: reg.elapsedMs ?? null,
-    dedup: reg.dedup ?? null,
-    dedupDistancia: reg.dedupDistancia ?? null,
+    // D66 — trazas de decodificación del REGISTRO (null/ausente = sin master
+    // — fallback a la ruta de siempre, ERROR, registros previos; jamás
+    // inventar). decodeMs top-level ≠ tiempos.decodeMs (D61, decode del
+    // archivo en el bridge — semánticas distintas, ambas honestas).
+    decodeMs: reg.decodeMs ?? null,
+    origenDecode: reg.origenDecode ?? null,
+    precalentada: reg.precalentada === true,
+    precalorMs: reg.precalorMs ?? null,
     tieneDiagnostico: !!diag,
     conCarpeta,
     pesoImagenes,
@@ -468,14 +468,13 @@ export function actaLivianaJson(fila: FilaInforme) {
       : {}),
     ...(fila.skewGrados != null ? { skewGrados: fila.skewGrados } : {}),
     ...(fila.gateMarco != null ? { gateMarco: fila.gateMarco } : {}),
-    // D65 (T1.4/T2.3): trazas del watchdog y del dedup v2 — campo AUSENTE si
-    // el registro no lo trae (pre-D65/gemela copiada — misma receta del
-    // spread condicional de arriba; informes previos no cambian de forma).
-    ...(fila.watchdog != null ? { watchdog: fila.watchdog } : {}),
-    ...(fila.etapaAlMorir != null ? { etapaAlMorir: fila.etapaAlMorir } : {}),
-    ...(fila.elapsedMs != null ? { elapsedMs: fila.elapsedMs } : {}),
-    ...(fila.dedup != null ? { dedup: fila.dedup } : {}),
-    ...(fila.dedupDistancia != null ? { dedupDistancia: fila.dedupDistancia } : {}),
+    // D66 — KIT e14-decode-unico-precalor-v1 (T4): trazas de decodificación —
+    // campos AUSENTES si el registro no trae master (misma receta del spread
+    // condicional: informes previos no cambian de forma).
+    ...(fila.decodeMs != null ? { decodeMs: fila.decodeMs } : {}),
+    ...(fila.origenDecode != null ? { origenDecode: fila.origenDecode } : {}),
+    ...(fila.precalentada ? { precalentada: true } : {}),
+    ...(fila.precalorMs != null ? { precalorMs: fila.precalorMs } : {}),
   };
 }
 
@@ -546,24 +545,37 @@ export function renderTxt(
   linea(
     `CONVERSION/PERSISTENCIA (solo actas con dato): decode medio ${tiemposMedios.decodeMs ?? "-"}ms · detect medio ${tiemposMedios.detectMs ?? "-"}ms · persistencia media ${tiemposMedios.persistMs ?? "-"}ms · envio medio ${tiemposMedios.envioMs ?? "-"}ms`,
   );
-  // D65 — KIT e14-progreso-watchdog-dedup-v1 (T4.2/T4.3): líneas aditivas
-  // AL FINAL de TOTALES (los parsers van por prefijo — contrato D57). Sin
-  // colgadas la línea queda con 0s reales (el instrumento corrió); la línea
-  // DEDUP SOLO si hay trazas del dedup (T2 activo — kit literal).
-  const colgadasInfo = resumenColgadas(filas);
-  const detalleEtapas = ["decodificando", "deteccion", "ocr", "verificacion", "sin-senal"]
-    .filter((k) => (colgadasInfo.porEtapa[k] ?? 0) > 0)
-    .map((k) => `${k} ${colgadasInfo.porEtapa[k]}`)
-    .join(", ");
+  // D66 — KIT e14-decode-unico-precalor-v1 (T4): líneas aditivas AL FINAL de
+  // TIEMPOS (formato literal del kit — sin reordenar las existentes, contrato
+  // D57: los parsers del dueño van por prefijo). Medias en SEGUNDOS con 1
+  // decimal SOLO sobre filas con el dato ("-" si ninguna — jamás inventar);
+  // conteos nativo/wasm sobre origenDecode; precalentadas = filas cuyo
+  // desenlace nació de un master precalentado; precalor medio ídem.
+  const decodeValores = filas
+    .map((f) => f.decodeMs)
+    .filter((v): v is number => typeof v === "number");
+  const decodeMediaS = decodeValores.length
+    ? (decodeValores.reduce((a, b) => a + b, 0) / decodeValores.length / 1000).toFixed(1)
+    : null;
+  const nativoCount = filas.filter((f) => f.origenDecode === "nativo").length;
+  const wasmCount = filas.filter((f) => f.origenDecode === "wasm").length;
+  const precalentadasCount = filas.filter((f) => f.precalentada).length;
+  const precalorValores = filas
+    .map((f) => f.precalorMs)
+    .filter((v): v is number => typeof v === "number");
+  const precalorMedioS = precalorValores.length
+    ? (precalorValores.reduce((a, b) => a + b, 0) / precalorValores.length / 1000).toFixed(1)
+    : null;
   linea(
-    `COLGADAS: ${colgadasInfo.total} - salvadas por reintento: ${colgadasInfo.salvadas}${detalleEtapas ? ` - etapas: ${detalleEtapas}` : ""}`,
+    `Decodificacion: media ${decodeMediaS ?? "-"}s - nativo ${nativoCount} / wasm ${wasmCount} - precalentadas ${precalentadasCount} (precalor medio ${precalorMedioS ?? "-"}s)`,
   );
-  const dedupInfo = resumenDedup(filas);
-  if (dedupInfo.activo) {
-    linea(
-      `DEDUP v2: matches ${dedupInfo.matches} - distancia media ${dedupInfo.distanciaMedia ?? "-"}`,
-    );
-  }
+  // D66 (T4): vigilancia del outlier de 19 s del informe 122235 — cuántas
+  // actas mantienen procesoMs por encima de 6 s (criterio de aceptación 2
+  // del kit: cero outliers >6 s en lote normal). 0 con datos = honesto.
+  const outliersProceso = filas.filter(
+    (f) => (f.tiempos?.procesoMs ?? 0) > 6000,
+  ).length;
+  linea(`Outliers procesoMs >6s: ${outliersProceso}`);
   linea();
   const rechazoFilas = filas.filter((f) => f.rechazo);
   linea(`RECHAZOS (${rechazoFilas.length})`);
@@ -860,6 +872,13 @@ export async function generarInformeZip(
           ...acta,
           nombreFila: reg.nombre,
           agregadaEn: reg.agregadaEn,
+          // D66 — KIT e14-decode-unico-precalor-v1 (T4): trazas de
+          // decodificación del REGISTRO (aditivas AL FINAL de la ficha —
+          // campos AUSENTES si no hubo master; jamás inventar).
+          ...(reg.decodeMs != null ? { decodeMs: reg.decodeMs } : {}),
+          ...(reg.origenDecode != null ? { origenDecode: reg.origenDecode } : {}),
+          ...(reg.precalentada === true ? { precalentada: true } : {}),
+          ...(reg.precalorMs != null ? { precalorMs: reg.precalorMs } : {}),
         };
         delete ficha.fotoOriginal;
         delete ficha.fotoProcesada;

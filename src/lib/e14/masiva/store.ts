@@ -19,6 +19,12 @@ import {
   vaciar as vaciarCola,
 } from "./cola";
 import { hacerThumb, iniciarRunner, pausarRunner } from "./runner";
+// D66 — KIT e14-decode-unico-precalor-v1: cableado del PRECALOR (T3) — la
+// suscripción al mini-store vive aquí (zona del kit: «flag transitorio
+// precalentada + cola de precalor») DESPUÉS de crear el store: precalor.ts
+// también importa useMasivaStore (solo DENTRO de funciones — un call en su
+// evaluación de módulo sería TDZ por el ciclo runner↔precalor↔store).
+import { cablearPrecalor } from "./precalor";
 // KIT e14-masiva-ux-v1 (T2): clasificación/extracción de archivos — las
 // deps pesadas (fflate/node-unrar-js) viven DETRÁS de extraerArchivo con
 // import diferido (D47): el bundle inicial no las carga.
@@ -628,3 +634,10 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
 
   setFiltro: (filtro) => set({ filtro }),
 }));
+
+// D66 — KIT e14-decode-unico-precalor-v1 (T3): el precalor queda cableado
+// al mini-store DESDE AHORA (store ya creado) — respira con la cola aunque
+// el dueño nunca pulse PROCESAR (ese es su propósito: trabajar en la
+// espera). En SSR el store no emite eventos y las señales de ociosidad lo
+// mantienen apagado.
+cablearPrecalor();
