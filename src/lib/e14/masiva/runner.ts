@@ -215,7 +215,26 @@ async function procesarUno(
       onProgreso: (p) => progresoThrottled(fila.id, p),
       timeoutMs: TIMEOUT_MASIVA_MS, // T4 — ver constante (individual: 15 s intacto)
     };
-    const acta = await getBridge().escanearActa(opcionesMasiva);
+    // D57 — KIT e14-instrumentos-espera-v1 (T1): espera en cola → inicio del
+    // pipeline. tInicio capturado JUSTO ANTES de escanearActa (kit §4-T1):
+    // esperaMs = tInicio − fila.agregadaEn (≥ 0 defensivo — jamás inventar).
+    // SOLO masiva lo llena (el flujo individual no tiene espera de cola).
+    const tInicio = Date.now();
+    const esperaMs = Math.max(0, tInicio - fila.agregadaEn);
+    const actaBruta = await getBridge().escanearActa(opcionesMasiva);
+    // D57 (T1): parche INMUTABLE del diagnóstico (kit §4-T1). ADITIVO — no
+    // toca score/status/gate; si el diagnóstico no existe (no debería: el
+    // bridge lo monta en todo desenlace fuera de SIM), se omite el campo.
+    const acta =
+      actaBruta.diagnostico != null
+        ? {
+            ...actaBruta,
+            diagnostico: {
+              ...actaBruta.diagnostico,
+              tiempos: { ...actaBruta.diagnostico.tiempos, esperaMs },
+            },
+          }
+        : actaBruta;
 
     // FIX M8 (auditoría 2-c): la decisión del dueño manda TAMBIÉN para el
     // ENVÍO — si quitó la fila mientras el OCR corría, el desenlace NO se
