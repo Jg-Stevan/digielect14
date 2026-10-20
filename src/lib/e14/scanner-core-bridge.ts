@@ -111,6 +111,11 @@ import type { Acta, ActaFirma, ActaStatus, DiagnosticoActa, ProgresoAnalisis } f
 import type { E14Bridge, OpcionesEscaneo } from "./bridge";
 // KIT e14-motor-rapidocr-v1 (PROD-2 §3): adaptador del motor de producción.
 import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
+// KIT e14-orientacion-auto-v1 (T-A2/A3): probe de orientación por confianza
+// de rec + anclas (§2.1) — corre ANTES del OCR completo en AMBOS pipelines
+// (escaneo y pipelineRecorte). SIM OMITIDO (guard — chips 8.2/7.0/4.3
+// intactos, §2.2); JAMÁS lanza (catch interno — el pipeline no depende, §5).
+import { probeOrientacion, rotarDataUrl } from "./orientacion";
 // KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado justo
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
@@ -1069,6 +1074,21 @@ export class RealCoreBridge implements E14Bridge {
         ocrIn = "bw-fallback";
       }
     }
+    // KIT e14-orientacion-auto-v1 (T-A2): probe de orientación DESPUÉS de fijar
+    // fotoOcr (tras el warp, §2.1) y ANTES del OCR completo y de TODA medición
+    // downstream (esquinas/completitud/visor ven el acta YA derecha). SIM:
+    // OMITIDO (§2.2 — mismo guard del banda/esquinas; chips 8.2/7.0/4.3
+    // intactos). sinRecorte solo existe en SIM en esta base → cubierto por el
+    // MISMO guard. Al aplicar se giran fotoOcr Y fotoProcesada (re-encode
+    // JPEG q0.92, §2.1 paso 4) para que el acta visible/guardada quede
+    // derecha; JAMÁS lanza (catch interno — el pipeline no depende, §5).
+    if (!opciones.simular) {
+      const probe = await probeOrientacion(fotoOcr);
+      if (probe?.aplicado) {
+        fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
+        fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
+      }
+    }
     // KIT consenso-frankfurt-v1 (FASE 2, §3): esquinas fiduciales ANTES del
     // guard — la marca presente es PRUEBA POSITIVA de que el papel está
     // entero dentro del cuadro (ANALISIS §5.1) → verificarCompletitud la
@@ -1644,7 +1664,10 @@ export class RealCoreBridge implements E14Bridge {
     );
     ms.proceso = performance.now() - tProceso;
     emitir({ etapa: "REALZANDO", progreso: 1 });
-    const fotoProcesada = resultado.processed;
+    // KIT e14-orientacion-auto-v1 (T-A3): let — el probe puede reemplazarla
+    // por la YA derecha (§2.1 paso 4); el horneado `parcial` de abajo consume
+    // la final.
+    let fotoProcesada = resultado.processed;
     // KIT e14-recorte-manual-v1 (T1): el warp COMPLETÓ — horneado al
     // acumulador (el timeout de recortar() ya puede mostrar este recorte
     // aunque calidad/OCR/gate no alcancen dentro del presupuesto).
@@ -1659,6 +1682,19 @@ export class RealCoreBridge implements E14Bridge {
       fotoOcr = resultadoOcr.processed;
     } else {
       ocrIn = "bw-fallback";
+    }
+    // KIT e14-orientacion-auto-v1 (T-A3): MISMO probe del escaneo (§2.1) —
+    // en recorte MANUAL el usuario puede no haber corregido la rotación.
+    // Aquí no hay SIM (el recorte siempre es real). Al aplicar se giran
+    // fotoOcr Y fotoProcesada y el acumulador `parcial` (horneado temprano,
+    // kit recorte-manual) se actualiza con la YA derecha.
+    {
+      const probe = await probeOrientacion(fotoOcr);
+      if (probe?.aplicado) {
+        fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
+        fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
+        parcial.fotoProcesada = fotoProcesada;
+      }
     }
     // §D4 (SPEC-e14-score-ocr): tinta de la procesada re-recortada — mismo
     // criterio del pipeline (un crop sobre zona sin tinta → ORIGINAL).

@@ -826,6 +826,99 @@ export async function rapidOcrReconocer(
   };
 }
 
+// ─── KIT e14-orientacion-auto-v1 (T-A1): soporte del probe de orientación ───
+
+/**
+ * det + K crops repartidos por el acta para el probe de orientación (§2.1
+ * paso 1): UNA pasada det (el MISMO inferDet de producción — sin sesión
+ * nueva, §2.2) y crops ANTES del cls (el cls puede sesgar el probe en 180°,
+ * kit §2.1). Selección (kit: «p. ej. boxesFuente cada len/8» — el p. ej.
+ * deja la muestra a criterio): las 3 líneas MÁS LARGAS + el resto repartido
+ * cada n/K por orden de centro Y. La LONGITUD importa: las anclas de
+ * ANCLAS_LECTURA (cabecera E-14, fila CONSULADO/PAIS/ZONA/PUESTO/MESA,
+ * código 1D) viven en las líneas largas — verificad en sandbox con dump
+ * visual: el spread puro cayó todo en el cuerpo (VOTOS NULOS / TOTAL...)
+ * y el probe quedó sin anclas en 180° (score 0.99 < 0+1.5 → no aplicaba).
+ * El largo se mide como el lado MAYOR del rect (p0→p1 o p1→p2): en actas
+ * ±90° las líneas son verticales y tl→tr daría el GROSOR, no el largo
+ * (regresión medida en sandbox: score(270) 3.83→1.06 → no aplicaba).
+ */
+export async function rapidOcrCropsOrientacion(
+  rt: RapidRuntime,
+  dataUrl: string,
+  k: number,
+): Promise<{ crops: HTMLCanvasElement[]; w: number; h: number; msDet: number }> {
+  const src = await loadImage(dataUrl);
+  const { boxesFuente, msDet } = await inferDet(rt, src);
+  const n = boxesFuente.length;
+  const crops: HTMLCanvasElement[] = [];
+  if (n > 0) {
+    const kk = Math.min(k, n);
+    const largoDe = (b: { x: number; y: number }[]) =>
+      Math.max(
+        Math.hypot(b[1].x - b[0].x, b[1].y - b[0].y),
+        Math.hypot(b[2].x - b[1].x, b[2].y - b[1].y),
+      );
+    const nAnchas = Math.min(3, kk);
+    const anchas = [...boxesFuente]
+      .sort((a, b) => largoDe(b) - largoDe(a))
+      .slice(0, nAnchas);
+    const enAnchas = new Set(anchas);
+    const resto = [...boxesFuente]
+      .sort(
+        (a, b) => a.reduce((s, p) => s + p.y, 0) - b.reduce((s, p) => s + p.y, 0),
+      )
+      .filter((b) => !enAnchas.has(b));
+    const faltan = kk - anchas.length;
+    const paso = resto.length / Math.max(1, faltan); // ≥ 1 → índices sin repetir
+    const elegidas = [...anchas];
+    for (let i = 0; i < faltan; i++) {
+      elegidas.push(resto[Math.floor(i * paso)]);
+    }
+    for (const b of elegidas) crops.push(cropLinea(src, b).canvas);
+  }
+  return { crops, w: src.naturalWidth, h: src.naturalHeight, msDet };
+}
+
+/**
+ * rec CRUDO de un lote de crops para el probe (§2.1 paso 2): el MISMO pre/post
+ * del rec de producción (orden por ratio → lotes de 6 → tensorDeCanvases →
+ * ctcDecode) SIN cls y SIN filtro TEXT_SCORE — el probe necesita la conf
+ * cruda de TODAS las líneas (un crop mal rotado debe puntuar BAJO, no
+ * desaparecer del cómputo de conf/anclas). Sin sesiones nuevas: recibe el
+ * MISMO runtime singleton del caller (§2.2).
+ */
+export async function rapidOcrRecLote(
+  rt: RapidRuntime,
+  canvases: HTMLCanvasElement[],
+): Promise<{ texto: string; conf: number }[]> {
+  const salida: { texto: string; conf: number }[] = new Array(canvases.length);
+  const orden = canvases
+    .map((c, i) => ({ i, ratio: c.width / c.height }))
+    .sort((a, b) => a.ratio - b.ratio);
+  for (let k = 0; k < orden.length; k += 6) {
+    const lote = orden.slice(k, k + 6);
+    const maxRatio = Math.max(320 / 48, ...lote.map((o) => o.ratio));
+    const W = Math.floor(48 * maxRatio);
+    const tensor = tensorDeCanvases(rt.ort, lote.map((o) => canvases[o.i]), W);
+    const res = await rt.rec.run({ [rt.rec.inputNames[0]]: tensor });
+    const out = res[rt.rec.outputNames[0]];
+    for (let m = 0; m < lote.length; m++) {
+      const dims = out.dims;
+      const sub: OrtValue = {
+        dims: [1, dims[1], dims[2]],
+        data: (out.data as Float32Array).subarray(
+          m * dims[1] * dims[2],
+          (m + 1) * dims[1] * dims[2],
+        ) as Float32Array,
+        type: out.type,
+      };
+      salida[lote[m].i] = ctcDecode(sub, rt.dict);
+    }
+  }
+  return salida;
+}
+
 // KIT e14-optimizacion-v1 (T4): notaWebgpu BORRADA — residuo del informe
 // (kit fuera-informes retiró a sus consumidores; 0 refs en src/, verificado
 // con rg). WebGPU sigue anotado, no usado (EP wasm fijo, determinismo).
