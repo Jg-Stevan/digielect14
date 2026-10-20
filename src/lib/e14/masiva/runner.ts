@@ -23,6 +23,7 @@ import { useE14Store } from "../store";
 import { guardarRegistro, leerRegistro } from "./cola";
 import { useMasivaStore } from "./store";
 import { clasificarOrigenDeArchivo } from "./origen"; // D63-A — detector de origen (kit e63a-origen-escaneo-v1)
+import { preProcesoEscaneo } from "./deskew"; // D63-B — pre-proceso de escaneos (kit e63b-deskew-escaneo-v1)
 import { paginaDeActa, tituloDeActa, type FilaMasiva, type RegistroMasiva } from "./tipos";
 import type { ProgresoAnalisis } from "../types";
 
@@ -220,6 +221,21 @@ async function procesarUno(
       `[e14] origen=${veredictoOrigen.origen ?? "null"} senales=${veredictoOrigen.senales ?? "null"}`,
     );
 
+    // D63-B — KIT e63b-deskew-escaneo-v1 (bloque de PRE-PROCESO, T2/T3):
+    // SOLO escaneos (origen del detector D63-A) — detección de ángulo sobre
+    // la banda del encabezado + deskew selectivo (|θ| ≥ 0.3° y ≤ 10°) con
+    // resample de alta calidad + limpieza suave del punto blanco. Fotos y
+    // escaneos rectos+limpios pasan el archivo ORIGINAL byte-idéntico (memo
+    // de decode del bridge intacta — cero cambios). El pipeline consume el
+    // master corregido (T2.2); el original duerme en IDB sin cambios.
+    const preProceso = await preProcesoEscaneo(archivoPipeline, veredictoOrigen.origen);
+    if (veredictoOrigen.origen === "escaneo") {
+      console.info(
+        `[e14] preproceso skewGrados=${preProceso.skewGrados ?? "null"} deskewMs=${preProceso.deskewMs ?? "null"} limpiezaMs=${preProceso.limpiezaMs ?? "null"} limpieza=${preProceso.limpieza} aplicado=${preProceso.aplicado} decodeMs=${preProceso.decodeMs ?? "null"}`,
+      );
+    }
+    const archivoCorregido = preProceso.archivo;
+
     // T4: variable tipada con la intersección (sin excess-check de literal —
     // el parámetro de la interfaz E14Bridge sigue siendo OpcionesEscaneo).
     const opcionesMasiva: OpcionesEscaneoConTimeout = {
@@ -256,6 +272,11 @@ async function procesarUno(
               tiempos: { ...actaBruta.diagnostico.tiempos, esperaMs },
               origen: veredictoOrigen.origen,
               origenSenales: veredictoOrigen.senales,
+              // D63-B (T2/T3): trazas del pre-proceso de escaneos (aditivas,
+              // al final del contrato — null cuando no aplicó/no es escaneo).
+              skewGrados: preProceso.skewGrados,
+              deskewMs: preProceso.deskewMs,
+              limpieza: preProceso.limpieza,
             },
           }
         : actaBruta;
