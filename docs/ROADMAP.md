@@ -202,3 +202,12 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 **Verificado (sandbox, tira real KIT 399):** sana → `aplicado=0` e 8.5 idéntico · girada 90/180/270 → `aplicado=1` (score probe 8.60/8.58/8.37, anclas=3) → **8.5 AUTO las tres** · SIM 8.2/7.0/4.3 exactos con 0 trazas · lint/tsc/build limpios · zona prohibida VACÍA.
 
 **Pendiente:** AC-2 del dueño (las 6 fotos del informe en su equipo) — bloqueante para merge final, no para el PR. Los otros 2 kits del mega-kit (tiempos: B1-B5) van por los Agentes 2/3 en paralelo.
+## BENCH-TIEMPOS — e14-bench-tiempos-v1 (2026-10-19, AGENTE 3): 3 bancos GO/NO-GO para las palancas de tiempo (CERO producción)
+
+- [x] T1 — `tools/bench-lote12/` (B2): rec/cls lote 6 vs 12 — corpus del kit bench-rec-int8 (seed 0xe14be6c5), réplica rapidocr.ts (W=floor(48·max(320/48,r)), NCHW BGR, CTC greedy; cls flags) → **NO-GO rec** (0.99×, 1/60 líneas degrada O→0) / **GO cls** (1.25-1.30×, flags 100%) — decisión global NO-GO, sub-palanca cls para el dueño.
+- [x] T2 — `tools/bench-det1280/` (B3): det 1280 vs 1920 con corpus acta-like sintético (4 págs × 30 votos manuscritos, seed 0xe14de7a2) + senal-lectura congelada → **GO DURO**: 0 votos perdidos, FUERTE/anclas/cajas idénticas, det −56.4% (ratio 0.436 ≈ teoría), ahorro escalonado ~9% del OCR en corpus (más en actas reales: det share 19-21%).
+- [x] T3 — `tools/bench-ep-webgpu/` (B4): 3 brazos (webgpu+jsep / wasm-jsep control / wasm-producción ancla) → **BLOQUEADA-entorno** (requestAdapter null en headless — NO es NO-GO del EP); paridad jsep↔producción EXACTA (calibración del banco).
+- [x] T4 — Determinismo ×2-×3 (texto EXACTO, ms ±10% salvo 1 outlier documentado), «DESCARGAR JSON» manual, window.__benchJson programático.
+- [x] T5 — Docs: REPORTE (3 veredictos + evidencia + repro) + esta entrada + worklog + AGENTS (DECISIONS.md INTACTO por diseño del kit).
+- [x] T6 — PR DRAFT (diff de producción VACÍO — solo tools/ + docs; JAMÁS merge — el dueño mergea).
+- [ ] Del dueño: correr los 3 bancos en SU máquina (4 núcleos/Chrome 155/Windows) · decidir B2 (archivar rec / kit cls-solo) · validar B3 con las fotos reales del informe (16 actas) · correr B4 en SU Chrome con GPU → si GO preliminar, kit de activación (flag gradual + fallback wasm) con su decisión en DECISIONS.md.
