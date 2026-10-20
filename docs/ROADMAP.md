@@ -295,3 +295,12 @@ Problema (kit §0, cifras CITADAS del lote 15:04): el probe costó media 6.0 s/a
 - [x] T2 — `rapidocr.ts`: memo del det a nivel `inferDet` (clave = dataURL + cap en el valor, tope 2, HIT ⇒ mismo resultado sin re-inferir; MISS ⇒ alimenta) + trazas `detMemo=hit msAhorrado=N`/`miss` al final de la línea `celda:` (prefijo intacto). Guard honesto: jamás decide score/gate.
 - [x] Gates: lint 0 · tsc 0 · build estático OK · whitelist exacta (2 archivos) · anillo 18/18 headless (prueba efímera no commiteada) · atajo T1/`PROBE_BUDGET_MS`/`cortes=`/`DET_CAP_*`/umbrales verificados intactos por diff.
 - [ ] Del dueño: paridad de desenlace A/B 13/13 del lote 15:04 (VETO — procedimiento exacto en REPORTE §6; divergencia = NO-GO y revertir) · tabla ANTES/DESPUÉS del REPORTE §5 con sus fotos · GO/merge del PR DRAFT · reparar marcadores de conflicto pre-existentes en DECISIONS.md/AGENTS.md (hallazgo colateral §4.8 del REPORTE) · REVOCAR el token del chat.
+
+## INFORME-TRAZAS-ESCANEO — e14-informe-trazas-escaneo-v1 (2026-10-20, D63-D, AGENTE 4): ⛔ BLOQUEADO — la base D63-A/B/C no existe
+
+Problema (kit §0): D63-B y D63-C añaden trazas de escaneo (`skewGrados`, `deskewMs`, `limpieza`, `gateMarco`, `quadOrigen:"pagina-completa"`) que por contrato de zonas NINGUNO llevó al informe; este mini-kit las haría visibles en `informe.txt/json` (T1 líneas ACTAS + T2 línea ESCANEOS de D63-A).
+
+- [x] Auditoría de base: `origin/main` `f78a8f6` SIN D63-A/B/C — 0 commits/ramas/PRs (abiertos y cerrados), 0 trazas en el código, informe sin línea ESCANEOS (evidencia reproducible en REPORTE §2).
+- [x] Entrega documental (CERO diff `src/` `public/`): REPORTE (auditoría §2 + mapeo kit↔faltante §3 + por qué no implementar hoy §4 + plan de desbloqueo con gate checklist §5 + sketch de implementación §5.1 + plantilla ANTES/DESPUÉS §5.2) + fila D63-D en DECISIONS + rama `feat/e14-informe-trazas-escaneo-v1` RESERVADA desde `f78a8f6`.
+- [ ] Desbloqueo (dueño/orquestador): ejecutar D63-A (línea ESCANEOS en el informe), D63-B y D63-C (trazas en productores + types) y re-ejecutar D63-D tras el gate del REPORTE §5 paso 2 (el kit dice «se corre AL FINAL»).
+- [ ] Del dueño: lote mixto real (fotos + escaneos) → trazas solo donde hay datos y fotos sin ruido extra · líneas previas byte a byte salvo añadidos al final · lint 0 · merge del PR (el agente NUNCA mergea).
