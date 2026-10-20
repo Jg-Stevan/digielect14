@@ -9,11 +9,12 @@
  * Copy corto del repo (mono, uppercase, sin guías — D1/gate-v2). Sin toasts
  * (redesign-stitch D2): píldoras/banner. Listas largas: max-h + overflow-y-auto.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import {
   refrescarEnviosTrasDrenaje,
   useMasivaStore,
+  type EtapaVidaKit,
   type FiltroMasiva,
 } from "@/lib/e14/masiva/store";
 import type { FilaMasiva } from "@/lib/e14/masiva/tipos";
@@ -66,6 +67,24 @@ const FILTROS: { valor: FiltroMasiva; label: string }[] = [
   { valor: "EN_REVISION_HUMANA", label: "EN RH" },
   { valor: "ERROR", label: "ERROR" },
 ];
+
+/** D65 (T3.3) — etiqueta de vida HONESTA (kit: el número % SOLO si es dato
+ *  real → solo OCR, cuya fracción es REAL del reconocedor; las demás etapas
+ *  van SIN número — barra animada, jamás inventar %). */
+function etiquetaVida(p: { etapa: EtapaVidaKit; ocrFraccion?: number }): string {
+  switch (p.etapa) {
+    case "preparando":
+      return "PREPARANDO…";
+    case "deteccion":
+      return "DETECCIÓN…";
+    case "verificacion":
+      return "VERIFICANDO…";
+    case "ocr":
+      return p.ocrFraccion != null
+        ? `OCR ${Math.min(100, Math.max(0, Math.round(p.ocrFraccion * 100)))}%`
+        : "OCR…";
+  }
+}
 
 export function MasivaView() {
   const filas = useMasivaStore((s) => s.filas);
@@ -160,6 +179,58 @@ export function MasivaView() {
 
   const activa = progreso ? filas.find((f) => f.id === progreso.id) : null;
   const filaActiva = activa && activa.estado === "PROCESANDO" ? activa : null;
+
+  // D65 (T3.3): cola REAL del runner (MISMA orden que siguientePendiente:
+  // PENDIENTE/DUPLICADA sin temps por agregadaEn) + la fila EN CURSO al
+  // frente → «EN COLA #N de M» honesto (N = posición 1-based; M = total por
+  // procesar + en curso). DUPLICADA también va en cola (su procesamiento es
+  // la copia rápida — el runner la toma igual).
+  const enCursoId = progreso?.id ?? null;
+  const colaVida = useMemo(() => {
+    const ordenadas = filas
+      .filter(
+        (f) =>
+          (f.estado === "PENDIENTE" || f.estado === "DUPLICADA") &&
+          !f.id.startsWith("masiva-temp-"),
+      )
+      .sort((a, b) => a.agregadaEn - b.agregadaEn)
+      .map((f) => f.id);
+    return enCursoId ? [enCursoId, ...ordenadas] : ordenadas;
+  }, [filas, enCursoId]);
+
+  // D65 (T3.3): destello 100% verde al LISTAR («un instante, luego pasa al
+  // estado normal»). Transitorio en memoria — nada a IDB. La 1.ª pasada
+  // (montaje/recarga: LISTA restauradas de IDB) NO destella (sin % fantasma).
+  const [recienListas, setRecienListas] = useState<Set<string>>(() => new Set());
+  const listasVistosRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const listas = new Set(filas.filter((f) => f.estado === "LISTA").map((f) => f.id));
+    if (listasVistosRef.current === null) {
+      listasVistosRef.current = listas;
+      return;
+    }
+    const nuevas: string[] = [];
+    for (const id of listas) {
+      if (!listasVistosRef.current.has(id)) nuevas.push(id);
+    }
+    listasVistosRef.current = listas;
+    if (!nuevas.length) return;
+    setRecienListas((prev) => {
+      const next = new Set(prev);
+      for (const id of nuevas) next.add(id);
+      return next;
+    });
+    // Sin cleanup: cada timer se limpia solo al disparar (1.2 s).
+    for (const id of nuevas) {
+      window.setTimeout(() => {
+        setRecienListas((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, 1200);
+    }
+  }, [filas]);
 
   return (
     <section
@@ -310,8 +381,7 @@ export function MasivaView() {
               {filaActiva && progreso && (
                 <span className="text-gray-500 font-medium">
                   {" "}
-                  — {filaActiva.nombre} · {progreso.etapa}{" "}
-                  {Math.round(progreso.fraccion * 100)}%
+                  — {filaActiva.nombre} · {etiquetaVida(progreso)}
                 </span>
               )}
             </p>
@@ -383,13 +453,22 @@ export function MasivaView() {
             {visibles.map((f) => {
               const pildora = pildoraDe(f);
               const esActiva = progreso?.id === f.id && f.estado === "PROCESANDO";
+              // D65 (T3.3) — señal de vida de la fila (barra h-1 discreta):
+              const enColaVida = f.estado === "PENDIENTE" || f.estado === "DUPLICADA";
+              const posCola = enColaVida ? colaVida.indexOf(f.id) + 1 : 0;
+              // % SOLO si es dato REAL (OCR del reconocedor) — kit T3 honestidad.
+              const ocrPct =
+                esActiva && progreso?.etapa === "ocr" && progreso.ocrFraccion != null
+                  ? Math.min(100, Math.max(0, Math.round(progreso.ocrFraccion * 100)))
+                  : null;
               return (
                 <li
                   key={f.id}
-                  className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 bg-brand-surface ${
+                  className={`rounded-xl border px-3 py-2.5 bg-brand-surface ${
                     esActiva ? "border-brand-green/60 ring-1 ring-brand-green/60" : "border-brand-border"
                   }`}
                 >
+                  <div className="flex items-center gap-3">
                   {/* Thumb 40px (o cuadrado pendiente) */}
                   {f.thumb ? (
                     <img
@@ -540,6 +619,51 @@ export function MasivaView() {
                       QUITAR
                     </button>
                   </div>
+                  </div>
+
+                  {/* D65 (T3.3) — BARRA DE VIDA (h-1, tipografía discreta — no
+                      compite con los chips): EN COLA → vacía + «#N de M»;
+                      PROCESANDO preparando/detección/verificación → animada
+                      SIN número; OCR con fracción REAL → determinada + %;
+                      LISTA → 100% verde un instante (transitorio); ERROR →
+                      roja. aria-live SOLO en el texto de etapa (los cambios
+                      de % van en un hermano sin aria-live — kit T3.5). */}
+                  {(enColaVida || esActiva || f.estado === "ERROR" || (f.estado === "LISTA" && recienListas.has(f.id))) && (
+                    <div className="mt-2">
+                      {esActiva && ocrPct != null ? (
+                        <div
+                          role="progressbar"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={ocrPct}
+                          aria-label={`OCR ${ocrPct}%`}
+                          className="h-1 rounded-full bg-white/10 overflow-hidden"
+                        >
+                          <div className="h-full bg-brand-green" style={{ width: `${ocrPct}%` }} />
+                        </div>
+                      ) : esActiva ? (
+                        <div className="h-1 rounded-full bg-brand-green/40 animate-pulse" aria-hidden />
+                      ) : f.estado === "ERROR" ? (
+                        <div className="h-1 rounded-full bg-red-500/40" aria-hidden />
+                      ) : f.estado === "LISTA" ? (
+                        <div className="h-1 rounded-full bg-brand-green" aria-hidden />
+                      ) : (
+                        <div className="h-1 rounded-full bg-white/5" aria-hidden />
+                      )}
+                      {(enColaVida || (esActiva && progreso)) && (
+                        <p className="mt-1 font-mono text-[11px] tabular-nums tracking-wider text-gray-500 uppercase truncate">
+                          <span aria-live="polite">
+                            {enColaVida
+                              ? `EN COLA #${posCola} DE ${colaVida.length}`
+                              : progreso
+                                ? etiquetaVida({ etapa: progreso.etapa })
+                                : ""}
+                          </span>
+                          {ocrPct != null && <span> {ocrPct}%</span>}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}

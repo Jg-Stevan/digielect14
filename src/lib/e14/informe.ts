@@ -295,6 +295,61 @@ function conteo(
   return mapa;
 }
 
+/** Espejo del DETALLE_TIMEOUT del bridge/runner (constante PRIVADA allí):
+ *  el string ES el veredicto de «murió el procesado» — el informe lo usa
+ *  para separar colgadas salvadas de colgadas muertas (D65 T4.2). */
+const DETALLE_TIMEOUT_INFORME = "TIEMPO DE PROCESADO EXCEDIDO";
+
+/** D65 (T4.2) — resumen de COLGADAS (PURO — humo bun): n = filas con
+ *  watchdog ≥ 1 (al menos un intento murió); salvadas = de esas, las cuyo
+ *  desenlace final NO es el rechazo-timeout (el reintento las rescató);
+ *  porEtapa = conteo de etapaAlMorir (buckets fijos a 0 + "sin-senal").
+ *  Registros pre-D65 (watchdog null) no cuentan — el instrumento no existía. */
+export function resumenColgadas(filas: FilaInforme[]): {
+  total: number;
+  salvadas: number;
+  porEtapa: Record<string, number>;
+} {
+  const colgadas = filas.filter((f) => f.watchdog != null && f.watchdog >= 1);
+  const salvadas = colgadas.filter(
+    (f) =>
+      !(
+        f.rechazo?.tipo === "ILEGIBLE" &&
+        f.rechazo.detalle === DETALLE_TIMEOUT_INFORME
+      ),
+  ).length;
+  const porEtapa = conteo(
+    colgadas.map((f) => f.etapaAlMorir ?? "sin-senal"),
+    ["decodificando", "deteccion", "ocr", "verificacion"],
+  );
+  return { total: colgadas.length, salvadas, porEtapa };
+}
+
+/** D65 (T4.3) — resumen de DEDUP v2 (PURO — humo bun). activo = hay trazas
+ *  del dedup (el instrumento corrió en esta cola). matches = filas marcadas
+ *  gemela por contenido — incluye las que el dueño luego reprocesó con
+ *  PROCESAR IGUAL (el match SÍ ocurrió); distancia media SOLO sobre matches
+ *  con distancia (sin datos → null — jamás inventar). */
+export function resumenDedup(filas: FilaInforme[]): {
+  activo: boolean;
+  matches: number;
+  distanciaMedia: number | null;
+  sinMatch: number;
+} {
+  const matches = filas.filter((f) => f.dedup === "v2");
+  const distancias = matches
+    .map((f) => f.dedupDistancia)
+    .filter((v): v is number => typeof v === "number");
+  return {
+    activo: filas.some((f) => f.dedup != null),
+    matches: matches.length,
+    distanciaMedia: distancias.length
+      ? Math.round(distancias.reduce((a, b) => a + b, 0) / distancias.length)
+      : null,
+    sinMatch: filas.filter((f) => f.dedup === "sin-match").length,
+  };
+}
+
 /** Medias SOLO sobre actas con el dato (sin inventar — T1.2). */
 function mediosTiempos(filas: FilaInforme[]): ResumenInforme["tiemposMediosMs"] {
   // D57 — "esperaMs" AÑADIDO (aditivo — los campos viejos no cambian de
@@ -479,7 +534,7 @@ export function renderTxt(
       )
     : null;
   linea(
-    `- Espera media en cola: ${tiemposMedios.esperaMs ?? "-"}ms (p50 ${p50 ?? "-"}ms) — pipeline-real ≈ total − espera`,
+    `- Espera media en cola: ${tiemposMedios.esperaMs ?? "-"}ms (p50 ${p50 ?? "-"}ms) — la espera es tiempo en COLA antes de iniciar; totalMs NO incluye la espera`,
   );
   // D61 — KIT e14-tiempos-ocultos-v1 (T4): línea NUEVA AL FINAL de TOTALES
   // (formato exacto del kit — aditiva, el parser por prefijos de los
@@ -636,6 +691,14 @@ export function renderTxt(
         : null,
       f.skewGrados != null ? `skewGrados ${f.skewGrados}` : null,
       f.gateMarco != null ? `gateMarco ${f.gateMarco}` : null,
+      // D65 (T1.4/T2.3) — trazas del watchdog y del dedup v2 AL FINAL de la
+      // línea (aditivo — jamás reordenar, contrato D57). Sin dato NO se
+      // imprime nada (null/ausente — honestidad del kit).
+      f.watchdog != null ? `watchdog ${f.watchdog}` : null,
+      f.etapaAlMorir != null ? `etapaAlMorir ${f.etapaAlMorir}` : null,
+      f.elapsedMs != null ? `elapsedMs ${f.elapsedMs}` : null,
+      f.dedup != null ? `dedup ${f.dedup}` : null,
+      f.dedupDistancia != null ? `dedupDistancia ${f.dedupDistancia}` : null,
     ].filter((t): t is string => t != null);
     linea(`${i + 1}. ${trozos.join(" - ")}`);
   });
@@ -718,6 +781,27 @@ export async function generarInformeZip(
       filas.filter((f) => f.tieneDiagnostico).map((f) => f.quadOrigen ?? "null"),
       ["worker", "sobel", "null"],
     ),
+    // D65 — KIT e14-progreso-watchdog-dedup-v1 (T4): resumen machine-readable
+    // de las secciones nuevas del txt (claves ADITIVAS al final — informe.json
+    // estable; ceros = dato real, no invención).
+    colgadas: (() => {
+      const r = resumenColgadas(filas);
+      return {
+        total: r.total,
+        salvadasPorReintento: r.salvadas,
+        porEtapa: r.porEtapa,
+      };
+    })(),
+    dedup: (() => {
+      const r = resumenDedup(filas);
+      return {
+        version: "v2" as const,
+        activo: r.activo,
+        matches: r.matches,
+        sinMatch: r.sinMatch,
+        distanciaMedia: r.distanciaMedia,
+      };
+    })(),
     actas: filas.map(actaLivianaJson),
     ...(recortado
       ? { imagenesRecortadasA: TOPE_ACTAS_CON_IMAGEN, actasSinImagen: sinImagen }
