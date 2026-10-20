@@ -6,6 +6,7 @@
 import type { PageFilter, Quad } from "@jg-stevan/scanner-core/types";
 import type { ClasificacionE14 } from "./clasificador";
 import type { NivelLectura } from "./senal-lectura";
+import type { OrigenActa } from "./masiva/origen"; // D63-A — tipo del origen (kit: tipos viven en origen.ts)
 
 // ---------- Captura y análisis (SPEC fase lógica §3.1) ----------
 export type FuenteCaptura = "SIMULACION" | "CAMARA" | "ARCHIVO";
@@ -138,6 +139,14 @@ export interface DiagnosticoActa {
    *  Asignación defensiva en el bridge (si no hay diagnóstico, se omite).
    *  Ausente en SIM (el probe no corre) y en registros previos a D57. */
   orientacionProbeMs?: number;
+  /** D63-A — KIT e63a-origen-escaneo-v1 (T2): origen del archivo MASIVA
+   *  según el detector heurístico (masiva/origen.ts). null = duda honesta —
+   *  jamás inventar. Ausente en SIM y en registros previos a D63-A. SOLO
+   *  visibilidad: no toca score/gate/veredictos (kit §0). */
+  origen?: OrigenActa;
+  /** D63-A — T2: señales auditables de la decisión del detector (p. ej.
+   *  "sin-exif+borde-blanco+ratio-hoja"). null = no evaluado. */
+  origenSenales?: string | null;
 }
 
 export interface Acta {
