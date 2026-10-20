@@ -10,6 +10,14 @@
  * LCP de Vercel (kit §3-T2.1). El wasm de unrar viaja dentro del paquete npm
  * (se le pasa `wasmBinary` explícito — el locateFile del emscripten no sirve
  * en el bundle: `public/**` y `src/assets/**` son intocables, kit §0.3).
+ *
+ * D60 (KIT e14-pdf-masiva-v1): los PDF entran a la cola — se renderizan
+ * PÁGINA A PÁGINA client-side (pdf.js) y CADA página se encola como una
+ * `File` JPEG más → el pipeline real, el gate, el dedup, la persistencia y
+ * la REVISIÓN funcionan SIN cambios (la página viaja por la misma vía que
+ * las extraídas de un .zip). `pdfjs-dist` se importa DEFERIDO (D47, mismo
+ * patrón) y su worker viaja como asset del paquete npm vía
+ * `new URL(..., import.meta.url)` — NADA en `public/**` ni `src/assets/**`.
  */
 
 /** Entradas de comprimido que son imágenes (por extensión — kit T2.2). */
@@ -18,6 +26,14 @@ const EXT_IMAGEN = /\.(jpe?g|png|webp|bmp|gif|avif|heic|heif)$/i;
 const EXT_COMPRIMIDO_ANIDADO = /\.(zip|rar)$/i;
 /** Tope de imágenes extraídas por comprimido (kit T2.2). */
 const TOPE_POR_COMPRIMIDO = 500;
+
+/** D60 — Tope de páginas renderizadas por PDF (un E-14 real es 1-2 páginas). */
+const TOPE_PAGINAS_PDF = 30;
+/** D60 — Longitud objetivo del borde largo del render (px) — el det trabaja
+ *  a 1920; 2400 da margen para el realce sin inflar memoria. */
+const PDF_LARGO_OBJETIVO = 2400;
+/** D60 — Escala máxima del render (viewport×escala ≥ origen nunca más de 4×). */
+const PDF_ESCALA_MAX = 4;
 
 /**
  * ¿El archivo entra a la cola como imagen? El MISMO criterio de ScanView
@@ -31,12 +47,20 @@ export function pareceImagenMasiva(archivo: File): boolean {
   );
 }
 
+/** D60 — ¿el archivo es un PDF? MIME oficial o extensión (algunos navegadores
+ *  entregan application/octet-stream). */
+export function parecePdfMasiva(archivo: File): boolean {
+  return archivo.type === "application/pdf" || /\.pdf$/i.test(archivo.name);
+}
+
 /** Guard del kit T2.2 que NO invalida el lote (viajan junto a las imágenes
- *  extraídas — el store los convierte en filas ERROR con motivo corto). */
+ *  extraídas — el store los convierte en filas ERROR con motivo corto).
+ *  D60 añade LIMITE_PAGINAS_PDF (una fila por PDF que exceda el tope). */
 export type MotivoExtraccion =
   | "PROTEGIDO_O_CORRUPTO"
   | "ARCHIVO_ANIDADO"
-  | "LIMITE_500_POR_COMPRIMIDO";
+  | "LIMITE_500_POR_COMPRIMIDO"
+  | "LIMITE_PAGINAS_PDF";
 
 export interface ErrorExtraccion {
   nombre: string;
@@ -73,6 +97,87 @@ export async function extraerArchivo(archivo: File): Promise<ResultadoExtraccion
   if (/\.zip$/i.test(archivo.name)) return extraerZip(archivo);
   if (/\.rar$/i.test(archivo.name)) return extraerRar(archivo);
   throw new Error("FORMATO_NO_SOPORTADO");
+}
+
+/** D60 — PDF → páginas JPEG en la cola (MISMA vía que las extraídas de un
+ *  .zip: ids reales, temps, cadenaDedup, IDB, runner, thumb — TODO heredado).
+ *  Render página a página client-side con pdf.js (import DEFERIDO — D47);
+ *  el worker viaja como asset del PROPIO paquete npm vía
+ *  `new URL(..., import.meta.url)` (mismo mecanismo del unrar.wasm — NADA en
+ *  public/). Contrato idéntico a zip/rar: PROTEGIDO_O_CORRUPTO /
+ *  SIN_PAGINAS / PDF_WORKER_NO_CARGO lanzan (el store crea la fila ERROR)
+ *  y LIMITE_PAGINAS_PDF viaja en `errores` (patrón LIMITE_500). */
+export async function extraerPdf(archivo: File): Promise<ResultadoExtraccion> {
+  // D47: pdfjs-dist SOLO cuando llega un PDF — bundle inicial y LCP intactos.
+  const pdfjs = await import("pdfjs-dist");
+  try {
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+      "pdfjs-dist/build/pdf.worker.min.mjs",
+      import.meta.url
+    ).toString();
+  } catch {
+    throw new Error("PDF_WORKER_NO_CARGO");
+  }
+
+  // getDocument: contraseña (PasswordException) o parse/corrupción → el
+  // motivo ya es conocido por la bandeja (fila ERROR corta) — ídem zip/rar.
+  // ADAPTACIÓN v6 (REPORTE §desviaciones): el destroy vive en el LOADING
+  // TASK (PDFDocumentProxy ya no lo expone) — memoria disciplinada ídem.
+  let carga: ReturnType<typeof pdfjs.getDocument>;
+  let doc: Awaited<ReturnType<typeof pdfjs.getDocument>["promise"]>;
+  try {
+    carga = pdfjs.getDocument({ data: await archivo.arrayBuffer() });
+    doc = await carga.promise;
+  } catch {
+    throw new Error("PROTEGIDO_O_CORRUPTO");
+  }
+
+  const base = archivo.name.replace(/\.pdf$/i, "");
+  const archivos: File[] = [];
+  const errores: ErrorExtraccion[] = [];
+  try {
+    if (doc.numPages === 0) throw new Error("SIN_PAGINAS");
+    // Render SECUENCIAL (1 página en memoria a la vez) — un PDF de 30 no
+    // revienta la pestaña; canvas/ctx los libera el GC del bucle.
+    const n = Math.min(doc.numPages, TOPE_PAGINAS_PDF);
+    for (let i = 1; i <= n; i++) {
+      const page = await doc.getPage(i);
+      const v1 = page.getViewport({ scale: 1 });
+      const escala = Math.min(
+        PDF_LARGO_OBJETIVO / Math.max(v1.width, v1.height),
+        PDF_ESCALA_MAX
+      );
+      const viewport = page.getViewport({ scale: escala });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      // Firma v6 (RenderParameters.canvas requerido — ctx interno de pdf.js;
+      // willReadFrequently NO aplica: render, no lectura — D60 §T2.8).
+      await page.render({ canvas, viewport }).promise;
+      // blob null → página saltada (sin inventar). El nombre conserva la
+      // identidad del E-14 oficial: `E14_XXX_...-P1.jpg`.
+      const blob = await new Promise<Blob | null>((res) =>
+        canvas.toBlob(res, "image/jpeg", 0.92)
+      );
+      if (blob) {
+        archivos.push(
+          new File([blob], `${base}-P${i}.jpg`, {
+            type: "image/jpeg",
+            lastModified: archivo.lastModified,
+          })
+        );
+      }
+      page.cleanup();
+    }
+    if (doc.numPages > TOPE_PAGINAS_PDF) {
+      // Más páginas que el tope: lo renderizado se encola + UNA fila ERROR.
+      errores.push({ nombre: archivo.name, motivo: "LIMITE_PAGINAS_PDF" });
+    }
+    if (!archivos.length && !errores.length) throw new Error("SIN_PAGINAS");
+    return { archivos, errores };
+  } finally {
+    await carga.destroy(); // memoria disciplinada — salga como salga (v6)
+  }
 }
 
 /** ZIP con fflate (sync, ~8 KB). Contraseña/corrupto → unzipSync lanza →

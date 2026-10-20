@@ -22,7 +22,13 @@ import { hacerThumb, iniciarRunner, pausarRunner } from "./runner";
 // KIT e14-masiva-ux-v1 (T2): clasificación/extracción de archivos — las
 // deps pesadas (fflate/node-unrar-js) viven DETRÁS de extraerArchivo con
 // import diferido (D47): el bundle inicial no las carga.
-import { extraerArchivo, pareceImagenMasiva } from "./archivos";
+// D60: parecePdfMasiva/extraerPdf añaden la rama PDF (pdfjs diferido ídem).
+import {
+  extraerArchivo,
+  extraerPdf,
+  pareceImagenMasiva,
+  parecePdfMasiva,
+} from "./archivos";
 import { dhashDeArchivo, hamming64, HAMMING_MAX } from "./dedup";
 import {
   paginaDeActa,
@@ -260,8 +266,9 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     // KIT e14-masiva-ux-v1 (T2.3): clasificación — imágenes (MIME o
     // extensión, HEIC incluido) pasan directo; .zip/.rar se EXTRAEN
     // client-side (import diferido D47 — extraer NO procesa nada, solo
-    // encola: D45 intacto); lo demás → fila ERROR FORMATO_NO_SOPORTADO
-    // (ya no se descarta en silencio).
+    // encola: D45 intacto); D60: PDF → páginas JPEG por extraerPdf (pdfjs
+    // diferido ídem — cada página hereda TODO); lo demás → fila ERROR
+    // FORMATO_NO_SOPORTADO (ya no se descarta en silencio).
     const lista = Array.from(files);
     if (!lista.length) return;
     const imagenes: File[] = [];
@@ -272,6 +279,21 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
       } else if (/\.(zip|rar)$/i.test(f.name)) {
         try {
           const resultado = await extraerArchivo(f);
+          imagenes.push(...resultado.archivos);
+          errores.push(...resultado.errores);
+        } catch (err) {
+          errores.push({
+            nombre: f.name,
+            motivo: (
+              err instanceof Error ? err.message : "PROTEGIDO_O_CORRUPTO"
+            ).slice(0, 48),
+          });
+        }
+      } else if (parecePdfMasiva(f)) {
+        // D60 — PDF: render página a página → CADA página cae en `imagenes`
+        // (mismo manejo exacto que zip/rar: hereda pipeline/gate/dedup/IDB).
+        try {
+          const resultado = await extraerPdf(f);
           imagenes.push(...resultado.archivos);
           errores.push(...resultado.errores);
         } catch (err) {

@@ -276,14 +276,13 @@ Mandato: informe del dueño 20/10 07:42 (17 actas, 17 ENVIADAS, 0 rechazos) con 
 - [x] T4 — Docs: DECISIONS D58 (SOLO-EVIDENCIA) + esta entrada + REPORTE (evidencia completa + continuidad) + línea AGENTS.md + worklog.
 - [ ] Del dueño: correr B5 y B7 con las 9 fotos reales (171125, 170755, 171446, 171454, 171500, 171506, 171512, 171518 — input local, NUNCA se commitean) → cierra NO-GO B5 físico y DESBLOQUEA D61 · buscar trazas `dedup … marcada/sin-original` en sus capturas (decide hash vs ORDEN) · decidir D62 (auto-envío con página null).
 
-## INFO-ACTA-FILAS — e14-info-acta-filas-v1 (2026-10-20, D59): la fila MASIVA muestra la info reconocida del acta (idea del dueño, mockup Stitch corregido)
+## PDF-MASIVA — e14-pdf-masiva-v1 (2026-10-20, D60, AGENTE 2): los E-14 oficiales en PDF entran a la cola MASIVA
 
-Mandato: cada fila de la bandeja MASIVA pinta, encima del nombre de archivo, `DEPTO - PUESTO - TIPO - MESA nnn - PÁG n DE m` — cero pipeline nuevo: todo ya existe en `Acta.clasificacion`; sin datos → sin título (jamás inventar). Filas ERROR ganan REINTENTAR (re-encolar, NO auto-procesa — D45).
+Problema: en la corrida real del 20-oct 15:04 los 2 únicos errores del lote fueron PDFs oficiales E-14 → fila ERROR `FORMATO_NO_SOPORTADO` (la clasificación solo aceptaba imágenes y .zip/.rar).
 
-- [x] T1 — `tipos.ts`: `infoTitulo?: string|null` (FilaMasiva + RegistroMasiva, persiste — desviación aditiva de thumb) + `tituloDeActa()` junto a `paginaDeActa` (cero imports).
-- [x] T2 — `runner.ts`: los 3 desenlaces alimentan el título (dedup copia el de su original · pipeline completo `tituloDeActa(actaFinal)` · catch ERROR → null).
-- [x] T3 — `store.ts`: mapping `filaDeRegistro` (sobrevive la recarga) + `reintentar(id)` (guard ERROR + no-corriendo; sin archivo → `SIN_ARCHIVO_ORIGINAL`; persistente; NO auto-procesa).
-- [x] T4 — `MasivaView.tsx`: título verde mono truncate + `title` attr encima del nombre; nombre `text-red-300` en ERROR; botón REINTENTAR (border-red-500/40, aria-label, ≥44px). Zonas D60 intocadas (`agregarFiles`, accept, hints).
-- [x] T5 — Gates: tsc 0 · lint 0 · build estático OK. Navegador (1280×800 y 390×844, lote real mesa001/mesa002/sana + gemela + límites): título verde completo en ENVIADAS (8.5 AUTO), DUPLICADAS heredan el título, ERROR con archivo ciclo REINTENTAR→PENDIENTE→PROCESAR→ERROR, ERROR sin archivo → SIN_ARCHIVO_ORIGINAL, recarga repinta todo desde IDB, 0 errores de consola.
-- [x] T6 — Docs: REPORTE (errores del mockup NO replicados + hallazgos §4) + D59 + esta entrada + línea AGENTS.md + worklog.
-- [ ] Del dueño: lote de las 13 actas del informe 15:04 en SU equipo (las fotos nunca salen del sandbox) · revisar REPORTE §4-B (fallback de plantilla ACTA_MOCK en sin-clasificar — ajuste futuro del BRIDGE, no del kit) · merge.
+- [x] T1 — `pdfjs-dist` 6.4.299 (pin exacto) con import DEFERIDO (D47 — ídem fflate/unrar): impacto ~0 en bundle inicial y LCP (lib 455 KB verificada LAZY fuera del HTML inicial; worker emitido desde el paquete npm — `public/**` intocable).
+- [x] T2 — `archivos.ts`: `parecePdfMasiva` (MIME o extensión) + `extraerPdf` (render SECUENCIAL página a página → JPEG q0.92 2400px/escala≤4 → `File(base-P#.jpg)`; tope 30 págs → `LIMITE_PAGINAS_PDF` patrón LIMITE_500; `PROTEGIDO_O_CORRUPTO`/`SIN_PAGINAS`/`PDF_WORKER_NO_CARGO` lanzan → fila ERROR; `carga.destroy()` try/finally). Adaptaciones API v6 documentadas (REPORTE §6).
+- [x] T3 — `store.ts` `agregarFiles`: rama PDF antes del `else` final — mismo manejo exacto que zip/rar (las páginas heredan ids reales, temps, `cadenaDedup`, IDB, runner, thumb — TODO).
+- [x] T4 — `MasivaView.tsx`: `accept` + `.pdf` + hints («SUELTA FOTOS, PDF O ZIP/RAR AQUÍ» / «SUELTA MÁS ARCHIVOS AQUÍ — SE SUMAN A LA COLA»).
+- [x] T5 — Gates: tsc 0 · lint 0 · build estático OK · `git diff --name-status origin/main` = zonas exactas del kit · smoke navegador (build COOP/COEP): 2 págs → 2 filas `-P1/-P2` + runner/prowarm sobre páginas renderizadas · corrupto → `PROTEGIDO_O_CORRUPTO` · 35 págs → 30 filas + `LIMITE_PAGINAS_PDF` · dedup-PDF OBSERVACIÓN: hamming 0 cross-archivo (mecanismo GO; GO/NO-GO final con los PDFs reales del dueño). Detalle: docs/REPORTE-e14-pdf-masiva-v1.md.
+- [ ] Del dueño: los 2 PDFs reales del informe 15:04 → 1 fila por página → PROCESAR → score/status/píldora como cualquier foto · PDF protegido real → `PROTEGIDO_O_CORRUPTO` · recarga (IDB) · RAM 30 págs en su hardware · merge del PR DRAFT.
