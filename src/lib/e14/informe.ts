@@ -74,7 +74,13 @@ export interface FilaInforme {
     calidadMs: number;
     ocrMs: number;
     totalMs: number;
+    /** D57 — KIT e14-instrumentos-espera-v1: espera en cola MASIVA (solo
+     *  filas procesadas con el kit activo — ausente jamás se inventa). */
+    esperaMs?: number;
   } | null;
+  /** D57 — KIT e14-instrumentos-espera-v1 (T2): ms del probe de orientación
+   *  del diagnóstico (null cuando no corrió — SIM/registros previos). */
+  orientacionProbeMs: number | null;
   /** ¿El acta trae diagnóstico completo? (base de detección/tiempos). */
   tieneDiagnostico: boolean;
   /** ¿Esta fila lleva carpeta en actas/ (T1.3)? */
@@ -97,6 +103,9 @@ export interface ResumenInforme {
     calidadMs: number | null;
     ocrMs: number | null;
     totalMs: number | null;
+    /** D57 — media de esperaMs SOLO sobre actas con el dato (null si
+     *  ninguna lo trae — jamás inventar, kit §2). */
+    esperaMs: number | null;
   };
   /** Tope T1.6 aplicado: imágenes recortadas a las N más recientes. */
   imagenesRecortadasA: number | null;
@@ -181,6 +190,9 @@ function filaLiviana(reg: RegistroMasiva): FilaInforme {
     gateCompleta: diag ? diag.gate.completa : null,
     quadOrigen: diag ? diag.captura.quadOrigen : null,
     tiempos: diag?.tiempos ?? null,
+    // D57 — instrumentos aditivos: orientacionProbeMs cuando el diagnóstico
+    // lo trae (null si no — la forma del mapa NO cambia para los parsers).
+    orientacionProbeMs: diag?.orientacionProbeMs ?? null,
     tieneDiagnostico: !!diag,
     conCarpeta,
     pesoImagenes,
@@ -204,7 +216,9 @@ function conteo(
 
 /** Medias SOLO sobre actas con el dato (sin inventar — T1.2). */
 function mediosTiempos(filas: FilaInforme[]): ResumenInforme["tiemposMediosMs"] {
-  const campos = ["procesoMs", "calidadMs", "ocrMs", "totalMs"] as const;
+  // D57 — "esperaMs" AÑADIDO (aditivo — los campos viejos no cambian de
+  // forma; compatibilidad con informes previos, kit §4-T3).
+  const campos = ["procesoMs", "calidadMs", "ocrMs", "totalMs", "esperaMs"] as const;
   const medias: Record<string, number | null> = {};
   for (const campo of campos) {
     const valores = filas
@@ -290,6 +304,11 @@ function actaLivianaJson(fila: FilaInforme) {
     gateCompleta: fila.gateCompleta,
     quadOrigen: fila.quadOrigen,
     tiempos: fila.tiempos,
+    // D57 — por-acta, SOLO cuando exista (kit §4-T3: "cuando existan" —
+    // JSON.stringify omite undefined → informes previos no cambian de forma).
+    ...(fila.orientacionProbeMs != null
+      ? { orientacionProbeMs: fila.orientacionProbeMs }
+      : {}),
   };
 }
 
@@ -331,6 +350,23 @@ function renderTxt(
   );
   linea(
     `- Tiempos medios (solo actas con diagnostico): total ${tiemposMedios.totalMs ?? "-"}ms - proceso ${tiemposMedios.procesoMs ?? "-"}ms - calidad ${tiemposMedios.calidadMs ?? "-"}ms - OCR ${tiemposMedios.ocrMs ?? "-"}ms`,
+  );
+  // D57 — KIT e14-instrumentos-espera-v1 (T3): línea NUEVA tras los tiempos
+  // medios (append-only — los parsers del dueño van por prefijo). p50 SOLO
+  // sobre actas con esperaMs; sin datos → "-" (jamás inventar).
+  const esperas = filas
+    .map((f) => f.tiempos?.esperaMs)
+    .filter((v): v is number => typeof v === "number")
+    .sort((a, b) => a - b);
+  const p50 = esperas.length
+    ? Math.round(
+        esperas.length % 2 === 1
+          ? esperas[(esperas.length - 1) / 2]
+          : (esperas[esperas.length / 2 - 1] + esperas[esperas.length / 2]) / 2,
+      )
+    : null;
+  linea(
+    `- Espera media en cola: ${tiemposMedios.esperaMs ?? "-"}ms (p50 ${p50 ?? "-"}ms) — pipeline-real ≈ total − espera`,
   );
   linea();
   const rechazoFilas = filas.filter((f) => f.rechazo);
