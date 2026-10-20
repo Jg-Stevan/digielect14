@@ -77,6 +77,17 @@ export interface FilaInforme {
     /** D57 — KIT e14-instrumentos-espera-v1: espera en cola MASIVA (solo
      *  filas procesadas con el kit activo — ausente jamás se inventa). */
     esperaMs?: number;
+    /** D61 — KIT e14-tiempos-ocultos-v1: decode del archivo (null/ausente en
+     *  canvas-path y SIM — jamás se inventa). */
+    decodeMs?: number | null;
+    /** D61 — KIT e14-tiempos-ocultos-v1: detección de página del core. ídem. */
+    detectMs?: number | null;
+    /** D61 — KIT e14-tiempos-ocultos-v1: persistencia del desenlace en IDB
+     *  (solo MASIVA — ausente jamás se inventa). */
+    persistMs?: number;
+    /** D61 — KIT e14-tiempos-ocultos-v1: envío online del desenlace (offline/
+     *  EN COLA/no-OPTIMA → ausente — jamás se inventa). */
+    envioMs?: number;
   } | null;
   /** D57 — KIT e14-instrumentos-espera-v1 (T2): ms del probe de orientación
    *  del diagnóstico (null cuando no corrió — SIM/registros previos). */
@@ -106,6 +117,12 @@ export interface ResumenInforme {
     /** D57 — media de esperaMs SOLO sobre actas con el dato (null si
      *  ninguna lo trae — jamás inventar, kit §2). */
     esperaMs: number | null;
+    /** D61 — KIT e14-tiempos-ocultos-v1 (T4): medias SOLO sobre actas con el
+     *  dato (mismo criterio de esperaMs — null si ninguna lo trae). */
+    decodeMs: number | null;
+    detectMs: number | null;
+    persistMs: number | null;
+    envioMs: number | null;
   };
   /** Tope T1.6 aplicado: imágenes recortadas a las N más recientes. */
   imagenesRecortadasA: number | null;
@@ -218,7 +235,20 @@ function conteo(
 function mediosTiempos(filas: FilaInforme[]): ResumenInforme["tiemposMediosMs"] {
   // D57 — "esperaMs" AÑADIDO (aditivo — los campos viejos no cambian de
   // forma; compatibilidad con informes previos, kit §4-T3).
-  const campos = ["procesoMs", "calidadMs", "ocrMs", "totalMs", "esperaMs"] as const;
+  // D61 — KIT e14-tiempos-ocultos-v1 (T4): "decodeMs/detectMs/persistMs/
+  // envioMs" AÑADIDOS con el MISMO criterio (media SOLO sobre actas con el
+  // dato — el filtro typeof ya excluye null/undefined; jamás inventar).
+  const campos = [
+    "procesoMs",
+    "calidadMs",
+    "ocrMs",
+    "totalMs",
+    "esperaMs",
+    "decodeMs",
+    "detectMs",
+    "persistMs",
+    "envioMs",
+  ] as const;
   const medias: Record<string, number | null> = {};
   for (const campo of campos) {
     const valores = filas
@@ -367,6 +397,15 @@ function renderTxt(
     : null;
   linea(
     `- Espera media en cola: ${tiemposMedios.esperaMs ?? "-"}ms (p50 ${p50 ?? "-"}ms) — pipeline-real ≈ total − espera`,
+  );
+  // D61 — KIT e14-tiempos-ocultos-v1 (T4): línea NUEVA AL FINAL de TOTALES
+  // (formato exacto del kit — aditiva, el parser por prefijos de los
+  // instrumentos no se rompe). Sin datos → "-" como la línea de espera
+  // (jamás inventar). La media de persistMs cubre los writes del runner
+  // MASIVA; envioMs solo filas ENVIADAS online; decode/detect solo la ruta
+  // worker del pipeline (canvas-path → null).
+  linea(
+    `CONVERSION/PERSISTENCIA (solo actas con dato): decode medio ${tiemposMedios.decodeMs ?? "-"}ms · detect medio ${tiemposMedios.detectMs ?? "-"}ms · persistencia media ${tiemposMedios.persistMs ?? "-"}ms · envio medio ${tiemposMedios.envioMs ?? "-"}ms`,
   );
   linea();
   const rechazoFilas = filas.filter((f) => f.rechazo);
