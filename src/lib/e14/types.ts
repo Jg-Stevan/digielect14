@@ -107,7 +107,24 @@ export interface DiagnosticoActa {
     // de mejorarResolución — n/d jamás miente, misma filosofía del T-A).
     quadOrigen: "worker" | "sobel" | null;
   };
-  tiempos: { procesoMs: number; calidadMs: number; ocrMs: number; totalMs: number };
+  tiempos: {
+    procesoMs: number;
+    calidadMs: number;
+    ocrMs: number;
+    totalMs: number;
+    /** D57 — KIT e14-instrumentos-espera-v1 (T1): espera en cola MASIVA, desde
+     *  `agregadaEn` hasta iniciar el pipeline (tInicio − agregadaEn). SOLO
+     *  masiva/runner.ts lo llena (el flujo individual no tiene espera de
+     *  cola). Opcional: los registros previos y el flujo individual van sin
+     *  él — jamás inventar (kit §2). */
+    esperaMs?: number;
+  };
+  /** D57 — KIT e14-instrumentos-espera-v1 (T2): coste del probe de
+   *  orientación (`probe.ms` de `probeOrientacion()`) persistido en la ficha
+   *  — la traza de consola (D51) ya existía, esto lo vuelve permanente.
+   *  Asignación defensiva en el bridge (si no hay diagnóstico, se omite).
+   *  Ausente en SIM (el probe no corre) y en registros previos a D57. */
+  orientacionProbeMs?: number;
 }
 
 export interface Acta {
