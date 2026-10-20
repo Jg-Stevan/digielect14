@@ -202,3 +202,13 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 **Verificado (sandbox, tira real KIT 399):** sana → `aplicado=0` e 8.5 idéntico · girada 90/180/270 → `aplicado=1` (score probe 8.60/8.58/8.37, anclas=3) → **8.5 AUTO las tres** · SIM 8.2/7.0/4.3 exactos con 0 trazas · lint/tsc/build limpios · zona prohibida VACÍA.
 
 **Pendiente:** AC-2 del dueño (las 6 fotos del informe en su equipo) — bloqueante para merge final, no para el PR. Los otros 2 kits del mega-kit (tiempos: B1-B5) van por los Agentes 2/3 en paralelo.
+
+## OCR-ESCALONADO — e14-ocr-escalonado-v1 (2026-10-20): 1.ª pasada det 1280 → re-OCR 1920 solo si hace falta (D53)
+
+**Problema:** OCR medio 17.3 s (68% del total 25.3 s); el det a 1920 es ~19-21% del OCR real. El banco `tools/bench-det1280` (PR #34) dio GO (−56% det, 120/120 votos, 0 cajas perdidas) pero la palanca seguía sin activar en producción.
+
+**Solución:** OCR ESCALONADO en AMBOS pipelines — 1.ª pasada con det cap **1280** (`DET_CAP_RAPIDO`, op4 parametrizable; op1 y la sesión det intactos) → decisión pura (`ocr-escalonado.ts`: FUERTE fin · MEDIA+mesa+4 anclas fin · resto reintenta) → re-OCR a **1920** y `elegirMejor` por anclas+conf (**NUNCA automáticamente la 2.ª** — el gate jamás ve texto degradado si el 1920 lo salva). SIM omitido (flujo de hoy, 0 trazas); presupuesto = timeout EXISTENTE (vencido → no hay 2.ª); 2.ª pasada reusa el MISMO emit de OCR; `ultimoOcr*` con la pasada elegida; traza propia `[e14] ocr-escalonado` (append-only).
+
+**Verificado (sandbox, módulos de producción + corpus VERBATIM del banco):** AC-1 120/120 votos con reocr=0 en 4/4 (FUERTE 10/10 anclas) · AC-2 acta real girada → probe Kit A aplicado → FUERTE reocr=0, desenlace igual a sana · AC-3 acta real por IMPORTAR: OCR **−28.8%** (6.8 vs 9.6 s), score 10, clasif AUTO idéntica (cod:710007453010102) · reocr=1 verificado (elegido=1920 por conf) · SIM 8.2/7.0/4.3 exactos, 0 trazas · lint 0 · tsc 0 · build OK · zona prohibida VACÍA. Desviaciones honestas (proxy headless del sandbox, criterio de identidad AC-1, tiempos ≠ del dueño): REPORTE §4.
+
+**Pendiente:** AC-5 del dueño (16 fotos del informe en SU equipo — media total vs 25.3 s y 0 rechazos nuevos; bloqueante para merge final, no para el PR). Orden de merge: orientacion (#35) → este.
