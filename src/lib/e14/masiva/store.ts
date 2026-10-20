@@ -94,6 +94,12 @@ interface MasivaStore {
    *  DUPLICADA (→ PENDIENTE, dupOf fuera) para que el runner la reprocese
    *  COMPLETA (fotos distintas pueden parecer iguales en thumb — kit §2). */
   procesarIgual: (id: string) => Promise<void>;
+  /** D59 — KIT e14-info-acta-filas-v1 (T3): «REINTENTAR» de una fila ERROR —
+   *  la re-encola (PENDIENTE, error fuera, persistente) para que el dueño
+   *  pulse PROCESAR. NO auto-procesa (misma doctrina D45: extraer/re-encolar
+   *  NO procesa). Sin archivo original en IDB → la fila SIGUE en ERROR con
+   *  SIN_ARCHIVO_ORIGINAL (honesto — registros viejos o filas de formato). */
+  reintentar: (id: string) => Promise<void>;
   /** Envío en lote SECUENCIAL de ADVERTENCIAS (cada una vía registrarEnvio
    *  real). NO toca RECHAZADAS ni EN_RH (kit §6). */
   enviarLote: (estado: "ADVERTENCIA") => Promise<void>;
@@ -114,6 +120,9 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
     pagina: acta ? paginaDeActa(acta) : null,
     motivo: acta?.rechazo?.tipo ?? null,
     thumb: r.thumb,
+    // D59 — KIT e14-info-acta-filas-v1 (T3): el título compuesto sobrevive
+    // la recarga (persiste en el registro — desviación aditiva de thumb).
+    infoTitulo: r.infoTitulo ?? null,
     enviadaAuto: r.acta?.status === "ENVIADA" && !!r.acta?.enviadoAutomaticamente,
     // KIT e14-masiva-ux-v1 (T3.2): el estado de envío se deriva DEL REGISTRO
     // (kit-literal: hashSha256 === "EN COLA") — sobrevive la recarga.
@@ -423,6 +432,33 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     try {
       const registro = await leerRegistro(id);
       await guardarRegistro({ ...registro, estado: "PENDIENTE", dupOf: undefined });
+    } catch {
+      /* IDB caído — la fila ya está PENDIENTE en memoria (honesto) */
+    }
+  },
+
+  // D59 — KIT e14-info-acta-filas-v1 (T3): «REINTENTAR» — la fila ERROR
+  // vuelve a PENDIENTE (error fuera, persistente) y el runner la toma en su
+  // siguiente pasada (o cuando el dueño pulse PROCESAR). Guard honesto: sin
+  // archivo original en IDB (registros viejos o filas de formato) la fila
+  // SIGUE en ERROR con SIN_ARCHIVO_ORIGINAL — jamás encolar humo.
+  reintentar: async (id) => {
+    const fila = get().filas.find((f) => f.id === id);
+    if (!fila || fila.estado !== "ERROR") return;
+    if (get().progreso?.id === id) return; // no corriendo en ese id (defensivo)
+    let registro: RegistroMasiva;
+    try {
+      registro = await leerRegistro(id);
+    } catch {
+      return; // sin registro en IDB — nada que reintentar (honesto)
+    }
+    if (!(registro.archivo instanceof File)) {
+      patchFila(id, { error: "SIN_ARCHIVO_ORIGINAL" });
+      return;
+    }
+    patchFila(id, { estado: "PENDIENTE", error: null });
+    try {
+      await guardarRegistro({ ...registro, estado: "PENDIENTE", error: undefined });
     } catch {
       /* IDB caído — la fila ya está PENDIENTE en memoria (honesto) */
     }
