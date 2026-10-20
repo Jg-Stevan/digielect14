@@ -91,6 +91,11 @@ export interface DiagnosticoActa {
   ocrValido: boolean;
   gate: {
     completa: boolean;
+    /** D63-C — KIT e63c-quad-gate-escaneo-v1 (T2.3): veredicto del MARCO
+     *  IMPRESO del formulario en escaneos ("completo" | "cortado" |
+     *  "no-encontrado"). null = no se evaluó (fotos, SIM, registros
+     *  previos a D63-C — jamás inventar). Aditivo al final del contrato. */
+    gateMarco?: "completo" | "cortado" | "no-encontrado" | null;
     fondo: boolean;
     recortada: boolean;
     ladoEsquina: string | null;
@@ -106,7 +111,10 @@ export interface DiagnosticoActa {
     // KIT e14-quad-sobel-v1 (P1 §4-C): quién fabricó el quad de verdad.
     // null SOLO si la detección NO corrió (recorte manual del editor, catch
     // de mejorarResolución — n/d jamás miente, misma filosofía del T-A).
-    quadOrigen: "worker" | "sobel" | null;
+    // D63-C (T1): valor NUEVO "pagina-completa" — escaneos sin quad real
+    // (worker falló + sobel fabricó): la página completa es el acta, sin
+    // warp de perspectiva (la rotación recta ya la trajo D63-B).
+    quadOrigen: "worker" | "sobel" | "pagina-completa" | null;
   };
   tiempos: {
     procesoMs: number;
