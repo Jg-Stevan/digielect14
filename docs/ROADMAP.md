@@ -192,3 +192,13 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] Docs: REPORTE + esta entrada + worklog + AGENTS (DECISIONS.md INTACTO por diseño del kit).
 - [x] PR DRAFT (merge solo con orden del dueño; `tools/` no entra en el build — lint/tsc/build OK y diff de producción VACÍO verificado).
 - [ ] Del dueño: correr el banco en SU máquina (4 núcleos/8 GB/Chrome 155) y decidir si archiva la idea int8 del rec o pide otro kit con otra variante (fp16/modelo menor — fuera de alcance aquí).
+
+## BENCH-TIEMPOS — e14-bench-tiempos-v1 (2026-10-19, AGENTE 3): 3 bancos GO/NO-GO para las palancas de tiempo (CERO producción)
+
+- [x] T1 — `tools/bench-lote12/` (B2): rec/cls lote 6 vs 12 — corpus del kit bench-rec-int8 (seed 0xe14be6c5), réplica rapidocr.ts (W=floor(48·max(320/48,r)), NCHW BGR, CTC greedy; cls flags) → **NO-GO rec** (0.99×, 1/60 líneas degrada O→0) / **GO cls** (1.25-1.30×, flags 100%) — decisión global NO-GO, sub-palanca cls para el dueño.
+- [x] T2 — `tools/bench-det1280/` (B3): det 1280 vs 1920 con corpus acta-like sintético (4 págs × 30 votos manuscritos, seed 0xe14de7a2) + senal-lectura congelada → **GO DURO**: 0 votos perdidos, FUERTE/anclas/cajas idénticas, det −56.4% (ratio 0.436 ≈ teoría), ahorro escalonado ~9% del OCR en corpus (más en actas reales: det share 19-21%).
+- [x] T3 — `tools/bench-ep-webgpu/` (B4): 3 brazos (webgpu+jsep / wasm-jsep control / wasm-producción ancla) → **BLOQUEADA-entorno** (requestAdapter null en headless — NO es NO-GO del EP); paridad jsep↔producción EXACTA (calibración del banco).
+- [x] T4 — Determinismo ×2-×3 (texto EXACTO, ms ±10% salvo 1 outlier documentado), «DESCARGAR JSON» manual, window.__benchJson programático.
+- [x] T5 — Docs: REPORTE (3 veredictos + evidencia + repro) + esta entrada + worklog + AGENTS (DECISIONS.md INTACTO por diseño del kit).
+- [x] T6 — PR DRAFT (diff de producción VACÍO — solo tools/ + docs; JAMÁS merge — el dueño mergea).
+- [ ] Del dueño: correr los 3 bancos en SU máquina (4 núcleos/Chrome 155/Windows) · decidir B2 (archivar rec / kit cls-solo) · validar B3 con las fotos reales del informe (16 actas) · correr B4 en SU Chrome con GPU → si GO preliminar, kit de activación (flag gradual + fallback wasm) con su decisión en DECISIONS.md.
