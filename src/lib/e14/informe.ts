@@ -97,6 +97,18 @@ export interface FilaInforme {
   origen: string | null;
   /** D63-A — T2: señales auditables de la decisión (null = no evaluado). */
   origenSenales: string | null;
+  /** D63-D — KIT e63d-informe-trazas-escaneo-v1 (T1): ángulo de skew medido
+   *  por el pre-proceso de escaneos (D63-B, con signo, pasos de 0.1°).
+   *  null = no medido (fotos, SIM, registros previos, banda sin tinta o
+   *  ángulo fuera de ±10°) — jamás inventar. */
+  skewGrados: number | null;
+  /** D63-D — (T2) ms del deskew aplicado (D63-B); null = NO se rotó. Es la
+   *  base del «deskew medio de escaneos corregidos» de la línea ESCANEOS. */
+  deskewMs: number | null;
+  /** D63-D — (T1) veredicto del marco impreso (D63-C): "completo" |
+   *  "cortado" | "no-encontrado". null = no evaluado (fotos, SIM, registros
+   *  previos a D63-C) — jamás inventar. */
+  gateMarco: "completo" | "cortado" | "no-encontrado" | null;
   /** ¿El acta trae diagnóstico completo? (base de detección/tiempos). */
   tieneDiagnostico: boolean;
   /** ¿Esta fila lleva carpeta en actas/ (T1.3)? */
@@ -219,6 +231,11 @@ function filaLiviana(reg: RegistroMasiva): FilaInforme {
     // registros previos/SIM; jamás inventar).
     origen: diag?.origen ?? null,
     origenSenales: diag?.origenSenales ?? null,
+    // D63-D — trazas de escaneos del diagnóstico (null si no las trae —
+    // fotos, SIM, registros previos a D63-B/C; jamás inventar).
+    skewGrados: diag?.skewGrados ?? null,
+    deskewMs: diag?.deskewMs ?? null,
+    gateMarco: diag?.gate?.gateMarco ?? null,
     tieneDiagnostico: !!diag,
     conCarpeta,
     pesoImagenes,
@@ -351,8 +368,10 @@ function actaLivianaJson(fila: FilaInforme) {
   };
 }
 
-/** informe.txt — render legible del MISMO contenido del informe.json (T1). */
-function renderTxt(
+/** informe.txt — render legible del MISMO contenido del informe.json (T1).
+ *  D63-D: exportada PURO (sin side effects) para verificación por humo —
+ *  misma razón que tituloDeActa en masiva/tipos.ts (D59REV). */
+export function renderTxt(
   generado: string,
   entorno: EntornoInforme,
   filas: FilaInforme[],
@@ -453,8 +472,36 @@ function renderTxt(
   const motivosEscaneos = [
     ...new Set(escaneos.filter((f) => f.rechazo).map((f) => f.rechazo?.tipo)),
   ].join(", ");
+  // D63-D — KIT e63d-informe-trazas-escaneo-v1 (T2): extensión ADITIVA AL
+  // FINAL de la línea ESCANEOS que dejó D63-A (el prefijo queda intacto —
+  // los parsers van por prefijo, contrato D57). Sin escaneos NO se añade
+  // NADA (línea byte-idéntica a D63-A). Chunks:
+  // (1) deskew medio SOLO de escaneos CORREGIDOS (deskewMs presente — una
+  //     media sin datos no se inventa, honestidad del kit);
+  // (2) conteo de quadOrigen "pagina-completa" (valor nuevo de D63-C);
+  // (3) gateMarco por resultado, baldes fijos a 0 (JSON/txt estables).
+  let extensionEscaneos = "";
+  if (escaneos.length) {
+    const corregidos = escaneos.filter((f) => f.deskewMs != null);
+    if (corregidos.length) {
+      const deskewMedio = Math.round(
+        corregidos.reduce((s, f) => s + (f.deskewMs ?? 0), 0) /
+          corregidos.length,
+      );
+      extensionEscaneos += ` - deskew medio ${deskewMedio}ms (${corregidos.length} corregidos)`;
+    }
+    const paginaCompleta = escaneos.filter(
+      (f) => f.quadOrigen === "pagina-completa",
+    ).length;
+    extensionEscaneos += ` - pagina-completa ${paginaCompleta}`;
+    const porGateMarco = conteo(
+      escaneos.map((f) => f.gateMarco),
+      ["completo", "cortado", "no-encontrado"],
+    );
+    extensionEscaneos += ` - gateMarco completo ${porGateMarco["completo"]} - cortado ${porGateMarco["cortado"]} - no-encontrado ${porGateMarco["no-encontrado"]}`;
+  }
   linea(
-    `ESCANEOS: ENVIADAS ${escPorStatus["ENVIADA"]} - ADVERTENCIA ${escPorStatus["ADVERTENCIA"]} - RECHAZADAS ${escPorStatus["RECHAZADA"]} (motivos: ${motivosEscaneos || "ninguno"})`,
+    `ESCANEOS: ENVIADAS ${escPorStatus["ENVIADA"]} - ADVERTENCIA ${escPorStatus["ADVERTENCIA"]} - RECHAZADAS ${escPorStatus["RECHAZADA"]} (motivos: ${motivosEscaneos || "ninguno"})${extensionEscaneos}`,
   );
   linea();
   linea(`ACTAS (${filas.length})`);
@@ -471,6 +518,13 @@ function renderTxt(
       f.quadOrigen ? `quad ${f.quadOrigen}` : null,
       f.tiempos ? `${f.tiempos.totalMs}ms` : null,
       f.error ? `error ${f.error}` : null,
+      // D63-D — KIT e63d-informe-trazas-escaneo-v1 (T1): trazas de escaneos
+      // AL FINAL de la línea (aditivo — jamás reordenar, contrato D57).
+      // Honestidad del kit: sin dato NO se imprime nada (null/ausente).
+      // skewGrados usa != null (un 0.0 medido es un dato real, no ausencia).
+      f.origen != null ? `origen ${f.origen}` : null,
+      f.skewGrados != null ? `skewGrados ${f.skewGrados}` : null,
+      f.gateMarco != null ? `gateMarco ${f.gateMarco}` : null,
     ].filter((t): t is string => t != null);
     linea(`${i + 1}. ${trozos.join(" - ")}`);
   });
