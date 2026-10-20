@@ -1273,7 +1273,10 @@ export function ScanView() {
     const ganador = candidatos.reduce((a, b) => (b.lapVar > a.lapVar ? b : a));
     const blob = await canvasABlob(ganador.canvas);
     for (const c of candidatos) {
-      if (c !== ganador) liberarCanvas(c.canvas);
+      // FIX (auditoría 2-b #8): TODOS los canvases se liberan (antes el
+      // ganador quedaba vivo esperando al GC — inconsistente con la
+      // disciplina iOS del propio módulo, error #22 del lab).
+      liberarCanvas(c.canvas);
     }
     if (blob) {
       // Capa 3 H2: el frame ganador también pasa por el tope (decode único,
@@ -1426,6 +1429,11 @@ export function ScanView() {
       }
       const probes: CameraProbeResult[] = [];
       for (const d of devices) {
+        // FIX M6 (auditoría 2-b): el sondEO consulta la cancelación — salir
+        // de CÁMARA durante el arranque (BottomNav vivo durante
+        // «INICIANDO CÁMARA…») dejaba las cámaras abriéndose/cerrándose en
+        // background varios segundos (LED de cámara activo sin vista).
+        if (cancelado) return null;
         // FIX v5 (5.3) del lab: plazo de 2 s por sonda (una cámara lenta no
         // bloquea el arranque).
         const p = await probeCamera(media, d.deviceId, d.label, PROBE_TIMEOUT_MS);
@@ -1452,6 +1460,9 @@ export function ScanView() {
         : [];
       attempts.push({ video: true, audio: false }); // último recurso
       for (let ai = 0; ai < attempts.length; ai += 1) {
+        // FIX M6 (auditoría 2-b): idem sondas — la apertura de la ganadora
+        // también aborta si el usuario ya se fue de la vista.
+        if (cancelado) return null;
         try {
           const stream = await media.getUserMedia(attempts[ai]!);
           // FIX v5 (5.3) del lab: persistir la elección SOLO si el stream
@@ -1744,6 +1755,12 @@ export function ScanView() {
     const archivo = e.target.files?.[0];
     e.target.value = ""; // permite re-elegir el MISMO archivo (REPETIR FOTO)
     if (!archivo) return;
+    // FIX M4 (auditoría 2-b): guard temprano — con una captura en vuelo el
+    // archivo se procesaría (tope/HEIC) para nada y el disparo se ignora.
+    if (procesandoRef.current || useE14Store.getState().vista === "analizando") {
+      mostrarAviso("ESPERA — YA HAY UNA CAPTURA EN CURSO", "warn", 2500);
+      return;
+    }
     if (!pareceImagen(archivo)) {
       mostrarAviso("ARCHIVO NO VÁLIDO — el archivo seleccionado no es una imagen.", "crit");
       return;
@@ -1783,6 +1800,11 @@ export function ScanView() {
     const archivo = e.target.files?.[0];
     e.target.value = "";
     if (!archivo) return;
+    // FIX M4 (auditoría 2-b): mismo guard del IMPORTAR (ruta iOS nativa).
+    if (procesandoRef.current || useE14Store.getState().vista === "analizando") {
+      mostrarAviso("ESPERA — YA HAY UNA CAPTURA EN CURSO", "warn", 2500);
+      return;
+    }
     if (!pareceImagen(archivo)) {
       mostrarAviso("ARCHIVO NO VÁLIDO — el archivo seleccionado no es una imagen.", "crit");
       return;
@@ -1968,7 +1990,11 @@ export function ScanView() {
                 type="button"
                 aria-label="Cerrar selector de modo"
                 onClick={() => setModoMenuAbierto(false)}
-                className="absolute inset-0 z-50 cursor-default"
+                // FIX (auditoría 2-b #16): backdrop FIXED — el absolute solo
+                // cubría el visor y el footer (chips de simulación/obturador)
+                // quedaba vivo con el menú abierto; un tap ahí no cerraba y
+                // podía disparar el escaneo con el selector encima.
+                className="fixed inset-0 z-50 cursor-default"
               />
               <div
                 role="menu"

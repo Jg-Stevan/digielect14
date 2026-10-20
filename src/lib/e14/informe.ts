@@ -20,11 +20,11 @@
  * Fuente de datos: SOLO la cola masiva (IndexedDB e14-masiva-v1 vía
  * listarRegistros/leerRegistro — consumo tal cual, cola.ts INTOCABLE). El
  * flujo INDIVIDUAL no persiste actas (limitación documentada en el REPORTE).
- * Lectura SECUENCIAL: el mapa liviano sale de listarRegistros() y el
- * contenido de carpetas se materializa con leerRegistro() UNO A LA VEZ
- * (nunca Promise.all — RAM acotada, T1.1).
+ * Lectura SECUENCIAL: el mapa liviano sale de listarMapeados() (mapper en el
+ * cursor — RAM acotada) y el contenido de carpetas se materializa con
+ * leerRegistro() UNO A LA VEZ (nunca Promise.all — RAM acotada, T1.1).
  */
-import { listarRegistros, leerRegistro } from "./masiva/cola";
+import { listarMapeados, leerRegistro } from "./masiva/cola";
 import type { EstadoEntrada, RegistroMasiva } from "./masiva/tipos";
 
 // ---------- Tope de tamaño (T1.6) ----------
@@ -390,12 +390,13 @@ function renderTxt(
 export async function generarInformeZip(
   onProgreso?: (p: ProgresoInforme) => void,
 ): Promise<InformeZip> {
-  // T1.1 — fuente de datos: la cola masiva. Listado UNA vez para el mapa
-  // liviano; después leerRegistro(id) UNO A LA VEZ (nunca Promise.all).
-  const registros = await listarRegistros();
-  if (!registros.length) throw new Error("COLA_VACIA");
-  const filas = registros.map(filaLiviana);
-  registros.length = 0; // los dataURLs/Blobs del listado se liberan ya
+  // T1.1 — fuente de datos: la cola masiva. FIX C6 (auditoría 2-c): el mapa
+  // liviano sale del MAPPER DENTRO del cursor — los registros completos
+  // (acta con dataURLs de ~7-14 MB c/u) JAMÁS se materializan todos a la
+  // vez (el listado anterior hacía pico de >1 GB en jornadas reales).
+  // Después leerRegistro(id) UNO A LA VEZ (nunca Promise.all).
+  const filas = await listarMapeados(filaLiviana);
+  if (!filas.length) throw new Error("COLA_VACIA");
 
   // T1.6 — tope: estimar imágenes de carpetas ANTES de compilar. Si pasa
   // 250 MB → solo las 50 actas-problema más recientes llevan imágenes.
@@ -470,12 +471,15 @@ export async function generarInformeZip(
   // T1.3/T1.4 — carpetas: leerRegistro UNO A LA VEZ; la referencia del
   // registro muere con cada iteración (RAM acotada). Las ÓPTIMA/ENVIADA y
   // las recortadas por el tope NO materializan carpeta.
+  // FIX M11 (auditoría 2-c): leerRegistro SOLO para filas con carpeta —
+  // antes deserializaba el registro completo (acta enorme incluida) de
+  // TODAS las filas, incluidas las que no aportan nada al ZIP.
   const usados = new Set<string>();
   let carpetas = 0;
   let actual = 0;
   for (const fila of filas) {
-    const reg = await leerRegistro(fila.id);
     if (fila.conCarpeta && conImagen.has(fila.id)) {
+      const reg = await leerRegistro(fila.id);
       const ruta = `actas/${nombreCarpeta(fila, usados)}`;
       if (fila.estado === "ERROR") {
         // ERROR de pipeline: el Blob original + ficha mínima (sin acta).
