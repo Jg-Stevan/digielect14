@@ -275,3 +275,14 @@ Mandato: informe del dueño 20/10 07:42 (17 actas, 17 ENVIADAS, 0 rechazos) con 
 - [x] FORENSE pag=None (solo reporte): cadena causal completa con citas (clasificador.ts L533-560 · bridge L1377-1381 piso 8.5 · evaluarGate L2244-2281 no mira página · store.ts L539 «PÁG ?» + L377-393 hueco primer-libre) — riesgo de integridad: pág-2 real archivada en P1 y reemplazada por la P1 real (pérdida silenciosa del consolidado); foto parcial DESCARTADA (caps 7.9 no aplicaron); fix D62 SOLO PROPUESTA.
 - [x] T4 — Docs: DECISIONS D58 (SOLO-EVIDENCIA) + esta entrada + REPORTE (evidencia completa + continuidad) + línea AGENTS.md + worklog.
 - [ ] Del dueño: correr B5 y B7 con las 9 fotos reales (171125, 170755, 171446, 171454, 171500, 171506, 171512, 171518 — input local, NUNCA se commitean) → cierra NO-GO B5 físico y DESBLOQUEA D61 · buscar trazas `dedup … marcada/sin-original` en sus capturas (decide hash vs ORDEN) · decidir D62 (auto-envío con página null).
+
+## PDF-MASIVA — e14-pdf-masiva-v1 (2026-10-20, D60, AGENTE 2): los E-14 oficiales en PDF entran a la cola MASIVA
+
+Problema: en la corrida real del 20-oct 15:04 los 2 únicos errores del lote fueron PDFs oficiales E-14 → fila ERROR `FORMATO_NO_SOPORTADO` (la clasificación solo aceptaba imágenes y .zip/.rar).
+
+- [x] T1 — `pdfjs-dist` 6.4.299 (pin exacto) con import DEFERIDO (D47 — ídem fflate/unrar): impacto ~0 en bundle inicial y LCP (lib 455 KB verificada LAZY fuera del HTML inicial; worker emitido desde el paquete npm — `public/**` intocable).
+- [x] T2 — `archivos.ts`: `parecePdfMasiva` (MIME o extensión) + `extraerPdf` (render SECUENCIAL página a página → JPEG q0.92 2400px/escala≤4 → `File(base-P#.jpg)`; tope 30 págs → `LIMITE_PAGINAS_PDF` patrón LIMITE_500; `PROTEGIDO_O_CORRUPTO`/`SIN_PAGINAS`/`PDF_WORKER_NO_CARGO` lanzan → fila ERROR; `carga.destroy()` try/finally). Adaptaciones API v6 documentadas (REPORTE §6).
+- [x] T3 — `store.ts` `agregarFiles`: rama PDF antes del `else` final — mismo manejo exacto que zip/rar (las páginas heredan ids reales, temps, `cadenaDedup`, IDB, runner, thumb — TODO).
+- [x] T4 — `MasivaView.tsx`: `accept` + `.pdf` + hints («SUELTA FOTOS, PDF O ZIP/RAR AQUÍ» / «SUELTA MÁS ARCHIVOS AQUÍ — SE SUMAN A LA COLA»).
+- [x] T5 — Gates: tsc 0 · lint 0 · build estático OK · `git diff --name-status origin/main` = zonas exactas del kit · smoke navegador (build COOP/COEP): 2 págs → 2 filas `-P1/-P2` + runner/prowarm sobre páginas renderizadas · corrupto → `PROTEGIDO_O_CORRUPTO` · 35 págs → 30 filas + `LIMITE_PAGINAS_PDF` · dedup-PDF OBSERVACIÓN: hamming 0 cross-archivo (mecanismo GO; GO/NO-GO final con los PDFs reales del dueño). Detalle: docs/REPORTE-e14-pdf-masiva-v1.md.
+- [ ] Del dueño: los 2 PDFs reales del informe 15:04 → 1 fila por página → PROCESAR → score/status/píldora como cualquier foto · PDF protegido real → `PROTEGIDO_O_CORRUPTO` · recarga (IDB) · RAM 30 págs en su hardware · merge del PR DRAFT.
