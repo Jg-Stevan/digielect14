@@ -129,6 +129,12 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
     };
     const acta = await getBridge().escanearActa(opcionesMasiva);
 
+    // FIX M8 (auditoría 2-c): la decisión del dueño manda TAMBIÉN para el
+    // ENVÍO — si quitó la fila mientras el OCR corría, el desenlace NO se
+    // transmite (antes registrarEnvioMasiva corría ANTES del guard: fila de
+    // historial + completadas + hueco archivado de un acta descartado).
+    if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return;
+
     // Desenlace → la MISMA vía que el flujo normal (T3.3/T3.2). El envío
     // automático reutiliza registrarEnvio (historial + completadas + hueco
     // archivado + cola offline); el resto cae al contador T5 con las
@@ -160,11 +166,22 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
       acta: actaFinal,
       thumb,
     };
-    // El dueño pudo QUITAR/VACIAR la fila mientras el OCR corría: su
-    // decisión manda — no se re-persiste un registro borrado (0 zombis).
-    if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return;
-
-    await guardarRegistro(registroListo);
+    // FIX M14 (auditoría 2-c): persistencia fallida TRAS el envío — la fila
+    // NO pasa a ERROR (el acta SÍ se transmitió; una fila ERROR invita a
+    // reprocesar → doble envío tras recarga) y el registro JAMÁS queda
+    // PENDIENTE con el archivo (el reproceso automático re-enviaría).
+    // Reintento MÍNIMO: estado LISTA + desenlace liviano, SIN el acta
+    // completa (la causa típica del fallo es quota — el registro con acta
+    // de ~15 MB no cabe; el liviano sí).
+    try {
+      await guardarRegistro(registroListo);
+    } catch {
+      try {
+        await guardarRegistro({ ...registro, estado: "LISTA", thumb });
+      } catch {
+        /* IDB caída del todo — la fila vive honesta en memoria (LISTA) */
+      }
+    }
     marcarFila(fila.id, {
       estado: "LISTA",
       statusActa: actaFinal.status,
@@ -181,6 +198,9 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
     // Errores de IDB/decode/pipeline NUNCA tumban la UI (kit §3): la
     // entrada pasa a ERROR con motivo corto (repetible — quitar y
     // re-soltar la foto vuelve a encolarla).
+    // FIX M8-b (auditoría 2-c): el guard anti-zombi TAMBIÉN en el catch —
+    // re-persistir el registro de una fila QUITADA lo revivía al recargar.
+    if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return;
     marcarFila(fila.id, { estado: "ERROR", error: motivoCorto(err), thumb: undefined });
     if (registro) {
       try {

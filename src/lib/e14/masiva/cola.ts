@@ -116,12 +116,22 @@ export async function leerRegistro(id: string): Promise<RegistroMasiva> {
 
 /** Listar SIN materializar todo de golpe: cursor uno-a-uno — cada registro
  *  (Blob + acta con dataURLs) vive un instante y se libera al mapearlo a
- *  fila liviana (lección L7). */
-export async function listarRegistros(): Promise<RegistroMasiva[]> {
+ *  fila liviana (lección L7).
+ *  FIX (auditoría 2-c C6): el listado anterior acumulaba TODOS los
+ *  registros completos (acta con fotoOriginal+fotoProcesada como dataURLs,
+ *  ~7-14 MB c/u) antes de retornar → en una jornada real (100+ actas) el
+ *  pico superaba 1 GB y mataba la pestaña. Ahora el MAPPER corre dentro
+ *  del cursor: el registro se suelta en cuanto se transforma; devolver
+ *  null lo salta sin retenerlo. Recorrer con mapper que devuelve el
+ *  registro completo sigue siendo posible, pero cada caller ahora decide
+ *  QUÉ retiene (y solo retiene lo liviano). */
+export async function listarMapeados<T>(
+  mapper: (registro: RegistroMasiva) => T | null,
+): Promise<T[]> {
   const db = await abrirCola();
   const store = transaccion(db, "readonly");
   const req = store.openCursor();
-  const registros: RegistroMasiva[] = [];
+  const salida: T[] = [];
   await new Promise<void>((resolve, reject) => {
     req.onsuccess = () => {
       const cursor = req.result;
@@ -129,12 +139,21 @@ export async function listarRegistros(): Promise<RegistroMasiva[]> {
         resolve();
         return;
       }
-      registros.push(cursor.value as RegistroMasiva);
+      const mapeado = mapper(cursor.value as RegistroMasiva);
+      if (mapeado !== null) salida.push(mapeado);
       cursor.continue();
     };
     req.onerror = () => reject(req.error ?? new Error("IDB_LISTAR"));
   });
-  return registros;
+  return salida;
+}
+
+/** Conteo SIN leer un solo registro (IDB count nativo) — para checks de
+ *  «¿la cola está vacía?» (ResumenView) sin tocar los Blobs. */
+export async function contarRegistros(): Promise<number> {
+  const db = await abrirCola();
+  const store = transaccion(db, "readonly");
+  return pedir<number>(store.count(), "IDB_CONTAR");
 }
 
 export async function borrar(id: string): Promise<void> {
@@ -163,10 +182,13 @@ export async function vaciar(): Promise<void> {
 
 /** Recuperación de caída (kit §3): TODO estado PROCESANDO vuelve a
  *  PENDIENTE — una app que murió a mitad de OCR no debe dejar entradas
- *  zombis. Se llama en el arranque de MASIVA (T4, cargarFilas). */
+ *  zombis. Se llama en el arranque de MASIVA (T4, cargarFilas).
+ *  FIX C6: el cursor solo RETIENE los zombis (mapper null para el resto) —
+ *  el historial completo jamás se materializa. */
 export async function recuperarCola(): Promise<void> {
-  const registros = await listarRegistros();
-  const zombis = registros.filter((r) => r.estado === "PROCESANDO");
+  const zombis = await listarMapeados((r) =>
+    r.estado === "PROCESANDO" ? r : null,
+  );
   for (const r of zombis) {
     await guardarRegistro({ ...r, estado: "PENDIENTE" });
   }
