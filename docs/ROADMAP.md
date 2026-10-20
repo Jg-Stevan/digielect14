@@ -254,3 +254,14 @@ Problema: informe 20/10 07:42 (17 actas, 17 ENVIADAS) con outliers sin explicar 
 - [x] T5 — Docs: REPORTE + D57 + esta entrada + worklog.
 - [x] PR DRAFT con `D57` en el título (merge SOLO del dueño).
 - [ ] Del dueño: decidir la ruta del gate Worker parity (A: espejar las 5 líneas en `web-scanner` main → verde sin tocar esta rama / B: sync futuro) · correr MASIVA con 3-4 fotos reales → verificar `esperaMs` (media/p50; la última fila acumula la espera de las anteriores) + `orientacionProbeMs` por acta · consola en escaneo real SIN avisos Canvas2D · desenlace de acta sana idéntico a main · leer outliers con **pipeline-real ≈ totalMs − esperaMs** (lo que quede sin atribuir ≈ probe [queda en su campo] + decode).
+## ORIENTACION-PRESUPUESTO — e14-orientacion-presupuesto-v1 (2026-10-20): el probe que sí llega en hardware lento (D56)
+
+Mandato P0: «es lo único que separa a la flota HP del resultado bueno del informe 20/10» — en la HP 4 cores el probe (D51) agotaba su presupuesto de 4000 ms con el baseline a 0° (det1920 3037 ms + rec0 ~3000 ms) y jamás sondeaba un desafiante → acta rotada 90° = 42 s de OCR vertical = 4.9 RECHAZADA.
+
+- [x] T1 — Atajo de lectura-sana (`orientacion.ts`): scores[0] no-DEBIL → break (la sana sale en ~4 s, sin desafiantes).
+- [x] T2 — det del probe a `DET_CAP_RAPIDO` (`rapidocr.ts`, única edición: `inferDet` de `rapidOcrCropsOrientacion`): 3037 → ~1183 ms en la HP (banco B3).
+- [x] T3 — `PROBE_BUDGET_MS` 4000 → 12000 (solo lo pagan actas DEBIL a 0°; caso roto ~10.2 s < 12 s).
+- [x] T4 — Traza aditiva final `cortes=sana|presupuesto|vacio|completo` (contrato D51 intacto).
+- [x] T5 — Docs: REPORTE + D56 + ROADMAP + worklog.
+- [x] Validación (actas REALES KIT 399): rotada 90° → `aplicado=1 cortes=completo` + 8.5 AUTO cod:710003993010102 · sana → `cortes=sana aplicado=0 ms=3965` (A/B main: 5315 ms sin campo — −25%, desenlace idéntico) · SIM 8.2/7.0/4.3 con 0 trazas · lint 0 · tsc 0 · build OK.
+- [ ] Del dueño: AC-5-D56 en SU flota (HP 4 cores — traza `cortes=` y acta rotada ≥ 7) · merge.

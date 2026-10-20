@@ -25,17 +25,25 @@
  * score(0) SIEMPRE se sondea (baseline del MARGEN — el ejemplo de traza del
  * kit trae las cuatro).
  *
- * Presupuesto (§2.2): PROBE_BUDGET_MS = 4000 — si a mitad de probe se pasa,
- * aborta y sigue con 0° (comportamiento de hoy). SIM: el probe NO corre
+ * Presupuesto (§2.2 / D56 §3 T3): PROBE_BUDGET_MS = 12000 — si a mitad de
+ * probe se pasa, aborta y sigue con 0° (comportamiento de hoy; el 4000
+ * original NUNCA alcanzó el primer desafiante en la HP 4 cores del dueño:
+ * det1920 3037 ms + rec0 ~3000 ms = 6030 > 4000 → aplicado=0 garantizado).
+ * SIM: el probe NO corre
  * (guard en el bridge — chips 8.2/7.0/4.3 intactos). Sin recorte: corre igual
  * (no hay quad, pero la rotación del contenido es independiente — §2.2; en
  * ESTA base sinRecorte solo existe en SIM → el guard del bridge lo cubre).
  *
  * Traza en línea PROPIA (§2.1 paso 5 — los instrumentos del dueño parsean por
  * prefijo; NO mezclar campos con pipeline/recorte; solo AÑADIR):
- *   [e14] orientacion crop=WxH rot=R probe={0:a,90:b,180:c,270:d} anclasR=n confR=0.xx aplicado=0|1 ms=NNN
+ *   [e14] orientacion crop=WxH rot=R probe={0:a,90:b,180:c,270:d} anclasR=n confR=0.xx aplicado=0|1 ms=NNN cortes=sana|presupuesto|vacio|completo
  * (en probe={} aparecen SOLO las rotaciones sondeadas — los atajos cortan;
- * rot=R es la ganadora, con anclasR/confR de ELLA; aplicado=0 cuando no rota).
+ * rot=R es la ganadora, con anclasR/confR de ELLA; aplicado=0 cuando no rota.
+ * D56 §3 T4: cortes= es ADITIVO AL FINAL — sana = salió por el atajo T1
+ * (lectura a 0° no-DEBIL) · presupuesto = aborto por budget · vacio = det
+ * sin cajas · completo = el probe terminó su decisión (incluye el atajo
+ * MARGEN que ya decidió ganadora — contrato D51: solo AÑADIR; los campos
+ * previos NO cambian de forma).
  * Sin línea si el probe ni siquiera corrió (SIM o error duro de det/init —
  * catch general: el probe JAMÁS tumba el pipeline, §5).
  *
@@ -45,7 +53,7 @@
  * después (escudo-fondo, recortada, sin-votos — §2.2).
  */
 
-import { ANCLAS_LECTURA, norm } from "./senal-lectura";
+import { ANCLAS_LECTURA, norm, senalDeLectura } from "./senal-lectura";
 import {
   rapidOcrCropsOrientacion,
   rapidOcrInit,
@@ -63,8 +71,13 @@ export interface ProbeOrientacion {
   ms: number;
 }
 
-/** §2.2 — tope duro del probe: a mitad, abortar y seguir con 0° (hoy). */
-export const PROBE_BUDGET_MS = 4000;
+/** §2.2 — tope duro del probe: a mitad, abortar y seguir con 0° (hoy).
+ *  D56 §3 T3: 4000 → 12000 — presupuesto HONESTO. El caso roto del dueño
+ *  (HP 4 cores: det a 1920 = 3037 ms) ya agotaba 4000 con el baseline a 0°.
+ *  Con det del probe a DET_CAP_RAPIDO (T2) el caso roto cabe: det ~1.2 s +
+ *  rec0 ~3 s + rec90 ~3 s + rec270 ~3 s ≈ 10.2 s < 12 s. Solo lo pagan actas
+ *  con lectura DEBIL a 0° (las sanas salen por el atajo T1 en ~4 s). */
+export const PROBE_BUDGET_MS = 12000;
 /** §2.1 paso 3 — margen mínimo sobre score(0) para aplicar la rotación. */
 export const MARGEN_ORIENTACION = 1.5;
 /** §2.1 paso 1 — K crops repartidos por el acta. */
@@ -155,7 +168,7 @@ export async function probeOrientacion(
     if (crops.length === 0) {
       const msVacio = Math.round(performance.now() - t0);
       console.info(
-        `[e14] orientacion crop=${w}x${h} rot=0 probe={0:0.00} anclas0=0 conf0=0.00 aplicado=0 ms=${msVacio}`,
+        `[e14] orientacion crop=${w}x${h} rot=0 probe={0:0.00} anclas0=0 conf0=0.00 aplicado=0 ms=${msVacio} cortes=vacio`,
       );
       return { rot: 0, aplicado: false, scores: { 0: 0 }, anclas: { 0: 0 }, conf: { 0: 0 }, ms: msVacio };
     }
@@ -166,9 +179,14 @@ export async function probeOrientacion(
     // y luego el desafiante probable según la forma de la tira.
     const orden: Rotacion[] = h > w ? [0, 180, 90, 270] : [0, 90, 270, 180];
     let mejor: Rotacion | null = null;
+    // D56 §3 T4 — por qué terminó el sondeo (solo para la traza, aditivo).
+    let corte: "sana" | "presupuesto" | "completo" = "completo";
     for (const rot of orden) {
       // §2.2 presupuesto: a mitad de probe, abortar y seguir con 0° (hoy).
-      if (rot !== 0 && performance.now() - t0 > PROBE_BUDGET_MS) break;
+      if (rot !== 0 && performance.now() - t0 > PROBE_BUDGET_MS) {
+        corte = "presupuesto";
+        break;
+      }
       // 0° usa los crops DIRECTOS (rec no muta canvases — no hace falta copia).
       const girados = rot === 0 ? crops : crops.map((c) => girarFuente(c, rot));
       const lineas = await rapidOcrRecLote(rt, girados);
@@ -182,7 +200,19 @@ export async function probeOrientacion(
       scores[rot] = Math.min(TOPE_SCORE, nAnclas * 2 + confMedia * (chars / 40));
       anclas[rot] = nAnclas;
       conf[rot] = confMedia;
-      if (rot === 0) continue;
+      if (rot === 0) {
+        // D56 §3 T1 — atajo de lectura-sana: si el texto a 0° YA se lee,
+        // ninguna rotación puede necesitar aplicarse y ninguna debe arriesgar
+        // la lectura (rotar es riesgo puro). El acta sana sale en ~4 s sin
+        // sondear 90/270/180; la rotada del dueño leyó anclas0=0 chars=9 →
+        // DEBIL → sigue a los challengers ✓. Regresión nula esperada: el
+        // MARGEN ya protegía parcialmente; esto lo hace explícito y barato.
+        if (senalDeLectura(texto).nivel !== "DEBIL") {
+          corte = "sana";
+          break;
+        }
+        continue;
+      }
       // Guard absoluto (§2.1 paso 2): score<1.0 Y conf<0.55 → NO candidata.
       const candidata = (scores[rot] ?? 0) >= 1.0 || (conf[rot] ?? 0) >= 0.55;
       if (!candidata) continue;
@@ -201,7 +231,7 @@ export async function probeOrientacion(
       .map((r) => `${r}:${(scores[r] ?? 0).toFixed(2)}`)
       .join(",");
     console.info(
-      `[e14] orientacion crop=${w}x${h} rot=${rot} probe={${probeTxt}} anclas${rot}=${anclas[rot] ?? 0} conf${rot}=${(conf[rot] ?? 0).toFixed(2)} aplicado=${aplicado ? 1 : 0} ms=${ms}`,
+      `[e14] orientacion crop=${w}x${h} rot=${rot} probe={${probeTxt}} anclas${rot}=${anclas[rot] ?? 0} conf${rot}=${(conf[rot] ?? 0).toFixed(2)} aplicado=${aplicado ? 1 : 0} ms=${ms} cortes=${corte}`,
     );
     return { rot, aplicado, scores, anclas, conf, ms };
   } catch {
