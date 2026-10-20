@@ -60,15 +60,25 @@ export interface MarcadoresResult {
  */
 export async function medirZonaVotos(
   dataUrlFotoProcesada: string,
+  /** D63-C — KIT e63c-quad-gate-escaneo-v1: región de la zona de votos en
+   *  FRACCIONES del canvas — el RECT del marco impreso del formulario (el
+   *  marco ES el borde del acta: mismo sistema de referencia que las
+   *  fracciones ZONA_*). undefined = fracciones fijas de HOY (fotos y
+   *  escaneos sin rect — comportamiento byte-idéntico). */
+  region?: { x0: number; y0: number; x1: number; y1: number },
 ): Promise<MarcadoresResult> {
   const motor = await motorTinta(dataUrlFotoProcesada);
   if (!motor.utilizable) {
     return { densidadVotosPct: 0, hayVotos: false };
   }
-  const sx = Math.round(motor.cw * ZONA_X0);
-  const sy = Math.round(motor.ch * ZONA_Y0);
-  const sw = Math.max(1, Math.round(motor.cw * ZONA_X1) - sx);
-  const sh = Math.max(1, Math.round(motor.ch * ZONA_Y1) - sy);
+  const zx0 = region?.x0 ?? ZONA_X0;
+  const zx1 = region?.x1 ?? ZONA_X1;
+  const zy0 = region?.y0 ?? ZONA_Y0;
+  const zy1 = region?.y1 ?? ZONA_Y1;
+  const sx = Math.round(motor.cw * zx0);
+  const sy = Math.round(motor.ch * zy0);
+  const sw = Math.max(1, Math.round(motor.cw * zx1) - sx);
+  const sh = Math.max(1, Math.round(motor.ch * zy1) - sy);
   const densidadVotosPct = motor.densidadDe(sx, sy, sw, sh) * 100;
   return { densidadVotosPct, hayVotos: densidadVotosPct >= UMBRAL_VOTOS_PCT };
 }
