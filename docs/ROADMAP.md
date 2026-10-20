@@ -265,3 +265,13 @@ Mandato P0: «es lo único que separa a la flota HP del resultado bueno del info
 - [x] T5 — Docs: REPORTE + D56 + ROADMAP + worklog.
 - [x] Validación (actas REALES KIT 399): rotada 90° → `aplicado=1 cortes=completo` + 8.5 AUTO cod:710003993010102 · sana → `cortes=sana aplicado=0 ms=3965` (A/B main: 5315 ms sin campo — −25%, desenlace idéntico) · SIM 8.2/7.0/4.3 con 0 trazas · lint 0 · tsc 0 · build OK.
 - [ ] Del dueño: AC-5-D56 en SU flota (HP 4 cores — traza `cortes=` y acta rotada ≥ 7) · merge.
+
+## BANCOS-EVIDENCIA — e14-bancos-b5-b7-pagnull-v1 (2026-10-20, D58): B5 det-960 + B7 dedup-tolerancia + forense pag=None — SOLO EVIDENCIA
+
+Mandato: informe del dueño 20/10 07:42 (17 actas, 17 ENVIADAS, 0 rechazos) con 3 hallazgos: dedup no atrapó 2 pares heic/jpg (171454, 171446 — ambos a pipeline completo), ¿pasada 1 a 960?, y `171446` ENVIADA con `paginaIndex = null` (score 8.5).
+
+- [x] B5 — `tools/bench-det960/` (réplica del patrón bench-det1280 PR #34: misma sesión det, mismo corpus seed 0xe14de7a2, IoU ≥ 0.5 entre AABB de quads): det 960 **pierde 5 cajas en 4/4 páginas** (0 a 1280; 71 cajas/pág idéntico al PR #34 — réplica validada; Σ det 1920/1280/960 = 2788/1274/776 ms) → **NO-GO DURO a 960 — D60 sin evidencia GO; la 1.ª pasada se mantiene en 1280 (D53)**. Determinismo ×2 idéntico.
+- [x] B7 — `tools/bench-dedup-tolerancia/` (dhash copia congelada de `dedup.ts` sobre la vía REAL del pipeline: `fileToCaptureDataUrl` del core): mecanismo OK (gemelas por construcción maxIntra 5 ≤ 6) · dhash robusto al color (+12/canal → 2-3 bits — hipótesis gamma/color DEBILITADA) · hallazgo colateral: minHammingEntreActas **4 < 6** (layouts idénticos → riesgo teórico falso positivo — observación para D61) · hipótesis ORDEN documentada en código (store.ts L174-175 + runner.ts L128/L188 — trazas `sin-original reprocesa-completo` a buscar en capturas del dueño).
+- [x] FORENSE pag=None (solo reporte): cadena causal completa con citas (clasificador.ts L533-560 · bridge L1377-1381 piso 8.5 · evaluarGate L2244-2281 no mira página · store.ts L539 «PÁG ?» + L377-393 hueco primer-libre) — riesgo de integridad: pág-2 real archivada en P1 y reemplazada por la P1 real (pérdida silenciosa del consolidado); foto parcial DESCARTADA (caps 7.9 no aplicaron); fix D62 SOLO PROPUESTA.
+- [x] T4 — Docs: DECISIONS D58 (SOLO-EVIDENCIA) + esta entrada + REPORTE (evidencia completa + continuidad) + línea AGENTS.md + worklog.
+- [ ] Del dueño: correr B5 y B7 con las 9 fotos reales (171125, 170755, 171446, 171454, 171500, 171506, 171512, 171518 — input local, NUNCA se commitean) → cierra NO-GO B5 físico y DESBLOQUEA D61 · buscar trazas `dedup … marcada/sin-original` en sus capturas (decide hash vs ORDEN) · decidir D62 (auto-envío con página null).
