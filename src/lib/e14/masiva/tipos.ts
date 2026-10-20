@@ -90,6 +90,33 @@ export interface RegistroMasiva {
   /** D66 (T4): ms TOTALES del precalor para esta fila (solo precalentadas;
    *  null = no precalentada). */
   precalorMs?: number | null;
+
+  // ─── D65 — KIT e14-progreso-watchdog-dedup-v1: trazas aditivas (kit T1.4/T2.3) ───
+  // REPARACIÓN del merge #57: el resolver PISÓ este bloque con el de D66
+  // (ambos son aditivos — deben CONVIVIR). Contrato D57: campos NUEVOS AL
+  // FINAL — los previos no cambian de nombre ni de lugar. Ausente = registro
+  // pre-D65 (el instrumento no existía); JAMÁS se inventa un valor.
+
+  /** (T1) intentos consumidos por el watchdog: 0 = ningún intento murió;
+   *  1 = el 1.º venció a los 75 s y el reintento tomó el desenlace;
+   *  2 = ambos vencieron → rechazo de siempre con trazas. Solo filas que
+   *  pasaron por el pipeline (la gemela copiada no corre pipeline → sin campo). */
+  watchdog?: number;
+  /** (T1) etapa del pipeline al morir el ÚLTIMO intento vencido — vocabulario
+   *  del kit: "decodificando" | "deteccion" | "ocr" | "verificacion". El
+   *  recorte/realce caen en "deteccion" (cola de la fase de encuadre).
+   *  null/ausente = sin señal de progreso antes de morir (jamás inventar). */
+  etapaAlMorir?: string | null;
+  /** (T1) duración (ms) del intento que murió — hoy era null y escondía los
+   *  ~175 s del informe 20261020-122235. null/ausente = sin dato. */
+  elapsedMs?: number | null;
+  /** (T2) dedup v2 por CONTENIDO: "v2" = gemela matcheada (Hamming ≤ 6);
+   *  "sin-match" = hasheada sin gemela. Ausente = pre-D65 o hash falló
+   *  (decode — la fila procesa normal, conservador). */
+  dedup?: "v2" | "sin-match";
+  /** (T2) distancia de Hamming del match v2 (0–64). Solo filas con
+   *  dedup === "v2" lo traen; sin match no hay distancia (no se inventa). */
+  dedupDistancia?: number | null;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del

@@ -109,6 +109,23 @@ export interface FilaInforme {
    *  "cortado" | "no-encontrado". null = no evaluado (fotos, SIM, registros
    *  previos a D63-C) — jamás inventar. */
   gateMarco: "completo" | "cortado" | "no-encontrado" | null;
+  // ─── D65 — KIT e14-progreso-watchdog-dedup-v1: trazas aditivas (T1.4/T2.3) ───
+  // REPARACIÓN del merge #57: el resolver PISÓ este bloque con el de D66
+  // (ambos kits son aditivos — sus trazas CONVIVEN en la misma fila).
+  /** (T1) intentos consumidos por el watchdog (0/1/2). null = registro
+   *  pre-D65 o fila que no corrió pipeline (gemela copiada) — jamás inventar. */
+  watchdog: number | null;
+  /** (T1) etapa del pipeline al morir el ÚLTIMO intento vencido
+   *  ("decodificando" | "deteccion" | "ocr" | "verificacion"). */
+  etapaAlMorir: string | null;
+  /** (T1) duración (ms) del intento que murió (hoy era null y escondía los
+   *  ~175 s — kit §0). null = sin dato. */
+  elapsedMs: number | null;
+  /** (T2) traza del dedup v2 POR CONTENIDO: "v2" = gemela matcheada;
+   *  "sin-match" = hasheada sin gemela. null = pre-D65 o hash falló. */
+  dedup: "v2" | "sin-match" | null;
+  /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
+  dedupDistancia: number | null;
   // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
   /** D66 (T4): ms SOLO del decodificado a MASTER (0 = precalentada — el
    *  decode vivió en el precalor; null = sin master: fallback/ERROR/
@@ -251,6 +268,15 @@ function filaLiviana(reg: RegistroMasiva): FilaInforme {
     skewGrados: diag?.skewGrados ?? null,
     deskewMs: diag?.deskewMs ?? null,
     gateMarco: diag?.gate?.gateMarco ?? null,
+    // D65 — trazas del watchdog y del dedup v2 (viven EN el registro, no en
+    // el diagnóstico — kit T1.4/T2.3). null si el registro no las trae
+    // (pre-D65, gemela copiada, hash falló — jamás inventar). BLOQUE
+    // RESTAURADO: el merge #57 lo pisó con el de D66 (aditivos — conviven).
+    watchdog: reg.watchdog ?? null,
+    etapaAlMorir: reg.etapaAlMorir ?? null,
+    elapsedMs: reg.elapsedMs ?? null,
+    dedup: reg.dedup ?? null,
+    dedupDistancia: reg.dedupDistancia ?? null,
     // D66 — trazas de decodificación del REGISTRO (null/ausente = sin master
     // — fallback a la ruta de siempre, ERROR, registros previos; jamás
     // inventar). decodeMs top-level ≠ tiempos.decodeMs (D61, decode del
@@ -468,6 +494,15 @@ export function actaLivianaJson(fila: FilaInforme) {
       : {}),
     ...(fila.skewGrados != null ? { skewGrados: fila.skewGrados } : {}),
     ...(fila.gateMarco != null ? { gateMarco: fila.gateMarco } : {}),
+    // D65 (T1.4/T2.3): trazas del watchdog y del dedup v2 — campo AUSENTE si
+    // el registro no lo trae (pre-D65/gemela copiada — misma receta del
+    // spread condicional de arriba; informes previos no cambian de forma).
+    // BLOQUE RESTAURADO: el merge #57 lo pisó con el de D66 (aditivos).
+    ...(fila.watchdog != null ? { watchdog: fila.watchdog } : {}),
+    ...(fila.etapaAlMorir != null ? { etapaAlMorir: fila.etapaAlMorir } : {}),
+    ...(fila.elapsedMs != null ? { elapsedMs: fila.elapsedMs } : {}),
+    ...(fila.dedup != null ? { dedup: fila.dedup } : {}),
+    ...(fila.dedupDistancia != null ? { dedupDistancia: fila.dedupDistancia } : {}),
     // D66 — KIT e14-decode-unico-precalor-v1 (T4): trazas de decodificación —
     // campos AUSENTES si el registro no trae master (misma receta del spread
     // condicional: informes previos no cambian de forma).
@@ -545,6 +580,26 @@ export function renderTxt(
   linea(
     `CONVERSION/PERSISTENCIA (solo actas con dato): decode medio ${tiemposMedios.decodeMs ?? "-"}ms · detect medio ${tiemposMedios.detectMs ?? "-"}ms · persistencia media ${tiemposMedios.persistMs ?? "-"}ms · envio medio ${tiemposMedios.envioMs ?? "-"}ms`,
   );
+  // D65 — KIT e14-progreso-watchdog-dedup-v1 (T4.2/T4.3): líneas aditivas
+  // AL FINAL de TOTALES (los parsers van por prefijo — contrato D57). Sin
+  // colgadas la línea queda con 0s reales (el instrumento corrió); la línea
+  // DEDUP SOLO si hay trazas del dedup (T2 activo — kit literal).
+  // BLOQUE RESTAURADO: el merge #57 lo pisó con las líneas de D66 (ambos
+  // kits añaden al final de la MISMA sección → D65 primero, D66 después).
+  const colgadasInfo = resumenColgadas(filas);
+  const detalleEtapas = ["decodificando", "deteccion", "ocr", "verificacion", "sin-senal"]
+    .filter((k) => (colgadasInfo.porEtapa[k] ?? 0) > 0)
+    .map((k) => `${k} ${colgadasInfo.porEtapa[k]}`)
+    .join(", ");
+  linea(
+    `COLGADAS: ${colgadasInfo.total} - salvadas por reintento: ${colgadasInfo.salvadas}${detalleEtapas ? ` - etapas: ${detalleEtapas}` : ""}`,
+  );
+  const dedupInfo = resumenDedup(filas);
+  if (dedupInfo.activo) {
+    linea(
+      `DEDUP v2: matches ${dedupInfo.matches} - distancia media ${dedupInfo.distanciaMedia ?? "-"}`,
+    );
+  }
   // D66 — KIT e14-decode-unico-precalor-v1 (T4): líneas aditivas AL FINAL de
   // TIEMPOS (formato literal del kit — sin reordenar las existentes, contrato
   // D57: los parsers del dueño van por prefijo). Medias en SEGUNDOS con 1

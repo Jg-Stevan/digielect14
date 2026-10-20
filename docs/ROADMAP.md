@@ -316,3 +316,14 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] Gates: tsc 0 · lint 0 · build OK · humo navegador completo (precalor en espera 229/143/37 ms · consumo decode=0 precalentada=true · decode del bridge 342/130/36 ms · cancelación QUITAR/DUPLICADA · SIM 8.2 intacto · chip 360 px · informe byte a byte).
 - [ ] Desviación de base documentada: D65 no existe aún (0 commits/ramas/PRs) — kit autocontenido sobre `2483c42`; convivencia con el futuro watchdog D65 por append-only.
 - [ ] Del dueño: A/B 16/16 veredictos (lote 20261019, corrida 162728, ±0.3 — divergencia = NO-GO y revertir) · tiempos reales JPG/HEIC (registrar qué máquinas dan decode nativo) · 26 actas de memoria · merge (el agente NUNCA mergea).
+
+## REPARACIÓN MERGE #57 — reconciliación D65+D66 (2026-10-20, FIX-1, AGENTE-2): main compilaba con 29 errores tsc
+
+El merge de PR #57 (D66, base pre-D65 `2483c42`) resolvió mal los conflictos con main@`eedb18e` (D65): pisó los bloques aditivos D65 de `informe.ts` con los de D66, olvidó por completo `tipos.ts` (bloque D65) y empalmó el cuerpo lineal pre-D65 de `runner.ts` con el loop del watchdog. Ambos padres compilaban 0 errores — el daño nació en la resolución (`cd6a3b5`).
+
+- [x] Reconstrucción de `runner.ts` = D65 limpio (`eedb18e`) + deltas D66: D63-A/B sobre el ORIGINAL del intento dentro del loop, pipeline consume el MASTER (re-horneado en el reintento desde el File fresco — decodeMemo por instancia), trazas de decode describen al master del desenlace, prefetch D61 → `asegurarMaestro`.
+- [x] `tipos.ts`: bloque D65 restaurado al final de `RegistroMasiva` (append-only, contrato D57).
+- [x] `informe.ts`: bloques D65 restaurados en `FilaInforme`/`filaLiviana`/`actaLivianaJson`/TOTALES (COLGADAS + DEDUP v2 antes de las líneas D66) — conviven con D66.
+- [x] DOCS: entrada D65 de `docs/worklog.md` restaurada byte a byte (el merge la borró) + marcadores `=======` huérfanos del merge #46 eliminados.
+- [x] Gates: tsc 0 · lint 0 · build estático OK.
+- [ ] Del dueño: revisar/mergear el PR de reparación · A/B de desenlaces D66 16/16 (corrida 162728 ±0.3) · validación §3 de D65 con su lote real (gemelos heic/jpg + colgado) · REVOCAR el token del chat.
