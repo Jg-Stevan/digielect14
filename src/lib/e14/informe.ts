@@ -92,6 +92,11 @@ export interface FilaInforme {
   /** D57 — KIT e14-instrumentos-espera-v1 (T2): ms del probe de orientación
    *  del diagnóstico (null cuando no corrió — SIM/registros previos). */
   orientacionProbeMs: number | null;
+  /** D63-A — KIT e63a-origen-escaneo-v1 (T2/T3): origen del archivo según
+   *  el detector heurístico (null = duda o registro previo a D63-A). */
+  origen: string | null;
+  /** D63-A — T2: señales auditables de la decisión (null = no evaluado). */
+  origenSenales: string | null;
   /** ¿El acta trae diagnóstico completo? (base de detección/tiempos). */
   tieneDiagnostico: boolean;
   /** ¿Esta fila lleva carpeta en actas/ (T1.3)? */
@@ -210,6 +215,10 @@ function filaLiviana(reg: RegistroMasiva): FilaInforme {
     // D57 — instrumentos aditivos: orientacionProbeMs cuando el diagnóstico
     // lo trae (null si no — la forma del mapa NO cambia para los parsers).
     orientacionProbeMs: diag?.orientacionProbeMs ?? null,
+    // D63-A — origen del detector (null si el diagnóstico no lo trae —
+    // registros previos/SIM; jamás inventar).
+    origen: diag?.origen ?? null,
+    origenSenales: diag?.origenSenales ?? null,
     tieneDiagnostico: !!diag,
     conCarpeta,
     pesoImagenes,
@@ -423,6 +432,29 @@ function renderTxt(
     `DETECCION (quadOrigen): ${Object.entries(deteccion)
       .map(([k, v]) => `${k} ${v}`)
       .join(" - ")}`,
+  );
+  // D63-A — KIT e63a-origen-escaneo-v1 (T3): líneas aditivas AL FINAL de la
+  // sección DETECCION (formato EXACTO del kit — SOLO visibilidad). Sin datos
+  // de origen (registros previos/SIM) caen al balde null — jamás inventar.
+  // La línea ESCANEOS cuenta SOLO las filas marcadas escaneo por su
+  // statusActa (el vocabulario es el de porStatusActa); motivos = tipos de
+  // rechazo únicos de las RECHAZADAS (ninguna → «ninguno»).
+  const conteoOrigen = conteo(filas.map((f) => f.origen ?? "null"), ["escaneo", "foto", "null"]);
+  linea(
+    `ORIGEN: ${Object.entries(conteoOrigen)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(" - ")}`,
+  );
+  const escaneos = filas.filter((f) => f.origen === "escaneo");
+  const escPorStatus = conteo(
+    escaneos.map((f) => f.statusActa),
+    ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA"],
+  );
+  const motivosEscaneos = [
+    ...new Set(escaneos.filter((f) => f.rechazo).map((f) => f.rechazo?.tipo)),
+  ].join(", ");
+  linea(
+    `ESCANEOS: ENVIADAS ${escPorStatus["ENVIADA"]} - ADVERTENCIA ${escPorStatus["ADVERTENCIA"]} - RECHAZADAS ${escPorStatus["RECHAZADA"]} (motivos: ${motivosEscaneos || "ninguno"})`,
   );
   linea();
   linea(`ACTAS (${filas.length})`);
