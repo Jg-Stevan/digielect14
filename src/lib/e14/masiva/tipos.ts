@@ -3,7 +3,11 @@
  *  aquí SOLO vive la orquestación. */
 import type { Acta } from "../types";
 
-export type EstadoEntrada = "PENDIENTE" | "PROCESANDO" | "LISTA" | "ERROR";
+/** KIT e14-masiva-tiempos-v1 (PR-1): DUPLICADA = gemela por hash perceptual
+ *  (dhash Hamming ≤ 6, dedup.ts) — estado SOLO visual: al procesar REUTILIZA
+ *  el resultado de la original (runner) sin correr el pipeline. «PROCESAR
+ *  IGUAL» la devuelve a PENDIENTE (reproceso completo — kit §2). */
+export type EstadoEntrada = "PENDIENTE" | "PROCESANDO" | "LISTA" | "ERROR" | "DUPLICADA";
 
 /** Fila LIVIANA en memoria (lo que pinta la bandeja) — NUNCA trae la foto:
  *  RAM acotada (lección L7). El acta completa duerme en IndexedDB. */
@@ -25,6 +29,12 @@ export interface FilaMasiva {
    *  acta.hashSha256 === "EN COLA"); se drena al reactivar conexión. */
   envioEnCola?: boolean;
   error?: string | null; // estado ERROR (decode/IDB/pipeline)
+  /** KIT e14-masiva-tiempos-v1 (PR-1): hash perceptual dhash 64-bit (hex 16,
+   *  dedup.ts) calculado al ENCOLAR en background — null si falló el decode. */
+  hashDedup?: string | null;
+  /** KIT e14-masiva-tiempos-v1 (PR-1): id de la fila ORIGINAL cuando la fila
+   *  está DUPLICADA (Hamming ≤ 6) — el runner copia SU resultado. */
+  dupOf?: string | null;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
@@ -42,6 +52,10 @@ export interface RegistroMasiva {
   /** KIT e14-masiva-ux-v1 (T2): motivo corto de las filas ERROR SIN acta
    *  (guards de extracción/formato — PROTEGIDO_O_CORRUPTO, etc.). */
   error?: string;
+  /** KIT e14-masiva-tiempos-v1 (PR-1): dedup persistente — sobrevive la
+   *  recarga (la fila sigue DUPLICADA y el runner puede copiar igual). */
+  hashDedup?: string;
+  dupOf?: string;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del

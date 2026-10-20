@@ -23,6 +23,7 @@ import { hacerThumb, iniciarRunner, pausarRunner } from "./runner";
 // deps pesadas (fflate/node-unrar-js) viven DETRÁS de extraerArchivo con
 // import diferido (D47): el bundle inicial no las carga.
 import { extraerArchivo, pareceImagenMasiva } from "./archivos";
+import { dhashDeArchivo, hamming64, HAMMING_MAX } from "./dedup";
 import {
   paginaDeActa,
   type EstadoEntrada,
@@ -74,6 +75,10 @@ interface MasivaStore {
   sincronizarAlVolver: () => Promise<void>;
   quitar: (id: string) => Promise<void>;
   vaciar: () => Promise<void>;
+  /** KIT e14-masiva-tiempos-v1 (PR-1): «PROCESAR IGUAL» — des-marca la fila
+   *  DUPLICADA (→ PENDIENTE, dupOf fuera) para que el runner la reprocese
+   *  COMPLETA (fotos distintas pueden parecer iguales en thumb — kit §2). */
+  procesarIgual: (id: string) => Promise<void>;
   /** Envío en lote SECUENCIAL de ADVERTENCIAS (cada una vía registrarEnvio
    *  real). NO toca RECHAZADAS ni EN_RH (kit §6). */
   enviarLote: (estado: "ADVERTENCIA") => Promise<void>;
@@ -104,6 +109,10 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
       r.estado === "ERROR"
         ? (r.error ?? (r.acta ? null : "ERROR DE COLA"))
         : null,
+    // KIT e14-masiva-tiempos-v1 (PR-1): dedup persistente — sobrevive la
+    // recarga (la fila sigue DUPLICADA y el runner puede copiar igual).
+    hashDedup: r.hashDedup ?? null,
+    dupOf: r.estado === "DUPLICADA" ? (r.dupOf ?? null) : null,
   };
 }
 
@@ -112,6 +121,59 @@ function patchFila(id: string, patch: Partial<FilaMasiva>): void {
   useMasivaStore.setState({
     filas: filas.map((f) => (f.id === id ? { ...f, ...patch } : f)),
   });
+}
+
+/** KIT e14-masiva-tiempos-v1 (PR-1): cadena de hashing DEDUP en background —
+ *  por cada archivo del lote EN ORDEN FIFO: dhash (misma vía del pipeline,
+ *  dedup.ts) → persiste hashDedup → compara contra TODAS las filas con hash
+ *  (Hamming ≤ 6) → marca DUPLICADA (persistente) apuntando a la ORIGINAL.
+ *  NUNCA bloquea la UI ni lanza: fallo de decode/hash → hash null → la fila
+ *  procesa normal (conservador). Los guards de existencia hacen el vaciar/
+ *  quitar del dueño MANDAR (0 zombis — mismo patrón del runner). */
+async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void> {
+  for (const entrada of lote) {
+    try {
+      const hash = await dhashDeArchivo(entrada.archivo);
+      if (!hash) continue; // decode/hash falló → sin dedup para esta fila
+      // Guard anti-zombi: la fila pudo ser quitada/vaciada mientras el decode corría.
+      if (!useMasivaStore.getState().filas.some((f) => f.id === entrada.id)) continue;
+      let registro: RegistroMasiva;
+      try {
+        registro = await leerRegistro(entrada.id);
+      } catch {
+        continue; // fuera de la cola (IDB/vaciar) — nada que marcar
+      }
+      await guardarRegistro({ ...registro, hashDedup: hash });
+      patchFila(entrada.id, { hashDedup: hash });
+      // ¿Gemela de una fila existente? (filas ANTERIORES con hash — la
+      // cadena es FIFO, la original siempre lleva delante).
+      const filas = useMasivaStore.getState().filas;
+      const candidatas = filas.filter(
+        (f) => f.id !== entrada.id && f.hashDedup && f.estado !== "ERROR",
+      );
+      let original: FilaMasiva | null = null;
+      let hamming = HAMMING_MAX + 1;
+      for (const c of candidatas) {
+        const d = hamming64(hash, c.hashDedup as string);
+        if (d <= HAMMING_MAX && (original === null || d < hamming || c.agregadaEn < original.agregadaEn)) {
+          original = c;
+          hamming = d;
+        }
+      }
+      if (!original) continue;
+      // Solo marca filas aún PENDIENTES (el dueño pudo procesar/quitar mientras el hash corría).
+      const filaViva = useMasivaStore.getState().filas.find((f) => f.id === entrada.id);
+      if (!filaViva || filaViva.estado !== "PENDIENTE") continue;
+      const reg = await leerRegistro(entrada.id);
+      await guardarRegistro({ ...reg, estado: "DUPLICADA", dupOf: original.id });
+      patchFila(entrada.id, { estado: "DUPLICADA", dupOf: original.id });
+      console.info(
+        `[e14] dedup fila=${entrada.id} marcada hamming=${hamming} dupOf=${original.id} hash=${hash}`,
+      );
+    } catch {
+      /* un fallo de la cadena JAMÁS tumba el encolado — la fila queda normal */
+    }
+  }
 }
 
 /** KIT e14-masiva-ux-v1 (T3.2): al reactivar la conexión la cola offline del
@@ -239,6 +301,10 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
           guardando: Math.max(0, get().guardando - imagenes.length),
           colaDisponible: true,
         });
+        // KIT e14-masiva-tiempos-v1 (PR-1): cadena de hashing DEDUP en
+        // background (fire-and-forget — NUNCA bloquea el encolado ni la
+        // UI; marca DUPLICADAS al aterrizar cada hash, FIFO).
+        void cadenaDedup(imagenes.map((file, i) => ({ id: ids[i], archivo: file })));
       } else {
         set({ guardando: Math.max(0, get().guardando - imagenes.length) });
       }
@@ -274,6 +340,22 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
   },
 
   pausar: () => pausarRunner(),
+
+  // KIT e14-masiva-tiempos-v1 (PR-1): «PROCESAR IGUAL» — la fila vuelve a
+  // PENDIENTE (dupOf fuera, persistente) y el runner la reprocesa COMPLETA
+  // como cualquier otra (kit §2 — el dueño fuerza el reproceso de una
+  // gemela sospechosa). Si el runner está corriendo la toma en su siguiente
+  // pasada (siguientePendiente ya incluye PENDIENTE).
+  procesarIgual: async (id) => {
+    patchFila(id, { estado: "PENDIENTE", dupOf: null });
+    console.info(`[e14] dedup fila=${id} procesar-igual`);
+    try {
+      const registro = await leerRegistro(id);
+      await guardarRegistro({ ...registro, estado: "PENDIENTE", dupOf: undefined });
+    } catch {
+      /* IDB caído — la fila ya está PENDIENTE en memoria (honesto) */
+    }
+  },
 
   abrirActa: async (id) => {
     // AUTO-PAUSA (kit §4 regla 2): el flujo de revisión usa el main thread
