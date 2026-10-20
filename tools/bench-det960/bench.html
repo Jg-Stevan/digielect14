@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIT e14-bancos-b5-b7-pagnull-v1 — banco B5 det 960/1280/1920 (SOLO banco, cero producción)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: #0c0c0d; color: #e4e4e7;
+    font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 22px 0 8px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .06em; }
+  .sub { color: #a1a1aa; margin: 0 0 18px; font-size: 12.5px; }
+  .caja { border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; background: #131316; margin-bottom: 14px; }
+  .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; padding: 10px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #3f3f46; background: #1f1f23; color: #e4e4e7; min-height: 44px;
+  }
+  button:hover:not(:disabled) { background: #2d2d33; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #btn-descargar { border-color: #3f6212; background: #1a2e05; color: #bef264; }
+  #btn-descargar:hover:not(:disabled) { background: #274008; }
+  #btn-md { border-color: #713f12; background: #2e2305; color: #fbbf24; }
+  .estado { margin: 10px 0 0; white-space: pre-wrap; }
+  .ok { color: #a3e635; } .mal { color: #f87171; } .info { color: #d4d4d8; } .warn { color: #fbbf24; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { border: 1px solid #27272a; padding: 6px 10px; text-align: left; font-size: 13px; }
+  th { background: #18181b; color: #a1a1aa; font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .veredicto { font-size: 22px; font-weight: 700; padding: 10px 18px; border-radius: 10px; display: inline-block; margin-top: 8px; }
+  .veredicto.go { background: #1a2e05; color: #a3e635; border: 1px solid #3f6212; }
+  .veredicto.nogo { background: #2e0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+  pre#log {
+    max-height: 240px; overflow-y: auto; font-size: 12px; color: #a1a1aa;
+    background: #0f0f11; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin: 8px 0 0;
+  }
+  pre#log::-webkit-scrollbar { width: 8px; }
+  pre#log::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  .detalle-tabla { max-height: 420px; overflow-y: auto; }
+  code { color: #bef264; }
+  .thumb { border: 1px solid #3f3f46; border-radius: 4px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<h1>KIT e14-bancos-b5-b7-pagnull-v1 · B5 — det <code>det_limit_side_len</code> 960 / 1280 / 1920 (PP-OCRv4)</h1>
+<p class="sub">SOLO banco de pruebas (instrumento de medición, cero producción) · réplica del patrón
+<code>tools/bench-det1280</code> (PR #34 — b3 GO): pre-det op1-4 + DB-postprocess JS puro mapeado a espacio fuente,
+SESIÓN det COMPARTIDA entre los 3 caps (solo cambia op4 — <code>DET_CAP</code>). Métrica del kit: nº de cajas y
+<strong>cajasPerdidas vs 1920</strong> (caja a 1920 sin match a 960/1280 con <strong>IoU ≥ 0.5</strong> entre quads —
+IoU medido entre los AABB de los quads mapeados a la fuente, proxy determinista documentado en el README).
+Corpus: páginas acta-like SINTÉTICAS deterministas (mismo generador/seed del banco det1280 — seed 0xe14de7a2) +
+<strong>fotos reales cargables</strong> (las 9 del dueño — NUNCA se commitean; input de archivos local).
+Veredicto kit: GO = 0 cajas perdidas en el 100% del corpus a 960 → recomienda pasada 1 a 960 (kit futuro D60).
+Si pierde UNA caja → NO-GO documentado.</p>
+
+<div class="caja">
+  <div class="fila">
+    <button id="btn-correr" type="button">▶ REPETIR CORRIDA</button>
+    <button id="btn-descargar" type="button" disabled>⬇ DESCARGAR JSON</button>
+    <button id="btn-md" type="button" disabled>⬇ DESCARGAR MD</button>
+    <label class="info"><input type="checkbox" id="chk-rec"> correr rec también (votos — evidencia extra, el criterio GO es solo cajas)</label>
+  </div>
+  <p id="estado" class="estado info">Cargando ORT-web…</p>
+  <div class="fila" id="fila-thumbs"></div>
+  <div class="fila" style="margin-top:10px">
+    <input type="file" id="input-fotos" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" style="display:none">
+    <button id="btn-fotos" type="button">📎 AÑADIR FOTOS REALES (locales — nunca se suben ni se commitean)</button>
+    <span id="meta" class="info"></span>
+  </div>
+</div>
+
+<h2>Resultados</h2>
+<div class="caja" id="caja-resultados"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Detalle página a página</h2>
+<div class="caja detalle-tabla" id="caja-detalle"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Log</h2>
+<pre id="log"></pre>
+
+<script type="module">
+import * as ort from "../../node_modules/onnxruntime-web/dist/ort.wasm.min.mjs";
+
+// ─── Config del banco ────────────────────────────────────────────────────────
+const URL_DET = "../../public/models/rapidocr/ch_PP-OCRv4_det_infer.onnx";
+const URL_CLS = "../../public/models/rapidocr/ch_ppocr_mobile_v2.0_cls_infer.onnx";
+const URL_REC = "../../public/models/rapidocr/ch_PP-OCRv4_rec_infer.onnx";
+const URL_DICT = "../../public/models/rapidocr/ppocr_keys.txt";
+const CAP_PRODUCCION = 1920;   // rapidocr.ts:259 (op4) — producción (REFERENCIA de este banco)
+const CAP_1280 = 1280;         // DET_CAP_RAPIDO — palanca YA activa (D53, ocr-escalonado)
+const CAP_960 = 960;           // palanca B5 de este banco — SOLO aquí, NUNCA en src/
+const SEMILLA = 0xe14de7a2;    // MISMO corpus determinista del banco det1280 (PR #34)
+const N_PAGINAS = 4;
+
+// Constantes DB-postprocess — réplica exacta de rapidocr.ts:293-299 (igual que bench-det1280)
+const DB_THRESH = 0.3;
+const DB_BOX_THRESH = 0.5;
+const DB_MAX_CANDIDATES = 1000;
+const DB_UNCLIP_RATIO = 1.6;
+const MIN_SIDE_DESCARTAR = 3;
+const MIN_SIDE_TRAS_UNCLIP = 5;
+const TEXT_SCORE = 0.5;
+
+const IOU_MIN = 0.5; // criterio del kit D58: caja perdida = sin match IoU ≥ 0.5 vs 1920
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls = "info") => {
+  const linea = document.createElement("div");
+  if (cls) linea.className = cls;
+  linea.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $("log").appendChild(linea);
+  $("log").scrollTop = $("log").scrollHeight;
+};
+const setEstado = (msg, cls = "info") => { $("estado").textContent = msg; $("estado").className = `estado ${cls}`; };
+
+// ─── PRNG determinista (VERBATIM de tools/bench-det1280/bench.html) ─────────
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const entero = (rnd, min, max) => min + Math.floor(rnd() * (max - min + 1));
+
+// ─── Corpus acta-like SINTÉTICO determinista — generador VERBATIM del banco
+//     det1280 (mismo seed 0xe14de7a2, 4 páginas tira vertical E-14). ─────────
+const W_ACTA = 1000;
+const H_ACTA = 2920; // ratio ≈ 2.92 (como las actas reales del informe)
+
+function generarActas() {
+  const rnd = mulberry32(SEMILLA);
+  const actas = [];
+  for (let p = 0; p < N_PAGINAS; p++) {
+    const consulado = entero(rnd, 1, 99);
+    const pais = entero(rnd, 1, 99);
+    const zona = entero(rnd, 1, 99);
+    const puesto = entero(rnd, 10000, 99999);
+    const mesa = entero(rnd, 1, 99);
+    const kit = entero(rnd, 100, 999);
+    const pag = 1;
+    const totPag = 2;
+    const codigo = `71${String(kit).padStart(3, "0")}3${String(puesto).slice(0, 5)}1${String(mesa).padStart(2, "0")}0`;
+    const codigo15 = (`7100${String(kit).padStart(3, "0")}3010${String(puesto).slice(0, 4)}${String(mesa).padStart(2, "0")}`).slice(0, 15);
+    const suma = entero(rnd, 200, 499);
+    const prohibidos = new Set([consulado, pais, zona, puesto, mesa, kit, pag, totPag, suma].map(String));
+    const votos = [];
+    for (let c = 0; c < 30; c++) {
+      let valor = "";
+      let intentos = 0;
+      do {
+        valor = String(entero(rnd, 2, 499));
+        intentos++;
+      } while ((prohibidos.has(valor) || votos.some((v) => v.valor === valor)) && intentos < 200);
+      prohibidos.add(valor);
+      votos.push({ n: String(entero(rnd, 101, 899)), valor, fila: Math.floor(c / 5), col: c % 5 });
+    }
+    actas.push({ consulado, pais, zona, puesto, mesa, kit, pag, totPag, codigo, codigo15, suma, votos });
+  }
+  return actas;
+}
+
+function renderizarActa(a) {
+  const cv = document.createElement("canvas");
+  cv.width = W_ACTA;
+  cv.height = H_ACTA;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#f7f5f0";
+  ctx.fillRect(0, 0, W_ACTA, H_ACTA);
+  ctx.strokeStyle = "#1a1a1a";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(24, 24, W_ACTA - 48, H_ACTA - 48);
+  ctx.fillStyle = "#111111";
+  ctx.textAlign = "center";
+  ctx.font = "bold 64px Arial, sans-serif";
+  ctx.fillText("TARJETA ELECTORAL E-14", W_ACTA / 2, 110);
+  ctx.font = "bold 40px Arial, sans-serif";
+  ctx.fillText("REGISTRADURIA NACIONAL DEL ESTADO CIVIL", W_ACTA / 2, 165);
+  ctx.font = "bold 44px Arial, sans-serif";
+  ctx.fillText(`CONSULADO ${a.consulado}  PAIS ${a.pais}`, W_ACTA / 2, 225);
+  ctx.fillText(`ZONA ${a.zona}  PUESTO ${a.puesto}`, W_ACTA / 2, 275);
+  ctx.fillText(`MESA ${a.mesa}`, W_ACTA / 2, 325);
+  ctx.font = "32px Arial, sans-serif";
+  ctx.fillText(`Ver.: ${a.pag} Pag.: ${a.pag} de ${a.totPag}`, W_ACTA / 2, 372);
+  const gx0 = 60;
+  const gy0 = 420;
+  const cw = (W_ACTA - 120) / 5;
+  const ch = 300;
+  ctx.font = "26px Arial, sans-serif";
+  for (const v of a.votos) {
+    const x = gx0 + v.col * cw;
+    const y = gy0 + v.fila * ch;
+    ctx.strokeStyle = "#8a8a8a";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 6, y + 6, cw - 12, ch - 12);
+    ctx.fillStyle = "#333333";
+    ctx.textAlign = "center";
+    ctx.fillText(v.n, x + cw / 2, y + 40);
+    ctx.save();
+    ctx.translate(x + cw / 2 + (((v.fila * 31 + v.col * 17) % 11) - 5), y + 175);
+    ctx.rotate((((v.fila * 13 + v.col * 7) % 9) - 4) * Math.PI / 180);
+    ctx.font = "italic bold 56px Georgia, 'Times New Roman', serif";
+    ctx.fillStyle = "#1a2a6b";
+    ctx.fillText(v.valor, 0, 0);
+    ctx.restore();
+  }
+  const yBanda = gy0 + 6 * ch + 30;
+  ctx.fillStyle = "#111111";
+  ctx.font = "bold 44px Arial, sans-serif";
+  ctx.fillText(`KIT ${a.kit}  TIPO 1  VER 1  PAG ${a.pag}/${a.totPag}`, W_ACTA / 2, yBanda + 50);
+  ctx.font = "bold 48px 'Courier New', monospace";
+  ctx.fillText(a.codigo15, W_ACTA / 2, yBanda + 115);
+  ctx.font = "24px Arial, sans-serif";
+  ctx.fillText("CODIGO UNICO DE TARJETA", W_ACTA / 2, yBanda + 150);
+  ctx.font = "bold 40px Arial, sans-serif";
+  ctx.fillText(`SUMA TOTAL ${a.suma}`, W_ACTA / 2, H_ACTA - 160);
+  ctx.font = "30px Arial, sans-serif";
+  ctx.fillText("FIRMA TESTIGO  TRANSMISION OK", W_ACTA / 2, H_ACTA - 100);
+  return cv;
+}
+
+// ─── Utilidades de imagen (rapidocr.ts:173-190 — VERBATIM de bench-det1280) ──
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("loadImage: decodificación fallida"));
+    img.src = dataUrl;
+  });
+}
+function canvasDe(img, w, h) {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, w, h);
+  return c;
+}
+const round32 = (v) => Math.max(32, Math.round(v / 32) * 32);
+function ctxDe(canvas) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("canvas 2d no disponible");
+  return ctx;
+}
+
+// ─── Pre-det (rapidocr.ts:192-268 — VERBATIM de bench-det1280): op1 fijo 1920
+//     INTACTO; op4 usa detCap (la ÚNICA diferencia local del banco). ─────────
+function preDet(src, detCap) {
+  let w = src.naturalWidth || src.width;
+  let h = src.naturalHeight || src.height;
+  let ratioW = 1;
+  let ratioH = 1;
+
+  if (Math.max(h, w) > 1920) {
+    const ratio = 1920 / Math.max(h, w);
+    const nh = round32(Math.floor(h * ratio));
+    const nw = round32(Math.floor(w * ratio));
+    ratioW *= nw / w;
+    ratioH *= nh / h;
+    w = nw;
+    h = nh;
+  }
+
+  if (Math.min(h, w) < 30) {
+    const ratio = 30 / Math.min(h, w);
+    const nh = round32(Math.floor(h * ratio));
+    const nw = round32(Math.floor(w * ratio));
+    ratioW *= nw / w;
+    ratioH *= nh / h;
+    w = nw;
+    h = nh;
+  }
+
+  const imgEsc = canvasDe(src, w, h);
+
+  let padTop = 0;
+  let canvasPadded = imgEsc;
+  const widthHeightRatio = 8;
+  const minHeight = 30;
+  if (h <= minHeight || w / h > widthHeightRatio) {
+    const newH = Math.max(Math.floor(w / widthHeightRatio), minHeight) * 2;
+    padTop = Math.floor(Math.abs(newH - h) / 2);
+    const padded = document.createElement("canvas");
+    padded.width = w;
+    padded.height = h + padTop * 2;
+    const pctx = ctxDe(padded);
+    pctx.fillStyle = "#000000";
+    pctx.fillRect(0, 0, padded.width, padded.height);
+    pctx.drawImage(imgEsc, 0, padTop);
+    canvasPadded = padded;
+    h = padded.height;
+  }
+
+  // op4 — ★★★ DIFERENCIA LOCAL DEL BANCO: detCap ∈ {1920 (ref), 1280 (D53), 960 (B5)} ★★★
+  const ratioDet = Math.max(h, w) > detCap ? detCap / Math.max(h, w) : 1;
+  const dh = round32(Math.floor(h * ratioDet));
+  const dw = round32(Math.floor(w * ratioDet));
+  const detIn = canvasDe(canvasPadded, dw, dh);
+
+  return {
+    canvas: detIn,
+    ops: { w: dw, h: dh, ratioW, ratioH, padTop, ratioWDet: dw / w, ratioHDet: dh / h },
+  };
+}
+
+function mapearAFuente(p, ops, srcW, srcH) {
+  const xPostPad = p.x / ops.ratioWDet;
+  const yPostPad = p.y / ops.ratioHDet - ops.padTop;
+  const x = xPostPad / ops.ratioW;
+  const y = yPostPad / ops.ratioH;
+  return {
+    x: Math.max(0, Math.min(srcW, Math.round(x))),
+    y: Math.max(0, Math.min(srcH, Math.round(y))),
+  };
+}
+
+// ─── DB postprocess en JS puro — copia exacta de rapidocr.ts:311-478 ────────
+function convexHull(pts) {
+  if (pts.length < 3) return pts.slice();
+  const p = pts.slice().sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower = [];
+  for (const q of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0)
+      lower.pop();
+    lower.push(q);
+  }
+  const upper = [];
+  for (let i = p.length - 1; i >= 0; i--) {
+    const q = p[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0)
+      upper.pop();
+    upper.push(q);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+function minAreaRect(hull) {
+  if (hull.length < 2) return null;
+  let mejor = null;
+  let mejorArea = Infinity;
+  const n = hull.length;
+  for (let i = 0; i < n; i++) {
+    const p1 = hull[i];
+    const p2 = hull[(i + 1) % n];
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) continue;
+    const ux = dx / len;
+    const uy = dy / len;
+    let minU = Infinity;
+    let maxU = -Infinity;
+    let minV = Infinity;
+    let maxV = -Infinity;
+    for (const q of hull) {
+      const u = q.x * ux + q.y * uy;
+      const v = -q.x * uy + q.y * ux;
+      if (u < minU) minU = u;
+      if (u > maxU) maxU = u;
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
+    }
+    const w = maxU - minU;
+    const h = maxV - minV;
+    const area = w * h;
+    if (area < mejorArea) {
+      mejorArea = area;
+      mejor = {
+        cx: ((maxU + minU) / 2) * ux + ((maxV + minV) / 2) * -uy,
+        cy: ((maxU + minU) / 2) * uy + ((maxV + minV) / 2) * ux,
+        w,
+        h,
+        theta: Math.atan2(uy, ux),
+      };
+    }
+  }
+  return mejor;
+}
+function boxScoreFast(pred, w, h, box) {
+  let xmin = w - 1;
+  let xmax = 0;
+  let ymin = h - 1;
+  let ymax = 0;
+  for (const q of box) {
+    xmin = Math.max(0, Math.min(xmin, Math.floor(q.x)));
+    xmax = Math.min(w - 1, Math.max(xmax, Math.ceil(q.x)));
+    ymin = Math.max(0, Math.min(ymin, Math.floor(q.y)));
+    ymax = Math.min(h - 1, Math.max(ymax, Math.ceil(q.y)));
+  }
+  if (xmax < xmin || ymax < ymin) return 0;
+  let suma = 0;
+  let cuenta = 0;
+  for (let y = ymin; y <= ymax; y++) {
+    const xs = [];
+    for (let i = 0; i < box.length; i++) {
+      const a = box[i];
+      const b = box[(i + 1) % box.length];
+      if (a.y === b.y) continue;
+      const yMin = Math.min(a.y, b.y);
+      const yMax = Math.max(a.y, b.y);
+      if (y + 0.5 >= yMin && y + 0.5 < yMax) {
+        xs.push(a.x + ((y + 0.5 - a.y) * (b.x - a.x)) / (b.y - a.y));
+      }
+    }
+    if (xs.length < 2) continue;
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const x0 = Math.max(xmin, Math.ceil(xs[k] - 0.5));
+      const x1 = Math.min(xmax, Math.floor(xs[k + 1] - 0.5));
+      for (let x = x0; x <= x1; x++) {
+        if (x >= xs[k] && x <= xs[k + 1]) {
+          suma += pred[y * w + x];
+          cuenta++;
+        }
+      }
+    }
+  }
+  return cuenta === 0 ? 0 : suma / cuenta;
+}
+function esquinasRect(r) {
+  const cos = Math.cos(r.theta);
+  const sin = Math.sin(r.theta);
+  const nx = -sin;
+  const ny = cos;
+  const hw = r.w / 2;
+  const hh = r.h / 2;
+  const pts = [
+    { x: r.cx + hw * cos + hh * nx, y: r.cy + hw * sin + hh * ny },
+    { x: r.cx + hw * cos - hh * nx, y: r.cy + hw * sin - hh * ny },
+    { x: r.cx - hw * cos + hh * nx, y: r.cy - hw * sin + hh * ny },
+    { x: r.cx - hw * cos - hh * nx, y: r.cy - hw * sin - hh * ny },
+  ];
+  pts.sort((a, b) => a.x - b.x);
+  let tl, bl, tr, br;
+  if (pts[0].y <= pts[1].y) { tl = pts[0]; bl = pts[1]; } else { tl = pts[1]; bl = pts[0]; }
+  if (pts[2].y <= pts[3].y) { tr = pts[2]; br = pts[3]; } else { tr = pts[3]; br = pts[2]; }
+  return [tl, tr, br, bl];
+}
+function ordenarCajas(boxes) {
+  const sorted = boxes.slice().sort((a, b) => a[0].y - b[0].y || a[0].x - b[0].x);
+  for (let i = 0; i < sorted.length - 1; i++) {
+    for (let j = i; j >= 0; j--) {
+      if (Math.abs(sorted[j + 1][0].y - sorted[j][0].y) < 10 && sorted[j + 1][0].x < sorted[j][0].x) {
+        const tmp = sorted[j];
+        sorted[j] = sorted[j + 1];
+        sorted[j + 1] = tmp;
+      } else break;
+    }
+  }
+  return sorted;
+}
+
+// ─── det SOLAMENTE (el criterio B5 es de cajas): preDet → sesión det →
+//     DB-postprocess → quads mapeados a espacio FUENTE. ──────────────────────
+async function detPagina(ses, src, detCap) {
+  const tDet = performance.now();
+  const { canvas, ops } = preDet(src, detCap);
+  const ctx = ctxDe(canvas);
+  const { width: w, height: h } = canvas;
+  const img = ctx.getImageData(0, 0, w, h);
+  const data = new Float32Array(w * h * 3);
+  for (let i = 0, px = 0; i < img.data.length; i += 4, px++) {
+    data[px] = (img.data[i + 2] / 255 - 0.5) / 0.5;
+    data[w * h + px] = (img.data[i + 1] / 255 - 0.5) / 0.5;
+    data[2 * w * h + px] = (img.data[i] / 255 - 0.5) / 0.5;
+  }
+  const tensor = new ort.Tensor("float32", data, [1, 3, h, w]);
+  const res = await ses.det.run({ [ses.det.inputNames[0]]: tensor });
+  const out = res[ses.det.outputNames[0]];
+  const pred = out.data;
+  const pw = out.dims[3];
+  const ph = out.dims[2];
+  const msDet = performance.now() - tDet;
+
+  const bitmap = new Uint8Array(pw * ph);
+  for (let i = 0; i < bitmap.length; i++) bitmap[i] = pred[i] > DB_THRESH ? 1 : 0;
+  const dil = new Uint8Array(pw * ph);
+  for (let y = 0; y < ph; y++) {
+    const fila = y * pw;
+    const filaPrev = Math.max(0, y - 1) * pw;
+    for (let x = 0; x < pw; x++) {
+      const xPrev = Math.max(0, x - 1);
+      dil[fila + x] = Math.max(bitmap[fila + x], bitmap[filaPrev + x], bitmap[fila + xPrev], bitmap[filaPrev + xPrev]);
+    }
+  }
+  const labels = new Int32Array(pw * ph);
+  let nComp = 0;
+  const rects = [];
+  const stack = new Int32Array(pw * ph);
+  const coords = [];
+  for (let y = 0; y < ph && nComp < DB_MAX_CANDIDATES; y++) {
+    for (let x = 0; x < pw && nComp < DB_MAX_CANDIDATES; x++) {
+      const idx = y * pw + x;
+      if (dil[idx] === 0 || labels[idx] !== 0) continue;
+      nComp++;
+      let sp = 0;
+      stack[sp++] = idx;
+      labels[idx] = nComp;
+      coords.length = 0;
+      while (sp > 0) {
+        const cur = stack[--sp];
+        const cy = (cur / pw) | 0;
+        const cx = cur - cy * pw;
+        coords.push(cx, cy);
+        if (cx > 0 && dil[cur - 1] === 1 && labels[cur - 1] === 0) { labels[cur - 1] = nComp; stack[sp++] = cur - 1; }
+        if (cx < pw - 1 && dil[cur + 1] === 1 && labels[cur + 1] === 0) { labels[cur + 1] = nComp; stack[sp++] = cur + 1; }
+        if (cy > 0 && dil[cur - pw] === 1 && labels[cur - pw] === 0) { labels[cur - pw] = nComp; stack[sp++] = cur - pw; }
+        if (cy < ph - 1 && dil[cur + pw] === 1 && labels[cur + pw] === 0) { labels[cur + pw] = nComp; stack[sp++] = cur + pw; }
+      }
+      const nPx = coords.length / 2;
+      if (nPx < 10) continue;
+      const stride = nPx > 20000 ? Math.ceil(nPx / 20000) : 1;
+      const pts = [];
+      for (let k = 0; k < nPx; k += stride) pts.push({ x: coords[k * 2], y: coords[k * 2 + 1] });
+      const hull = convexHull(pts);
+      const rect = minAreaRect(hull);
+      if (!rect) continue;
+      const sside = Math.min(rect.w, rect.h);
+      if (sside < MIN_SIDE_DESCARTAR) continue;
+      const esq = esquinasRect(rect);
+      const score = boxScoreFast(pred, pw, ph, esq);
+      if (score < DB_BOX_THRESH) continue;
+      const perim = 2 * (rect.w + rect.h);
+      const dUnclip = (rect.w * rect.h * DB_UNCLIP_RATIO) / perim;
+      const wU = rect.w + 2 * dUnclip;
+      const hU = rect.h + 2 * dUnclip;
+      if (Math.min(wU, hU) < MIN_SIDE_TRAS_UNCLIP) continue;
+      rects.push({ cx: rect.cx, cy: rect.cy, w: wU, h: hU, theta: rect.theta });
+    }
+  }
+  const quads = rects
+    .map((r) => esquinasRect(r).map((p) => mapearAFuente(p, ops, src.naturalWidth, src.naturalHeight)))
+    .filter((b) => b.every((p) => p.x >= 0 && p.y >= 0));
+  return { quads, msDet };
+}
+
+// ─── IoU entre quads mapeados a la FUENTE: AABB de cada quad (proxy
+//     determinista — los quads del mismo texto a distinto cap mapean casi
+//     idéntico al espacio fuente; documentado en el README del banco). ──────
+function aabbDe(quad) {
+  const xs = quad.map((p) => p.x);
+  const ys = quad.map((p) => p.y);
+  return {
+    x0: Math.min(...xs), y0: Math.min(...ys),
+    x1: Math.max(...xs), y1: Math.max(...ys),
+  };
+}
+function iouAabb(a, b) {
+  const ix0 = Math.max(a.x0, b.x0);
+  const iy0 = Math.max(a.y0, b.y0);
+  const ix1 = Math.min(a.x1, b.x1);
+  const iy1 = Math.min(a.y1, b.y1);
+  const iw = Math.max(0, ix1 - ix0);
+  const ih = Math.max(0, iy1 - iy0);
+  const inter = iw * ih;
+  const areaA = Math.max(0, a.x1 - a.x0) * Math.max(0, a.y1 - a.y0);
+  const areaB = Math.max(0, b.x1 - b.x0) * Math.max(0, b.y1 - b.y0);
+  const union = areaA + areaB - inter;
+  return union <= 0 ? 0 : inter / union;
+}
+/** Cajas a `quadsRef` (1920) SIN match en `quadsPrueba` (IoU ≥ IOU_MIN). */
+function cajasPerdidas(quadsRef, quadsPrueba) {
+  const aabbsPrueba = quadsPrueba.map(aabbDe);
+  const perdidas = [];
+  for (const q of quadsRef) {
+    const box = aabbDe(q);
+    let mejor = 0;
+    for (const p of aabbsPrueba) {
+      const v = iouAabb(box, p);
+      if (v > mejor) mejor = v;
+    }
+    if (mejor < IOU_MIN) perdidas.push({ quad: q, mejorIoU: +mejor.toFixed(3) });
+  }
+  return perdidas;
+}
+
+// ─── Corrida principal ───────────────────────────────────────────────────────
+let ultimoJson = null;
+
+async function correr() {
+  $("btn-correr").disabled = true;
+  $("btn-descargar").disabled = true;
+  $("btn-md").disabled = true;
+  $("caja-resultados").innerHTML = '<p class="info">Corriendo…</p>';
+  $("caja-detalle").innerHTML = '<p class="info">Corriendo…</p>';
+  $("log").innerHTML = "";
+  $("fila-thumbs").innerHTML = "";
+  ultimoJson = null;
+
+  try {
+    ort.env.wasm.wasmPaths = new URL("../../public/vendor/onnxruntime/", location.href).href;
+    const coi = typeof SharedArrayBuffer !== "undefined" && self.crossOriginIsolated;
+    const numThreads = coi ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+    ort.env.wasm.numThreads = numThreads;
+    ort.env.wasm.simd = true;
+    log(`ORT-web ${(ort.env && ort.env.versions && ort.env.versions["onnxruntime-web"]) || "?"} · wasmPaths=vendido · numThreads=${numThreads} · COI=${coi} · cores=${navigator.hardwareConcurrency}`);
+
+    // Corpus: sintético (siempre) + fotos reales locales (si el dueño las cargó).
+    const fuentes = [];
+    const actas = generarActas();
+    for (let i = 0; i < actas.length; i++) {
+      const cv = renderizarActa(actas[i]);
+      const dataUrl = cv.toDataURL("image/png");
+      fuentes.push({ nombre: `sintetica-p${i + 1}`, img: await loadImage(dataUrl), dataUrl });
+      const thumb = document.createElement("img");
+      thumb.src = dataUrl;
+      thumb.className = "thumb";
+      thumb.width = 120;
+      thumb.alt = `acta sintética ${i + 1}`;
+      $("fila-thumbs").appendChild(thumb);
+    }
+    log(`Corpus sintético: ${actas.length} páginas ${W_ACTA}×${H_ACTA} (seed ${SEMILLA}) — MISMO generador del banco det1280`);
+
+    for (const f of fotosReales) {
+      const url = URL.createObjectURL(f);
+      const img = await loadImage(url);
+      fuentes.push({ nombre: `real-${f.name}`, img, dataUrl: null, real: true });
+      const thumb = document.createElement("img");
+      thumb.src = url;
+      thumb.className = "thumb";
+      thumb.width = 120;
+      thumb.alt = `foto real ${f.name}`;
+      $("fila-thumbs").appendChild(thumb);
+    }
+    if (fotosReales.length) log(`Fotos reales locales: ${fotosReales.length} (NUNCA se suben ni se commitean)`);
+
+    setEstado("Creando sesión det (EP wasm)…");
+    const tCrea = performance.now();
+    const opts = { executionProviders: ["wasm"] };
+    const ses = { det: await ort.InferenceSession.create(URL_DET, opts) };
+    log(`Sesión det creada en ${Math.round(performance.now() - tCrea)} ms · SESIÓN COMPARTIDA entre los 3 caps (solo cambia op4)`);
+
+    const CAPS = [CAP_PRODUCCION, CAP_1280, CAP_960];
+
+    // Protocolo: por cada cap, pasada caliente descartada + pasada medida.
+    const correrCap = async (detCap, medir) => {
+      const porFuente = [];
+      for (let i = 0; i < fuentes.length; i++) {
+        if (!medir) setEstado(`cap ${detCap}: pasada caliente pág ${i + 1}/${fuentes.length} (descartada)…`);
+        else setEstado(`cap ${detCap}: pasada medida pág ${i + 1}/${fuentes.length}…`);
+        const r = await detPagina(ses, fuentes[i].img, detCap);
+        if (medir) porFuente.push({ nombre: fuentes[i].nombre, quads: r.quads, msDet: r.msDet });
+      }
+      return medir ? porFuente : null;
+    };
+    await correrCap(CAP_PRODUCCION, false);
+    const r1920 = await correrCap(CAP_PRODUCCION, true);
+    await correrCap(CAP_1280, false);
+    const r1280 = await correrCap(CAP_1280, true);
+    await correrCap(CAP_960, false);
+    const r960 = await correrCap(CAP_960, true);
+
+    // ── Tabulación del kit: acta | límite | nCajas | cajasPerdidas vs 1920 | ms
+    const filas = [];
+    let perdidas960Total = 0;
+    let perdidas1280Total = 0;
+    for (let i = 0; i < fuentes.length; i++) {
+      const ref = r1920[i];
+      for (const [cap, res] of [[CAP_1280, r1280], [CAP_960, r960]]) {
+        const perdidas = cajasPerdidas(ref.quads, res[i].quads);
+        if (cap === CAP_960) perdidas960Total += perdidas.length;
+        if (cap === CAP_1280) perdidas1280Total += perdidas.length;
+        filas.push({
+          acta: fuentes[i].nombre,
+          limite: cap,
+          nCajas: res[i].quads.length,
+          nCajas1920: ref.quads.length,
+          cajasPerdidasVs1920: perdidas.length,
+          detallePerdidas: perdidas.slice(0, 5).map((p) => ({ mejorIoU: p.mejorIoU, quad: p.quad })),
+          ms: +res[i].msDet.toFixed(1),
+          ms1920: +ref.msDet.toFixed(1),
+        });
+      }
+      const p1280 = cajasPerdidas(ref.quads, r1280[i].quads).length;
+      const p960 = cajasPerdidas(ref.quads, r960[i].quads).length;
+      log(`${fuentes[i].nombre}: cajas 1920=${ref.quads.length} · 1280=${r1280[i].quads.length} (perdidas ${p1280}) · 960=${r960[i].quads.length} (perdidas ${p960}) · ms 1920=${ref.msDet.toFixed(0)} 1280=${r1280[i].msDet.toFixed(0)} 960=${r960[i].msDet.toFixed(0)}`, p960 ? "mal" : "info");
+    }
+
+    const go = perdidas960Total === 0;
+
+    ultimoJson = {
+      kit: "e14-bancos-b5-b7-pagnull-v1 (D58) — SOLO EVIDENCIA, CERO PRODUCCIÓN",
+      banco: "B5 — det det_limit_side_len 960/1280/1920 (réplica del patrón bench-det1280 PR #34)",
+      criterio: `caja perdida = caja a 1920 sin match IoU ≥ ${IOU_MIN} entre AABB de quads mapeados a fuente · GO = 0 perdidas a 960 en el 100% del corpus`,
+      hardware: `${navigator.hardwareConcurrency} núcleos lógicos`,
+      navegador: navigator.userAgent,
+      numThreads,
+      crossOriginIsolated: coi,
+      corpus: {
+        sintetico: { paginas: actas.length, tamano: `${W_ACTA}×${H_ACTA}`, seed: `0x${SEMILLA.toString(16)}`, nota: "mismo generador del banco det1280 (PR #34)" },
+        fotosReales: fotosReales.map((f) => f.name),
+      },
+      filas,
+      resumen: {
+        perdidasA960: perdidas960Total,
+        perdidasA1280: perdidas1280Total,
+        detMs960: +(r960.reduce((s, r) => s + r.msDet, 0)).toFixed(1),
+        detMs1280: +(r1280.reduce((s, r) => s + r.msDet, 0)).toFixed(1),
+        detMs1920: +(r1920.reduce((s, r) => s + r.msDet, 0)).toFixed(1),
+      },
+      veredicto: go ? "GO" : "NO-GO",
+      ep: "wasm (vendido public/vendor/onnxruntime/)",
+      ortWeb: (ort.env && ort.env.versions && ort.env.versions["onnxruntime-web"]) || "?",
+      fecha: new Date().toISOString(),
+    };
+    window.__benchJson = ultimoJson;
+    pintarResultados(ultimoJson);
+    $("btn-descargar").disabled = false;
+    $("btn-md").disabled = false;
+    setEstado(go ? `Corrida completa — veredicto GO (0 cajas perdidas a 960 en ${fuentes.length}/${fuentes.length} fuentes).` : `Corrida completa — veredicto NO-GO (${perdidas960Total} cajas perdidas a 960).`, go ? "ok" : "warn");
+    try { ses.det.release?.(); } catch { /* noop */ }
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    setEstado(`ERROR: ${msg}`, "mal");
+    log(`ERROR: ${msg}`, "mal");
+    console.error(e);
+  } finally {
+    $("btn-correr").disabled = false;
+  }
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function pintarResultados(j) {
+  const cls = j.veredicto === "GO" ? "go" : "nogo";
+  $("caja-resultados").innerHTML = `
+    <table>
+      <tr><th>resumen</th><th>Σ det ms</th><th>cajas perdidas vs 1920</th></tr>
+      <tr><td>det 1920 (referencia)</td><td class="num">${j.resumen.detMs1920}</td><td class="num">—</td></tr>
+      <tr><td>det 1280 (D53 activa)</td><td class="num">${j.resumen.detMs1280}</td><td class="num ${j.resumen.perdidasA1280 ? "mal" : "ok"}">${j.resumen.perdidasA1280}</td></tr>
+      <tr><td>det 960 (palanca B5)</td><td class="num">${j.resumen.detMs960}</td><td class="num ${j.resumen.perdidasA960 ? "mal" : "ok"}">${j.resumen.perdidasA960}</td></tr>
+    </table>
+    <div class="veredicto ${cls}">${j.veredicto}</div>
+    <p class="info">Criterio kit D58: GO = 0 cajas perdidas en el 100% del corpus a 960 → recomienda pasada 1 a 960 (kit futuro D60). Si pierde UNA caja → NO-GO documentado.</p>`;
+  $("caja-detalle").innerHTML = `
+    <table>
+      <tr><th>acta</th><th>límite</th><th>nCajas</th><th>nCajas @1920</th><th>cajasPerdidas vs 1920</th><th>ms (cap)</th><th>ms @1920</th></tr>
+      ${j.filas.map((f) => `
+        <tr>
+          <td>${esc(f.acta)}</td>
+          <td class="num">${f.limite}</td>
+          <td class="num">${f.nCajas}</td>
+          <td class="num">${f.nCajas1920}</td>
+          <td class="num ${f.cajasPerdidasVs1920 ? "mal" : "ok"}">${f.cajasPerdidasVs1920}</td>
+          <td class="num">${f.ms}</td>
+          <td class="num">${f.ms1920}</td>
+        </tr>`).join("")}
+    </table>`;
+}
+
+function generarMd(j) {
+  const filas = j.filas.map((f) =>
+    `| ${f.acta} | ${f.limite} | ${f.nCajas} | ${f.cajasPerdidasVs1920} | ${f.ms} |`).join("\n");
+  return `# Banco B5 — det 960/1280/1920 (KIT e14-bancos-b5-b7-pagnull-v1 — SOLO EVIDENCIA)
+
+- Fecha: ${j.fecha}
+- Criterio: ${j.criterio}
+- Corpus: ${j.corpus.sintetico.paginas} páginas sintéticas ${j.corpus.sintetico.tamano} (seed ${j.corpus.sintetico.seed}) + ${j.corpus.fotosReales.length} fotos reales locales (${j.corpus.fotosReales.join(", ") || "ninguna"})
+- Entorno: ${j.navegador} · numThreads=${j.numThreads} · COI=${j.crossOriginIsolated}
+
+## Tabla (acta | límite | nCajas | cajasPerdidas vs 1920 | ms)
+
+| acta | límite | nCajas | cajasPerdidas vs 1920 | ms |
+|---|---|---|---|---|
+${filas}
+
+## Resumen
+
+- det Σ ms: 1920=${j.resumen.detMs1920} · 1280=${j.resumen.detMs1280} · 960=${j.resumen.detMs960}
+- Cajas perdidas a 1280: ${j.resumen.perdidasA1280}
+- **Cajas perdidas a 960: ${j.resumen.perdidasA960}**
+
+## Veredicto
+
+**${j.veredicto}** — GO = 0 cajas perdidas en el 100% del corpus a 960 → recomienda pasada 1 a 960 (kit futuro D60). Si pierde UNA caja → NO-GO documentado.
+`;
+}
+
+$("btn-descargar").addEventListener("click", () => {
+  if (!ultimoJson) return;
+  const blob = new Blob([JSON.stringify(ultimoJson, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bench-det960-resultado.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("btn-md").addEventListener("click", () => {
+  if (!ultimoJson) return;
+  const blob = new Blob([generarMd(ultimoJson)], { type: "text/markdown" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bench-det960-resultado.md";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("btn-correr").addEventListener("click", () => void correr());
+
+// ─── Fotos reales (locales — input file; NUNCA se suben ni se commitean) ────
+const fotosReales = [];
+$("btn-fotos").addEventListener("click", () => $("input-fotos").click());
+$("input-fotos").addEventListener("change", (ev) => {
+  for (const f of ev.target.files) fotosReales.push(f);
+  $("meta").textContent = `${fotosReales.length} fotos reales cargadas (locales)`;
+});
+
+$("meta").textContent = `UA: ${navigator.userAgent}`;
+void correr();
+</script>
+</body>
+</html>

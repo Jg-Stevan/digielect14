@@ -1,0 +1,220 @@
+{
+  "kit": "e14-bancos-b5-b7-pagnull-v1 (D58) — SOLO EVIDENCIA, CERO PRODUCCIÓN",
+  "banco": "B5 — det det_limit_side_len 960/1280/1920 (réplica del patrón bench-det1280 PR #34)",
+  "criterio": "caja perdida = caja a 1920 sin match IoU ≥ 0.5 entre AABB de quads mapeados a fuente · GO = 0 perdidas a 960 en el 100% del corpus",
+  "hardware": "2 núcleos lógicos",
+  "navegador": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+  "numThreads": 2,
+  "crossOriginIsolated": true,
+  "corpus": {
+    "sintetico": {
+      "paginas": 4,
+      "tamano": "1000×2920",
+      "seed": "0xe14de7a2",
+      "nota": "mismo generador del banco det1280 (PR #34)"
+    },
+    "fotosReales": []
+  },
+  "filas": [
+    {
+      "acta": "sintetica-p1",
+      "limite": 1280,
+      "nCajas": 71,
+      "nCajas1920": 71,
+      "cajasPerdidasVs1920": 0,
+      "detallePerdidas": [],
+      "ms": 304.2,
+      "ms1920": 730.7
+    },
+    {
+      "acta": "sintetica-p1",
+      "limite": 960,
+      "nCajas": 71,
+      "nCajas1920": 71,
+      "cajasPerdidasVs1920": 1,
+      "detallePerdidas": [
+        {
+          "mejorIoU": 0.472,
+          "quad": [
+            {
+              "x": 664,
+              "y": 2053
+            },
+            {
+              "x": 699,
+              "y": 2053
+            },
+            {
+              "x": 699,
+              "y": 2098
+            },
+            {
+              "x": 664,
+              "y": 2098
+            }
+          ]
+        }
+      ],
+      "ms": 198.6,
+      "ms1920": 730.7
+    },
+    {
+      "acta": "sintetica-p2",
+      "limite": 1280,
+      "nCajas": 71,
+      "nCajas1920": 71,
+      "cajasPerdidasVs1920": 0,
+      "detallePerdidas": [],
+      "ms": 316.3,
+      "ms1920": 695.6
+    },
+    {
+      "acta": "sintetica-p2",
+      "limite": 960,
+      "nCajas": 71,
+      "nCajas1920": 71,
+      "cajasPerdidasVs1920": 1,
+      "detallePerdidas": [
+        {
+          "mejorIoU": 0.495,
+          "quad": [
+            {
+              "x": 300,
+              "y": 735
+            },
+            {
+              "x": 351,
+              "y": 735
+            },
+            {
+              "x": 351,
+              "y": 767
+            },
+            {
+              "x": 300,
+              "y": 767
+            }
+          ]
+        }
+      ],
+      "ms": 193.1,
+      "ms1920": 695.6
+    },
+    {
+      "acta": "sintetica-p3",
+      "limite": 1280,
+      "nCajas": 71,
+      "nCajas1920": 71,
+      "cajasPerdidasVs1920": 0,
+      "detallePerdidas": [],
+      "ms": 341.9,
+      "ms1920": 655.4
+    },
+    {
+      "acta": "sintetica-p3",
+      "limite": 960,
+      "nCajas": 71,
+      "nCajas1920": 71,
+      "cajasPerdidasVs1920": 2,
+      "detallePerdidas": [
+        {
+          "mejorIoU": 0.47,
+          "quad": [
+            {
+              "x": 649,
+              "y": 435
+            },
+            {
+              "x": 703,
+              "y": 435
+            },
+            {
+              "x": 703,
+              "y": 468
+            },
+            {
+              "x": 649,
+              "y": 468
+            }
+          ]
+        },
+        {
+          "mejorIoU": 0.497,
+          "quad": [
+            {
+              "x": 651,
+              "y": 735
+            },
+            {
+              "x": 703,
+              "y": 735
+            },
+            {
+              "x": 703,
+              "y": 767
+            },
+            {
+              "x": 651,
+              "y": 767
+            }
+          ]
+        }
+      ],
+      "ms": 193.7,
+      "ms1920": 655.4
+    },
+    {
+      "acta": "sintetica-p4",
+      "limite": 1280,
+      "nCajas": 71,
+      "nCajas1920": 71,
+      "cajasPerdidasVs1920": 0,
+      "detallePerdidas": [],
+      "ms": 311.6,
+      "ms1920": 706.1
+    },
+    {
+      "acta": "sintetica-p4",
+      "limite": 960,
+      "nCajas": 71,
+      "nCajas1920": 71,
+      "cajasPerdidasVs1920": 1,
+      "detallePerdidas": [
+        {
+          "mejorIoU": 0.481,
+          "quad": [
+            {
+              "x": 649,
+              "y": 1035
+            },
+            {
+              "x": 705,
+              "y": 1035
+            },
+            {
+              "x": 705,
+              "y": 1067
+            },
+            {
+              "x": 649,
+              "y": 1067
+            }
+          ]
+        }
+      ],
+      "ms": 190.7,
+      "ms1920": 706.1
+    }
+  ],
+  "resumen": {
+    "perdidasA960": 5,
+    "perdidasA1280": 0,
+    "detMs960": 776.1,
+    "detMs1280": 1274.1,
+    "detMs1920": 2787.8
+  },
+  "veredicto": "NO-GO",
+  "ep": "wasm (vendido public/vendor/onnxruntime/)",
+  "ortWeb": "?",
+  "fecha": "2026-10-20T13:31:51.824Z"
+}

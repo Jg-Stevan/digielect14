@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIT e14-bancos-b5-b7-pagnull-v1 — banco B7 tolerancia dedup (SOLO banco, cero producción)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: #0c0c0d; color: #e4e4e7;
+    font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 22px 0 8px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .06em; }
+  .sub { color: #a1a1aa; margin: 0 0 18px; font-size: 12.5px; }
+  .caja { border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; background: #131316; margin-bottom: 14px; }
+  .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; padding: 10px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #3f3f46; background: #1f1f23; color: #e4e4e7; min-height: 44px;
+  }
+  button:hover:not(:disabled) { background: #2d2d33; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #btn-descargar { border-color: #3f6212; background: #1a2e05; color: #bef264; }
+  #btn-md { border-color: #713f12; background: #2e2305; color: #fbbf24; }
+  .estado { margin: 10px 0 0; white-space: pre-wrap; }
+  .ok { color: #a3e635; } .mal { color: #f87171; } .info { color: #d4d4d8; } .warn { color: #fbbf24; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { border: 1px solid #27272a; padding: 6px 10px; text-align: left; font-size: 13px; }
+  th { background: #18181b; color: #a1a1aa; font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .veredicto { font-size: 20px; font-weight: 700; padding: 10px 18px; border-radius: 10px; display: inline-block; margin-top: 8px; }
+  .veredicto.go { background: #1a2e05; color: #a3e635; border: 1px solid #3f6212; }
+  .veredicto.nogo { background: #2e0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+  .veredicto.pend { background: #2e2305; color: #fbbf24; border: 1px solid #713f12; }
+  pre#log {
+    max-height: 240px; overflow-y: auto; font-size: 12px; color: #a1a1aa;
+    background: #0f0f11; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin: 8px 0 0;
+  }
+  pre#log::-webkit-scrollbar { width: 8px; }
+  pre#log::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  .detalle-tabla { max-height: 420px; overflow-y: auto; }
+  code { color: #bef264; }
+  .thumb { border: 1px solid #3f3f46; border-radius: 4px; image-rendering: pixelated; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "heic2any": "./heic2any-esm.js"
+  }
+}
+</script>
+<!-- Shim SOLO-BANCO: detector-client.js del core lee process.env.NEXT_PUBLIC_BASE_PATH
+     (el bundler de la app lo inyecta; el ESM crudo del navegador no — "" = sin
+     base path, paridad GH Pages raíz). Fuera de este bench esto no existe —
+     0 diff en src/ (gates D58). -->
+<script>window.process = { env: { NEXT_PUBLIC_BASE_PATH: "" } };</script>
+</head>
+<body>
+<h1>KIT e14-bancos-b5-b7-pagnull-v1 · B7 — tolerancia dedup heic/jpg (dhash 64-bit, umbral 6)</h1>
+<p class="sub">SOLO banco de pruebas (instrumento de medición, cero producción). dhash 64-bit
+<strong>EXACTAMENTE como <code>src/lib/e14/masiva/dedup.ts</code></strong> (copia congelada L16-74 — canvas 9×8,
+gradiente horizontal, hex 16; Hamming ≤ <code>HAMMING_MAX=6</code>) sobre la <strong>MISMA vía del pipeline</strong>:
+<code>fileToCaptureDataUrl</code> del core (EXIF/12MP/HEIC — importado de
+<code>node_modules/@jg-stevan/scanner-core</code>, byte-idéntico a producción) → <code>hacerThumb</code> 320
+(copia congelada de <code>runner.ts</code> L64-87) → dhash. Tabula Hamming <strong>intra-par</strong> (jpg vs heic de
+la MISMA foto) vs <strong>entre actas distintas</strong> vs el <strong>umbral vigente (6)</strong>.
+OJO hipótesis alternativa (kit T2): el dedup pudo fallar por <strong>ORDEN</strong>, no por hash —
+trazas a buscar en las capturas del dueño: <code>[e14] dedup fila=… marcada hamming=… dupOf=…</code> /
+<code>[e14] dedup fila=… reutiliza …</code> / <code>[e14] dedup fila=… sin-original reprocesa-completo</code>
+(carrera documentada en <code>store.ts</code> L174-175 y <code>runner.ts</code> L128/L188).</p>
+
+<div class="caja">
+  <div class="fila">
+    <button id="btn-sintetico" type="button">▶ CORRER SINTÉTICO (gemelas por construcción + sensibilidad color)</button>
+    <button id="btn-descargar" type="button" disabled>⬇ DESCARGAR JSON</button>
+    <button id="btn-md" type="button" disabled>⬇ DESCARGAR MD</button>
+  </div>
+  <div class="fila" style="margin-top:10px">
+    <input type="file" id="input-fotos" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" style="display:none">
+    <button id="btn-fotos" type="button">📎 CARGAR FOTOS REALES (pares jpg/heic del dueño — locales, nunca se commitean)</button>
+    <button id="btn-reales" type="button" disabled>▶ CALCULAR DHASH DE LAS REALES</button>
+    <span id="meta" class="info"></span>
+  </div>
+  <p id="estado" class="estado info">Listo. El corpus real (9 fotos: 171125, 170755, 171446, 171454, 171500, 171506, 171512, 171518) lo suelta el dueño en <code>tools/assets/</code> o con el botón — NUNCA se commitea.</p>
+  <div class="fila" id="fila-thumbs"></div>
+</div>
+
+<h2>Resultados — pares (intra-par)</h2>
+<div class="caja" id="caja-pares"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Hamming entre actas distintas (todas contra todas)</h2>
+<div class="caja detalle-tabla" id="caja-cruzadas"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Sensibilidad del dhash al color (hipótesis HEIC→RGB ≠ JPG→RGB)</h2>
+<div class="caja detalle-tabla" id="caja-sensibilidad"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Log</h2>
+<pre id="log"></pre>
+
+<script type="module">
+// ─── MISMA VÍA DEL PIPELINE: el decode del core es el de producción ─────────
+import { fileToCaptureDataUrl } from "../../node_modules/@jg-stevan/scanner-core/dist/image-processor.js";
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls = "info") => {
+  const linea = document.createElement("div");
+  if (cls) linea.className = cls;
+  linea.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $("log").appendChild(linea);
+  $("log").scrollTop = $("log").scrollHeight;
+};
+const setEstado = (msg, cls = "info") => { $("estado").textContent = msg; $("estado").className = `estado ${cls}`; };
+
+// ═══ COPIA CONGELADA — src/lib/e14/masiva/dedup.ts @ main f9e4027 (L16-74).
+//     dhash 64-bit EXACTO del pipeline: canvas 9×8, grises 0.299/0.587/0.114,
+//     bit=1 cuando gray[x] > gray[x+1] → 8 bits × 8 filas → hex 16.
+//     NADA aquí se re-implementa distinto (kit T2: «NO reimplementes un dhash
+//     distinto»). hamming64 y HAMMING_MAX también verbatim. ═════════════════
+export const HAMMING_MAX = 6;
+
+async function dhash64DeDataUrl(dataUrl) {
+  try {
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("DHASH_NO_DECODE"));
+      img.src = dataUrl;
+    });
+    const W = 9;
+    const H = 8;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, W, H);
+    const { data } = ctx.getImageData(0, 0, W, H);
+    const gris = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        gris[y * W + x] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      }
+    }
+    let hex = "";
+    for (let y = 0; y < H; y++) {
+      let byte = 0;
+      for (let x = 0; x < 8; x++) {
+        byte = (byte << 1) | (gris[y * W + x] > gris[y * W + x + 1] ? 1 : 0);
+      }
+      hex += byte.toString(16).padStart(2, "0");
+    }
+    return hex;
+  } catch {
+    return null;
+  }
+}
+
+function hamming64(a, b) {
+  if (!a || !b || a.length !== b.length) return 64;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) {
+    let x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+    while (x) {
+      d += x & 1;
+      x >>= 1;
+    }
+  }
+  return d;
+}
+
+// ═══ COPIA CONGELADA — src/lib/e14/masiva/runner.ts @ main f9e4027 (L64-87):
+//     hacerThumb — lado mayor 320, JPEG 0.7 (canvas 2d). ═════════════════════
+async function hacerThumb(dataUrl) {
+  if (!dataUrl) return undefined;
+  try {
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("THUMB_NO_DECODE"));
+      img.src = dataUrl;
+    });
+    const ladoMayor = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+    const escala = Math.min(1, 320 / ladoMayor);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * escala));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * escala));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return undefined;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  } catch {
+    return undefined;
+  }
+}
+
+/** dhash de UN archivo — verbatim de dedup.ts L82-91 (dhashDeArchivo):
+ *  fileToCaptureDataUrl (core — EXIF/12MP/HEIC) → hacerThumb 320 → dhash. */
+async function dhashDeFile(file) {
+  try {
+    const dataUrl = await fileToCaptureDataUrl(file);
+    const thumb = await hacerThumb(dataUrl);
+    if (!thumb) return null;
+    return await dhash64DeDataUrl(thumb);
+  } catch {
+    return null;
+  }
+}
+
+// ─── PRNG determinista (mismo patrón de los bancos del repo) ────────────────
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const entero = (rnd, min, max) => min + Math.floor(rnd() * (max - min + 1));
+
+// ─── Corpus sintético: 3 actas-like DISTINTAS (seeds fijas) — gemelas por
+//     construcción: la MISMA imagen codificada en varios formatos/calidades
+//     (PNG / JPEG q0.92 / JPEG q0.5 — canvas no encodea HEIC: la gemela HEIC
+//     REAL solo existe con las fotos del dueño). ════════════════════════════
+const W_ACTA = 1000;
+const H_ACTA = 2920;
+
+function renderizarActa(seed) {
+  const rnd = mulberry32(seed);
+  const cv = document.createElement("canvas");
+  cv.width = W_ACTA;
+  cv.height = H_ACTA;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#f7f5f0";
+  ctx.fillRect(0, 0, W_ACTA, H_ACTA);
+  ctx.strokeStyle = "#1a1a1a";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(24, 24, W_ACTA - 48, H_ACTA - 48);
+  ctx.fillStyle = "#111111";
+  ctx.textAlign = "center";
+  ctx.font = "bold 64px Arial, sans-serif";
+  ctx.fillText("TARJETA ELECTORAL E-14", W_ACTA / 2, 110);
+  ctx.font = "bold 40px Arial, sans-serif";
+  ctx.fillText("REGISTRADURIA NACIONAL DEL ESTADO CIVIL", W_ACTA / 2, 165);
+  const consulado = entero(rnd, 1, 99);
+  const pais = entero(rnd, 1, 99);
+  const zona = entero(rnd, 1, 99);
+  const puesto = entero(rnd, 10000, 99999);
+  const mesa = entero(rnd, 1, 99);
+  ctx.font = "bold 44px Arial, sans-serif";
+  ctx.fillText(`CONSULADO ${consulado}  PAIS ${pais}`, W_ACTA / 2, 225);
+  ctx.fillText(`ZONA ${zona}  PUESTO ${puesto}`, W_ACTA / 2, 275);
+  ctx.fillText(`MESA ${mesa}`, W_ACTA / 2, 325);
+  // grilla de votos manuscritos (5×6) — contenido denso como el acta real
+  const gx0 = 60;
+  const gy0 = 420;
+  const cw = (W_ACTA - 120) / 5;
+  const ch = 300;
+  ctx.font = "26px Arial, sans-serif";
+  for (let c = 0; c < 30; c++) {
+    const x = gx0 + (c % 5) * cw;
+    const y = gy0 + Math.floor(c / 5) * ch;
+    ctx.strokeStyle = "#8a8a8a";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 6, y + 6, cw - 12, ch - 12);
+    ctx.fillStyle = "#333333";
+    ctx.textAlign = "center";
+    ctx.fillText(String(entero(rnd, 101, 899)), x + cw / 2, y + 40);
+    ctx.save();
+    ctx.translate(x + cw / 2 + (((Math.floor(c / 5) * 31 + (c % 5) * 17) % 11) - 5), y + 175);
+    ctx.rotate((((Math.floor(c / 5) * 13 + (c % 5) * 7) % 9) - 4) * Math.PI / 180);
+    ctx.font = "italic bold 56px Georgia, 'Times New Roman', serif";
+    ctx.fillStyle = "#1a2a6b";
+    ctx.fillText(String(entero(rnd, 2, 499)), 0, 0);
+    ctx.restore();
+  }
+  ctx.fillStyle = "#111111";
+  ctx.font = "bold 44px Arial, sans-serif";
+  ctx.fillText(`KIT ${entero(rnd, 100, 999)}  TIPO 1  VER 1  PAG 1/2`, W_ACTA / 2, gy0 + 6 * ch + 80);
+  ctx.font = "bold 48px 'Courier New', monospace";
+  ctx.fillText(`7100${entero(rnd, 100, 999)}3010${entero(rnd, 1000, 9999)}`.slice(0, 15), W_ACTA / 2, gy0 + 6 * ch + 145);
+  ctx.font = "bold 40px Arial, sans-serif";
+  ctx.fillText(`SUMA TOTAL ${entero(rnd, 200, 499)}`, W_ACTA / 2, H_ACTA - 160);
+  return cv;
+}
+
+function canvasABlob(cv, tipo, calidad) {
+  return new Promise((resolve, reject) => {
+    cv.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("toBlob falló"))),
+      tipo,
+      calidad,
+    );
+  });
+}
+const blobAFile = (blob, nombre) => new File([blob], nombre, { type: blob.type });
+
+async function dhashDeCanvasVariantes(cv, stem) {
+  // Gemelas POR CONSTRUCCIÓN del mismo píxel-set:
+  //  - PNG (sin pérdida)
+  //  - JPEG q0.92 (calidad típica de cámara/decode del core)
+  //  - JPEG q0.50 (compresión agresiva)
+  const variantes = [
+    { etiqueta: "png", blob: await canvasABlob(cv, "image/png") },
+    { etiqueta: "jpg-q92", blob: await canvasABlob(cv, "image/jpeg", 0.92) },
+    { etiqueta: "jpg-q50", blob: await canvasABlob(cv, "image/jpeg", 0.5) },
+  ];
+  const out = [];
+  for (const v of variantes) {
+    const file = blobAFile(v.blob, `${stem}.${v.etiqueta === "png" ? "png" : "jpg"}`);
+    const t0 = performance.now();
+    const hash = await dhashDeFile(file);
+    out.push({ stem, variante: v.etiqueta, bytes: v.blob.size, hash, msDecode: +(performance.now() - t0).toFixed(0) });
+  }
+  return out;
+}
+
+/** Sensibilidad al color: la MISMA imagen con desplazamientos de color/gamma
+ *  (simula que HEIC→RGB difiere de JPG→RGB — sospecha del informe 20/10).
+ *  Devuelve hamming vs el hash de la variante base (png) por nivel de shift. */
+async function sensibilidadColor(cvBase) {
+  const ctx = cvBase.getContext("2d", { willReadFrequently: true });
+  const img = ctx.getImageData(0, 0, cvBase.width, cvBase.height);
+  const base = img.data.slice();
+  const niveles = [1, 2, 3, 5, 8, 12];
+  const filas = [];
+  const hashBase = await dhash64DeDataUrl(await hacerThumb(cvBase.toDataURL("image/png")));
+  for (const delta of niveles) {
+    const d = img.data;
+    // shift lineal en los 3 canales (≈ un cambio de exposición/gamma):
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] = Math.min(255, base[i] + delta);
+      d[i + 1] = Math.min(255, base[i + 1] + delta * 0.7);
+      d[i + 2] = Math.min(255, base[i + 2] + delta * 0.4);
+    }
+    ctx.putImageData(img, 0, 0);
+    const blob = await canvasABlob(cvBase, "image/jpeg", 0.92);
+    const file = blobAFile(blob, `shift-${delta}.jpg`);
+    const hash = await dhashDeFile(file);
+    filas.push({ deltaCanalR: delta, hammingVsBase: hash && hashBase ? hamming64(hash, hashBase) : null, hash });
+    // restaurar
+    img.data.set(base);
+    ctx.putImageData(img, 0, 0);
+  }
+  return { hashBase, filas };
+}
+
+// ─── Estado del banco ────────────────────────────────────────────────────────
+let ultimoJson = null;
+const hashesReales = []; // { nombre, stem, hash, msDecode }
+
+function stemNumerico(nombre) {
+  const m = nombre.match(/(\d{4,})/);
+  return m ? m[1] : nombre.replace(/\.[^.]+$/, "");
+}
+
+function pintarPares(filas, umbral) {
+  $("caja-pares").innerHTML = `
+    <table>
+      <tr><th>par</th><th>a</th><th>b</th><th>hamming</th><th>≤ umbral (${umbral})?</th></tr>
+      ${filas.map((f) => `
+        <tr>
+          <td>${f.par}</td>
+          <td>${f.a} <code>${f.hashA ?? "null"}</code></td>
+          <td>${f.b} <code>${f.hashB ?? "null"}</code></td>
+          <td class="num">${f.hamming}</td>
+          <td class="${f.hamming <= umbral ? "ok" : "mal"}">${f.hamming <= umbral ? "SÍ — el dedup la atraparía" : "NO — se escapa al pipeline completo"}</td>
+        </tr>`).join("")}
+    </table>`;
+}
+
+function pintarCruzadas(entidades, umbral) {
+  const n = entidades.length;
+  if (n < 2) { $("caja-cruzadas").innerHTML = '<p class="info">Se necesitan ≥2 actas distintas.</p>'; return; }
+  let html = `<table><tr><th></th>${entidades.map((e) => `<th>${e.etiqueta}</th>`).join("")}</tr>`;
+  for (let i = 0; i < n; i++) {
+    html += `<tr><th>${entidades[i].etiqueta}</th>`;
+    for (let j = 0; j < n; j++) {
+      if (i === j) { html += "<td>—</td>"; continue; }
+      const d = hamming64(entidades[i].hash ?? "", entidades[j].hash ?? "");
+      const misma = entidades[i].grupo && entidades[i].grupo === entidades[j].grupo;
+      html += `<td class="num ${d <= umbral ? (misma ? "ok" : "warn") : "info"}">${d}${misma ? " (par)" : ""}</td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</table>";
+  $("caja-cruzadas").innerHTML = html;
+}
+
+async function correrSintetico() {
+  $("btn-sintetico").disabled = true;
+  $("btn-descargar").disabled = true;
+  $("btn-md").disabled = true;
+  $("caja-pares").innerHTML = '<p class="info">Corriendo…</p>';
+  $("caja-cruzadas").innerHTML = '<p class="info">Corriendo…</p>';
+  $("caja-sensibilidad").innerHTML = '<p class="info">Corriendo…</p>';
+  $("fila-thumbs").innerHTML = "";
+  log("Corpus sintético: 3 actas-like distintas (seeds 0xe14d5e01/02/03) × {png, jpg-q92, jpg-q50} — gemelas POR CONSTRUCCIÓN (mismo píxel-set)");
+
+  try {
+    const grupos = [];
+    const seeds = [0xe14d5e01, 0xe14d5e02, 0xe14d5e03];
+    for (let i = 0; i < seeds.length; i++) {
+      const cv = renderizarActa(seeds[i]);
+      const dataUrl = cv.toDataURL("image/jpeg", 0.7);
+      const thumb = document.createElement("img");
+      thumb.src = dataUrl;
+      thumb.className = "thumb";
+      thumb.width = 90;
+      thumb.alt = `acta sintética ${i + 1}`;
+      $("fila-thumbs").appendChild(thumb);
+      const stem = `sintetica-${i + 1}`;
+      const variantes = await dhashDeCanvasVariantes(cv, stem);
+      grupos.push({ stem, variantes, cv });
+      log(`${stem}: ${variantes.map((v) => `${v.variante}=${v.hash ?? "null"} (${v.bytes} B, ${v.msDecode} ms)`).join(" · ")}`);
+    }
+
+    // Pares intra-grupo (gemelas por construcción)
+    const pares = [];
+    for (const g of grupos) {
+      const [a, b, c] = g.variantes;
+      pares.push({ par: g.stem, a: a.variante, b: b.variante, hashA: a.hash, hashB: b.hash, hamming: hamming64(a.hash ?? "", b.hash ?? "") });
+      pares.push({ par: g.stem, a: a.variante, b: c.variante, hashA: a.hash, hashB: c.hash, hamming: hamming64(a.hash ?? "", c.hash ?? "") });
+      pares.push({ par: g.stem, a: b.variante, b: c.variante, hashA: b.hash, hashB: c.hash, hamming: hamming64(b.hash ?? "", c.hash ?? "") });
+    }
+    pintarPares(pares, HAMMING_MAX);
+
+    // Entre actas distintas: base (png) de cada grupo contra TODAS las variantes de los OTROS grupos
+    const entidades = [];
+    for (const g of grupos) for (const v of g.variantes) entidades.push({ etiqueta: `${g.stem}/${v.variante}`, hash: v.hash, grupo: g.stem });
+    pintarCruzadas(entidades, HAMMING_MAX);
+
+    setEstado("Sensibilidad al color (shift lineal por canal — simula HEIC→RGB ≠ JPG→RGB)…");
+    const sens = await sensibilidadColor(grupos[0].cv);
+    $("caja-sensibilidad").innerHTML = `
+      <p class="info">Hamming del dhash contra el hash base (${sens.hashBase}) ante shifts de color crecientes
+      (canal R +δ, G +0.7δ, B +0.4δ — aproximación de un diferencial de decode/γ). Si un shift PEQUEÑO ya
+      rompe el umbral 6, la hipótesis «HEIC→RGB difiere de JPG→RGB» es PLAUSIBLE como causa del escape;
+      si el umbral aguanta shifts grandes, el color probablemente NO es la causa y la hipótesis de ORDEN
+      (carrera encolado — trazas del dueño) gana peso.</p>
+      <table>
+        <tr><th>δ canal R</th><th>hamming vs base</th><th>≤ 6?</th></tr>
+        ${sens.filas.map((f) => `<tr><td class="num">+${f.deltaCanalR}</td><td class="num">${f.hammingVsBase ?? "null"}</td><td class="${(f.hammingVsBase ?? 64) <= HAMMING_MAX ? "ok" : "mal"}">${(f.hammingVsBase ?? 64) <= HAMMING_MAX ? "sí" : "NO"}</td></tr>`).join("")}
+      </table>`;
+    log(`Sensibilidad color: ${sens.filas.map((f) => `+${f.deltaCanalR}→${f.hammingVsBase}`).join(" · ")}`);
+
+    const maxIntra = Math.max(...pares.map((p) => p.hamming));
+    const minInter = Math.min(...entidades.flatMap((e, i) =>
+      entidades.filter((_, j) => e.grupo !== entidades[j].grupo).map((o) => hamming64(e.hash ?? "", o.hash ?? ""))));
+    const mecanismoOk = maxIntra <= HAMMING_MAX;
+
+    ultimoJson = {
+      kit: "e14-bancos-b5-b7-pagnull-v1 (D58) — SOLO EVIDENCIA, CERO PRODUCCIÓN",
+      banco: "B7 — tolerancia dedup heic/jpg (dhash 64-bit de dedup.ts — copia congelada — vía fileToCaptureDataUrl del core)",
+      umbral: HAMMING_MAX,
+      sintetico: {
+        grupos: grupos.map((g) => ({ stem: g.stem, variantes: g.variantes })),
+        paresIntra: pares,
+        resumen: { maxHammingIntraPar: maxIntra, minHammingEntreActas: minInter, mecanismoAtrapaGemelas: mecanismoOk },
+      },
+      sensibilidadColor: sens,
+      reales: hashesReales,
+      hipotesisOrden: {
+        nota: "Si las gemelas reales NO se marcaron (sin traza 'marcada'), es hash/color; si se marcaron y luego cayó 'sin-original reprocesa-completo', es ORDEN (runner llegó antes de que la original tuviera acta — runner.ts L128/L188, store.ts L174-175). Trazas a buscar en capturas del dueño.",
+        trazas: [
+          "[e14] dedup fila=<id> marcada hamming=<d> dupOf=<origen> hash=<hex>",
+          "[e14] dedup fila=<id> dupOf=<origen> reutiliza score=<s> ms=<ms>",
+          "[e14] dedup fila=<id> sin-original reprocesa-completo",
+        ],
+      },
+      fecha: new Date().toISOString(),
+    };
+    window.__benchJson = ultimoJson;
+    $("btn-descargar").disabled = false;
+    $("btn-md").disabled = false;
+    setEstado(`Sintético listo — mecanismo ${mecanismoOk ? "OK (gemelas por construcción caen ≤ 6)" : "FALLA incluso con gemelas por construcción"} · max intra=${maxIntra} · min entre actas=${minInter}. Reales: cargalas con el botón (pendiente del dueño).`, mecanismoOk ? "ok" : "warn");
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    setEstado(`ERROR: ${msg}`, "mal");
+    log(`ERROR: ${msg}`, "mal");
+    console.error(e);
+  } finally {
+    $("btn-sintetico").disabled = false;
+  }
+}
+
+async function correrReales() {
+  if (!hashesReales.length) return;
+  $("btn-reales").disabled = true;
+  setEstado(`dhash de ${hashesReales.length} archivos reales (vía completa del pipeline: fileToCaptureDataUrl → thumb 320 → dhash)…`);
+  try {
+    // agrupar por stem numérico
+    const porStem = new Map();
+    for (const h of hashesReales) {
+      if (!porStem.has(h.stem)) porStem.set(h.stem, []);
+      porStem.get(h.stem).push(h);
+    }
+    const pares = [];
+    for (const [stem, grupo] of porStem) {
+      for (let i = 0; i < grupo.length; i++) {
+        for (let j = i + 1; j < grupo.length; j++) {
+          pares.push({
+            par: stem,
+            a: grupo[i].nombre,
+            b: grupo[j].nombre,
+            hashA: grupo[i].hash,
+            hashB: grupo[j].hash,
+            hamming: hamming64(grupo[i].hash ?? "", grupo[j].hash ?? ""),
+          });
+        }
+      }
+    }
+    pintarPares(pares, HAMMING_MAX);
+    const entidades = hashesReales.map((h) => ({ etiqueta: h.nombre, hash: h.hash, grupo: h.stem }));
+    pintarCruzadas(entidades, HAMMING_MAX);
+    if (ultimoJson) {
+      ultimoJson.realesPares = pares;
+      ultimoJson.realesResumen = {
+        pares: pares.length,
+        escapados: pares.filter((p) => p.hamming > HAMMING_MAX).length,
+        detalle: pares,
+      };
+      window.__benchJson = ultimoJson;
+    }
+    const escapados = pares.filter((p) => p.hamming > HAMMING_MAX).length;
+    setEstado(`Reales listas: ${pares.length} pares, ${escapados} por encima del umbral 6${escapados ? " — ver tabla (hash/color O orden — ver trazas)" : " — el umbral las atrapa"}`, escapados ? "warn" : "ok");
+  } finally {
+    $("btn-reales").disabled = false;
+  }
+}
+
+$("btn-sintetico").addEventListener("click", () => void correrSintetico());
+$("btn-reales").addEventListener("click", () => void correrReales());
+
+const fotos = [];
+$("btn-fotos").addEventListener("click", () => $("input-fotos").click());
+$("input-fotos").addEventListener("change", async (ev) => {
+  for (const f of ev.target.files) fotos.push(f);
+  $("meta").textContent = `${fotos.length} archivos reales cargados — calculando…`;
+  for (const f of fotos) {
+    if (hashesReales.some((h) => h.nombre === f.name)) continue;
+    const t0 = performance.now();
+    const hash = await dhashDeFile(f);
+    hashesReales.push({ nombre: f.name, stem: stemNumerico(f.name), tipo: f.type || "—", bytes: f.size, hash, msDecode: +(performance.now() - t0).toFixed(0) });
+    log(`real ${f.name}: hash=${hash ?? "null"} (${f.size} B, ${hashesReales[hashesReales.length - 1].msDecode} ms)`, hash ? "info" : "warn");
+    $("meta").textContent = `${hashesReales.length} hashes calculados`;
+  }
+  $("btn-reales").disabled = false;
+  $("meta").textContent = `${hashesReales.length} hashes listos — pulsa «CALCULAR DHASH DE LAS REALES» para las tablas`;
+});
+
+function generarMd(j) {
+  const pares = (j.realesPares ?? j.sintetico.paresIntra).map((p) =>
+    `| ${p.par} | ${p.a} | ${p.b} | ${p.hamming} | ${p.hamming <= j.umbral ? "SÍ" : "NO"} |`).join("\n");
+  return `# Banco B7 — tolerancia dedup heic/jpg (KIT e14-bancos-b5-b7-pagnull-v1 — SOLO EVIDENCIA)
+
+- Fecha: ${j.fecha}
+- dhash: copia congelada de \`src/lib/e14/masiva/dedup.ts\` (canvas 9×8, gradiente horizontal, hex 16) sobre la vía del pipeline (\`fileToCaptureDataUrl\` del core → \`hacerThumb\` 320 → dhash)
+- Umbral vigente: \`HAMMING_MAX = ${j.umbral}\`
+
+## Hamming intra-par (jpg vs heic de la misma foto)
+
+| par | a | b | hamming | ≤ ${j.umbral} (el dedup la atraparía)? |
+|---|---|---|---|---|
+${pares}
+
+## Sintético (gemelas por construcción)
+
+- maxHammingIntraPar: ${j.sintetico.resumen.maxHammingIntraPar}
+- minHammingEntreActas: ${j.sintetico.resumen.minHammingEntreActas}
+- mecanismoAtrapaGemelas: ${j.sintetico.resumen.mecanismoAtrapaGemelas}
+
+## Sensibilidad al color (hipótesis HEIC→RGB ≠ JPG→RGB)
+
+| δ canal R | hamming vs base | ≤ ${j.umbral}? |
+|---|---|---|
+${j.sensibilidadColor.filas.map((f) => `| +${f.deltaCanalR} | ${f.hammingVsBase ?? "null"} | ${(f.hammingVsBase ?? 64) <= j.umbral ? "sí" : "NO"} |`).join("\n")}
+
+## Hipótesis ORDEN (kit T2 — alternativa al hash)
+
+${j.hipotesisOrden.nota}
+
+Trazas:
+\`\`\`
+${j.hipotesisOrden.trazas.join("\n")}
+\`\`\`
+`;
+}
+
+$("btn-descargar").addEventListener("click", () => {
+  if (!ultimoJson) return;
+  const blob = new Blob([JSON.stringify(ultimoJson, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bench-dedup-tolerancia-resultado.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("btn-md").addEventListener("click", () => {
+  if (!ultimoJson) return;
+  const blob = new Blob([generarMd(ultimoJson)], { type: "text/markdown" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bench-dedup-tolerancia-resultado.md";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+</script>
+</body>
+</html>
