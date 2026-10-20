@@ -124,6 +124,35 @@ import { anclasDe, elegirMejor, necesitaSegunda } from "./ocr-escalonado";
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
 
+/** KIT e14-masiva-tiempos-v1 (PR-2, prefetch): memo de decode POR INSTANCIA
+ *  de File (WeakMap — GC-friendly, no retiene blobs). El mismo File JAMÁS
+ *  se decodifica dos veces: el prefetch del runner MASIVA
+ *  (precargarDecodeArchivo) oculta el decode de N+1 tras el OCR de N y el
+ *  pipeline de N+1 golpea la memo (~0 ms — AC-P1). TRANSPARENTE para todos
+ *  los flujos existentes: misma promesa, mismo resultado; si el decode
+ *  falla, la entrada sale de la memo y el siguiente intento re-decodifica
+ *  (comportamiento de hoy — kit AC-P2 «jamás bloquea»). */
+const decodeMemo = new WeakMap<File, Promise<string>>();
+
+function decodeArchivoMemo(file: File): Promise<string> {
+  let p = decodeMemo.get(file);
+  if (!p) {
+    p = fileToCaptureDataUrl(file);
+    decodeMemo.set(file, p);
+    void p.catch(() => {
+      if (decodeMemo.get(file) === p) decodeMemo.delete(file);
+    });
+  }
+  return p;
+}
+
+/** KIT e14-masiva-tiempos-v1 (PR-2): precalentar el decode de un archivo
+ *  (runner MASIVA — prefetch de 1 slot durante el OCR de la fila N). Misma
+ *  memo del pipeline: si la fila llega a procesarse, su decode es HIT. */
+export function precargarDecodeArchivo(file: File): Promise<string> {
+  return decodeArchivoMemo(file);
+}
+
 /** Timeout de seguridad global §5 (worker colgado en gama baja). */
 const TIMEOUT_MS = 15_000;
 /** KIT e14-recorte-manual-v1 (T1): presupuesto del RECORTE manual — el warp
@@ -903,7 +932,18 @@ function conRampa<T>(
   emitir: (p: ProgresoAnalisis) => void,
 ): Promise<T> {
   const inicio = performance.now();
+  // FIX (auditoría 2-a #7): autolímite del ramp — si la promesa envuelta
+  // cuelga SIN resolver (worker OpenCV muerto), el intervalo seguía
+  // disparando indefinidamente (un timer fugado por pipeline colgado; el
+  // timeout externo recupera la UI pero no el timer). 20× el estimado es
+  // inalcanzable en operación normal y cubre el peor caso real.
+  let ticks = 0;
+  const maxTicks = Math.ceil((msEstimados * 20) / 140);
   const timer = setInterval(() => {
+    if (++ticks > maxTicks) {
+      clearInterval(timer);
+      return;
+    }
     const f = Math.min(1, (performance.now() - inicio) / msEstimados);
     emitir(evento(f * 0.95));
   }, 140);
@@ -1016,7 +1056,9 @@ export class RealCoreBridge implements E14Bridge {
     const fotoOriginal =
       "archivo" in entrada
         ? await conRampa(
-            fileToCaptureDataUrl(entrada.archivo),
+            // KIT e14-masiva-tiempos-v1 (PR-2): decode con memo POR FILE —
+            // el prefetch del runner MASIVA comparte esta instancia → HIT.
+            decodeArchivoMemo(entrada.archivo),
             700,
             (f) => ({ etapa: "DETECTANDO", progreso: f * 0.5 }),
             emitir,
@@ -1654,6 +1696,14 @@ export class RealCoreBridge implements E14Bridge {
           status: "RECHAZADA",
           rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_TIMEOUT },
           firmas: this.firmasPorStatus(acta.firmas, "RECHAZADA"),
+          // FIX (auditoría 2-a #8): el invariante del gate (RECHAZADA ⇒
+          // clasificación descartada) también en el timeout del recorte —
+          // el spread conservaba una clasificación AUTO previa (p. ej. de
+          // un acta ADVERTENCIA que se re-recortaba) y el título/historial
+          // mostraban mesa/tipo/página de una identificación que el propio
+          // gate acaba de descartar (undefined = sin clasificación, mismo
+          // convenio del contrato Acta).
+          clasificacion: undefined,
         });
       }, RECORTE_TIMEOUT_MS);
 
