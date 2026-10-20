@@ -124,25 +124,29 @@ export function TopBar() {
           </h1>
         )}
         {nube ? (
-          <div
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs ${nube}`}
+          <button
+            type="button"
+            onClick={alternarConexion}
+            aria-pressed={online}
+            aria-label={
+              online
+                ? "En línea — tocar para simular sin conexión"
+                : "Sin conexión — tocar para reconectar"
+            }
             title={
               online
                 ? "En línea — los envíos se transmiten al servidor"
                 : "Sin conexión — los envíos se acumulan en cola local"
             }
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs tap-action transition-colors hover:bg-brand-surfacelight focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60 ${nube}`}
           >
             <StitchCloudCheckIcon className="w-4 h-4" />
             <span className="w-1.5 h-1.5 rounded-full bg-current" aria-hidden />
-          </div>
+          </button>
         ) : (
           <div className="w-10 h-10" aria-hidden />
         )}
       </div>
-      {/* §7.4: la pill alterna la conexión (accesible por teclado). */}
-      <button type="button" aria-hidden tabIndex={-1} className="sr-only" onClick={alternarConexion}>
-        Alternar conexión
-      </button>
     </header>
   );
 }

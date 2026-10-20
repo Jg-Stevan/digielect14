@@ -26,6 +26,16 @@ import {
   type ClasificacionE14,
 } from "./clasificador";
 import { cargarDivipol, mesasDePuesto } from "./divipol";
+// KIT L6: persistencia de la jornada (IDB vanilla — mismo patrón de la cola
+// masiva) + derivación del guion real (fix M10).
+import {
+  cargarJornada,
+  guardarActaEnRevision,
+  guardarJornada,
+  leerActaEnRevision,
+  mesasRealesDe,
+  TOPE_HISTORIAL,
+} from "./jornada";
 import {
   COLA_OFFLINE_INICIAL,
   SOLICITUDES_RESCANEO_INICIAL,
@@ -49,6 +59,14 @@ const MSG_RECORTE_FALLIDO = "NO SE PUDO RECORTAR — INTENTA DE NUEVO";
  *  no duplica. En memoria de sesión: se resetea al recargar, igual que el
  *  historial (kit §3-T5 — PROHIBIDO persistir). */
 const contadosNoEnvio = new Set<string>();
+
+/** FIX (auditoría 2-a #10): contador de ids de historial — dos filas creadas
+ *  en el MISMO milisegundo (envío auto + escalación, ráfaga MASIVA)
+ *  colisionaban como React keys. Mismo patrón del contador de construirActa. */
+let contadorHistorial = 0;
+function idHistorial(): string {
+  return `h-${Date.now()}-${contadorHistorial++}`;
+}
 
 /** §D3 (SPEC-e14-simulacion-scores): banda de un chip de calidad del mock.
  *  Los ids SON los del mock (ScanView §5) y el mapeo dueño es fijo:
@@ -239,6 +257,16 @@ interface E14Store {
    * SIMULACIÓN también rota real).
    */
   rotarFoto: () => Promise<void>;
+  /** KIT L6: restaura la jornada persistida al arrancar (llamado UNA vez
+   *  desde el shell) — estado liviano + mesas reales derivadas + acta en
+   *  revisión si quedó una a medias. Idempotente; sin registro → arranque
+   *  fresco (seed demo, como hoy). */
+  arrancarJornada: () => Promise<void>;
+  /** KIT L6: REINICIAR JORNADA — borra TODO el turno (mesas archivadas,
+   *  historial, contadores, motivos) + la cola MASIVA + el acta en
+   *  revisión, y deja la app como recién instalada (nuevo día de
+   *  votación). La confirmación de 2 toques vive en la UI (RESUMEN). */
+  reiniciarJornada: () => Promise<void>;
 }
 
 /** Siguiente página a escanear: EN_PROCESO > PENDIENTE > RESCANEO (por mesa). */
@@ -383,9 +411,17 @@ function archivarHueco(
     nuevas: {
       ...archivadas,
       [clave]: {
-        // hueco duplicado → REEMPLAZA (§G.4.1): la foto más reciente gana el hueco.
+        // hueco duplicado → REEMPLAZA (§G.4.1): la foto más reciente gana el
+        // hueco. FIX (auditoría 2-a C2): el re-archivo también reemplaza el
+        // ESTADO del hueco (AC-RC5) — antes se conservaban previa.huecos
+        // intactos y un RESCANEO ⚠ quedaba congelado para siempre (la mesa
+        // jamás cerraba aunque el re-escaneo saliera ÓPTIMO).
         clasificacion: clasif,
-        huecos: yaEstaba ? previa.huecos : [...previa.huecos, hueco],
+        huecos: yaEstaba
+          ? previa.huecos.map((h) =>
+              h.tipo === hueco.tipo && h.pagina === hueco.pagina ? hueco : h,
+            )
+          : [...previa.huecos, hueco],
       },
     },
     duplicado: yaEstaba,
@@ -404,6 +440,18 @@ function hashMock(): string {
  *  rotación rápida es async y un doble tap giraría 180°). */
 let rotandoFotoEnVuelo = false;
 
+// ---------- KIT L6: estado del PERSISTER (módulo — declarado ANTES del
+// create para excluir cualquier TDZ con HMR re-evaluando el módulo) ----------
+let arrancada = false; // idempotencia de arrancarJornada (doble montaje incl.)
+let persisterActivo = false; // gate multi-instancia (se abre al terminar arrancarJornada)
+// FIX (hallazgo E2E #2): arranca en null (NO undefined) — igual que el
+// actaActual inicial del store. Con undefined, el PRIMER set del arranque
+// (ScanView montando, antes de que arrancarJornada lea el slot) disparaba
+// la suscripción con actaActual=null ≠ undefined → limpiaba el slot del
+// acta en revisión ANTES de poder restaurarlo (la recarga perdía el acta).
+let ultimaActaPersistida: Acta | null | undefined = null;
+let ultimoEstadoJson = "";
+
 export const useE14Store = create<E14Store>((set, get) => {
   const bridge = getBridge();
 
@@ -416,7 +464,7 @@ export const useE14Store = create<E14Store>((set, get) => {
     const actaFuente = actaEnvio ?? actaActual;
     const hora = bridge.horaHistorial();
     const fila: HistorialRow = {
-      id: `h-${Date.now()}`,
+      id: idHistorial(),
       titulo: tituloPagina,
       estado: "ENVIADO",
       hora,
@@ -429,20 +477,26 @@ export const useE14Store = create<E14Store>((set, get) => {
       colaOffline += 1;
       hash = "EN COLA";
     }
-    const mesasActualizadas = paginaObjetivo
-      ? mesas.map((m) =>
-          m.id === paginaObjetivo.mesaId
-            ? recalcularMesa({
-                ...m,
-                paginas: m.paginas.map((p) =>
-                  p.tipo === paginaObjetivo.tipo && p.pagina === paginaObjetivo.pagina
-                    ? { ...p, estado: "OK" }
-                    : p,
-                ),
-              })
-            : m,
-        )
-      : mesas;
+    // FIX M1 (auditoría 2-a/2-c): paginaObjetivo SOLO del flujo NORMAL (sin
+    // actaEnvio). El objetivo del escaneo individual jamás se resetea a null
+    // tras una captura — un envío MASIVA posterior lo aplicaba sobre `mesas`
+    // marcando OK una página que NUNCA se transmitió (el comentario del
+    // runner lo prometía intacto y el código no lo cumplía).
+    const mesasActualizadas =
+      !actaEnvio && paginaObjetivo
+        ? mesas.map((m) =>
+            m.id === paginaObjetivo.mesaId
+              ? recalcularMesa({
+                  ...m,
+                  paginas: m.paginas.map((p) =>
+                    p.tipo === paginaObjetivo.tipo && p.pagina === paginaObjetivo.pagina
+                      ? { ...p, estado: "OK" }
+                      : p,
+                  ),
+                })
+              : m,
+          )
+        : mesas;
     // Fase B (§6): acta con clasificación AUTO (gate o panel) → archiva su
     // hueco. Idempotente: si el panel ya la archivó, el reemplazo es
     // silencioso (mismo acta, mismos datos).
@@ -548,10 +602,33 @@ export const useE14Store = create<E14Store>((set, get) => {
     // — AC-SIM2). Sin puesto real o sin t DIVIPOL → seed demo (como hoy).
     // APAGAR → solo apaga. Overlay de vista (Opción A): SOLO mesas/
     // simCompleta/simUltima — D6 (jamás archivadas/puestoActual/historial).
+    // FIX M10 (auditoría 2-a, kit L6): APAGAR ahora RESTAURA el guion REAL
+    // (derivado de archivadas+puestoActual) — antes el progreso FALSO del
+    // SIM quedaba quemado en `mesas` (todas OK) y `proximaPagina` devolvía
+    // null para el resto de la sesión: todo escaneo real perdía página
+    // objetivo y RESUMEN mostraba el avance inventado como real.
     alternarModoSimulacion: () => {
       const encender = !get().modoSimulacion;
       if (!encender) {
         set({ modoSimulacion: false });
+        const puesto = get().puestoActual;
+        if (puesto) {
+          const [dep, mun, zon, std] = puesto.clave.split("-");
+          void cargarDivipol()
+            .then((base) => {
+              const total = mesasDePuesto(base, dep, mun, zon, std);
+              // Solo si sigue APAGADO (no re-montó el guion SIM debajo).
+              if (total && !get().modoSimulacion) {
+                set({ mesas: mesasRealesDe(get().archivadas, puesto, total) });
+              }
+            })
+            .catch(() => {
+              /* sin base → mesas queda como esté (degradación honesta) */
+            });
+        } else {
+          // Sin puesto real → guion demo FRESCO (mismo estado de arranque).
+          set({ mesas: mesasIniciales() });
+        }
         return;
       }
       // Puesto demo INMEDIATO (la vista nunca queda vacía mientras carga DIVIPOL).
@@ -622,6 +699,13 @@ export const useE14Store = create<E14Store>((set, get) => {
     },
 
     dispararEscaneo: async (intentoParam?, sim?) => {
+      // FIX M4 (auditoría 2-b): guard IN-FLIGHT — un disparo durante el
+      // análisis en curso (IMPORTAR mientras takePhoto vuela hasta 8 s,
+      // doble tap del obturador, el timeout de despacharCaptura llegando
+      // tarde) lanzaba un 2º pipeline concurrente: doble OCR compitiendo
+      // por el wasm, actasSesion +2. La vista "analizando" se setea
+      // SÍNCRONAMENTE al entrar → el guard cierra la carrera.
+      if (get().vista === "analizando") return;
       const { mesas, fuente, archivoPendiente, framePendiente, actaActual: previa } = get();
       // §D3 (SPEC-e14-simulacion-scores): un chip SIEMPRE corre la fuente
       // SIMULACION con el asset fijo de su banda + score inyectado (el bridge
@@ -667,6 +751,16 @@ export const useE14Store = create<E14Store>((set, get) => {
         // KIT e14-carga-masiva-v1 (T3.4): una captura nueva NUNCA es de MASIVA.
         masivaOrigen: false,
       });
+      // FIX M12 (auditoría 2-c): AUTO-PAUSA del runner MASIVA ante una
+      // captura INDIVIDUAL — dos pipelines corriendo compiten por el wasm
+      // mono-hilo (D45 secuencial estricto) y el escaneo interactivo manda.
+      // Import DINÁMICO: runner.ts importa este store (evita el ciclo).
+      // Fire-and-forget idempotente (pausarRunner solo levanta stopFlag).
+      void import("./masiva/runner")
+        .then((m) => m.pausarRunner())
+        .catch(() => {
+          /* módulo no cargado → no hay runner vivo */
+        });
       try {
         const acta = await bridge.escanearActa({
           objetivo,
@@ -695,15 +789,20 @@ export const useE14Store = create<E14Store>((set, get) => {
         // estado REVISIÓN HUMANA de la REVISIÓN (redesign-stitch §4.3).
         if (acta.status === "EN_REVISION_HUMANA" && intento >= acta.maxIntentos) {
           const fila: HistorialRow = {
-            id: `h-${Date.now()}`,
+            id: idHistorial(),
             titulo: tituloPaginaActual(),
             estado: "REVISION_HUMANA",
             hora: bridge.horaHistorial(),
           };
           set({ historial: [fila, ...get().historial] });
         }
-      } catch {
-        // Manejo de error del pipeline (§7 store): nunca quedar en analizando.
+      } catch (err) {
+        // FIX M3 (auditoría 2-a): el fallo del pipeline deja de ser mudo —
+        // mismo patrón del kit e14-recorte-manual-v1 (T2): razonable en
+        // consola. La UI vuelve al visor (los guards de entrada ya cubren
+        // lo previsible; esto cubre lo imprevisto: asset SIM caído, decode
+        // de archivo corrupto, video no listo).
+        console.error("[e14] dispararEscaneo falló:", err);
         set({ vista: "escanear", progresoAnalisis: null, analisisResuelto: false });
       }
     },
@@ -735,7 +834,7 @@ export const useE14Store = create<E14Store>((set, get) => {
       get().contarMotivoNoEnvioActa(actaActual);
       if (actaActual.status === "RECHAZADA") {
         const fila: HistorialRow = {
-          id: `h-${Date.now()}`,
+          id: idHistorial(),
           titulo: tituloPaginaActual(),
           estado: "RESCANEO_REQUERIDO",
           hora: bridge.horaHistorial(),
@@ -774,8 +873,22 @@ export const useE14Store = create<E14Store>((set, get) => {
     },
 
     repetirFoto: () => {
-      const { actaActual } = get();
-      const intento = (actaActual?.intento ?? 0) + 1;
+      const { actaActual: previa } = get();
+      // FIX M2 (auditoría 2-a): §7 — el ciclo de repetición CIERRA con
+      // ADVERTENCIA/ENVIADA/OPTIMA/contingencia agotada → repetir desde ahí
+      // abre ciclo NUEVO (intento 1). Solo RECHAZADA (y EN_REVISION_HUMANA
+      // «repetir-primero» bajo el tope) CONTINÚA el ciclo: intento+1 con
+      // TOPE maxIntentos. Antes un intento explícito sin tope fabricaba
+      // «INTENTO 5 DE 4» + una fila REVISION_HUMANA nueva por cada intento
+      // extra (dispararEscaneo L696 cree que es contingencia C4).
+      const continuaCiclo =
+        previa &&
+        (previa.status === "RECHAZADA" ||
+          (previa.status === "EN_REVISION_HUMANA" &&
+            previa.intento < previa.maxIntentos));
+      const intento = continuaCiclo
+        ? Math.min((previa?.intento ?? 0) + 1, previa?.maxIntentos ?? 4)
+        : 1;
       void get().dispararEscaneo(intento);
     },
 
@@ -799,7 +912,7 @@ export const useE14Store = create<E14Store>((set, get) => {
       // (RECHAZADA). ENVIADA/OPTIMA/EN_RH: no-op.
       if (!acta || (acta.status !== "ADVERTENCIA" && acta.status !== "RECHAZADA")) return;
       const fila: HistorialRow = {
-        id: `h-${Date.now()}`,
+        id: idHistorial(),
         titulo: tituloPaginaActual(),
         estado: "REVISION_HUMANA",
         hora: bridge.horaHistorial(),
@@ -850,7 +963,10 @@ export const useE14Store = create<E14Store>((set, get) => {
       if (!actaActual?.fotoOriginal) {
         return false;
       }
-      if (get().recortando) return false;
+      // FIX M5 (auditoría 2-b): guard SIMÉTRICO — un upgrade silencioso en
+      // vuelo (revelando, ~15 s) compite por el wasm y su resolve tardío
+      // sobrescribiría el acta recortada (mismo patrón que mejorarFotoActa).
+      if (get().recortando || get().revelando) return false;
       // KIT e14-recorte-manual-v1 (T2): cada intento NACE sin error previo.
       set({ recortando: true, progresoAnalisis: null, errorRecorte: null });
       try {
@@ -951,6 +1067,11 @@ export const useE14Store = create<E14Store>((set, get) => {
         // F2/D36: revelar = SOLO processImage (sin re-OCR/re-calidad — igual
         // que setFilterOnPage del core); el acta conserva identidad por spread.
         const acta = await bridge.revelar(actaActual, filtro);
+        // FIX M5 (auditoría 2-b): re-validación de identidad al resolver —
+        // un recorte aplicado durante el revelado (~1-3 s) NO debe ser
+        // sobrescrito por la foto SIN recorte de este resolve (patrón del
+        // upgrade silencioso del lab, L1008 del propio store).
+        if (get().actaActual !== actaActual) return;
         set({ actaActual: acta });
         // El feedback persistente es la PROPIA foto re-velada + el chip del
         // filtro activo en el sheet (§4.3 del redesign-stitch — sin toast).
@@ -1005,13 +1126,17 @@ export const useE14Store = create<E14Store>((set, get) => {
         if (acta.status === "OPTIMA") {
           const hora = bridge.horaEnvio();
           registrarEnvio(tituloPaginaActual());
+          // FIX M7 (auditoría 2-b): NO teletransportar — el upgrade vuela
+          // ~15 s en segundo plano; si el usuario ya navegó a ACTAS/RESUMEN
+          // el acta se actualiza igual pero la vista NO se roba (el banner
+          // de ENVIADA aparece cuando vuelva a REVISIÓN). Sin key `vista`:
+          // cada vista conserva la suya.
           set({
             actaActual: {
               ...get().actaActual!,
               status: "ENVIADA",
               enviadoAutomaticamente: hora,
             },
-            vista: "revision",
           });
         }
       } catch {
@@ -1070,5 +1195,144 @@ export const useE14Store = create<E14Store>((set, get) => {
         /* registro ausente/IDB caído → la bandeja queda como está (kit §3) */
       }
     },
+
+    // ---------- KIT L6: persistencia de la jornada ----------
+
+    arrancarJornada: async () => {
+      if (arrancada) return; // idempotente (StrictMode double-mount incl.)
+      arrancada = true;
+      try {
+        const j = await cargarJornada();
+        if (!j) return; // arranque fresco (seed demo, como hoy)
+        // El operador pudo disparar un escaneo antes de que la carga
+        // resolviera (IDB lento): su actividad MANDA — no se pisa nada.
+        if (get().actasSesion > 0 || get().actaActual) return;
+        set({
+          archivadas: j.archivadas,
+          puestoActual: j.puestoActual,
+          historial: j.historial,
+          completadas: j.completadas,
+          asignadasHoy: Math.max(j.asignadasHoy, j.completadas),
+          actasSesion: j.actasSesion,
+          colaOffline: j.colaOffline,
+          solicitudesRescaneo: j.solicitudesRescaneo,
+          motivosNoEnvio: j.motivosNoEnvio,
+        });
+        // mesas: DERIVADAS del puesto real (fix M10 — jamás el guion SIM).
+        const puesto = j.puestoActual;
+        if (puesto && !get().modoSimulacion) {
+          const [dep, mun, zon, std] = puesto.clave.split("-");
+          try {
+            const base = await cargarDivipol();
+            const total = mesasDePuesto(base, dep, mun, zon, std);
+            if (total && !get().modoSimulacion) {
+              set({ mesas: mesasRealesDe(j.archivadas, puesto, total) });
+            }
+          } catch {
+            /* sin base → mesas queda en seed (degradación honesta) */
+          }
+        }
+        // Acta que quedó a mitad de REVISIÓN (crash/recarga) — se restaura
+        // con TODO: recorte, filtros y envío manual siguen intactos.
+        const acta = await leerActaEnRevision();
+        if (acta && !get().actaActual && get().actasSesion === j.actasSesion) {
+          set({ actaActual: acta, vista: "revision" });
+        }
+      } catch {
+        /* IDB caída → arranque fresco (la jornada vive en RAM, honesto) */
+      } finally {
+        // FIX (hallazgo E2E #3 — multi-instancia): el persister NO escribe
+        // hasta que el arranque TERMINÓ. Antes, una segunda pestaña/instancia
+        // que booteaba fresca sobrescribía la jornada persistida con su seed
+        // ANTES de que cargarJornada pudiera restaurarla (la recarga en la
+        // pestaña original perdía todo). Con el gate: toda instancia PRIMERO
+        // restaura (o confirma que no hay nada) y solo entonces persiste.
+        persisterActivo = true;
+      }
+    },
+
+    reiniciarJornada: async () => {
+      // El ciclo de intentos/estados en vuelo no sobrevive al reinicio.
+      contadosNoEnvio.clear();
+      set({
+        vista: "escanear",
+        actaActual: null,
+        paginaObjetivo: null,
+        progresoAnalisis: null,
+        analisisResuelto: false,
+        recortando: false,
+        errorRecorte: null,
+        revelando: false,
+        // Jornada REAL a cero (nuevo día de votación).
+        archivadas: {},
+        puestoActual: null,
+        historial: historialInicial(),
+        completadas: progresoInicial().completadas,
+        asignadasHoy: progresoInicial().asignadasHoy,
+        actasSesion: 0,
+        colaOffline: COLA_OFFLINE_INICIAL,
+        solicitudesRescaneo: SOLICITUDES_RESCANEO_INICIAL,
+        motivosNoEnvio: {},
+        // Overlays y guiones también nacen frescos.
+        mesas: mesasIniciales(),
+        modoSimulacion: false,
+        simCompleta: false,
+        simUltima: null,
+        masivaOrigen: false,
+      });
+      // Slot del acta en revisión FUERA (el estado liviano se re-persiste
+      // fresco por el suscriptor de abajo).
+      void guardarActaEnRevision(null);
+      // La cola MASIVA también es de la jornada: pausa + VACIAR (su propio
+      // mecanismo, con sus guards — imports dinámicos por el ciclo de módulos).
+      void import("./masiva/runner")
+        .then((m) => m.pausarRunner())
+        .catch(() => undefined);
+      void import("./masiva/store")
+        .then((m) => m.useMasivaStore.getState().vaciar())
+        .catch(() => undefined);
+    },
   };
 });
+
+// ---------- KIT L6: persistencia por SUSCRIPCIÓN (una sola fuente) ----------
+// El estado liviano se persiste en cada cambio REAL (comparación por JSON —
+// el tick del SIM solo toca mesas/simUltima/simCompleta, que NO están en el
+// slice → cero escrituras espurias, D6 intacto). El acta en revisión se
+// persiste por IDENTIDAD de referencia (stringify de ~14 MB en cada set
+// sería prohibitivo — el cambio de referencia es el evento exacto).
+// SIMULACIÓN y origen MASIVA jamás ocupan el slot del acta.
+if (typeof window !== "undefined" && typeof indexedDB !== "undefined") {
+  useE14Store.subscribe((s) => {
+    // Gate multi-instancia: sin arranque completado no se persiste NADA
+    // (ni el estado ni el slot del acta) — ver comentario del finally.
+    if (!persisterActivo) return;
+    const estado = {
+      version: 1,
+      archivadas: s.archivadas,
+      puestoActual: s.puestoActual,
+      historial: s.historial.slice(0, TOPE_HISTORIAL),
+      completadas: s.completadas,
+      asignadasHoy: s.asignadasHoy,
+      actasSesion: s.actasSesion,
+      colaOffline: s.colaOffline,
+      solicitudesRescaneo: s.solicitudesRescaneo,
+      motivosNoEnvio: s.motivosNoEnvio,
+    };
+    const json = JSON.stringify(estado);
+    if (json !== ultimoEstadoJson) {
+      ultimoEstadoJson = json;
+      void guardarJornada(estado);
+    }
+    if (s.actaActual !== ultimaActaPersistida) {
+      ultimaActaPersistida = s.actaActual;
+      const persistible =
+        s.actaActual &&
+        s.actaActual.fuente !== "SIMULACION" && // chips/demo jamás ocupan el slot
+        !s.masivaOrigen // la cola MASIVA ya persiste las suyas
+          ? s.actaActual
+          : null;
+      void guardarActaEnRevision(persistible);
+    }
+  });
+}
