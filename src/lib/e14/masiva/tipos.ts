@@ -74,30 +74,41 @@ export function paginaDeActa(acta: Acta): string {
   return acta.pagina ? `${acta.pagina.index}/${acta.pagina.total}` : "-/-";
 }
 
-/** D59 — KIT e14-info-acta-filas-v1 (T1): título compuesto con la info
- *  reconocida del acta (idea del dueño, mockup Stitch corregido) —
- *  "335 EGIPTO - EL CAIRO CONSULADO - DELEGADOS - MESA 001 - PÁG 1 DE 2".
- *  NO exige pipeline nuevo: todos los trozos YA existen en
- *  Acta.clasificacion (ClasificacionE14): departamento {codigo,nombre} ·
- *  puesto.nombre (fallback: acta.titulo) · tipo · mesa (number, zero-pad 3
- *  — mismo estilo del chip REVISIÓN «MESA 012»; fallback: ubicacion.mesa
- *  numérica) · pagina {index,total} (fallback: acta.pagina).
- *  string|null: null = sin datos → la fila solo pinta el nombre de archivo
- *  (honestidad del repo: jamás inventar — PÁG «-/-» cuando es null). */
+/** D59 — KIT e14-info-acta-filas-v1 (T1) · REVISIÓN D59REV — KIT
+ *  e14-titulo-compacto-v1: título compuesto con la info reconocida del acta,
+ *  EXACTAMENTE como el diseño (decisión textual del dueño: «Según el diseño
+ *  solo aparece el país-puesto, mesa, d/t, pág. Déjalo así, porque no cabe
+ *  tanta info en el espacio»):
+ *
+ *  "{dep.codigo} {dep.nombre} - {puesto.nombre} - {tipo} - MESA {nnn} - PAG {i} DE {t}"
+ *
+ *  (unido con " - ", en mayúsculas). Contrato CONGELADO (D59REV §2):
+ *  · Campos SOLO de ClasificacionE14 — único fallback honesto: puesto →
+ *    acta.titulo (tabla §0 del kit). Se ELIMINAN los fallbacks
+ *    ubicacion.mesa/acta.pagina del D59 (no están en el diseño).
+ *  · Campo ausente → se OMITE ese trozo y sus guiones sobrantes (jamás
+ *    «—», «N/A» ni vacíos). Prohibido AGREGAR nada (T2): sin municipio,
+ *    score, nivel, tiempos, «ACTA», ni segundo renglón.
+ *  · SIN clasificacion → null → la fila solo pinta el nombre de archivo
+ *    (mata el leak de la plantilla ACTA_MOCK «ROMA - CONSULADO» del D59,
+ *    hallazgo §2 de su REPORTE).
+ *  · PAG solo si hay index Y total, SIN tilde («PAG 1 DE 2» — mockup).
+ *  · Mesa zero-pad 3 («MESA 001», mismo estilo del chip REVISIÓN).
+ *  · La fila lo pinta con truncate + title= (MasivaView D59 T4 intacto). */
 export function tituloDeActa(acta: Acta): string | null {
   const c = acta.clasificacion;
+  if (!c) return null; // D59REV: sin clasificación NUNCA hay título (honestidad)
   const partes: string[] = [];
-  const depto = c?.departamento
+  const depto = c.departamento
     ? [c.departamento.codigo, c.departamento.nombre].filter(Boolean).join(" ").trim()
     : null;
   if (depto) partes.push(depto);
-  const puesto = c?.puesto?.nombre?.trim() || acta.titulo?.trim() || null;
+  const puesto = c.puesto?.nombre?.trim() || acta.titulo?.trim() || null;
   if (puesto) partes.push(puesto);
-  if (c?.tipo) partes.push(c.tipo);
-  const mesa = c?.mesa ?? (/^\d+$/.test(acta.ubicacion?.mesa ?? "") ? Number(acta.ubicacion.mesa) : null);
-  if (mesa != null) partes.push(`MESA ${String(mesa).padStart(3, "0")}`);
-  const pag = c?.pagina ?? acta.pagina;
-  if (pag) partes.push(`PÁG ${pag.index} DE ${pag.total}`);
+  if (c.tipo) partes.push(c.tipo);
+  if (c.mesa != null) partes.push(`MESA ${String(c.mesa).padStart(3, "0")}`);
+  if (c.pagina && c.pagina.index != null && c.pagina.total != null)
+    partes.push(`PAG ${c.pagina.index} DE ${c.pagina.total}`);
   const t = partes.join(" - ").toUpperCase();
-  return t.length > 0 ? t : null; // sin clasificación ni título → null
+  return t.length > 0 ? t : null;
 }
