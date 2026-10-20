@@ -242,6 +242,30 @@ Mandato: «8 de las 16 actas del informe eran duplicados (.heic+.jpg) — cada u
 - [x] T6 — Docs: REPORTE (evidencia verbatim + 3 desviaciones documentadas) + D52 + AGENTS + worklog.
 - [ ] Del dueño: merge PR-1 → PR-2 (apilada) · AC-B1 con sus gemelas reales .heic+.jpg en su equipo · medir el ahorro B5 con HEIC reales (aquí jpg 0.3-0.5 s/acta ocultos; HEIC esperado 1-2 s).
 
+## INSTRUMENTOS-ESPERA — e14-instrumentos-espera-v1 (2026-10-20, AGENTE 2): instrumentos de diagnóstico ADITIVOS (D57)
+
+Problema: informe 20/10 07:42 (17 actas, 17 ENVIADAS) con outliers sin explicar — `171125.heic` 55.6 s con OCR 5.2 s y proceso 3.0 s (~47 s sin atribuir), mismo patrón en 37.6 s y 27.0 s. Hipótesis no discriminables con el informe actual: espera en cola, probe de orientación o decode HEIC. Además: 3 avisos `Canvas2D … willReadFrequently` en `handleWarp`/`handleEnhance` del worker.
+
+- [x] T1 — `esperaMs` (cola → inicio del pipeline): capturado en `masiva/runner.ts` JUSTO ANTES de `escanearActa` (`tInicio − fila.agregadaEn`, ≥0) y parcheado INMUTABLEMENTE en el diagnóstico del desenlace; `tiempos.esperaMs?` en types.ts — SOLO masiva lo llena.
+- [x] T2 — `orientacionProbeMs` en el diagnóstico: `probe.ms` persistido en los 2 call-sites de `probeOrientacion` (escaneo + recorte manual), asignación defensiva (jamás lanza; sin diagnóstico → se omite) — la traza de consola D51 ahora es permanente en la ficha.
+- [x] T3 — informe ADITIVO: `esperaMs` en `mediosTiempos`; txt línea nueva «- Espera media en cola: Xms (p50 Yms) — pipeline-real ≈ total − espera»; json `tiemposMediosMs.esperaMs` + por-acta `tiempos.esperaMs` y `orientacionProbeMs` cuando existan. Campos viejos sin cambio de forma (informes previos siguen parseando).
+- [x] T4 — `willReadFrequently: true` en los 5 `getContext("2d")` de `detection-worker.js` (3 del canvas COMPARTIDO detect/warp/enhance — el atributo debe estar en el PRIMERO que crea el contexto — + 2 canvas de salida, inofensivo).
+- [x] Gates: tsc 0 · lint 0 · build OK · `git diff --name-status main` = EXACTAMENTE types.ts (+2 opcionales), runner.ts, informe.ts, scanner-core-bridge.ts (4 regiones aditivas), detection-worker.js, docs — prohibidos (orientacion.ts, ocr/**, dedup.ts, store.ts, sw.js) SIN tocar. CI head: **Quality Gate ✅ · Vercel ✅ · Worker parity ❌ ESPERADO** — el gate exige byte-paridad con el worker del lab `web-scanner` (main), que aún no trae `willReadFrequently`; T4 es mandatario del kit (REPORTE §9: ruta A espejar el cambio en el lab / ruta B sync futuro — precedente `bbc4b01`/`6172456`).
+- [x] T5 — Docs: REPORTE + D57 + esta entrada + worklog.
+- [x] PR DRAFT con `D57` en el título (merge SOLO del dueño).
+- [ ] Del dueño: decidir la ruta del gate Worker parity (A: espejar las 5 líneas en `web-scanner` main → verde sin tocar esta rama / B: sync futuro) · correr MASIVA con 3-4 fotos reales → verificar `esperaMs` (media/p50; la última fila acumula la espera de las anteriores) + `orientacionProbeMs` por acta · consola en escaneo real SIN avisos Canvas2D · desenlace de acta sana idéntico a main · leer outliers con **pipeline-real ≈ totalMs − esperaMs** (lo que quede sin atribuir ≈ probe [queda en su campo] + decode).
+## ORIENTACION-PRESUPUESTO — e14-orientacion-presupuesto-v1 (2026-10-20): el probe que sí llega en hardware lento (D56)
+
+Mandato P0: «es lo único que separa a la flota HP del resultado bueno del informe 20/10» — en la HP 4 cores el probe (D51) agotaba su presupuesto de 4000 ms con el baseline a 0° (det1920 3037 ms + rec0 ~3000 ms) y jamás sondeaba un desafiante → acta rotada 90° = 42 s de OCR vertical = 4.9 RECHAZADA.
+
+- [x] T1 — Atajo de lectura-sana (`orientacion.ts`): scores[0] no-DEBIL → break (la sana sale en ~4 s, sin desafiantes).
+- [x] T2 — det del probe a `DET_CAP_RAPIDO` (`rapidocr.ts`, única edición: `inferDet` de `rapidOcrCropsOrientacion`): 3037 → ~1183 ms en la HP (banco B3).
+- [x] T3 — `PROBE_BUDGET_MS` 4000 → 12000 (solo lo pagan actas DEBIL a 0°; caso roto ~10.2 s < 12 s).
+- [x] T4 — Traza aditiva final `cortes=sana|presupuesto|vacio|completo` (contrato D51 intacto).
+- [x] T5 — Docs: REPORTE + D56 + ROADMAP + worklog.
+- [x] Validación (actas REALES KIT 399): rotada 90° → `aplicado=1 cortes=completo` + 8.5 AUTO cod:710003993010102 · sana → `cortes=sana aplicado=0 ms=3965` (A/B main: 5315 ms sin campo — −25%, desenlace idéntico) · SIM 8.2/7.0/4.3 con 0 trazas · lint 0 · tsc 0 · build OK.
+- [ ] Del dueño: AC-5-D56 en SU flota (HP 4 cores — traza `cortes=` y acta rotada ≥ 7) · merge.
+
 ## BANCOS-EVIDENCIA — e14-bancos-b5-b7-pagnull-v1 (2026-10-20, D58): B5 det-960 + B7 dedup-tolerancia + forense pag=None — SOLO EVIDENCIA
 
 Mandato: informe del dueño 20/10 07:42 (17 actas, 17 ENVIADAS, 0 rechazos) con 3 hallazgos: dedup no atrapó 2 pares heic/jpg (171454, 171446 — ambos a pipeline completo), ¿pasada 1 a 960?, y `171446` ENVIADA con `paginaIndex = null` (score 8.5).
