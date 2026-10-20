@@ -22,6 +22,8 @@ import { precargarDecodeArchivo, type OpcionesEscaneoConTimeout } from "../scann
 import { useE14Store } from "../store";
 import { guardarRegistro, leerRegistro } from "./cola";
 import { useMasivaStore } from "./store";
+import { clasificarOrigenDeArchivo } from "./origen"; // D63-A — detector de origen (kit e63a-origen-escaneo-v1)
+import { preProcesoEscaneo } from "./deskew"; // D63-B — pre-proceso de escaneos (kit e63b-deskew-escaneo-v1)
 import { paginaDeActa, tituloDeActa, type FilaMasiva, type RegistroMasiva } from "./tipos";
 import type { ProgresoAnalisis } from "../types";
 
@@ -208,6 +210,32 @@ async function procesarUno(
     // SIEMPRE (identidad de desenlace intacta, AC-P3).
     const archivoPipeline = archivoPredecode ?? archivo;
 
+    // D63-A — KIT e63a-origen-escaneo-v1 (punto ÚNICO del kit, T1/T2):
+    // origen del archivo — detector heurístico conservador (origen.ts),
+    // calculado UNA vez por fila AL INICIO del pipeline. SOLO visibilidad:
+    // no alimenta score/gate (calibra D63-B/D63-C). Falla → null (el
+    // detector jamás tumba el pipeline). Traza aditiva propia (contrato
+    // D51: solo-AÑADIR) + campos en el diagnóstico (parche D57 de abajo).
+    const veredictoOrigen = await clasificarOrigenDeArchivo(archivoPipeline);
+    console.info(
+      `[e14] origen=${veredictoOrigen.origen ?? "null"} senales=${veredictoOrigen.senales ?? "null"}`,
+    );
+
+    // D63-B — KIT e63b-deskew-escaneo-v1 (bloque de PRE-PROCESO, T2/T3):
+    // SOLO escaneos (origen del detector D63-A) — detección de ángulo sobre
+    // la banda del encabezado + deskew selectivo (|θ| ≥ 0.3° y ≤ 10°) con
+    // resample de alta calidad + limpieza suave del punto blanco. Fotos y
+    // escaneos rectos+limpios pasan el archivo ORIGINAL byte-idéntico (memo
+    // de decode del bridge intacta — cero cambios). El pipeline consume el
+    // master corregido (T2.2); el original duerme en IDB sin cambios.
+    const preProceso = await preProcesoEscaneo(archivoPipeline, veredictoOrigen.origen);
+    if (veredictoOrigen.origen === "escaneo") {
+      console.info(
+        `[e14] preproceso skewGrados=${preProceso.skewGrados ?? "null"} deskewMs=${preProceso.deskewMs ?? "null"} limpiezaMs=${preProceso.limpiezaMs ?? "null"} limpieza=${preProceso.limpieza} aplicado=${preProceso.aplicado} decodeMs=${preProceso.decodeMs ?? "null"}`,
+      );
+    }
+    const archivoCorregido = preProceso.archivo;
+
     // T4: variable tipada con la intersección (sin excess-check de literal —
     // el parámetro de la interfaz E14Bridge sigue siendo OpcionesEscaneo).
     const opcionesMasiva: OpcionesEscaneoConTimeout = {
@@ -216,6 +244,10 @@ async function procesarUno(
       maxIntentos: 4, // fallos → RECHAZADA repetible / rescate por recorte manual
       fuente: "ARCHIVO", // A5 — MASIVA SIEMPRE archivo
       archivo: archivoPipeline,
+      // D63-C — KIT e63c-quad-gate-escaneo-v1: origen del detector D63-A
+      // alimenta T1 (quad página-completa) y T2 (gate del marco impreso).
+      // SIM y el flujo individual JAMÁS lo traen (nada de escaneos les aplica).
+      origenActa: veredictoOrigen.origen,
       onProgreso: (p) => progresoThrottled(fila.id, p),
       timeoutMs: TIMEOUT_MASIVA_MS, // T4 — ver constante (individual: 15 s intacto)
     };
@@ -229,6 +261,8 @@ async function procesarUno(
     // D57 (T1): parche INMUTABLE del diagnóstico (kit §4-T1). ADITIVO — no
     // toca score/status/gate; si el diagnóstico no existe (no debería: el
     // bridge lo monta en todo desenlace fuera de SIM), se omite el campo.
+    // D63-A (T2): las trazas de origen viajan en el MISMO parche (aditivas,
+    // al final del contrato D57 — origen/origenSenales, ver origen.ts).
     const acta =
       actaBruta.diagnostico != null
         ? {
@@ -236,6 +270,13 @@ async function procesarUno(
             diagnostico: {
               ...actaBruta.diagnostico,
               tiempos: { ...actaBruta.diagnostico.tiempos, esperaMs },
+              origen: veredictoOrigen.origen,
+              origenSenales: veredictoOrigen.senales,
+              // D63-B (T2/T3): trazas del pre-proceso de escaneos (aditivas,
+              // al final del contrato — null cuando no aplicó/no es escaneo).
+              skewGrados: preProceso.skewGrados,
+              deskewMs: preProceso.deskewMs,
+              limpieza: preProceso.limpieza,
             },
           }
         : actaBruta;
