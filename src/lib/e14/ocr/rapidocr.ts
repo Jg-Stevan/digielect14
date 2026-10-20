@@ -128,6 +128,37 @@ export function rapidOcrPrecalentar(): Promise<boolean> {
   return prewarmHecho;
 }
 
+/** D65 — KIT e14-progreso-watchdog-dedup-v1 (T1): soltar el runtime OCR
+ *  cuando el watchdog mata y re-crea los workers del intento vencido.
+ *  Best-effort: release() de cada sesión (det/cls/rec) SI la build de ORT
+ *  lo expone (los tipos locales son mínimos), luego el singleton FUERA →
+ *  la próxima rapidOcrInit() re-crea TODO (sesiones y worker proxy nuevos).
+ *  El pre-warm también cae (puede volver a calentar si alguien lo llama).
+ *  NOTA honesta: si el cuelgue vive DENTRO del worker proxy compartido de
+ *  ORT, el runtime re-creado puede volver a colgarse → el watchdog vence
+ *  otra vez (~150 s totales) y manda el veredicto honesto de siempre.
+ *  NUNCA lanza: un fallo de limpieza no empeora el reintento. */
+export async function rapidOcrReiniciar(): Promise<void> {
+  if (!rtSingleton) return;
+  try {
+    const rt = await rtSingleton;
+    const sesiones = [rt.det, rt.cls, rt.rec] as Array<
+      OrtSession & { release?: () => unknown }
+    >;
+    for (const s of sesiones) {
+      try {
+        await s.release?.();
+      } catch {
+        /* sesión ya muerta — seguir con la siguiente */
+      }
+    }
+  } catch {
+    /* el singleton ya estaba roto — nada que soltar */
+  }
+  rtSingleton = null;
+  prewarmHecho = null;
+}
+
 async function initReal(): Promise<RapidRuntime> {
   const ort = (await import("onnxruntime-web/wasm")) as unknown as OrtModule;
   ort.env.wasm.wasmPaths = `${PUBLIC_BASE}/vendor/onnxruntime/`;

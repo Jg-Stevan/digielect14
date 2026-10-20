@@ -29,14 +29,14 @@ import {
   pareceImagenMasiva,
   parecePdfMasiva,
 } from "./archivos";
-import { dhashDeArchivo, hamming64, HAMMING_MAX } from "./dedup";
+import { dhashDeArchivo, hamming64, DEDUP_HAMMING_MAX } from "./dedup";
 import {
   paginaDeActa,
   type EstadoEntrada,
   type FilaMasiva,
   type RegistroMasiva,
 } from "./tipos";
-import type { Acta, EtapaAnalisis } from "../types";
+import type { Acta } from "../types";
 
 export type FiltroMasiva =
   | "TODAS"
@@ -46,11 +46,21 @@ export type FiltroMasiva =
   | "EN_REVISION_HUMANA"
   | "ERROR";
 
-/** Progreso de la fila ACTIVA (throttled por el runner ~200 ms). */
+/** D65 — KIT e14-progreso-watchdog-dedup-v1 (T3): vocabulario del kit para
+ *  la señal de vida de la fila ACTIVA. La fracción SOLO existe en OCR y es
+ *  REAL (reconocedor por lotes de rec — §2-C4 del kit ocr-escalonado); las
+ *  demás etapas van SIN número (barra animada — jamás inventar %). */
+export type EtapaVidaKit = "preparando" | "deteccion" | "ocr" | "verificacion";
+
+/** Progreso de la fila ACTIVA (throttled por el runner 250 ms — D65 T3.1).
+ *  Estado TRANSITORIO: NO se persiste en IndexedDB (kit T3.4 — cada tick a
+ *  IDB sería caro); al recargar la página las filas vuelven a PENDIENTE como
+ *  hoy y no queda % fantasma. */
 export interface ProgresoFila {
   id: string;
-  etapa: EtapaAnalisis;
-  fraccion: number;
+  etapa: EtapaVidaKit;
+  /** 0..1 SOLO cuando etapa === "ocr" — dato REAL del reconocedor. */
+  ocrFraccion?: number;
 }
 
 interface MasivaStore {
@@ -103,6 +113,13 @@ interface MasivaStore {
   /** Envío en lote SECUENCIAL de ADVERTENCIAS (cada una vía registrarEnvio
    *  real). NO toca RECHAZADAS ni EN_RH (kit §6). */
   enviarLote: (estado: "ADVERTENCIA") => Promise<void>;
+  /** D65 (T3.1): señal de vida de la fila en curso — action NUEVO del kit;
+   *  el runner emite con throttle 250 ms vía bucketDeVida. Transitorio
+   *  (NUNCA a IDB — kit T3.4). */
+  marcarProgreso: (
+    id: string,
+    progreso: { etapa: EtapaVidaKit; ocrFraccion?: number },
+  ) => void;
   setFiltro: (filtro: FiltroMasiva) => void;
 }
 
@@ -153,7 +170,10 @@ function patchFila(id: string, patch: Partial<FilaMasiva>): void {
  *  (Hamming ≤ 6) → marca DUPLICADA (persistente) apuntando a la ORIGINAL.
  *  NUNCA bloquea la UI ni lanza: fallo de decode/hash → hash null → la fila
  *  procesa normal (conservador). Los guards de existencia hacen el vaciar/
- *  quitar del dueño MANDAR (0 zombis — mismo patrón del runner). */
+ *  quitar del dueño MANDAR (0 zombis — mismo patrón del runner).
+ *  D65 (T2): dedup v2 POR CONTENIDO con EXIF normalizada (dedup.ts) — misma
+ *  cadena, y la traza aditiva dedup/dedupDistancia (kit T2.3) persiste en el
+ *  MISMO write del hashDedup (campos nuevos al final del contrato D57). */
 async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void> {
   for (const entrada of lote) {
     try {
@@ -167,23 +187,33 @@ async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void>
       } catch {
         continue; // fuera de la cola (IDB/vaciar) — nada que marcar
       }
-      await guardarRegistro({ ...registro, hashDedup: hash });
-      patchFila(entrada.id, { hashDedup: hash });
       // ¿Gemela de una fila existente? (filas ANTERIORES con hash — la
-      // cadena es FIFO, la original siempre lleva delante).
+      // cadena es FIFO, la original siempre lleva delante). D65: la búsqueda
+      // corre ANTES del write para plegar la traza dedup (T2.3) en el MISMO
+      // guardarRegistro del hash — mismo nº de writes que v1 (1 por fila, 2
+      // para gemelas). Los candidatos salen del STORE (otras filas — esta no
+      // es candidata de sí misma): mismo resultado que el orden de v1.
       const filas = useMasivaStore.getState().filas;
       const candidatas = filas.filter(
         (f) => f.id !== entrada.id && f.hashDedup && f.estado !== "ERROR",
       );
       let original: FilaMasiva | null = null;
-      let hamming = HAMMING_MAX + 1;
+      let hamming = DEDUP_HAMMING_MAX + 1;
       for (const c of candidatas) {
         const d = hamming64(hash, c.hashDedup as string);
-        if (d <= HAMMING_MAX && (original === null || d < hamming || c.agregadaEn < original.agregadaEn)) {
+        if (d <= DEDUP_HAMMING_MAX && (original === null || d < hamming || c.agregadaEn < original.agregadaEn)) {
           original = c;
           hamming = d;
         }
       }
+      // D65 (T2.3): traza del dedup v2 — "v2" = match (con la distancia REAL
+      // del match); "sin-match" = hasheada sin gemela. Sin hash (decode
+      // falló) la fila NO trae traza (ausente = instrumento no corrió).
+      const trazaDedup: Pick<RegistroMasiva, "dedup" | "dedupDistancia"> = original
+        ? { dedup: "v2", dedupDistancia: hamming }
+        : { dedup: "sin-match" };
+      await guardarRegistro({ ...registro, hashDedup: hash, ...trazaDedup });
+      patchFila(entrada.id, { hashDedup: hash });
       if (!original) continue;
       // Solo marca filas aún PENDIENTES (el dueño pudo procesar/quitar mientras el hash corría).
       const filaViva = useMasivaStore.getState().filas.find((f) => f.id === entrada.id);
@@ -591,6 +621,10 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
       set({ enviandoLote: false });
     }
   },
+
+  // D65 (T3.1): señal de vida — estado transitorio (NUNCA a IDB, kit T3.4);
+  // el % fantasma no existe: al recargar, progreso vuelve a null.
+  marcarProgreso: (id, progreso) => set({ progreso: { id, ...progreso } }),
 
   setFiltro: (filtro) => set({ filtro }),
 }));
