@@ -20,9 +20,20 @@ import { ActasView } from "@/components/e14/screens/ActasView";
 import { ResumenView } from "@/components/e14/screens/ResumenView";
 // KIT e14-carga-masiva-v1 (T4): vista MASIVA (módulo separado, desktop-first).
 import { MasivaView } from "@/components/e14/screens/MasivaView";
+// F-PWA (kit H6): registro del Service Worker + listeners de instalación +
+// banner E-04 «Nueva versión lista» — montaje único, no renderiza nada.
+import { PwaRegister } from "@/components/e14/PwaRegister";
 
 export default function Page() {
   const vista = useE14Store((s) => s.vista);
+
+  // KIT L6: arranque de la jornada persistida — UNA vez por carga (la
+  // acción es idempotente: guarda de doble montaje incluida). Sin registro
+  // persistido la app arranca fresca exactamente como hoy.
+  const arrancarJornada = useE14Store((s) => s.arrancarJornada);
+  useEffect(() => {
+    void arrancarJornada();
+  }, [arrancarJornada]);
 
   // KIT e14-esquinas-suaves-v1 (T-R): tick del SIM VIVO en el SHELL — corre en
   // TODAS las vistas (el dueño mira RESUMEN y el puesto se llena a la vista).
@@ -64,6 +75,10 @@ export default function Page() {
           {vista === "revision" && <ReviewCtas />}
         </BottomNav>
       )}
+
+      {/* F-PWA (H6): SW offline + instalación — SIEMPRE montado (todas las
+          vistas) porque el registro vive en el shell, no en una pantalla. */}
+      <PwaRegister />
     </div>
   );
 }

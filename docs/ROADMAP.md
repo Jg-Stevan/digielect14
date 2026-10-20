@@ -22,7 +22,7 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] L3 — Fuente CÁMARA real + interfaz de escaneo del lab COMPLETA: CameraFrameLoop + HUD + BUSCANDO ACTA… + quad en vivo + IA·AUTO (OFF default, D24) + flash F-FLASH v3 + ZSL best-shot + ruta iOS + destello (D25-D27)
 - [x] L4 — EXPORTAR PDF: adaptador §6 + CTA en REVISIÓN (solo actas reales)
 - [x] L5 — Editor de recorte: COPIAR subsistema CROP de scanner-lab/EditorView.tsx (§7.5) + toolbar real de REVISIÓN (D28–D31)
-- [ ] L6 — (opcional) Persistencia: localStorage + IndexedDB + "REINICIAR JORNADA"
+- [x] L6 — Persistencia de jornada: IndexedDB vanilla `e14-jornada-v1` (estado liviano + slot del acta en revisión con fotos) + «REINICIAR JORNADA» (2 toques) + mesas reales derivadas (SIM OFF no quema progreso) — kit e14-pwa-persistencia-v1 (PR #38)
 - [ ] L7 — (opcional) Cámara sintética en SIMULACIÓN (SyntheticCamera del core)
 
 ## FIDELIDAD AL LAB (SPEC-auditoria-copias.md — fix/e14-fidelidad-lab)
@@ -32,7 +32,7 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] H3 — captureSmart: snapA ANTES del disparo (§5.4 del lab)
 - [x] H4 — TORCH_HINT verbatim completo (diagnóstico de campo para el operador)
 - [x] H5 — IMPORTAR: accept `.heic/.heif` en ambos inputs + guard F-IMPORT/HEIC del lab
-- [ ] H6 — (DECISIÓN del autor) PWA instalable + offline (manifest + SW network-first del lab) — valioso para operadores en zona de mala conexión; NO en este PR por alcance
+- [x] H6 — PWA instalable + offline: SW network-first del lab + cache del MOTOR OCR al primer uso (~30 MB) + banner de actualización consentido (E-04) — kit e14-pwa-persistencia-v1 (PR #38)
 
 ## UX REAL (SPEC-ux-real-bn-editor.md — fix/e14-ux-real)
 
@@ -69,7 +69,7 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 ### Fuera de alcance (decisión del dueño, §0/§8)
 - [ ] Manuscritos G.2/G.3 (votos/firmas/cédulas) — cubiertos por la revisión humana existente
 - [ ] Consulta viva AppSync (§G.4.6, fase futura)
-- [ ] H6 PWA — decisión del autor
+- [x] H6 PWA — decisión del autor (hecha en e14-pwa-persistencia-v1, PR #38)
 
 ## F-INFO — TÍTULO/UBICACIÓN REALES + TIPO HONESTO + dígito 9 del 1D (SPEC-e14-titulo-ubicacion-clasificada.md — feat/e14-info-clasificada)
 
@@ -211,6 +211,14 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T5 — Docs: REPORTE (3 veredictos + evidencia + repro) + esta entrada + worklog + AGENTS (DECISIONS.md INTACTO por diseño del kit).
 - [x] T6 — PR DRAFT (diff de producción VACÍO — solo tools/ + docs; JAMÁS merge — el dueño mergea).
 - [ ] Del dueño: correr los 3 bancos en SU máquina (4 núcleos/Chrome 155/Windows) · decidir B2 (archivar rec / kit cls-solo) · validar B3 con las fotos reales del informe (16 actas) · correr B4 en SU Chrome con GPU → si GO preliminar, kit de activación (flag gradual + fallback wasm) con su decisión en DECISIONS.md.
+## PWA-PERSISTENCIA — e14-pwa-persistencia-v1 (2026-10-20): auditoría integral + H6 offline + L6 jornada
+
+- [x] A — AUDITORÍA (3 pases core/UI/MASIVA contra doctrina del vault): 6 bugs CRÍTICOS corregidos (C1 `paginaVerPag` grupo Ver→Pág — pág 2 en hueco P1 · C2 hueco duplicado jamás actualizaba estado (RESCANEO eterno) · C3 quad del usuario borrado en re-render (QuadEditor) · C4 `sincronizarAlVolver` código muerto → ediciones MASIVA jamás sincronizaban · C5 `enviarLote` re-entrante (doble envío) · C6 `listarRegistros` materializaba la cola COMPLETA en RAM — OOM en jornadas de 100+) + 14 medios (M1-M14) + 12 menores. Doctrina INTACTA: `evaluarGate`/pisos/techos/telemetría/`hashMock`/D48/chips SIM sin tocar.
+- [x] B — L6 PERSISTENCIA: `jornada.ts` IDB vanilla `e14-jornada-v1` — estado liviano (archivadas, puesto, historial tope 200, contadores, motivos) + slot del acta en revisión CON fotos (solo CÁMARA/ARCHIVO; MASIVA tiene su IDB D45) · `arrancarJornada`/`reiniciarJornada` · persister por suscripción (comparación JSON — el tick SIM no escribe) · mesas REALES derivadas de archivadas+puesto (fix M10: SIM OFF restaura el guion real) · gate multi-pestaña (`persisterActivo`) · REINICIAR JORNADA (2 toques, patrón VACIAR) en RESUMEN.
+- [x] C — H6 PWA: `sw.js` del lab (`escaner-v7`→`e14-v1`) — navigate network-first · `_next/static` cache-first · resto SWR tope 80 · **MOTOR cache-on-first-use** (`/models/rapidocr/` + `/vendor/onnxruntime/` ~30 MB → primer escaneo online = offline para siempre) · precache best-effort opencv+worker · E-04 sin `skipWaiting` incondicional (banner consentido) · limpieza de cachés viejas · iconos (192/512/maskable/apple-touch) · manifest completo · `PwaRegister` (adaptación declarada: sin warm-up — D50 existe).
+- [x] V — E2E con foto REAL del dueño (Galaxy A56): OCR 94% · AUTO `88·120·15·02·012` · score 8.5 · ÓPTIMA auto-enviada · RECARGA restaura jornada+acta ENVIADA con fotos · REINICIAR fresco · MASIVA OK · 0 errores consola · lint 0 · tsc 0.
+- [x] T — Docs: REPORTE + D54/D55 + esta entrada + docs/worklog + AGENTS. (Arreglos de auditoría del PR: `package.json` dev restaurado byte a byte + worklog de sandbox fuera del repo.)
+- [ ] Del dueño: auditar/mergeear PR #38 · decidir D48 (timeout MASIVA 120 s) · probar instalación PWA + offline en SU teléfono (SW exige https) · `unzipSync`→async si el despliegue lo exige.
 
 ## MASIVA-TIEMPOS — e14-masiva-tiempos-v1 (2026-10-20, AGENTE 2 terminado por orden del dueño): dedup + prefetch (B1 + B5)
 
