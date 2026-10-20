@@ -120,6 +120,35 @@ import { probeOrientacion, rotarDataUrl } from "./orientacion";
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
 
+/** KIT e14-masiva-tiempos-v1 (PR-2, prefetch): memo de decode POR INSTANCIA
+ *  de File (WeakMap — GC-friendly, no retiene blobs). El mismo File JAMÁS
+ *  se decodifica dos veces: el prefetch del runner MASIVA
+ *  (precargarDecodeArchivo) oculta el decode de N+1 tras el OCR de N y el
+ *  pipeline de N+1 golpea la memo (~0 ms — AC-P1). TRANSPARENTE para todos
+ *  los flujos existentes: misma promesa, mismo resultado; si el decode
+ *  falla, la entrada sale de la memo y el siguiente intento re-decodifica
+ *  (comportamiento de hoy — kit AC-P2 «jamás bloquea»). */
+const decodeMemo = new WeakMap<File, Promise<string>>();
+
+function decodeArchivoMemo(file: File): Promise<string> {
+  let p = decodeMemo.get(file);
+  if (!p) {
+    p = fileToCaptureDataUrl(file);
+    decodeMemo.set(file, p);
+    void p.catch(() => {
+      if (decodeMemo.get(file) === p) decodeMemo.delete(file);
+    });
+  }
+  return p;
+}
+
+/** KIT e14-masiva-tiempos-v1 (PR-2): precalentar el decode de un archivo
+ *  (runner MASIVA — prefetch de 1 slot durante el OCR de la fila N). Misma
+ *  memo del pipeline: si la fila llega a procesarse, su decode es HIT. */
+export function precargarDecodeArchivo(file: File): Promise<string> {
+  return decodeArchivoMemo(file);
+}
+
 /** Timeout de seguridad global §5 (worker colgado en gama baja). */
 const TIMEOUT_MS = 15_000;
 /** KIT e14-recorte-manual-v1 (T1): presupuesto del RECORTE manual — el warp
@@ -907,7 +936,9 @@ export class RealCoreBridge implements E14Bridge {
     const fotoOriginal =
       "archivo" in entrada
         ? await conRampa(
-            fileToCaptureDataUrl(entrada.archivo),
+            // KIT e14-masiva-tiempos-v1 (PR-2): decode con memo POR FILE —
+            // el prefetch del runner MASIVA comparte esta instancia → HIT.
+            decodeArchivoMemo(entrada.archivo),
             700,
             (f) => ({ etapa: "DETECTANDO", progreso: f * 0.5 }),
             emitir,
