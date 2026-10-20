@@ -228,6 +228,10 @@ async function procesarUno(
       maxIntentos: 4, // fallos → RECHAZADA repetible / rescate por recorte manual
       fuente: "ARCHIVO", // A5 — MASIVA SIEMPRE archivo
       archivo: archivoPipeline,
+      // D63-C — KIT e63c-quad-gate-escaneo-v1: origen del detector D63-A
+      // alimenta T1 (quad página-completa) y T2 (gate del marco impreso).
+      // SIM y el flujo individual JAMÁS lo traen (nada de escaneos les aplica).
+      origenActa: veredictoOrigen.origen,
       onProgreso: (p) => progresoThrottled(fila.id, p),
       timeoutMs: TIMEOUT_MASIVA_MS, // T4 — ver constante (individual: 15 s intacto)
     };
