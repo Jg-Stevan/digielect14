@@ -266,9 +266,10 @@ export function MasivaView() {
             id="masiva-archivos"
             type="file"
             multiple
-            // KIT e14-masiva-ux-v1 (T2.5): imágenes + HEIC/HEIF + comprimidos.
-            // El filtro REAL vive en el store (pareceImagenMasiva + extraerArchivo).
-            accept="image/*,.heic,.heif,.zip,.rar"
+            // KIT e14-masiva-ux-v1 (T2.5) + D60: imágenes + HEIC/HEIF +
+            // comprimidos + PDF. El filtro REAL vive en el store
+            // (pareceImagenMasiva + extraerArchivo + parecePdfMasiva).
+            accept="image/*,.heic,.heif,.zip,.rar,.pdf"
             className="sr-only"
             onChange={(e) => {
               void agregarFiles(Array.from(e.target.files ?? []));
@@ -286,8 +287,8 @@ export function MasivaView() {
           </button>
           <p className="mt-2 font-mono text-[10px] tracking-wider text-gray-500 uppercase">
             {filas.length === 0
-              ? "SUELTA FOTOS DE ACTAS AQUÍ"
-              : "SUELTA MÁS FOTOS AQUÍ — SE SUMAN A LA COLA"}
+              ? "SUELTA FOTOS, PDF O ZIP/RAR AQUÍ"
+              : "SUELTA MÁS ARCHIVOS AQUÍ — SE SUMAN A LA COLA"}
           </p>
           {guardando > 0 && (
             <p
