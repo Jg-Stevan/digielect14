@@ -189,6 +189,17 @@ function ctxDe(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   return ctx;
 }
 
+// ─── KIT e14-ocr-escalonado-v1 (§2.1): cap del det-preprocess (op4) ──────────
+// La sesión det NO cambia (mismos pesos — el cap es del preprocess op4, NO del
+// modelo ni de una sesión nueva): DET_CAP_PROD=1920 es el comportamiento de
+// HOY byte a byte (config det_limit_side_len=1920, det_limit_type='max');
+// DET_CAP_RAPIDO=1280 es la 1.ª pasada del OCR escalonado (banco B3 GO:
+// det −56%, 120/120 votos, 0 cajas perdidas — tools/bench-det1280, PR #34).
+// op1 (reduce_max_side 1920) queda INTACTO: es el preprocess fijo del paquete,
+// det_limit_side_len es el parámetro que op4 implementa.
+export const DET_CAP_PROD = 1920;
+export const DET_CAP_RAPIDO = 1280;
+
 // ─── Pre-det (main.py fidelidad: reduce_max → increase_min → letterbox →
 //     det-preprocess round32) + registro de ops para mapear de vuelta ───────
 
@@ -205,7 +216,13 @@ interface OpsDet {
   ratioHDet: number;
 }
 
-function preDet(src: HTMLImageElement): { canvas: HTMLCanvasElement; ops: OpsDet } {
+// KIT e14-ocr-escalonado-v1 (§2.1): cap PARAMETRIZABLE — default DET_CAP_PROD
+// (byte a byte el flujo de hoy); el OCR escalonado pasa DET_CAP_RAPIDO en la
+// 1.ª pasada.
+function preDet(
+  src: HTMLImageElement,
+  cap: number = DET_CAP_PROD,
+): { canvas: HTMLCanvasElement; ops: OpsDet } {
   let w = src.naturalWidth || src.width;
   let h = src.naturalHeight || src.height;
   let ratioW = 1;
@@ -255,8 +272,10 @@ function preDet(src: HTMLImageElement): { canvas: HTMLCanvasElement; ops: OpsDet
     h = padded.height;
   }
 
-  // op4 — det-preprocess (limit 1920 max + round32 SIEMPRE, mínimo 32)
-  const ratioDet = Math.max(h, w) > 1920 ? 1920 / Math.max(h, w) : 1;
+  // op4 — det-preprocess (limit <cap> max + round32 SIEMPRE, mínimo 32) —
+  //   cap=DET_CAP_PROD (1920) = producción de hoy byte a byte; 1280 = 1.ª
+  //   pasada del escalonado (banco B3: −56% det, 0 votos perdidos).
+  const ratioDet = Math.max(h, w) > cap ? cap / Math.max(h, w) : 1;
   const dh = round32(Math.floor(h * ratioDet));
   const dw = round32(Math.floor(w * ratioDet));
   const detIn = canvasDe(canvasPadded, dw, dh);
@@ -595,9 +614,13 @@ interface DetSalida {
   nBoxes: number;
 }
 
-async function inferDet(rt: RapidRuntime, src: HTMLImageElement): Promise<DetSalida> {
+async function inferDet(
+  rt: RapidRuntime,
+  src: HTMLImageElement,
+  cap: number = DET_CAP_PROD,
+): Promise<DetSalida> {
   const t0 = performance.now();
-  const { canvas, ops } = preDet(src);
+  const { canvas, ops } = preDet(src, cap);
   const ctx = ctxDe(canvas);
   const { width: w, height: h } = canvas;
   const img = ctx.getImageData(0, 0, w, h);
@@ -721,11 +744,15 @@ export async function rapidOcrReconocer(
   rt: RapidRuntime,
   dataUrl: string,
   onProgress?: (p: number) => void,
+  // KIT e14-ocr-escalonado-v1 (§2.1-§2.2): cap det de ESTA llamada —
+  // ausente = DET_CAP_PROD (comportamiento de hoy byte a byte); la 1.ª
+  // pasada del escalonado pasa DET_CAP_RAPIDO. La sesión/cls/rec NO cambian.
+  opts?: { detCap?: number },
 ): Promise<RapidOcrResultado> {
   const t0 = performance.now();
   const tTotal = performance.now();
   const src = await loadImage(dataUrl);
-  const { boxesFuente, msDet } = await inferDet(rt, src);
+  const { boxesFuente, msDet } = await inferDet(rt, src, opts?.detCap ?? DET_CAP_PROD);
 
   if (boxesFuente.length === 0) {
     return { lineas: [], texto: "", confMedia: 0, msDet, msCls: 0, msRec: 0, nBoxes: 0 };
