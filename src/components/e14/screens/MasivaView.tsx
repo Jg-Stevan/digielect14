@@ -74,6 +74,8 @@ export function MasivaView() {
   const filtro = useMasivaStore((s) => s.filtro);
   const guardando = useMasivaStore((s) => s.guardando);
   const colaDisponible = useMasivaStore((s) => s.colaDisponible);
+  const avisoCola = useMasivaStore((s) => s.avisoCola);
+  const enviandoLote = useMasivaStore((s) => s.enviandoLote);
   const {
     cargarFilas,
     sincronizarAlVolver,
@@ -124,10 +126,13 @@ export function MasivaView() {
     if (online) void refrescarEnviosTrasDrenaje();
   }, [online]);
 
-  const pendientes = filas.filter((f) => f.estado === "PENDIENTE").length;
+  const pendientes = filas.filter(
+    (f) => f.estado === "PENDIENTE" && !f.id.startsWith("masiva-temp-"),
+  ).length;
   // KIT e14-masiva-tiempos-v1 (PR-1): las DUPLICADAS son cola también (su
   // procesamiento es la copia rápida) — habilitan PROCESAR igual que las
-  // PENDIENTES y se cuentan aparte en la línea de conteos.
+  // PENDIENTES y se cuentan aparte en la línea de conteos. FIX M13: las
+  // temps no cuentan como PENDIENTES (mueren al aterrizar sus ids reales).
   const duplicadas = filas.filter((f) => f.estado === "DUPLICADA").length;
   const terminadas = filas.filter((f) => f.estado === "LISTA" || f.estado === "ERROR").length;
   const advertenciasPend = filas.filter(
@@ -225,6 +230,16 @@ export function MasivaView() {
             className="rounded-xl border border-amber-400/60 bg-amber-400/10 px-3.5 py-2.5 font-mono text-[11px] font-bold uppercase tracking-wider text-amber-400"
           >
             TU NAVEGADOR NO SOPORTA LA COLA — IMPORTA DE A UNA EN ESCANEAR
+          </p>
+        )}
+        {/* FIX M9 (auditoría 2-c): quota ≠ sin soporte — aviso honesto y la
+            cola SIGUE viva (PROCESAR vale para lo que ya hay dentro). */}
+        {colaDisponible && avisoCola && (
+          <p
+            role="alert"
+            className="rounded-xl border border-amber-400/60 bg-amber-400/10 px-3.5 py-2.5 font-mono text-[11px] font-bold uppercase tracking-wider text-amber-400"
+          >
+            {avisoCola}
           </p>
         )}
 
@@ -344,14 +359,17 @@ export function MasivaView() {
               ENVIADAS {enviadas} · EN COLA {enCola} · PENDIENTES {pendientes}
               {duplicadas > 0 && <> · DUPLICADAS {duplicadas}</>} · ERRORES {errores}
             </span>
-            {advertenciasPend > 0 && !corriendo && (
+            {(advertenciasPend > 0 || enviandoLote) && !corriendo && (
               <button
                 type="button"
+                // FIX C5: disabled con enviandoLote — sin guard visual un doble
+                // tap disparaba dos lotes sobre el mismo snapshot de filas.
+                disabled={enviandoLote}
                 onClick={() => void enviarLote("ADVERTENCIA")}
                 aria-label={`Enviar ${advertenciasPend} actas con advertencia`}
-                className="ml-auto min-h-[36px] px-3 rounded-full border border-amber-400/60 text-amber-400 bg-amber-400/10 font-mono text-[10px] font-bold uppercase tracking-wider hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
+                className="ml-auto min-h-[36px] px-3 rounded-full border border-amber-400/60 text-amber-400 bg-amber-400/10 font-mono text-[10px] font-bold uppercase tracking-wider hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
               >
-                ENVIAR ADVERTENCIAS ({advertenciasPend})
+                {enviandoLote ? "ENVIANDO…" : `ENVIAR ADVERTENCIAS (${advertenciasPend})`}
               </button>
             )}
           </div>
@@ -463,9 +481,14 @@ export function MasivaView() {
                     )}
                     <button
                       type="button"
+                      // FIX (auditoría 2-b #15): QUITAR fuera de la fila en
+                      // PROCESO — el desenlace de la foto activa ya está en
+                      // vuelo (el runner descarta el resultado de una fila
+                      // quitada, pero el botón mentía sobre lo que hace).
+                      disabled={f.estado === "PROCESANDO"}
                       onClick={() => void quitar(f.id)}
                       aria-label={`Quitar ${f.nombre} de la cola`}
-                      className="min-h-[44px] min-w-[44px] rounded-lg text-gray-500 hover:text-red-400 font-mono text-[10px] font-bold uppercase tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                      className="min-h-[44px] min-w-[44px] rounded-lg text-gray-500 hover:text-red-400 font-mono text-[10px] font-bold uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
                     >
                       QUITAR
                     </button>

@@ -170,10 +170,18 @@ async function extraerRar(archivo: File): Promise<ResultadoExtraccion> {
 
 /** Bytes del unrar.wasm del PROPIO paquete npm (sin red, sin public/).
  *  `new URL(..., import.meta.url)` es el mecanismo de assets estáticos de
- *  los bundlers (webpack/turbopack emiten el archivo junto al chunk). */
+ *  los bundlers (webpack/turbopack emiten el archivo junto al chunk).
+ *  FIX (auditoría 2-c #14): un fallo del fetch (404/red/caída del asset)
+ *  se reporta con SU PROPIO motivo — antes viajaba como
+ *  PROTEGIDO_O_CORRUPTO (falso e irreproducible para el dueño). */
 async function fetchWasmUnrar(): Promise<ArrayBuffer> {
   const url = new URL("node-unrar-js/esm/js/unrar.wasm", import.meta.url);
-  const respuesta = await fetch(url);
-  if (!respuesta.ok) throw new Error("PROTEGIDO_O_CORRUPTO");
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(url);
+  } catch {
+    throw new Error("WASM_NO_CARGO");
+  }
+  if (!respuesta.ok) throw new Error("WASM_NO_CARGO");
   return await respuesta.arrayBuffer();
 }
