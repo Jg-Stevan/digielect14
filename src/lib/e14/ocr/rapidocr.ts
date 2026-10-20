@@ -612,13 +612,67 @@ interface DetSalida {
   boxesFuente: { x: number; y: number }[][];
   msDet: number;
   nBoxes: number;
+  /** D62 T2 — SOLO en HIT del memo: ms de det que esta llamada NO pagó
+   *  (los pagó el probe sobre el MISMO bitmap). Ausente = miss/computo. */
+  memoMsAhorrado?: number;
+}
+
+// ─── KIT e14-probe-adaptativo-v1 (D62 T2): memo del det por identidad ────────
+// Cuando el probe NO aplica rotación (aplicado=0), el det a 1280 del probe
+// (rapidOcrCropsOrientacion) y el det a 1280 de la pasada-1 del escalonado
+// (rapidOcrReconocer con detCap=DET_CAP_RAPIDO) corren sobre el MISMO bitmap —
+// el segundo es gratis si se memoiza. Clave = el PROPIO string dataURL de
+// entrada (identidad exacta: rotar ⇒ re-encode ⇒ string distinto ⇒ miss
+// natural, cero ramas especiales) + cap (en producción 1920 la clave jamás
+// matchea la del probe 1280 ⇒ sin cambio de comportamiento). GUARD HONESTO:
+// el memo JAMÁS decide score/gate — devuelve el MISMO resultado que computaría
+// det (determinismo wasm: mismo bitmap + mismo cap ⇒ mismo boxesFuente/msDet;
+// se devuelve la MISMA referencia). Tope 2 entradas: insertar desplaza la más
+// vieja (probe y pasada-1 son consecutivos; nunca coexisten más). El memo es
+// solo de ejecución (no persiste) y no corre en SIM (el probe no corre allí —
+// guard del bridge; si otra vía alimenta el memo, devuelve lo mismo que
+// computaría — inofensivo).
+interface DetMemoEntrada {
+  cap: number;
+  boxesFuente: { x: number; y: number }[][];
+  msDet: number;
+  nBoxes: number;
+}
+
+const DET_MEMO_TOPE = 2;
+const detMemo = new Map<string, DetMemoEntrada>();
+
+function detMemoGuardar(clave: string, entrada: DetMemoEntrada): void {
+  if (detMemo.size >= DET_MEMO_TOPE) {
+    const masVieja = detMemo.keys().next().value; // 1.ª insertada = más vieja
+    if (masVieja !== undefined) detMemo.delete(masVieja);
+  }
+  detMemo.delete(clave); // si la clave ya estaba (otro cap), renueva posición
+  detMemo.set(clave, entrada);
 }
 
 async function inferDet(
   rt: RapidRuntime,
   src: HTMLImageElement,
   cap: number = DET_CAP_PROD,
+  // D62 T2 — identidad del bitmap de origen (dataURL) para el memo; los 2
+  // callers la pasan (reconocer + cropsOrientacion). Ausente = sin memo.
+  claveOrigen?: string,
 ): Promise<DetSalida> {
+  // D62 T2 — HIT: el probe ACABA de computar este mismo det (mismo dataURL +
+  // mismo cap, aplicado=0). Devuelve el MISMO resultado que computaría det —
+  // jamás decide score/gate. Los "det run" no se emiten (no corrió aquí).
+  if (claveOrigen != null) {
+    const hit = detMemo.get(claveOrigen);
+    if (hit !== undefined && hit.cap === cap) {
+      return {
+        boxesFuente: hit.boxesFuente,
+        msDet: hit.msDet,
+        nBoxes: hit.nBoxes,
+        memoMsAhorrado: hit.msDet,
+      };
+    }
+  }
   const t0 = performance.now();
   const { canvas, ops } = preDet(src, cap);
   const ctx = ctxDe(canvas);
@@ -729,7 +783,10 @@ async function inferDet(
   const boxesFuente = rects
     .map((r) => esquinasRect(r).map((p) => mapearAFuente(p, ops, src.naturalWidth, src.naturalHeight)))
     .filter((b) => b.every((p) => p.x >= 0 && p.y >= 0));
-  return { boxesFuente: ordenarCajas(boxesFuente), msDet, nBoxes: rects.length };
+  const salida: DetSalida = { boxesFuente: ordenarCajas(boxesFuente), msDet, nBoxes: rects.length };
+  // D62 T2 — MISS: alimenta el memo (tope 2; insertar desplaza la más vieja).
+  if (claveOrigen != null) detMemoGuardar(claveOrigen, { cap, ...salida });
+  return salida;
 }
 
 // ─── Reconocer (secuencia completa) ─────────────────────────────────────────
@@ -752,7 +809,9 @@ export async function rapidOcrReconocer(
   const t0 = performance.now();
   const tTotal = performance.now();
   const src = await loadImage(dataUrl);
-  const { boxesFuente, msDet } = await inferDet(rt, src, opts?.detCap ?? DET_CAP_PROD);
+  // D62 T2 — claveOrigen: el memo del det (probe 1280 ↔ pasada-1 1280 sobre el
+  // MISMO bitmap ⇒ HIT; aplicado=1 cambia el string ⇒ miss natural).
+  const { boxesFuente, msDet, memoMsAhorrado } = await inferDet(rt, src, opts?.detCap ?? DET_CAP_PROD, dataUrl);
 
   if (boxesFuente.length === 0) {
     return { lineas: [], texto: "", confMedia: 0, msDet, msCls: 0, msRec: 0, nBoxes: 0 };
@@ -840,7 +899,7 @@ export async function rapidOcrReconocer(
   const confMedia =
     aceptadas.length === 0 ? 0 : aceptadas.reduce((s, l) => s + l.conf, 0) / aceptadas.length;
   console.info(
-    `[e14-rapidocr] celda: det=${msDet}ms cls=${msCls}ms rec=${msRec}ms · ${boxesFuente.length} cajas · ${aceptadas.length} líneas · conf ${(confMedia * 100).toFixed(1)}% · ${Math.round(performance.now() - tTotal)}ms`,
+    `[e14-rapidocr] celda: det=${msDet}ms cls=${msCls}ms rec=${msRec}ms · ${boxesFuente.length} cajas · ${aceptadas.length} líneas · conf ${(confMedia * 100).toFixed(1)}% · ${Math.round(performance.now() - tTotal)}ms detMemo=${memoMsAhorrado != null ? `hit msAhorrado=${memoMsAhorrado}` : "miss"}`,
   );
   return {
     lineas: aceptadas,
@@ -878,7 +937,9 @@ export async function rapidOcrCropsOrientacion(
   const src = await loadImage(dataUrl);
   // D56 §3 T2: det del probe a DET_CAP_RAPIDO (banco B3 GO: −56%, 0 cajas
   // perdidas) — el probe no necesita det de producción, sí caber en presupuesto.
-  const { boxesFuente, msDet } = await inferDet(rt, src, DET_CAP_RAPIDO);
+  // D62 T2 — claveOrigen: este det ALIMENTA el memo (mismo bitmap + cap 1280
+  // ⇒ la pasada-1 del escalonado con aplicado=0 hace HIT y no repite el det).
+  const { boxesFuente, msDet } = await inferDet(rt, src, DET_CAP_RAPIDO, dataUrl);
   const n = boxesFuente.length;
   const crops: HTMLCanvasElement[] = [];
   if (n > 0) {
