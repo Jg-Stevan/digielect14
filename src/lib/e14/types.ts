@@ -147,6 +147,17 @@ export interface DiagnosticoActa {
   /** D63-A — T2: señales auditables de la decisión del detector (p. ej.
    *  "sin-exif+borde-blanco+ratio-hoja"). null = no evaluado. */
   origenSenales?: string | null;
+  /** D63-B — KIT e63b-deskew-escaneo-v1 (T2): ángulo de skew detectado en la
+   *  banda del encabezado (con signo, pasos de 0.1°; null = banda sin tinta
+   *  suficiente o ángulo fuera de ±10° — captura torcida, no skew). */
+  skewGrados?: number | null;
+  /** D63-B — T2: ms del deskew (detección + rotación del master). null si
+   *  no se rotó (|θ| < 0.3° o fuera de rango o no es escaneo). */
+  deskewMs?: number | null;
+  /** D63-B — T3: limpieza de blanco aplicada al master ("blanco" cuando el
+   *  histograma no llegaba a blanco puro). "no" = sin limpieza; null = no
+   *  evaluado (no escaneo / registro previo a D63-B). */
+  limpieza?: "blanco" | "no" | null;
 }
 
 export interface Acta {
