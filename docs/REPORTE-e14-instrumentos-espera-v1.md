@@ -183,3 +183,43 @@ const acta =
   docs (`docs(e14): …`) por separado.
 - **PR DRAFT** con `D57` en el título → revisión del arquitecto → **mergea el
   dueño**. NO se mergea desde el agente.
+
+## 9. CI — estado del head y el gate `Worker parity` (IMPORTANTE para el arquitecto)
+
+CI del head `d8aff45`:
+
+| Check | Resultado | Nota |
+|---|---|---|
+| **Quality Gate** | ✅ success | `tsc --noEmit` + `lint` + `build` — los gates del kit §5 |
+| **Vercel Preview** | ✅ success | preview desplegado |
+| **Worker parity** | ❌ failure | **esperado y explicado aquí** — decisión del dueño |
+
+**Causa exacta:** el workflow `worker-parity.yml` exige que
+`public/scanner/detection-worker.js` sea **byte-idéntico** al worker del repo
+hermano (`web-scanner/apps/scanner-lab/public/scanner/detection-worker.js`,
+rama main). Verificado hoy: el worker del lab es byte-idéntico al de
+e14-main (`69647 B`, herencia del sync `6172456`) y **NO** trae
+`willReadFrequently` — por eso el T4 del kit (mandatario, zona ✏️ exclusiva)
+enciende el gate por diseño.
+
+**Histórico relevante:** la paridad se ha roto antes por avance del lab
+(quad-repro: «parity ×2 rojo EXTERNO — sync del worker es decisión del
+dueño») y se resolvió con commits `sync(worker)` (`bbc4b01`, `6172456`).
+Aquí el origen del cambio es e14 (la evidencia de consola es del dueño EN
+ESTA app), no el lab.
+
+**Rutas de resolución (decisión del dueño/arquitecto — el agente NO toca
+web-scanner sin mandato):**
+
+- **A (recomendada, espejo del precedente sync):** aplicar la MISMA edición
+  de 5 líneas (`{ willReadFrequently: true }` en los mismos 5 `getContext`)
+  al worker del lab en `web-scanner` main → el gate vuelve a verde SIN tocar
+  esta rama (el diff se hace contra lab main en runtime). El atributo es
+  correcto en ambos: ambos hacen `getImageData` sobre el canvas compartido.
+- **B:** aceptar el rojo TEMPORAL de parity en este PR y que el dueño sincronice
+  después; o revertir T4 aquí y dejar que la mejora entre por un `sync(worker)`
+  futuro (el kit T4 llegaría vía lab → e14).
+
+**Honestidad:** NO se ocultó el fallo; Quality Gate (el gate técnico del kit)
+está verde. El desenlace no depende del atributo (hint de rendimiento del
+canvas 2d — no altera píxeles).
