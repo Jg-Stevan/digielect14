@@ -1465,3 +1465,31 @@ Stage Summary:
 
 Stage Summary:
 - KIT e14-masiva-tiempos-v1 COMPLETO (PR-1 dedup + PR-2 prefetch apilada) — B1 y B5 del mega-kit orientacion-tiempos entregados al 100% local. Falta: push + PR-1 + PR-2 (apilada) + CI verde (token del dueño) — NUNCA mergeo (kit §4.4). Deberes del dueño: merge PR-1 → PR-2, AC-B1 con sus gemelas .heic reales, y revocar tokens cuando termine.
+
+### [2026-10-19 22:47 (Bogotá)] — KIT e14-union-cascada-v1 (INTEGRACIÓN) — FASE A: renumeración D52/D53 → D54/D55 en PR #38 + merge del PR #38 a main — agente INTEGRACIÓN (Z.ai Code)
+
+- **FASE A (rama `feat/e14-pwa-persistencia-y-mejoras`):** main sin novedades desde su último merge (verificado). `grep -rn "D5[23]" docs/` → 5 menciones (2 filas DECISIONS + 1 ROADMAP + 2 worklog — todas del kit pwa-persistencia, ninguna ajena). Cambios EXACTOS del kit §3.4: DECISIONS D52→**D54** / D53→**D55** (solo el número de fila); ROADMAP «REPORTE + D54/D55»; worklog 2 líneas de renumeración/registro. SHA antes `f83aab8` → después `feebd1c`. tsc 0 · lint 0. CI green (checks/parity/Vercel).
+- **Nota honesta (kit §2.6):** la verificación §3.5 `grep "D5[23]"` deja 1 resultado — la propia línea de reserva que el kit §3.4 manda escribir («D52/D53 quedaron reservadas para masiva-dedup y ocr-escalonado»). Objetivo semántico cumplido: 0 filas/menciones que reclamen D52/D53 como propias de esta rama.
+- **CHECKPOINT-1:** PR #38 mergeado a main (merge-commit, CI green previo). Verificación: `merge-base --is-ancestor` → **YA_EN_MAIN** (main `022bd47..e427000`). Desviación de herramienta: el endpoint REST `/pulls/38/merge` devolvía 404 pese a permisos admin/repo correctos → merge ejecutado vía GraphQL `mergePullRequest` (mismo resultado, sin force-push ni toques directos a main).
+- SHAs: rama `f83aab8..feebd1c` · main `022bd47..e427000`.
+
+### [2026-10-19 22:47 (Bogotá)] — KIT e14-union-cascada-v1 (INTEGRACIÓN) — FASE B: main (con PR #38) integrado en `feat/e14-masiva-dedup-v1` + merge del PR #39 — agente INTEGRACIÓN (Z.ai Code)
+
+- **FASE B:** `git merge origin/main` → EXACTAMENTE los 6 conflictos esperados (kit §4.2): DECISIONS/ROADMAP/worklog/AGENTS/MasivaView/store. Resolución: 4 docs keep-both en orden temporal (pwa 01:2x primero, masiva 02:4x después — cabeceras de las propias entradas); DECISIONS quedó `D50, D51, D52 (masiva), D54, D55 (pwa)` sin duplicados; `MasivaView.tsx` y `store.ts` con los bloques EXACTOS literales del kit §4.4/§4.5 (contador pendientes con exclusión de temps + DUPLICADAS; huérfanos borrados antes de `cadenaDedup` con filtro `!huerfanos.includes` — `vivas`/`huerfanos` verificados definidos arriba en la misma función). `runner.ts` auto-mergió limpio. SHA antes `d4fefab` → después `126e75f`. `grep marcadores` → 0. tsc 0 · lint 0. CI green.
+- **CHECKPOINT-2:** PR #39 mergeado a main (GraphQL, mismo patrón). Verificación: **YA_EN_MAIN** (main `e427000..ddf5000`).
+- SHAs: rama `d4fefab..126e75f` · main `e427000..ddf5000`.
+
+### [2026-10-19 22:47 (Bogotá)] — KIT e14-union-cascada-v1 (INTEGRACIÓN) — FASE C: main (con dedup) integrado en `perf/e14-masiva-prefetch-v1` + merge del PR #40 — agente INTEGRACIÓN (Z.ai Code)
+
+- **FASE C:** `git merge origin/main` → **auto-merge limpio** tal como predijo la simulación (0 conflictos, 0 marcadores). Compromiso auto-generado por git con mensaje por defecto → `--amend` del mensaje LOCAL (aún sin pushear; no es force-push) al EXACTO del kit §5.4. SHA antes `57579ac` → después `b119f1a`. tsc 0 · lint 0. CI green.
+- **Desviación de flujo (kit §2.6):** el PR #40 tenía base `feat/e14-masiva-dedup-v1` (apilado) — para el CHECKPOINT-3 del kit (prefetch debe quedar en main) se re-apuntó su base a `main` vía API (`PATCH /pulls/40`, base=main). Sin cambios de contenido; el diff del PR pasa a ser el mismo contra main.
+- **CHECKPOINT-3:** PR #40 mergeado a main (GraphQL). Verificación: **YA_EN_MAIN** (main `ddf5000..b21d4d4`).
+- SHAs: rama `57579ac..b119f1a` · main `ddf5000..b21d4d4`.
+
+### [2026-10-19 22:47 (Bogotá)] — KIT e14-union-cascada-v1 (INTEGRACIÓN) — FASE D: main (con dedup+prefetch+PR #38) integrado en `feat/e14-ocr-escalonado-v1` + merge del PR #37 — CASCADA COMPLETA — agente INTEGRACIÓN (Z.ai Code)
+
+- **FASE D:** `git merge origin/main` → EXACTAMENTE los 4 conflictos de docs esperados (kit §6.2): AGENTS/DECISIONS/ROADMAP/worklog. `scanner-core-bridge.ts` auto-mergió limpio. Resolución keep-both en orden temporal (pwa 01:2x → ocr-escalonado 01:5x → masiva PR-1 02:4x → masiva PR-2 02:5x); DECISIONS quedó `D50, D51, D52, D53, D54, D55` (D53 insertada en orden numérico). SHA antes `8c9ef2f` → después `ce95f86`. tsc 0 · lint 0 · **BUILD_STATIC=1 build OK**. CI green.
+- **CHECKPOINT-4:** PR #37 mergeado a main (GraphQL). Verificación: **YA_EN_MAIN** (main `b21d4d4..dac8cad`).
+- **Verificación final global en main `dac8cad`:** 4× `merge-base --is-ancestor` → TODAS EN_MAIN · DECISIONS D50–D55 sin duplicados (4 filas D52-D55 exactas) · 0 marcadores de conflicto en AGENTS/docs/src · **tsc 0 · lint 0 · build estático 0**.
+- **Desviación de registro (kit §2.6/§7/§8):** las entradas por fase debían aterrizar en cada rama ANTES de su push (§7); se hace UNA sola vez al final en esta rama de registro `chore/e14-union-cascada-registro` (las 4 ramas del kit ya estaban mergeadas y el kit prohíbe pushear a main — nuevo branch + PR para revisión del dueño). Sin nueva D-number (bookkeeping de integración), sin sección nueva en ROADMAP.
+- SHAs: rama `8c9ef2f..ce95f86` · main `b21d4d4..dac8cad`.
