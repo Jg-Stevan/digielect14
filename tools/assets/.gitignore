@@ -1,0 +1,6 @@
+# KIT e14-bancos-b5-b7-pagnull-v1 (D58) — fotos reales del dueño: NUNCA se
+# commitean (gates §4 del kit; política de assets del repo). Cargarlas en la
+# sesión local y usar el input «AÑADIR FOTOS REALES» de los benches.
+*
+!.gitignore
+!.gitkeep
