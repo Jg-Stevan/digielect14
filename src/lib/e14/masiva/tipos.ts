@@ -40,6 +40,13 @@ export interface FilaMasiva {
    *  string|null: null = sin datos → la fila solo pinta el nombre de archivo
    *  (honestidad, jamás inventar). */
   infoTitulo?: string | null;
+  /** D66 — KIT e14-decode-unico-precalor-v1 (T3.2/T3.5): flag TRANSITORIO
+   *  del precalor — esta fila PENDIENTE ya tiene master (blob JPEG a escala
+   *  de trabajo) esperando en el mapa del precalor. SOLO memoria del
+   *  mini-store: NUNCA viaja a IDB (al recargar se pierde y el precalor
+   *  vuelve a precalentar si aplica — kit T3.2 literal). El chip PREPARADA
+   *  de la bandeja lo pinta; consumirMaestro/descartarMaestro lo limpian. */
+  precalentada?: boolean;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
@@ -65,32 +72,24 @@ export interface RegistroMasiva {
    *  junto al registro (misma desviación aditiva documentada de thumb) —
    *  la bandeja lo repinta tras recargar sin re-procesar nada. */
   infoTitulo?: string | null;
-
-  // ─── D65 — KIT e14-progreso-watchdog-dedup-v1: trazas aditivas (kit T1.4/T2.3) ───
-  // Contrato D57: campos NUEVOS AL FINAL — los previos no cambian de nombre
-  // ni de lugar. Ausente = registro pre-D65 (el instrumento no existía);
-  // JAMÁS se inventa un valor.
-
-  /** (T1) intentos consumidos por el watchdog: 0 = ningún intento murió;
-   *  1 = el 1.º venció a los 75 s y el reintento tomó el desenlace;
-   *  2 = ambos vencieron → rechazo de siempre con trazas. Solo filas que
-   *  pasaron por el pipeline (la gemela copiada no corre pipeline → sin campo). */
-  watchdog?: number;
-  /** (T1) etapa del pipeline al morir el ÚLTIMO intento vencido — vocabulario
-   *  del kit: "decodificando" | "deteccion" | "ocr" | "verificacion". El
-   *  recorte/realce caen en "deteccion" (cola de la fase de encuadre).
-   *  null/ausente = sin señal de progreso antes de morir (jamás inventar). */
-  etapaAlMorir?: string | null;
-  /** (T1) duración (ms) del intento que murió — hoy era null y escondía los
-   *  ~175 s del informe 20261020-122235. null/ausente = sin dato. */
-  elapsedMs?: number | null;
-  /** (T2) dedup v2 por CONTENIDO: "v2" = gemela matcheada (Hamming ≤ 6);
-   *  "sin-match" = hasheada sin gemela. Ausente = pre-D65 o hash falló
-   *  (decode — la fila procesa normal, conservador). */
-  dedup?: "v2" | "sin-match";
-  /** (T2) distancia de Hamming del match v2 (0–64). Solo filas con
-   *  dedup === "v2" lo traen; sin match no hay distancia (no se inventa). */
-  dedupDistancia?: number | null;
+  // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
+  /** ms SOLO del decodificado a MASTER (T4: separado de procesoMs, que
+   *  conserva su semántica). Filas precalentadas → 0 (el decode ya pasó en
+   *  el precalor; el coste vive en precalorMs). Sin master (fallback a la
+   *  ruta de siempre / fila ERROR / registros previos) → campo AUSENTE
+   *  (jamás inventar). */
+  decodeMs?: number;
+  /** D66 (T4): quién fabricó el master — el decode nativo del navegador o
+   *  la reserva wasm (heic2any). null/ausente = sin master (fallback). */
+  origenDecode?: "nativo" | "wasm" | null;
+  /** D66 (T4): el desenlace nació de un master PRECALENTADO (el runner lo
+   *  consumió del precalor — decode ≈ 0). Documenta el PROVENANCE del
+   *  desenlace y SÍ persiste (a diferencia del flag transitorio de
+   *  FilaMasiva, que es estado vivo de la cola). */
+  precalentada?: boolean;
+  /** D66 (T4): ms TOTALES del precalor para esta fila (solo precalentadas;
+   *  null = no precalentada). */
+  precalorMs?: number | null;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del

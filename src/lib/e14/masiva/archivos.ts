@@ -35,6 +35,176 @@ const PDF_LARGO_OBJETIVO = 2400;
 /** D60 — Escala máxima del render (viewport×escala ≥ origen nunca más de 4×). */
 const PDF_ESCALA_MAX = 4;
 
+// ---------- D66 — KIT e14-decode-unico-precalor-v1 (T1/T2): maestro único ----------
+
+/** D66 (T1-R4) — ESCALA DE TRABAJO ACTUAL, documentada y SIN CAMBIO: es la
+ *  `IMPORT_MAX_LONG_SIDE` del F-IMPORT del core (@jg-stevan/scanner-core
+ *  0.4.0, image-processor.js L140) — idéntica a `PROCESSED_MAX_LONG_SIDE`
+ *  (L35): 4032×3024 ≈ 12.2 MP. Todo el pipeline (fotoOriginal capturada,
+ *  fotoProcesada, REVISIÓN) vive a ESA escala hoy; el master nace a la MISMA
+ *  escala para que los píxeles que llegan a detección/OCR sean los de siempre
+ *  (mismo cap — solo cambia UNA re-encode intermedia q0.90, gate del dueño
+ *  ±0.3). Prohibido mover este número sin un kit propio (mueve scores). */
+const MAESTRO_LADO_MAYOR = 4032;
+/** D66 (T3.2) — calidad del JPEG del master (kit literal «q≈0.90»). */
+const MAESTRO_JPEG_CALIDAD = 0.9;
+
+/** D66 (T2/T4) — quién fabricó el master: el decodificador NATIVO del
+ *  navegador (createImageBitmap sobre el blob original) o la ruta wasm
+ *  (heic2any — el mismo motor que el F-HEIC del core, import diferido D47). */
+export type OrigenDecode = "nativo" | "wasm";
+
+/** D66 (T1.5/T3.1) — el MASTER: un solo decodificado a escala de trabajo del
+ *  que thumb/quad/OCR se derivan (vía el pipeline normal — el bridge recibe
+ *  ESTE archivo). `archivo` es el JPEG del master listo para la cola; el
+ *  bitmap vivo JAMÁS se retiene (T3.2: el master reposa como blob). */
+export interface MaestroImagen {
+  archivo: File;
+  ancho: number;
+  alto: number;
+  origenDecode: OrigenDecode;
+  /** ms SOLO del decodificado a master (T4 — separado de procesoMs). */
+  decodeMs: number;
+}
+
+/** ¿El blob declara HEIC/HEIF (MIME o extensión)? Los «.jpg» con contenido
+ *  HEIC (típico de mensajería) los detecta el FALLO del decode nativo —
+ *  misma cascada del F-IMPORT del core. */
+function pareceHeic(blob: Blob, nombre?: string): boolean {
+  if (blob.type === "image/heic" || blob.type === "image/heif") return true;
+  return !!nombre && /\.(heic|heif)$/i.test(nombre);
+}
+
+/** Bitmap → File JPEG del master (canvas fuera — la RAM muere con él).
+ *  Falla el encode → null (la fila cae a la ruta de siempre — honesto). */
+async function bitmapAMaestro(
+  bm: ImageBitmap,
+  origenDecode: OrigenDecode,
+  t0: number,
+  nombreBase: string,
+): Promise<MaestroImagen | null> {
+  try {
+    const lado = Math.max(bm.width, bm.height) || 1;
+    const escala = Math.min(1, MAESTRO_LADO_MAYOR / lado);
+    const ancho = Math.max(1, Math.round(bm.width * escala));
+    const alto = Math.max(1, Math.round(bm.height * escala));
+    const canvas = document.createElement("canvas");
+    canvas.width = ancho;
+    canvas.height = alto;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(bm, 0, 0, ancho, alto);
+    const blob = await new Promise<Blob | null>((res) =>
+      canvas.toBlob(res, "image/jpeg", MAESTRO_JPEG_CALIDAD),
+    );
+    if (!blob) return null;
+    return {
+      archivo: new File([blob], nombreBase, { type: "image/jpeg" }),
+      ancho,
+      alto,
+      origenDecode,
+      decodeMs: Math.max(1, Math.round(Date.now() - t0)),
+    };
+  } finally {
+    try {
+      bm.close();
+    } catch {
+      /* bitmap ya cerrado — noop */
+    }
+  }
+}
+
+/**
+ * D66 (T1.2/T1.5 + T2) — `maestroDeImagen`: UN decodificado a la escala de
+ * trabajo (4032 — constante documentada arriba, R4 sin cambio) con
+ * `createImageBitmap` + `resizeQuality:"high"` (el decodificador nativo baja
+ * escala durante el decode en JPEG grandes — DCT 1/2 — y el bitmap de 12 MP
+ * intermedio desaparece). T2: HEIC intenta NATIVO primero (feature-detect
+ * con validación de dimensiones sanas — `origenDecode:"nativo"`); si el
+ * navegador no decodifica HEIC → ruta wasm de RESERVA con heic2any
+ * (`origenDecode:"wasm"` — import DEFERIDO D47, motor idéntico al F-HEIC
+ * del core; el fallback JAMÁS se asume disponible ni se borra). Devuelve
+ * null ante CUALQUIER fallo o cancelación — la fila cae a la ruta de
+ * SIEMPRE (jamás bloquea el pipeline; honestidad del kit).
+ *
+ * `senalCancelacion` (T3.4): el precalor la pasa para abortar entre etapas
+ * (fila quitada/cola vaciada → null sin consumir CPU del encode).
+ */
+export async function maestroDeImagen(
+  entrada: Blob,
+  opciones?: {
+    nombre?: string;
+    senalCancelacion?: () => boolean;
+  },
+): Promise<MaestroImagen | null> {
+  const cancelado = () => opciones?.senalCancelacion?.() ?? false;
+  const t0 = Date.now();
+  // Nombre del master: el del original con .jpg (la identidad visual de la
+  // bandeja sigue viniendo del registro — este File solo alimenta al bridge).
+  const nombreBase = `${(opciones?.nombre ?? "acta").replace(/\.[a-z0-9]{2,5}$/i, "")}.jpg`;
+  const esHeic = pareceHeic(entrada, opciones?.nombre);
+
+  // 1) NATIVO primero (T2.1) — para TODO (JPG incluido): una sola llamada
+  //    con resize integrado cuando el navegador la soporta. imageOrientation
+  //    "from-image" = MISMA orientación que el F-IMPORT del core (EXIF).
+  try {
+    const bm = await createImageBitmap(entrada, {
+      imageOrientation: "from-image",
+      resizeQuality: "high",
+    });
+    if (bm.width <= 0 || bm.height <= 0) throw new Error("DIMENSIONES_INVALIDAS");
+    if (cancelado()) {
+      try {
+        bm.close();
+      } catch {
+        /* noop */
+      }
+      return null;
+    }
+    return await bitmapAMaestro(bm, "nativo", t0, nombreBase);
+  } catch {
+    /* sin decode nativo (HEIC en Chrome/Windows, blob roto) → reserva */
+  }
+  if (cancelado()) return null;
+
+  // 2) Reserva wasm (T2.2) — SOLO si el formato lo justifica (HEIC/HEIF o un
+  //    "jpg" que resultó ser HEIC: el nativo falló). heic2any = el MISMO
+  //    motor del F-HEIC del core (0.0.4) con import DEFERIDO (D47). Un no-HEIC
+  //    que falló el nativo (blob corrupto) NO paga wasm: fallback honesto.
+  if (!esHeic) return null;
+  try {
+    const { default: heic2any } = await import("heic2any");
+    if (cancelado()) return null;
+    const convertido = await heic2any({
+      blob: entrada,
+      toType: "image/jpeg",
+      quality: 0.92,
+    });
+    const jpeg = Array.isArray(convertido) ? convertido[0] : convertido;
+    if (!(jpeg instanceof Blob)) return null;
+    const bm = await createImageBitmap(jpeg, { resizeQuality: "high" });
+    if (bm.width <= 0 || bm.height <= 0) {
+      try {
+        bm.close();
+      } catch {
+        /* noop */
+      }
+      return null;
+    }
+    if (cancelado()) {
+      try {
+        bm.close();
+      } catch {
+        /* noop */
+      }
+      return null;
+    }
+    return await bitmapAMaestro(bm, "wasm", t0, nombreBase);
+  } catch {
+    return null; // decode imposible — la ruta de siempre lo resolverá (o ERROR)
+  }
+}
+
 /**
  * ¿El archivo entra a la cola como imagen? El MISMO criterio de ScanView
  * (F-IMPORT L602-607 — copiado, no inventado): MIME image/* o extensión
