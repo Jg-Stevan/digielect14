@@ -6,6 +6,7 @@
 import type { PageFilter, Quad } from "@jg-stevan/scanner-core/types";
 import type { ClasificacionE14 } from "./clasificador";
 import type { NivelLectura } from "./senal-lectura";
+import type { OrigenActa } from "./masiva/origen"; // D63-A — tipo del origen (kit: tipos viven en origen.ts)
 
 // ---------- Captura y análisis (SPEC fase lógica §3.1) ----------
 export type FuenteCaptura = "SIMULACION" | "CAMARA" | "ARCHIVO";
@@ -90,6 +91,11 @@ export interface DiagnosticoActa {
   ocrValido: boolean;
   gate: {
     completa: boolean;
+    /** D63-C — KIT e63c-quad-gate-escaneo-v1 (T2.3): veredicto del MARCO
+     *  IMPRESO del formulario en escaneos ("completo" | "cortado" |
+     *  "no-encontrado"). null = no se evaluó (fotos, SIM, registros
+     *  previos a D63-C — jamás inventar). Aditivo al final del contrato. */
+    gateMarco?: "completo" | "cortado" | "no-encontrado" | null;
     fondo: boolean;
     recortada: boolean;
     ladoEsquina: string | null;
@@ -105,7 +111,10 @@ export interface DiagnosticoActa {
     // KIT e14-quad-sobel-v1 (P1 §4-C): quién fabricó el quad de verdad.
     // null SOLO si la detección NO corrió (recorte manual del editor, catch
     // de mejorarResolución — n/d jamás miente, misma filosofía del T-A).
-    quadOrigen: "worker" | "sobel" | null;
+    // D63-C (T1): valor NUEVO "pagina-completa" — escaneos sin quad real
+    // (worker falló + sobel fabricó): la página completa es el acta, sin
+    // warp de perspectiva (la rotación recta ya la trajo D63-B).
+    quadOrigen: "worker" | "sobel" | "pagina-completa" | null;
   };
   tiempos: {
     procesoMs: number;
@@ -138,6 +147,25 @@ export interface DiagnosticoActa {
    *  Asignación defensiva en el bridge (si no hay diagnóstico, se omite).
    *  Ausente en SIM (el probe no corre) y en registros previos a D57. */
   orientacionProbeMs?: number;
+  /** D63-A — KIT e63a-origen-escaneo-v1 (T2): origen del archivo MASIVA
+   *  según el detector heurístico (masiva/origen.ts). null = duda honesta —
+   *  jamás inventar. Ausente en SIM y en registros previos a D63-A. SOLO
+   *  visibilidad: no toca score/gate/veredictos (kit §0). */
+  origen?: OrigenActa;
+  /** D63-A — T2: señales auditables de la decisión del detector (p. ej.
+   *  "sin-exif+borde-blanco+ratio-hoja"). null = no evaluado. */
+  origenSenales?: string | null;
+  /** D63-B — KIT e63b-deskew-escaneo-v1 (T2): ángulo de skew detectado en la
+   *  banda del encabezado (con signo, pasos de 0.1°; null = banda sin tinta
+   *  suficiente o ángulo fuera de ±10° — captura torcida, no skew). */
+  skewGrados?: number | null;
+  /** D63-B — T2: ms del deskew (detección + rotación del master). null si
+   *  no se rotó (|θ| < 0.3° o fuera de rango o no es escaneo). */
+  deskewMs?: number | null;
+  /** D63-B — T3: limpieza de blanco aplicada al master ("blanco" cuando el
+   *  histograma no llegaba a blanco puro). "no" = sin limpieza; null = no
+   *  evaluado (no escaneo / registro previo a D63-B). */
+  limpieza?: "blanco" | "no" | null;
 }
 
 export interface Acta {
