@@ -27,8 +27,20 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false },
   // §12 PWA (SPEC-e14-cyber-neon): pantalla completa sin barras del
   // navegador — standalone + manifest (Next prefija el basePath al servir).
-  // SIN service worker ni install-prompt (fuera de alcance de la ronda).
+  // KIT H6 (PWA completa): SW network-first del lab + iconos + apple-touch.
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Digitalizador E-14",
+  },
 };
 
 export const viewport: Viewport = {

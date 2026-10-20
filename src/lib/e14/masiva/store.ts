@@ -14,7 +14,7 @@ import {
   borrar,
   guardarRegistro,
   leerRegistro,
-  listarRegistros,
+  listarMapeados,
   recuperarCola,
   vaciar as vaciarCola,
 } from "./cola";
@@ -58,6 +58,15 @@ interface MasivaStore {
   guardando: number;
   /** false → píldora de fallback (IndexedDB no disponible — kit §3/§6). */
   colaDisponible: boolean;
+  /** FIX (auditoría 2-c C5): true mientras corre «ENVIAR ADVERTENCIAS» —
+   *  guard de re-entrancia del lote (doble tap = doble envío). */
+  enviandoLote: boolean;
+
+  /** FIX M9 (auditoría 2-c): aviso específico de QUOTA — antes cualquier
+   *  fallo de escritura (casi siempre almacenamiento lleno con actas de
+   *  ~15 MB/registro) degradaba a «TU NAVEGADOR NO SOPORTA LA COLA» (falso)
+   *  y mataba el botón PROCESAR para TODA la bandeja. null = sin aviso. */
+  avisoCola: string | null;
 
   /** Al montar: lista IDB → filas livianas + recuperarCola() (zombis fuera). */
   cargarFilas: () => Promise<void>;
@@ -153,19 +162,21 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
   filas: [],
   corriendo: false,
   progreso: null,
+  enviandoLote: false,
   filtro: "TODAS",
   origenAbierto: null,
   guardando: 0,
   colaDisponible: true,
+  avisoCola: null,
 
   cargarFilas: async () => {
     try {
       await recuperarCola(); // PROCESANDO zombi → PENDIENTE (caída a mitad de OCR)
-      const registros = await listarRegistros();
+      // FIX C6: mapper DENTRO del cursor — los registros completos (acta con
+      // dataURLs) viven un instante; la bandeja solo retiene filas livianas.
+      const filas = await listarMapeados(filaDeRegistro);
       set({
-        filas: registros
-          .map(filaDeRegistro)
-          .sort((a, b) => a.agregadaEn - b.agregadaEn),
+        filas: filas.sort((a, b) => a.agregadaEn - b.agregadaEn),
         colaDisponible: true,
       });
     } catch {
@@ -230,15 +241,31 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     try {
       if (imagenes.length) {
         const ids = await agregarLote(imagenes);
-        // Swap de ids temp → reales (mismo orden del lote).
+        // FIX M13 (auditoría 2-c): el swap respeta la decisión del dueño TOMADA
+        // DURANTE la copia (QUITAR de una fila temp, VACIAR, o recarga de la
+        // vista que re-monta cargarFilas): las temps que YA NO están en filas
+        // NO reviven con id real — sus registros recién creados se BORRAN de
+        // IDB (antes quedaban huérfanos y resucitaban como PENDIENTE al
+        // recargar, contra la voluntad del usuario).
+        const actuales = get().filas;
+        const vivas = new Set(actuales.map((f) => f.id));
+        const huerfanos = ids.filter((_, idx) => !vivas.has(temps[idx]!.id));
         set({
-          filas: get().filas.map((f) => {
+          filas: actuales.map((f) => {
             const idx = temps.findIndex((t) => t.id === f.id);
             return idx === -1 ? f : { ...f, id: ids[idx] };
           }),
           guardando: Math.max(0, get().guardando - imagenes.length),
           colaDisponible: true,
+          avisoCola: null, // un lote que SÍ entró despeja el aviso de quota
         });
+        for (const id of huerfanos) {
+          try {
+            await borrar(id);
+          } catch {
+            /* IDB caída — el orphan muere con el próximo VACIAR */
+          }
+        }
       } else {
         set({ guardando: Math.max(0, get().guardando - imagenes.length) });
       }
@@ -255,15 +282,29 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
           /* IDB caído: la fila vive SOLO en memoria (honesto) */
         }
       }
-    } catch {
-      // El lote NO entró a IDB: filas temporales fuera + píldora de fallback
+    } catch (err) {
+      // El lote NO entró a IDB: filas temporales fuera + píldora honesta
       // (errores de IDB NUNCA tumban la UI — kit carga-masiva §3). Las filas
       // ERROR quedan en memoria — su motivo ES la información.
+      // FIX M9 (auditoría 2-c): QUOTA ≠ «navegador sin soporte» — la cola
+      // SIGUE disponible (hay filas pre-existentes sanas y PROCESAR vale);
+      // el aviso explica cómo liberar espacio. Solo un fallo REAL de IDB
+      // (abrir/versión) degrada a colaDisponible false.
+      const esQuota =
+        err instanceof Error &&
+        (/quotaexceeded/i.test(err.name) ||
+          /quota/i.test(err.message) ||
+          /llen|full/i.test(err.message));
       const tempIds = new Set(temps.map((t) => t.id));
       set({
         filas: get().filas.filter((f) => !tempIds.has(f.id)),
         guardando: Math.max(0, get().guardando - imagenes.length),
-        colaDisponible: false,
+        ...(esQuota
+          ? {
+              avisoCola:
+                "ALMACENAMIENTO LLENO — vacía la bandeja o importa lotes más pequeños",
+            }
+          : { colaDisponible: false }),
       });
     }
   },
@@ -287,14 +328,26 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     const { origenAbierto } = get();
     if (!origenAbierto) return;
     const acta = useE14Store.getState().actaActual;
-    if (!acta || acta.id !== origenAbierto) {
-      // Identidad NO coincide (arrancó una captura normal mientras tanto):
-      // SOLO limpiar — no escribir nada (kit §4).
+    // FIX (auditoría 2-c C4): la identidad se resuelve contra el acta GUARDADA
+    // en el registro (registro.acta.id === actaActual.id) — NO contra el id de
+    // la FILA ("masiva-*" vs "acta-*": prefijos distintos, la comparación
+    // directa era SIEMPRE falsa y este bloque entero era código muerto: las
+    // ediciones de REVISIÓN jamás volvían a la bandeja/IDB y el usuario,
+    // viendo la fila desactualizada, re-abría y re-enviaba la misma acta).
+    // El recorte/filtro/rotación conservan acta.id (spread ...acta) → la
+    // identidad sobrevive a TODAS las ediciones del editor.
+    if (!acta) {
       set({ origenAbierto: null });
       return;
     }
     try {
       const registro = await leerRegistro(origenAbierto);
+      if (!registro || registro.acta?.id !== acta.id) {
+        // Identidad NO coincide (arrancó una captura normal mientras tanto):
+        // SOLO limpiar — no escribir nada (kit §4).
+        set({ origenAbierto: null });
+        return;
+      }
       const actaNueva = acta;
       // Thumb FRESCO si la foto cambió (recorte/filtro/rotación hornean
       // fotoProcesada) — la bandeja no debe mentir.
@@ -341,14 +394,22 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     } catch {
       /* las filas mueren igual en la bandeja */
     }
-    set({ filas: [], progreso: null, origenAbierto: null });
+    set({ filas: [], progreso: null, origenAbierto: null, avisoCola: null });
   },
 
   enviarLote: async (estado) => {
     if (estado !== "ADVERTENCIA") return; // v1: SOLO advertencias (kit §9)
+    // FIX (auditoría 2-c C5): guard de re-entrancia — un doble clic (o doble
+    // tap móvil) disparaba DOS lotes que tomaban el MISMO snapshot de filas
+    // ADVERTENCIA (el patchFila llegaba tarde) → cada acta pasaba 2× por
+    // registrarEnvioMasiva: historial duplicado y completadas inflada.
+    if (get().enviandoLote) return;
     const pendientes = get().filas.filter(
       (f) => f.estado === "LISTA" && f.statusActa === "ADVERTENCIA",
     );
+    if (pendientes.length === 0) return;
+    set({ enviandoLote: true });
+    try {
     for (const fila of pendientes) {
       try {
         const registro = await leerRegistro(fila.id);
@@ -377,6 +438,9 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
       } catch {
         /* una fila que falla NO detiene el lote (sigue con la siguiente) */
       }
+    }
+    } finally {
+      set({ enviandoLote: false });
     }
   },
 

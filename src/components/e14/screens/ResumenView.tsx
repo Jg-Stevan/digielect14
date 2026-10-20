@@ -11,7 +11,7 @@ import type { HistorialRow } from "@/lib/e14/types";
 import { PUESTO_SIMULADO } from "@/lib/e14/seed";
 // KIT e14-informe-analisis-v1 (T2): chequeo barato de la cola masiva al
 // montar — decide el disabled del botón INFORME ↓ (cola.ts INTOCABLE).
-import { listarRegistros } from "@/lib/e14/masiva/cola";
+import { contarRegistros } from "@/lib/e14/masiva/cola";
 import { SegmentedBar } from "../primitives";
 
 function badgeEstado(estado: HistorialRow["estado"]) {
@@ -66,13 +66,25 @@ export function ResumenView() {
   const [listo, setListo] = useState(false);
   const [motivo, setMotivo] = useState<string | null>(null);
 
+  // KIT L6: REINICIAR JORNADA con confirmación de 2 toques (mismo patrón del
+  // VACIAR de MASIVA — sin diálogos nativos). 4 s de ventana para confirmar.
+  const reiniciarJornada = useE14Store((s) => s.reiniciarJornada);
+  const [reiniciarArmado, setReiniciarArmado] = useState(false);
+  useEffect(() => {
+    if (!reiniciarArmado) return;
+    const t = window.setTimeout(() => setReiniciarArmado(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [reiniciarArmado]);
+
   // Chequeo SOLO al montar (kit T2.2 — barato): IDB caída → tratada como
   // vacía (el informe no puede nacer; mismo fallback honesto de MASIVA).
+  // FIX C6: count() nativo de IDB — un conteo NO debe deserializar TODA la
+  // cola (actas con dataURLs de ~7-14 MB c/u) para pedir su longitud.
   useEffect(() => {
     let vivo = true;
-    listarRegistros()
-      .then((registros) => {
-        if (vivo) setColaVacia(registros.length === 0);
+    contarRegistros()
+      .then((total) => {
+        if (vivo) setColaVacia(total === 0);
       })
       .catch(() => {
         if (vivo) setColaVacia(true);
@@ -268,6 +280,35 @@ export function ResumenView() {
               {motivo}
             </p>
           )}
+          {/* KIT L6: REINICIAR JORNADA — cierra el día de votación (borra
+              mesas archivadas, historial, contadores, acta en revisión y la
+              cola MASIVA). 2 toques (patrón VACIAR de MASIVA), aislado abajo
+              del INFORME para que el pulgar no lo toque por accidente. */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!reiniciarArmado) {
+                setReiniciarArmado(true);
+                return;
+              }
+              setReiniciarArmado(false);
+              void reiniciarJornada();
+            }}
+            aria-label={
+              reiniciarArmado
+                ? "Confirmar reiniciar la jornada completa (incluye la cola masiva)"
+                : "Reiniciar la jornada completa"
+            }
+            className={`min-h-[44px] px-6 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60 ${
+              reiniciarArmado
+                ? "border-red-500 text-red-400 bg-red-500/10"
+                : "border-brand-border bg-brand-surface text-gray-400 hover:border-red-500/50 hover:text-red-400"
+            }`}
+          >
+            {reiniciarArmado
+              ? "¿SEGURO? REINICIAR JORNADA"
+              : "REINICIAR JORNADA"}
+          </button>
         </section>
 
         {/* Historial de envíos — KIT e14-esquinas-suaves-v1 (T-R): con SIM

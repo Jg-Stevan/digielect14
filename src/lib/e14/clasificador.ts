@@ -533,7 +533,12 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
   const paginaVerPag =
     mVerPag && Number.isFinite(numeroLimpio(mVerPag[2]))
       ? {
-          index: Math.max(1, numeroLimpio(mVerPag[1]) || 1),
+          // FIX (auditoría 2-a C1): index = grupo 2 (Pág) — el grupo 1 es
+          // «Ver» (versión de diagramación, SIEMPRE 01). El swap fabricaba
+          // «PÁG 1/2» en toda pág 2 sin código 1D (hueco P1 mentiroso —
+          // el bug del dueño 16-oct que el kit decía curado) y el aviso
+          // VERPAG_CODIGO_DISCREPAN espurio cuando el código SÍ se leía.
+          index: Math.max(1, numeroLimpio(mVerPag[2]) || 1),
           total: Math.max(1, numeroLimpio(mVerPag[3]) || 2),
         }
       : null;
