@@ -1,7 +1,7 @@
 # REPORTE — KIT e14-tiempos-ocultos-v1 (D61)
 
 **Fecha:** 2026-10-20 · **Agente:** AGENTE-1 (tiempos-ocultos) · **Prioridad:** P1
-**Rama:** `feat/e14-tiempos-ocultos-v1` · **PR:** DRAFT hacia `main`
+**Rama:** `feat/e14-tiempos-ocultos-v1` · **PR:** DRAFT **#47** hacia `main` — https://github.com/Jg-Stevan/digielect14/pull/47
 **Base:** `6bbd464` (origin/main al momento de ramificar — ver §2)
 
 ---
@@ -162,6 +162,16 @@ siguen parseando (misma filosofía D57).
 | Desenlace intacto (por lectura) | CERO cambios en score/status/gate/envío/marcarFila: el diff del runner solo AÑADE medición + parches aditivos del diagnóstico. La ventana de persistencia conserva el orden EXACTO del FIX M14 (write principal → liviano), y el re-save de instrumento es un try/catch propio, fuera de ese desenlace |
 | Lote real MASIVA (1 HEIC + 1 JPG) | **PENDIENTE DEL DUEÑO** — §6 |
 | Informe TXT byte-idéntico en líneas antiguas con lote real | **PENDIENTE DEL DUEÑO** — §6 (por lectura: las líneas previas de `renderTxt` no se tocaron; la nueva va al final de TOTALES) |
+
+### 5.1 — CI del PR DRAFT #47 (head `3c08b17`, consultada vía API al momento del reporte)
+
+| Check | Resultado |
+|---|---|
+| `checks` (Quality Gate: tsc + lint + build) | ✅ success |
+| `Vercel` (deploy preview) + `Vercel Preview Comments` | ✅ success ×2 |
+| `parity` (worker-parity ×2) | ❌ failure ×2 — **ROJO HEREDADO, NO introducido por D61**: este PR tiene `git diff origin/main -- public/` VACÍO (0 toques a `public/scanner/detection-worker.js`); el workflow diffea el worker contra `web-scanner` main, y desde D57 el lab NO ha espejado las 5 líneas `willReadFrequently` (documentado en D57/worklog y su REPORTE §9 — ruta A del dueño: espejarlas en el lab → verde sin tocar esta rama). Sin fixes de CI fuera de alcance (mandato del kit) |
+
+Commits: `5e1bfe9` (código) · `3c08b17` (docs) · commit docs-CI (este).
 
 ## 6. PENDIENTE DEL DUEÑO (procedimiento exacto — NO inventado, no corrido)
 
