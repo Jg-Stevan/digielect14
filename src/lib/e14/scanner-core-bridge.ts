@@ -88,6 +88,9 @@ import { verificarCompletitud, type ResultadoCompletitud } from "./completitud";
 // KIT e14-gate-v2 (FASE G2): marcador OBLIGATORIO de votos — helper ÚNICO
 // compartido con el guard de completitud (motorTinta, cero duplicación).
 import { medirZonaVotos } from "./marcadores";
+// D63-C — KIT e63c-quad-gate-escaneo-v1: detector del MARCO IMPRESO del E-14
+// para el gate de escaneos (T2) — fotos y SIM jamás lo invocan (guards).
+import { evaluarMarcoImpreso, type MarcoEscaneo } from "./marco-escaneo";
 // KIT e14-score-lectura-v1: señal de LECTURA del score v2 (módulo puro — §4-A).
 import {
   PISO_LECTURA_FUERTE,
@@ -1073,12 +1076,16 @@ export class RealCoreBridge implements E14Bridge {
     //    en el log como hoy, traza de auditoría). SOLO alcanzable desde la
     //    rama SIMULACIÓN (ARCHIVO/CÁMARA corren detect byte a byte, AC15).
     const sinRecorte = "archivo" in entrada && entrada.sinRecorte === true;
+    // D63-C — KIT e63c-quad-gate-escaneo-v1: origen del archivo (detector
+    // D63-A) viaja en opciones SOLO para MASIVA — SIM y el flujo individual
+    // JAMÁS lo traen (guard doble del kit T3: nada de escaneos les aplica).
+    const origenActa = opciones.origenActa ?? null;
     let quad: Quad;
     // KIT e14-quad-sobel-v1 (P1 §4-B): quién fabricó el quad de verdad —
     // "worker" (la cascada ganó) o "sobel" (el fallback, incluido el catch del
     // propio Sobel con rect por defecto). null SOLO si ni siquiera corrió una
     // detección (n/d jamás miente — misma filosofía del T-A).
-    let quadOrigen: OrigenQuad | null = null;
+    let quadOrigen: OrigenQuad | "pagina-completa" | null = null;
     // KIT e14-masiva-ux-v1 (T1): trazabilidad del arreglo en el log — si
     // corrió el reintento (§3-T1.2). Solo AÑADIR campos al final del
     // formato (los instrumentos del dueño lo parsean).
@@ -1116,6 +1123,15 @@ export class RealCoreBridge implements E14Bridge {
         }
         quad = detalle.quad;
         quadOrigen = detalle.origen;
+        // D63-C (T1): en ESCANEOS sin quad real — el worker falló y sobel
+        // fabricó (un escaneo plano sin bordes no tiene quad que encontrar;
+        // evidencia: 3/8 del informe cayeron a sobel) — la PÁGINA COMPLETA
+        // es el acta: sin warp de perspectiva (la rotación recta ya la trajo
+        // D63-B). Las FOTOS no cambian (T1.3: quad sobel de siempre).
+        if (origenActa === "escaneo" && quadOrigen === "sobel") {
+          quad = QUAD_IDENTITY;
+          quadOrigen = "pagina-completa";
+        }
       } catch {
         // El core SIEMPRE devuelve Quad; una EXCEPCIÓN aquí = imagen no
         // detectable → RECHAZADA ILEGIBLE inmediata (§5 paso 1, spec §7.5).
@@ -1404,7 +1420,19 @@ export class RealCoreBridge implements E14Bridge {
     // (recorte/calidad/OCR) para que REVISIÓN muestre la imagen y el
     // operador entienda el problema.
     const verificacionResuelta = verificacion ? await verificacion : null;
-    const completa = opciones.simular ? true : (verificacionResuelta?.completa ?? true);
+    // D63-C (T2): gate de ESCANEOS por MARCO IMPRESO del formulario — el
+    // guard de fotos («contenido al filo = cortada») queda NI UNA LÍNEA
+    // distinto para fotos/SIM (el marco solo consulta `origenActa ===
+    // "escaneo"`, que SIM/fotos jamás traen — kit T2.4/T3). Veredicto:
+    // completo → no bloquea · cortado → INCOMPLETA como hoy (el scanner SÍ
+    // cortó la hoja — honesto) · no-encontrado → no bloquea (lectura/score
+    // deciden como siempre). El RECT del marco alimenta la región de la
+    // zona de votos (el marco ES el borde del acta — mismo sistema de
+    // referencia que las fracciones ZONA_* de marcadores.ts).
+    const marcoEscaneo: MarcoEscaneo | null =
+      origenActa === "escaneo" && !opciones.simular ? await evaluarMarcoImpreso(fotoProcesada) : null;
+    let completa = opciones.simular ? true : (verificacionResuelta?.completa ?? true);
+    if (marcoEscaneo) completa = marcoEscaneo.veredicto === "cortado" ? false : true;
     // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) — marcador OBLIGATORIO de
     // votos, FUERA de evaluarGate (MISMO patrón del veto INCOMPLETA: D6/
     // AC10). Fallo del 2026-10-16: acta sin votos llegó OPTIMA y se
@@ -1415,7 +1443,10 @@ export class RealCoreBridge implements E14Bridge {
     // demo no se rompe · docs/REPORTE-gate-marcadores-v2.md). INCOMPLETA
     // manda primero: el veto de votos SOLO condena actas completas sin
     // tinta en la zona de votos.
-    const marcadores = await medirZonaVotos(fotoProcesada);
+    // D63-C: con RECT del marco impreso (escaneos «completo») la zona se
+    // mide RELATIVA AL FORMULARIO — las fracciones fijas ZONA_* asumen el
+    // recorte = acta (falso SIN_VOTOS en página-completa con márgenes).
+    const marcadores = await medirZonaVotos(fotoProcesada, marcoEscaneo?.rect ?? undefined);
     // KIT actas-vivas-paginas-v1 (FASE C): gate de votos SOLO P1 — la pág 2
     // (constancias) NO tiene zona de votos (hoy pasaba por la tinta de las
     // líneas impresas: de la suerte). Página desconocida → se mide
@@ -1554,6 +1585,8 @@ export class RealCoreBridge implements E14Bridge {
           ocrValido: ocrTextIsValid(texto),
           gate: {
             completa,
+            // D63-C (T2.3): veredicto del marco impreso (null en fotos/SIM).
+            gateMarco: marcoEscaneo?.veredicto ?? null,
             fondo: verificacionResuelta?.fondo ?? false,
             recortada,
             ladoEsquina: ladoEsquina ?? null,
@@ -1677,7 +1710,7 @@ export class RealCoreBridge implements E14Bridge {
     // corrió (mejorarResolución). El recorte MANUAL del editor (store) no lo
     // pasa — el quad lo puso el usuario, ninguna detección corrió → undefined
     // → token ausente (n/d no miente).
-    quadOrigen?: OrigenQuad | null,
+    quadOrigen?: OrigenQuad | "pagina-completa" | null,
     // KIT e14-esquinas-suaves-v1 (Q2): recorte del editor = decisión CON VISTA.
     manual = false,
   ): Promise<Acta> {
@@ -1767,7 +1800,7 @@ export class RealCoreBridge implements E14Bridge {
     //    el catch el origen es null (ni siquiera corrió el Sobel — n/d no
     //    miente, misma filosofía del T-A).
     let quad: Quad;
-    let quadOrigen: OrigenQuad | null = null;
+    let quadOrigen: OrigenQuad | "pagina-completa" | null = null;
     try {
       const detalle = await detectDocumentEdgesDetail(fotoNueva);
       quad = detalle.quad;
@@ -1794,7 +1827,7 @@ export class RealCoreBridge implements E14Bridge {
     emitir: (p: ProgresoAnalisis) => void,
     // KIT e14-quad-sobel-v1 (P1 §4-B): origen del quad — null/undefined si la
     // detección NO corrió (recorte manual del editor, catch de mejorar).
-    quadOrigen: OrigenQuad | null = null,
+    quadOrigen: OrigenQuad | "pagina-completa" | null = null,
     // KIT e14-esquinas-suaves-v1 (Q2): true SOLO desde el editor del store
     // (aplicarRecorte) — activa el ESCUDO-MANUAL del gate (abajo).
     manual = false,

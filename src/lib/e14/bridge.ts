@@ -17,6 +17,10 @@ import type { PageFilter, Quad } from "@jg-stevan/scanner-core/types";
 // KIT e14-esquinas-suaves-v1 (Q2): origen del quad en el contrato del
 // recorte (ver comentario del contrato — el flag manual viaja con él).
 import type { OrigenQuad } from "@jg-stevan/scanner-core/image-processor";
+// D63-A/D63-C — KIT e63a-origen-escaneo-v1: el origen del archivo (detector
+// heurístico del runner MASIVA) viaja en opciones SOLO para MASIVA — SIM y
+// el flujo individual JAMÁS lo traen (el gate de escaneos no les aplica).
+import type { OrigenActa } from "./masiva/origen";
 
 /** Página de mesa a la que apunta el próximo escaneo (D7: vive en el store). */
 export interface PaginaObjetivo {
@@ -45,6 +49,11 @@ export interface OpcionesEscaneo {
    *  DESPUÉS de scoreDeCalidad y ANTES del gate; el desenlace real (ÓPTIMA
    *  enviada / EN_REVISION_HUMANA / RECHAZADA) lo decide `evaluarGate`. */
   scoreSimulado?: number;
+  /** D63-A/D63-C — KIT e63a-origen-escaneo-v1: origen del archivo según el
+   *  detector heurístico (masiva/origen.ts). SOLO MASIVA lo llena (runner).
+   *  "escaneo" activa el quad página-completa (T1) y el gate del marco
+   *  impreso (T2) del kit D63-C; fotos/SIM/ausente = pipeline de siempre. */
+  origenActa?: OrigenActa;
   onProgreso?: (p: ProgresoAnalisis) => void;
 }
 
