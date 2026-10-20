@@ -243,6 +243,21 @@ function filaLiviana(reg: RegistroMasiva): FilaInforme {
   };
 }
 
+/** D63-D rev.2 (T2b): señal DOMINANTE de un string de señales de un origen
+ *  null — la negativa que explica la duda (cada string de null trae
+ *  EXACTAMENTE una de estas, por la regla de decisión de D63-A):
+ *  - `sin-exif+sin-bitmap` → sin-bitmap (el decode falló — causa raíz)
+ *  - `sin-exif+borde-no-blanco+…` → borde-no-blanco (el borde no pareció scanner)
+ *  - `sin-exif+borde-blanco+ratio-fuera` → ratio-fuera (blanco pero forma absurda)
+ *  null si no hay negativa identificable (no se inventa balde). */
+function senalDominante(senales: string): string | null {
+  const partes = senales.split("+");
+  if (partes.includes("sin-bitmap")) return "sin-bitmap";
+  if (partes.includes("borde-no-blanco")) return "borde-no-blanco";
+  if (partes.includes("ratio-fuera")) return "ratio-fuera";
+  return null;
+}
+
 /** Conteo por valor — claves fijas a 0 cuando se pasan (JSON estable). */
 function conteo(
   valores: Array<string | null | undefined>,
@@ -343,8 +358,9 @@ function nombreCarpeta(fila: FilaInforme, usados: Set<string>): string {
 }
 
 /** Entrada liviana del array actas[] del informe.json (T1.2 — campos exactos
- *  del kit; PROHIBIDO fotoOriginal/fotoProcesada/ocrTexto aquí). */
-function actaLivianaJson(fila: FilaInforme) {
+ *  del kit; PROHIBIDO fotoOriginal/fotoProcesada/ocrTexto aquí). D63-D rev.2:
+ *  exportada PURO para verificación por humo (misma razón que renderTxt). */
+export function actaLivianaJson(fila: FilaInforme) {
   return {
     id: fila.id,
     nombre: fila.nombre,
@@ -365,6 +381,15 @@ function actaLivianaJson(fila: FilaInforme) {
     ...(fila.orientacionProbeMs != null
       ? { orientacionProbeMs: fila.orientacionProbeMs }
       : {}),
+    // D63-D rev.2 (T1b): trazas de origen — campo AUSENTE si el diagnóstico
+    // no lo trae (registros previos/SIM — jamás inventar; misma receta del
+    // spread condicional de arriba). skewGrados 0 ES dato (guard != null).
+    ...(fila.origen != null ? { origen: fila.origen } : {}),
+    ...(fila.origenSenales != null
+      ? { origenSenales: fila.origenSenales }
+      : {}),
+    ...(fila.skewGrados != null ? { skewGrados: fila.skewGrados } : {}),
+    ...(fila.gateMarco != null ? { gateMarco: fila.gateMarco } : {}),
   };
 }
 
@@ -459,10 +484,28 @@ export function renderTxt(
   // statusActa (el vocabulario es el de porStatusActa); motivos = tipos de
   // rechazo únicos de las RECHAZADAS (ninguna → «ninguno»).
   const conteoOrigen = conteo(filas.map((f) => f.origen ?? "null"), ["escaneo", "foto", "null"]);
+  // D63-D rev.2 (T2b): segundo nivel de la línea ORIGEN con las señales de
+  // los null — conteo por la señal DOMINANTE (la negativa que explica la
+  // duda: sin-bitmap = decode falló; borde-no-blanco = el borde no pareció
+  // scanner; ratio-fuera = blanco pero forma absurda — cada string de
+  // señales de un null trae EXACTAMENTE una de estas). Evidencia 162728:
+  // los 8 escaneos reales cayeron null y sin esto no se calibra el
+  // detector. Orden: conteo desc, luego alfabético (estable). Sin null
+  // (o sin señales) la línea queda byte-idéntica a la de D63-A.
+  const dominantes = conteo(
+    filas
+      .filter((f) => f.origen == null && f.origenSenales != null)
+      .map((f) => senalDominante(f.origenSenales!))
+      .filter((s): s is string => s != null),
+  );
+  const detalleNull = Object.entries(dominantes)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([k, v]) => `${k} ${v}`)
+    .join(" · ");
   linea(
     `ORIGEN: ${Object.entries(conteoOrigen)
       .map(([k, v]) => `${k} ${v}`)
-      .join(" - ")}`,
+      .join(" - ")}${detalleNull ? ` (null: ${detalleNull})` : ""}`,
   );
   const escaneos = filas.filter((f) => f.origen === "escaneo");
   const escPorStatus = conteo(
@@ -522,7 +565,14 @@ export function renderTxt(
       // AL FINAL de la línea (aditivo — jamás reordenar, contrato D57).
       // Honestidad del kit: sin dato NO se imprime nada (null/ausente).
       // skewGrados usa != null (un 0.0 medido es un dato real, no ausencia).
-      f.origen != null ? `origen ${f.origen}` : null,
+      // D63-D rev.2 (T1 — cambio de criterio): origenSenales se imprime
+      // SIEMPRE que exista, TAMBIÉN con origen null — evidencia 162728: los
+      // 8 escaneos reales cayeron null y sin sus señales no se calibra el
+      // detector. Formato del kit: `origen null (sin-exif+borde-no-blanco+…)`.
+      // Registro sin origen NI señales → nada (byte-idéntico al pre-D63-A).
+      f.origen != null || f.origenSenales != null
+        ? `origen ${f.origen ?? "null"}${f.origenSenales ? ` (${f.origenSenales})` : ""}`
+        : null,
       f.skewGrados != null ? `skewGrados ${f.skewGrados}` : null,
       f.gateMarco != null ? `gateMarco ${f.gateMarco}` : null,
     ].filter((t): t is string => t != null);
