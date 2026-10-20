@@ -26,6 +26,10 @@ function pildoraDe(f: FilaMasiva): { label: string; clases: string } {
   switch (f.estado) {
     case "PENDIENTE":
       return { label: "PENDIENTE", clases: "border-brand-borderdim text-gray-400" };
+    // KIT e14-masiva-tiempos-v1 (PR-1): gemela por hash — SOLO visual (al
+    // procesar reutiliza el resultado de la original; PROCESAR IGUAL fuerza).
+    case "DUPLICADA":
+      return { label: "DUPLICADA", clases: "border-gray-500/60 text-gray-300 bg-white/5" };
     case "PROCESANDO":
       return { label: "PROCESANDO", clases: "border-brand-borderdim text-gray-200 bg-white/5" };
     case "ERROR":
@@ -81,6 +85,7 @@ export function MasivaView() {
     vaciar,
     enviarLote,
     setFiltro,
+    procesarIgual,
   } = useMasivaStore.getState();
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +125,10 @@ export function MasivaView() {
   }, [online]);
 
   const pendientes = filas.filter((f) => f.estado === "PENDIENTE").length;
+  // KIT e14-masiva-tiempos-v1 (PR-1): las DUPLICADAS son cola también (su
+  // procesamiento es la copia rápida) — habilitan PROCESAR igual que las
+  // PENDIENTES y se cuentan aparte en la línea de conteos.
+  const duplicadas = filas.filter((f) => f.estado === "DUPLICADA").length;
   const terminadas = filas.filter((f) => f.estado === "LISTA" || f.estado === "ERROR").length;
   const advertenciasPend = filas.filter(
     (f) => f.estado === "LISTA" && f.statusActa === "ADVERTENCIA",
@@ -177,7 +186,7 @@ export function MasivaView() {
               <button
                 type="button"
                 onClick={iniciar}
-                disabled={!colaDisponible || pendientes === 0}
+                disabled={!colaDisponible || (pendientes === 0 && duplicadas === 0)}
                 aria-label="Procesar la cola"
                 className="min-h-[44px] px-4 rounded-xl bg-brand-green text-black font-mono text-[11px] font-extrabold uppercase tracking-wider shadow-[0_0_10px_rgba(0,230,118,0.2)] hover:brightness-110 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
               >
@@ -330,9 +339,10 @@ export function MasivaView() {
                 que los filtros (texto pequeño mono uppercase). */}
             <span
               className="font-mono text-[10px] uppercase tracking-wider text-gray-500"
-              aria-label={`Conteos: ${enviadas} enviadas, ${enCola} en cola, ${pendientes} pendientes, ${errores} errores`}
+              aria-label={`Conteos: ${enviadas} enviadas, ${enCola} en cola, ${pendientes} pendientes, ${duplicadas} duplicadas, ${errores} errores`}
             >
-              ENVIADAS {enviadas} · EN COLA {enCola} · PENDIENTES {pendientes} · ERRORES {errores}
+              ENVIADAS {enviadas} · EN COLA {enCola} · PENDIENTES {pendientes}
+              {duplicadas > 0 && <> · DUPLICADAS {duplicadas}</>} · ERRORES {errores}
             </span>
             {advertenciasPend > 0 && !corriendo && (
               <button
@@ -387,6 +397,13 @@ export function MasivaView() {
                       >
                         {pildora.label}
                       </span>
+                      {/* KIT e14-masiva-tiempos-v1 (PR-1): la DUPLICADA señala
+                          a su original — transparencia total del dedup. */}
+                      {f.estado === "DUPLICADA" && f.dupOf && (
+                        <span className="font-mono text-[9px] uppercase tracking-wider text-gray-500 truncate">
+                          ≡ {filas.find((o) => o.id === f.dupOf)?.nombre ?? "OTRA FILA"}
+                        </span>
+                      )}
                       {f.estado === "ERROR" && f.error && (
                         <span className="font-mono text-[9px] uppercase tracking-wider text-red-400/80 truncate">
                           {f.error}
@@ -421,6 +438,19 @@ export function MasivaView() {
 
                   {/* Acciones por fila */}
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {/* KIT e14-masiva-tiempos-v1 (PR-1): rescate del kit §2 —
+                        reprocesar la gemela COMPLETA por si el dhash la
+                        confundió (fotos distintas parecidas en thumb). */}
+                    {f.estado === "DUPLICADA" && (
+                      <button
+                        type="button"
+                        onClick={() => void procesarIgual(f.id)}
+                        aria-label={`Reprocesar ${f.nombre} completo aunque esté duplicada`}
+                        className="min-h-[44px] px-2.5 rounded-lg border border-amber-400/50 text-amber-400 font-mono text-[10px] font-bold uppercase tracking-wider hover:border-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+                      >
+                        PROCESAR IGUAL
+                      </button>
+                    )}
                     {f.estado === "LISTA" && (
                       <button
                         type="button"

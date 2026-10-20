@@ -89,22 +89,95 @@ function motivoCorto(err: unknown): string {
   return (corto || "ERROR DEL PIPELINE").toUpperCase();
 }
 
-/** Siguiente PENDIENTE (FIFO por agregadaEn) — el ORDEN vive en las filas
- *  livianas (mini-store), los DATOS viven en IDB (leerRegistro uno-a-uno).
- *  Las filas temporales (copia a IDB aún en vuelo — «GUARDANDO N…») se
- *  saltan: su id real llega al resolver agregarLote y el loop las toma
- *  en la siguiente pasada. */
+/** Siguiente PENDIENTE o DUPLICADA (FIFO por agregadaEn) — el ORDEN vive en
+ *  las filas livianas (mini-store), los DATOS viven en IDB (leerRegistro
+ *  uno-a-uno). Las filas temporales (copia a IDB aún en vuelo — «GUARDANDO
+ *  N…») se saltan: su id real llega al resolver agregarLote y el loop las
+ *  toma en la siguiente pasada. KIT e14-masiva-tiempos-v1 (PR-1): las
+ *  DUPLICADAS ENTRAN al loop — su procesamiento es la copia rápida (<1 s). */
 function siguientePendiente(): FilaMasiva | null {
   const pendientes = useMasivaStore
     .getState()
-    .filas.filter((f) => f.estado === "PENDIENTE" && !f.id.startsWith("masiva-temp-"))
+    .filas.filter(
+      (f) =>
+        (f.estado === "PENDIENTE" || f.estado === "DUPLICADA") &&
+        !f.id.startsWith("masiva-temp-"),
+    )
     .sort((a, b) => a.agregadaEn - b.agregadaEn);
   return pendientes[0] ?? null;
 }
 
+/** KIT e14-masiva-tiempos-v1 (PR-1): la fila DUPLICADA REUTILIZA el resultado
+ *  de su original (kit §2 — copia registro+status+thumb, sin pipeline, sin
+ *  contadores: el desenlace del acta gemela YA fue registrado con la
+ *  original). El acta copiada se RE-IDENTIFICA con el id de ESTA fila
+ *  (contrato de sincronizarAlVolver: acta.id === id de la fila abierta).
+ *  Devuelve false ante CUALQUIER falta (original quitada/ERROR/sin acta) →
+ *  la fila cae al reproceso completo — jamás inventar. */
+async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolean> {
+  if (!fila.dupOf) return false;
+  try {
+    const [registro, original] = await Promise.all([
+      leerRegistro(fila.id),
+      leerRegistro(fila.dupOf),
+    ]);
+    const actaOrigen = original.acta;
+    if (!actaOrigen) return false; // original sin desenlace (ERROR/en vuelo)
+    if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return false;
+    const actaCopia = { ...actaOrigen, id: fila.id };
+    const registroListo: RegistroMasiva = {
+      ...registro,
+      estado: "LISTA",
+      acta: actaCopia,
+      thumb: original.thumb,
+      hashDedup: registro.hashDedup,
+      dupOf: fila.dupOf,
+    };
+    await guardarRegistro(registroListo);
+    const ms = Date.now() - t0;
+    console.info(
+      `[e14] dedup fila=${fila.id} dupOf=${fila.dupOf} reutiliza score=${actaCopia.score ?? "-"} ms=${ms}`,
+    );
+    marcarFila(fila.id, {
+      estado: "LISTA",
+      statusActa: actaCopia.status,
+      score: actaCopia.score,
+      nivel: actaCopia.clasificacion?.nivel ?? null,
+      pagina: paginaDeActa(actaCopia),
+      motivo: actaCopia.rechazo?.tipo ?? null,
+      thumb: original.thumb,
+      enviadaAuto: actaCopia.status === "ENVIADA" && !!actaCopia.enviadoAutomaticamente,
+      envioEnCola: actaCopia.hashSha256 === "EN COLA",
+      error: null,
+    });
+    return true;
+  } catch {
+    return false; // original fuera de la cola / IDB caído → reprocesa completo
+  }
+}
+
 /** Desenlace de UNA foto — byte a byte el pipeline real (kit §6-C: el
  *  desenlace DEBE ser idéntico al del IMPORTAR normal). */
-async function procesarUno(fila: FilaMasiva): Promise<void> {
+async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
+  // KIT e14-masiva-tiempos-v1 (PR-1): rama DEDUP — copia del resultado de la
+  // original (<1 s). Si la original no sirve, la fila cae al pipeline
+  // completo AQUÍ MISMO (fallback honesto — el dueño nunca pierde la foto).
+  let fila = filaEntrante;
+  if (fila.estado === "DUPLICADA") {
+    marcarFila(fila.id, { estado: "PROCESANDO", error: null });
+    const t0 = Date.now();
+    if (await reutilizarResultado(fila, t0)) return;
+    // Fallback: des-marcar y reprocesar como fila normal (mismo pase).
+    fila = { ...fila, estado: "PENDIENTE", dupOf: null };
+    marcarFila(fila.id, { estado: "PENDIENTE", dupOf: null });
+    try {
+      const registro = await leerRegistro(fila.id);
+      await guardarRegistro({ ...registro, estado: "PENDIENTE", dupOf: undefined });
+    } catch {
+      /* IDB caído — la fila ya está PENDIENTE en memoria (honesto) */
+    }
+    console.info(`[e14] dedup fila=${fila.id} sin-original reprocesa-completo`);
+  }
   marcarFila(fila.id, { estado: "PROCESANDO", error: null });
   useMasivaStore.setState({ progreso: { id: fila.id, etapa: "DETECTANDO", fraccion: 0 } });
   let registro: RegistroMasiva | null = null;

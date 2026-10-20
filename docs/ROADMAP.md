@@ -211,3 +211,15 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T5 — Docs: REPORTE (3 veredictos + evidencia + repro) + esta entrada + worklog + AGENTS (DECISIONS.md INTACTO por diseño del kit).
 - [x] T6 — PR DRAFT (diff de producción VACÍO — solo tools/ + docs; JAMÁS merge — el dueño mergea).
 - [ ] Del dueño: correr los 3 bancos en SU máquina (4 núcleos/Chrome 155/Windows) · decidir B2 (archivar rec / kit cls-solo) · validar B3 con las fotos reales del informe (16 actas) · correr B4 en SU Chrome con GPU → si GO preliminar, kit de activación (flag gradual + fallback wasm) con su decisión en DECISIONS.md.
+
+## MASIVA-TIEMPOS — e14-masiva-tiempos-v1 (2026-10-20, AGENTE 2 terminado por orden del dueño): dedup + prefetch (B1 + B5)
+
+Mandato: «8 de las 16 actas del informe eran duplicados (.heic+.jpg) — cada uno pagó OCR completo» + «ocultar el decode HEIC tras el OCR de la fila anterior».
+
+- [x] T1 (PR-1) — `masiva/dedup.ts` (NUEVO): dhash 64-bit (9×8 gradiente horizontal) sobre thumb 320 (`hacerThumb` reuso) desde la MISMA vía del pipeline (`fileToCaptureDataUrl` — EXIF/HEIC → gemelas .heic/.jpg mismo hash) + `hamming64`.
+- [x] T2 (PR-1) — Cadena FIFO al encolar (`cadenaDedup` en store, fire-and-forget): hash persistente + marca `DUPLICADA` (persistente IDB) con Hamming ≤ 6 + guards anti-zombi. Runner: copia del resultado de la original (<1 s, traza `dupOf=`) con fallback honesto a reproceso completo.
+- [x] T3 (PR-1) — UI: píldora DUPLICADA + `≡ original` + botón «PROCESAR IGUAL» + conteo DUPLICADAS + PROCESAR habilitado con solo-duplicadas.
+- [x] T4 (PR-2) — Prefetch decode N+1 durante OCR de N: memo `WeakMap<File>` transparente en el ÚNICO call site del bridge + `precargarDecodeArchivo` + slot de 1 en el runner (conservado en filas dup; stopFlag lo respeta; fallo → re-decode como hoy).
+- [x] T5 — Verificación E2E arnés: gemelas cross-formato (jpg↔png, jpg↔webp) marcadas al instante; copias 42-141 ms con desenlace idéntico; `decode=0 ms` (HIT) en filas 2..N; pausa/reanudación + archivo corrupto (ERROR honesto, sin crash); identidad sana=8.5 AUTO en los 3 caminos. lint 0 · tsc 0 · build OK (cada rama sola).
+- [x] T6 — Docs: REPORTE (evidencia verbatim + 3 desviaciones documentadas) + D52 + AGENTS + worklog.
+- [ ] Del dueño: merge PR-1 → PR-2 (apilada) · AC-B1 con sus gemelas reales .heic+.jpg en su equipo · medir el ahorro B5 con HEIC reales (aquí jpg 0.3-0.5 s/acta ocultos; HEIC esperado 1-2 s).
