@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIT bench e14-tiempos-v1 — banco det 1280 vs 1920 PP-OCRv4 (SOLO banco, cero producción)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: #0c0c0d; color: #e4e4e7;
+    font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 22px 0 8px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .06em; }
+  .sub { color: #a1a1aa; margin: 0 0 18px; font-size: 12.5px; }
+  .caja { border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; background: #131316; margin-bottom: 14px; }
+  .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; padding: 10px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #3f3f46; background: #1f1f23; color: #e4e4e7; min-height: 44px;
+  }
+  button:hover:not(:disabled) { background: #2d2d33; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #btn-descargar { border-color: #3f6212; background: #1a2e05; color: #bef264; }
+  #btn-descargar:hover:not(:disabled) { background: #274008; }
+  .estado { margin: 10px 0 0; white-space: pre-wrap; }
+  .ok { color: #a3e635; } .mal { color: #f87171; } .info { color: #d4d4d8; } .warn { color: #fbbf24; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { border: 1px solid #27272a; padding: 6px 10px; text-align: left; font-size: 13px; }
+  th { background: #18181b; color: #a1a1aa; font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .veredicto { font-size: 22px; font-weight: 700; padding: 10px 18px; border-radius: 10px; display: inline-block; margin-top: 8px; }
+  .veredicto.go { background: #1a2e05; color: #a3e635; border: 1px solid #3f6212; }
+  .veredicto.nogo { background: #2e0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+  .veredicto.bloq { background: #2e2305; color: #fbbf24; border: 1px solid #713f12; }
+  pre#log {
+    max-height: 240px; overflow-y: auto; font-size: 12px; color: #a1a1aa;
+    background: #0f0f11; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin: 8px 0 0;
+  }
+  pre#log::-webkit-scrollbar { width: 8px; }
+  pre#log::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  .detalle-tabla { max-height: 420px; overflow-y: auto; }
+  code { color: #bef264; }
+  .thumb { border: 1px solid #3f3f46; border-radius: 4px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<h1>KIT bench e14-tiempos-v1 · B3 — det <code>det_limit_side_len</code> 1920 vs 1280 (PP-OCRv4)</h1>
+<p class="sub">SOLO banco de pruebas (instrumento de medición, cero producción) · pipeline completo det→cls→rec
+replicado de <code>rapidocr.ts</code> con UNA diferencia LOCAL: op4 (det-preprocess) usa
+<code>DET_CAP</code> (1920 = producción | 1280 = candidato). op1 (<code>reduce_max_side</code> 1920) queda INTACTO.
+Corpus: páginas acta-like SINTÉTICAS deterministas (tira vertical E-14 con votos manuscritos pequeños — el riesgo
+real) · seed fija · sin fotos reales (las valida el dueño después) · lectura FUERTE/MEDIA/DEBIL con copia local
+congelada de <code>senal-lectura.ts</code>.</p>
+
+<div class="caja">
+  <div class="fila">
+    <button id="btn-correr" type="button">▶ REPETIR CORRIDA</button>
+    <button id="btn-descargar" type="button" disabled>⬇ DESCARGAR JSON</button>
+    <span id="meta" class="info"></span>
+  </div>
+  <p id="estado" class="estado info">Cargando ORT-web…</p>
+  <div class="fila" id="fila-thumbs"></div>
+</div>
+
+<h2>Resultados</h2>
+<div class="caja" id="caja-resultados"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Detalle página a página</h2>
+<div class="caja detalle-tabla" id="caja-detalle"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Log</h2>
+<pre id="log"></pre>
+
+<script type="module">
+import * as ort from "../../node_modules/onnxruntime-web/dist/ort.wasm.min.mjs";
+
+// ─── Config del banco ────────────────────────────────────────────────────────
+const URL_DET = "../../public/models/rapidocr/ch_PP-OCRv4_det_infer.onnx";
+const URL_CLS = "../../public/models/rapidocr/ch_ppocr_mobile_v2.0_cls_infer.onnx";
+const URL_REC = "../../public/models/rapidocr/ch_PP-OCRv4_rec_infer.onnx";
+const URL_DICT = "../../public/models/rapidocr/ppocr_keys.txt";
+const CAP_PRODUCCION = 1920;   // rapidocr.ts:259 (op4) — producción
+const CAP_CANDIDATO = 1280;    // palanca B3 del kit — SOLO aquí, NUNCA en src/
+const SEMILLA = 0xe14de7a2;    // corpus acta-like determinista
+const N_PAGINAS = 4;
+
+// Constantes DB-postprocess — réplica exacta de rapidocr.ts:293-299
+const DB_THRESH = 0.3;
+const DB_BOX_THRESH = 0.5;
+const DB_MAX_CANDIDATES = 1000;
+const DB_UNCLIP_RATIO = 1.6;
+const MIN_SIDE_DESCARTAR = 3;
+const MIN_SIDE_TRAS_UNCLIP = 5;
+const TEXT_SCORE = 0.5;
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls = "info") => {
+  const linea = document.createElement("div");
+  if (cls) linea.className = cls;
+  linea.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $("log").appendChild(linea);
+  $("log").scrollTop = $("log").scrollHeight;
+};
+const setEstado = (msg, cls = "info") => { $("estado").textContent = msg; $("estado").className = `estado ${cls}`; };
+
+// ─── PRNG determinista ───────────────────────────────────────────────────────
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const entero = (rnd, min, max) => min + Math.floor(rnd() * (max - min + 1));
+
+// ─── Copia local CONGELADA de src/lib/e14/senal-lectura.ts @ b8b3e12 ────────
+// (kit §3: «evaluada con las regex de senal-lectura.ts — copia local congelada
+// del banco». norm() y ANCLAS_LECTURA byte-idénticas al módulo de producción;
+// senalDeLectura sin parciales — el banco no corre clasificarCabecera.)
+const ANCLAS_LECTURA = [
+  ["cabecera E-14", /E\s*-\s*14/i],
+  ["REGISTRADURÍA", /REGISTRADUR[IÍ]A/i],
+  ["CONSULADO n", /CONSULADO[::\s.]*\d|CONSULADOS/i],
+  ["PAÍS n", /PA[IÍ]S[::\s.]*\d/i],
+  ["ZONA n", /ZONA[::\s.]*\d+/i],
+  ["PUESTO n", /PUESTO[::\s.]*\d+/i],
+  ["MESA nnn", /MESA[::\s.]*\d+/i],
+  ["Ver Pag n de n", /Ver\.?\s*:?\s*\d+\s*Pag\.?\s*:?\s*\d+\s*de\s*\d+/i],
+  ["KIT nnn", /KIT[::\s.]*\d+/i],
+  ["código 1D 15d", /\b\d{15}\b/],
+];
+function norm(s) {
+  return s
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+}
+function senalDeLectura(texto) {
+  const chars = norm(texto).replace(/ /g, "").length;
+  const anclas = ANCLAS_LECTURA.filter(([, re]) => re.test(texto)).length;
+  const mesaLeida = /MESA[::\s.]*\d+/i.test(texto);
+  const nivel =
+    (mesaLeida && anclas >= 4) || anclas >= 6
+      ? "FUERTE"
+      : /E\s*-\s*14/i.test(texto) || anclas >= 2 || chars >= 150
+        ? "MEDIA"
+        : "DEBIL";
+  return { nivel, chars, anclas };
+}
+
+// ─── Corpus acta-like SINTÉTICO determinista (kit §3): tira vertical E-14 con
+//     cabecera gruesa, grilla de votos manuscritos pequeños, banda KIT, código
+//     1D de 15 dígitos y pie SUMA TOTAL. N páginas fijas, seed fija. ──────────
+const W_ACTA = 1000;
+const H_ACTA = 2920; // ratio ≈ 2.92 (como las actas reales del informe)
+
+function generarActas() {
+  const rnd = mulberry32(SEMILLA);
+  const actas = [];
+  for (let p = 0; p < N_PAGINAS; p++) {
+    // números de cabecera de ESTA página (deterministas)
+    const consulado = entero(rnd, 1, 99);
+    const pais = entero(rnd, 1, 99);
+    const zona = entero(rnd, 1, 99);
+    const puesto = entero(rnd, 10000, 99999);
+    const mesa = entero(rnd, 1, 99);
+    const kit = entero(rnd, 100, 999);
+    const pag = 1; // tira P1
+    const totPag = 2;
+    const codigo = `71${String(kit).padStart(3, "0")}3${String(puesto).slice(0, 5)}1${String(mesa).padStart(2, "0")}0`;
+    // código 1D de 15 dígitos EXACTOS (regla del banco: \b\d{15}\b)
+    const codigo15 = (`7100${String(kit).padStart(3, "0")}3010${String(puesto).slice(0, 4)}${String(mesa).padStart(2, "0")}`).slice(0, 15);
+    const suma = entero(rnd, 200, 499);
+
+    // votos: 5 columnas × 6 filas — valores únicos por página, distintos de
+    // los números de cabecera (regeneración determinista ante colisión).
+    const prohibidos = new Set([consulado, pais, zona, puesto, mesa, kit, pag, totPag, suma].map(String));
+    const votos = [];
+    for (let c = 0; c < 30; c++) {
+      let valor = "";
+      let intentos = 0;
+      do {
+        valor = String(entero(rnd, 2, 499));
+        intentos++;
+      } while ((prohibidos.has(valor) || votos.some((v) => v.valor === valor)) && intentos < 200);
+      prohibidos.add(valor);
+      votos.push({ n: String(entero(rnd, 101, 899)), valor, fila: Math.floor(c / 5), col: c % 5 });
+    }
+
+    actas.push({ consulado, pais, zona, puesto, mesa, kit, pag, totPag, codigo15, suma, votos });
+  }
+  return actas;
+}
+
+function renderizarActa(a) {
+  const cv = document.createElement("canvas");
+  cv.width = W_ACTA;
+  cv.height = H_ACTA;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  // papel
+  ctx.fillStyle = "#f7f5f0";
+  ctx.fillRect(0, 0, W_ACTA, H_ACTA);
+  // marco
+  ctx.strokeStyle = "#1a1a1a";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(24, 24, W_ACTA - 48, H_ACTA - 48);
+
+  // cabecera gruesa
+  ctx.fillStyle = "#111111";
+  ctx.textAlign = "center";
+  ctx.font = "bold 64px Arial, sans-serif";
+  ctx.fillText("TARJETA ELECTORAL E-14", W_ACTA / 2, 110);
+  ctx.font = "bold 40px Arial, sans-serif";
+  ctx.fillText("REGISTRADURIA NACIONAL DEL ESTADO CIVIL", W_ACTA / 2, 165);
+  ctx.font = "bold 44px Arial, sans-serif";
+  ctx.fillText(`CONSULADO ${a.consulado}  PAIS ${a.pais}`, W_ACTA / 2, 225);
+  ctx.fillText(`ZONA ${a.zona}  PUESTO ${a.puesto}`, W_ACTA / 2, 275);
+  ctx.fillText(`MESA ${a.mesa}`, W_ACTA / 2, 325);
+  ctx.font = "32px Arial, sans-serif";
+  ctx.fillText(`Ver.: ${a.pag} Pag.: ${a.pag} de ${a.totPag}`, W_ACTA / 2, 372);
+
+  // grilla de votos (5 columnas × 6 filas) — celdas con borde, número de
+  // candidato impreso pequeño y VOTO manuscrito pequeño (el riesgo real de B3)
+  const gx0 = 60;
+  const gy0 = 420;
+  const cw = (W_ACTA - 120) / 5;
+  const ch = 300;
+  ctx.font = "26px Arial, sans-serif";
+  for (const v of a.votos) {
+    const x = gx0 + v.col * cw;
+    const y = gy0 + v.fila * ch;
+    ctx.strokeStyle = "#8a8a8a";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 6, y + 6, cw - 12, ch - 12);
+    ctx.fillStyle = "#333333";
+    ctx.textAlign = "center";
+    ctx.fillText(v.n, x + cw / 2, y + 40);
+    // manuscrito: serif itálica con jitter/rotación determinista por dígito
+    ctx.save();
+    ctx.translate(x + cw / 2 + (((v.fila * 31 + v.col * 17) % 11) - 5), y + 175);
+    ctx.rotate((((v.fila * 13 + v.col * 7) % 9) - 4) * Math.PI / 180);
+    ctx.font = "italic bold 56px Georgia, 'Times New Roman', serif";
+    ctx.fillStyle = "#1a2a6b";
+    ctx.fillText(v.valor, 0, 0);
+    ctx.restore();
+  }
+
+  // banda KIT + código 1D de 15 dígitos
+  const yBanda = gy0 + 6 * ch + 30;
+  ctx.fillStyle = "#111111";
+  ctx.font = "bold 44px Arial, sans-serif";
+  ctx.fillText(`KIT ${a.kit}  TIPO 1  VER 1  PAG ${a.pag}/${a.totPag}`, W_ACTA / 2, yBanda + 50);
+  ctx.font = "bold 48px 'Courier New', monospace";
+  ctx.fillText(a.codigo15, W_ACTA / 2, yBanda + 115);
+  ctx.font = "24px Arial, sans-serif";
+  ctx.fillText("CODIGO UNICO DE TARJETA", W_ACTA / 2, yBanda + 150);
+
+  // pie
+  ctx.font = "bold 40px Arial, sans-serif";
+  ctx.fillText(`SUMA TOTAL ${a.suma}`, W_ACTA / 2, H_ACTA - 160);
+  ctx.font = "30px Arial, sans-serif";
+  ctx.fillText("FIRMA TESTIGO  TRANSMISION OK", W_ACTA / 2, H_ACTA - 100);
+  return cv;
+}
+
+// GT de cabecera por acta (para el detalle) y lista de todos los números de
+// cabecera (para evaluar anclas con las MISMAS regex de senal-lectura)
+function gtCabecera(a) {
+  return [
+    `TARJETA ELECTORAL E-14`,
+    `REGISTRADURIA NACIONAL DEL ESTADO CIVIL`,
+    `CONSULADO ${a.consulado}  PAIS ${a.pais}`,
+    `ZONA ${a.zona}  PUESTO ${a.puesto}`,
+    `MESA ${a.mesa}`,
+    `Ver.: ${a.pag} Pag.: ${a.pag} de ${a.totPag}`,
+    `KIT ${a.kit}  TIPO 1  VER 1  PAG ${a.pag}/${a.totPag}`,
+    a.codigo15,
+    `SUMA TOTAL ${a.suma}`,
+  ];
+}
+
+// ─── Utilidades de imagen (rapidocr.ts:173-190) ──────────────────────────────
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("loadImage: decodificación fallida"));
+    img.src = dataUrl;
+  });
+}
+function canvasDe(img, w, h) {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, w, h);
+  return c;
+}
+const round32 = (v) => Math.max(32, Math.round(v / 32) * 32);
+function ctxDe(canvas) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("canvas 2d no disponible");
+  return ctx;
+}
+
+// ─── Pre-det (rapidocr.ts:192-268) — ÚNICA diferencia del banco: op4 usa
+//     DET_CAP en vez del 1920 fijo. op1 (reduce_max_side 1920) INTACTO porque
+//     es el preprocess fijo del paquete; det_limit_side_len es el parámetro que
+//     op4 implementa (config det_limit_type='max'). ──────────────────────────
+function preDet(src, detCap) {
+  let w = src.naturalWidth || src.width;
+  let h = src.naturalHeight || src.height;
+  let ratioW = 1;
+  let ratioH = 1;
+
+  // op1 — reduce_max_side(img, 1920)
+  if (Math.max(h, w) > 1920) {
+    const ratio = 1920 / Math.max(h, w);
+    const nh = round32(Math.floor(h * ratio));
+    const nw = round32(Math.floor(w * ratio));
+    ratioW *= nw / w;
+    ratioH *= nh / h;
+    w = nw;
+    h = nh;
+  }
+
+  // op2 — increase_min_side(img, 30)
+  if (Math.min(h, w) < 30) {
+    const ratio = 30 / Math.min(h, w);
+    const nh = round32(Math.floor(h * ratio));
+    const nw = round32(Math.floor(w * ratio));
+    ratioW *= nw / w;
+    ratioH *= nh / h;
+    w = nw;
+    h = nh;
+  }
+
+  const imgEsc = canvasDe(src, w, h);
+
+  // op3 — maybe_add_letterbox
+  let padTop = 0;
+  let canvasPadded = imgEsc;
+  const widthHeightRatio = 8;
+  const minHeight = 30;
+  if (h <= minHeight || w / h > widthHeightRatio) {
+    const newH = Math.max(Math.floor(w / widthHeightRatio), minHeight) * 2;
+    padTop = Math.floor(Math.abs(newH - h) / 2);
+    const padded = document.createElement("canvas");
+    padded.width = w;
+    padded.height = h + padTop * 2;
+    const pctx = ctxDe(padded);
+    pctx.fillStyle = "#000000";
+    pctx.fillRect(0, 0, padded.width, padded.height);
+    pctx.drawImage(imgEsc, 0, padTop);
+    canvasPadded = padded;
+    h = padded.height;
+  }
+
+  // op4 — det-preprocess (limit detCap max + round32 SIEMPRE, mínimo 32)
+  //   ★★★ DIFERENCIA LOCAL DEL BANCO (palanca B3): rapidocr.ts:259 usa 1920
+  //   fijo; aquí detCap ∈ {1920 (producción), 1280 (candidato)}. ★★★
+  const ratioDet = Math.max(h, w) > detCap ? detCap / Math.max(h, w) : 1;
+  const dh = round32(Math.floor(h * ratioDet));
+  const dw = round32(Math.floor(w * ratioDet));
+  const detIn = canvasDe(canvasPadded, dw, dh);
+
+  return {
+    canvas: detIn,
+    ops: { w: dw, h: dh, ratioW, ratioH, padTop, ratioWDet: dw / w, ratioHDet: dh / h },
+  };
+}
+
+function mapearAFuente(p, ops, srcW, srcH) {
+  const xPostPad = p.x / ops.ratioWDet;
+  const yPostPad = p.y / ops.ratioHDet - ops.padTop;
+  const x = xPostPad / ops.ratioW;
+  const y = yPostPad / ops.ratioH;
+  return {
+    x: Math.max(0, Math.min(srcW, Math.round(x))),
+    y: Math.max(0, Math.min(srcH, Math.round(y))),
+  };
+}
+
+// ─── DB postprocess en JS puro — copia exacta de rapidocr.ts:311-478 ────────
+function convexHull(pts) {
+  if (pts.length < 3) return pts.slice();
+  const p = pts.slice().sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower = [];
+  for (const q of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0)
+      lower.pop();
+    lower.push(q);
+  }
+  const upper = [];
+  for (let i = p.length - 1; i >= 0; i--) {
+    const q = p[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0)
+      upper.pop();
+    upper.push(q);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+function minAreaRect(hull) {
+  if (hull.length < 2) return null;
+  let mejor = null;
+  let mejorArea = Infinity;
+  const n = hull.length;
+  for (let i = 0; i < n; i++) {
+    const p1 = hull[i];
+    const p2 = hull[(i + 1) % n];
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) continue;
+    const ux = dx / len;
+    const uy = dy / len;
+    let minU = Infinity;
+    let maxU = -Infinity;
+    let minV = Infinity;
+    let maxV = -Infinity;
+    for (const q of hull) {
+      const u = q.x * ux + q.y * uy;
+      const v = -q.x * uy + q.y * ux;
+      if (u < minU) minU = u;
+      if (u > maxU) maxU = u;
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
+    }
+    const w = maxU - minU;
+    const h = maxV - minV;
+    const area = w * h;
+    if (area < mejorArea) {
+      mejorArea = area;
+      mejor = {
+        cx: ((maxU + minU) / 2) * ux + ((maxV + minV) / 2) * -uy,
+        cy: ((maxU + minU) / 2) * uy + ((maxV + minV) / 2) * ux,
+        w,
+        h,
+        theta: Math.atan2(uy, ux),
+      };
+    }
+  }
+  return mejor;
+}
+function boxScoreFast(pred, w, h, box) {
+  let xmin = w - 1;
+  let xmax = 0;
+  let ymin = h - 1;
+  let ymax = 0;
+  for (const q of box) {
+    xmin = Math.max(0, Math.min(xmin, Math.floor(q.x)));
+    xmax = Math.min(w - 1, Math.max(xmax, Math.ceil(q.x)));
+    ymin = Math.max(0, Math.min(ymin, Math.floor(q.y)));
+    ymax = Math.min(h - 1, Math.max(ymax, Math.ceil(q.y)));
+  }
+  if (xmax < xmin || ymax < ymin) return 0;
+  let suma = 0;
+  let cuenta = 0;
+  for (let y = ymin; y <= ymax; y++) {
+    const xs = [];
+    for (let i = 0; i < box.length; i++) {
+      const a = box[i];
+      const b = box[(i + 1) % box.length];
+      if (a.y === b.y) continue;
+      const yMin = Math.min(a.y, b.y);
+      const yMax = Math.max(a.y, b.y);
+      if (y + 0.5 >= yMin && y + 0.5 < yMax) {
+        xs.push(a.x + ((y + 0.5 - a.y) * (b.x - a.x)) / (b.y - a.y));
+      }
+    }
+    if (xs.length < 2) continue;
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const x0 = Math.max(xmin, Math.ceil(xs[k] - 0.5));
+      const x1 = Math.min(xmax, Math.floor(xs[k + 1] - 0.5));
+      for (let x = x0; x <= x1; x++) {
+        if (x >= xs[k] && x <= xs[k + 1]) {
+          suma += pred[y * w + x];
+          cuenta++;
+        }
+      }
+    }
+  }
+  return cuenta === 0 ? 0 : suma / cuenta;
+}
+function esquinasRect(r) {
+  const cos = Math.cos(r.theta);
+  const sin = Math.sin(r.theta);
+  const nx = -sin;
+  const ny = cos;
+  const hw = r.w / 2;
+  const hh = r.h / 2;
+  const pts = [
+    { x: r.cx + hw * cos + hh * nx, y: r.cy + hw * sin + hh * ny },
+    { x: r.cx + hw * cos - hh * nx, y: r.cy + hw * sin - hh * ny },
+    { x: r.cx - hw * cos + hh * nx, y: r.cy - hw * sin + hh * ny },
+    { x: r.cx - hw * cos - hh * nx, y: r.cy - hw * sin - hh * ny },
+  ];
+  pts.sort((a, b) => a.x - b.x);
+  let tl, bl, tr, br;
+  if (pts[0].y <= pts[1].y) { tl = pts[0]; bl = pts[1]; } else { tl = pts[1]; bl = pts[0]; }
+  if (pts[2].y <= pts[3].y) { tr = pts[2]; br = pts[3]; } else { tr = pts[3]; br = pts[2]; }
+  return [tl, tr, br, bl];
+}
+function ordenarCajas(boxes) {
+  const sorted = boxes.slice().sort((a, b) => a[0].y - b[0].y || a[0].x - b[0].x);
+  for (let i = 0; i < sorted.length - 1; i++) {
+    for (let j = i; j >= 0; j--) {
+      if (Math.abs(sorted[j + 1][0].y - sorted[j][0].y) < 10 && sorted[j + 1][0].x < sorted[j][0].x) {
+        const tmp = sorted[j];
+        sorted[j] = sorted[j + 1];
+        sorted[j + 1] = tmp;
+      } else break;
+    }
+  }
+  return sorted;
+}
+
+// ─── Crops, cls, rec (rapidocr.ts:482-588) ───────────────────────────────────
+function cropLinea(src, box) {
+  const d = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+  const [p0, p1, p2, p3] = box;
+  const cropW = Math.max(1, Math.round(Math.max(d(p0, p1), d(p2, p3))));
+  const cropH = Math.max(1, Math.round(Math.max(d(p0, p3), d(p1, p2))));
+  const theta = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  const canvas = document.createElement("canvas");
+  canvas.width = cropW;
+  canvas.height = cropH;
+  const ctx = ctxDe(canvas);
+  const e = -cos * p0.x - sin * p0.y;
+  const f = sin * p0.x - cos * p0.y;
+  ctx.setTransform(cos, -sin, sin, cos, e, f);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(src, 0, 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  return { canvas, ratio: cropW / cropH };
+}
+function tensorDeCanvases(canvases, targetW) {
+  const b = canvases.length;
+  const data = new Float32Array(b * 3 * 48 * targetW);
+  for (let i = 0; i < b; i++) {
+    const c = canvases[i];
+    const ctx = ctxDe(c);
+    const { width: cw, height: ch } = c;
+    const img = ctx.getImageData(0, 0, cw, ch);
+    const rw = Math.min(Math.max(1, Math.ceil((48 * cw) / ch)), targetW);
+    for (let y = 0; y < 48; y++) {
+      const sy = Math.min(ch - 1, Math.floor((y * ch) / 48));
+      for (let x = 0; x < rw; x++) {
+        const sx = Math.min(cw - 1, Math.floor((x * cw) / rw));
+        const idx = (sy * cw + sx) * 4;
+        const o = i * 3 * 48 * targetW + y * targetW + x;
+        data[o] = (img.data[idx + 2] / 255 - 0.5) / 0.5;
+        data[o + 48 * targetW] = (img.data[idx + 1] / 255 - 0.5) / 0.5;
+        data[o + 2 * 48 * targetW] = (img.data[idx] / 255 - 0.5) / 0.5;
+      }
+    }
+  }
+  return new ort.Tensor("float32", data, [b, 3, 48, targetW]);
+}
+function softmax2(a, b) {
+  const m = Math.max(a, b);
+  const ea = Math.exp(a - m);
+  const eb = Math.exp(b - m);
+  return [ea / (ea + eb), eb / (ea + eb)];
+}
+function ctcDecode(tensor, dict) {
+  const dims = tensor.dims;
+  const T = dims[1];
+  const C = dims[2];
+  const data = tensor.data;
+  let texto = "";
+  let sumaConf = 0;
+  let cuenta = 0;
+  let ultimo = -1;
+  for (let t = 0; t < T; t++) {
+    const base = t * C;
+    let mejor = 0;
+    let mejorV = -Infinity;
+    for (let c = 0; c < C; c++) {
+      const v = data[base + c];
+      if (v > mejorV) { mejorV = v; mejor = c; }
+    }
+    if (mejor !== 0 && mejor !== ultimo) {
+      const prob = mejorV;
+      if (mejor <= dict.length) texto += dict[mejor - 1];
+      else texto += " ";
+      sumaConf += prob;
+      cuenta++;
+    }
+    ultimo = mejor;
+  }
+  return { texto, conf: cuenta === 0 ? 0 : sumaConf / cuenta };
+}
+
+// ─── Pipeline completo det→cls→rec con detCap local (réplica de
+//     rapidocr.ts:598-827; cls/rec en lote 6 de producción — la palanca de
+//     este banco es SOLO el cap del det) ──────────────────────────────────────
+async function ocrPagina(ses, dict, src, detCap) {
+  const t0 = performance.now();
+  // det
+  const tDet = performance.now();
+  const { canvas, ops } = preDet(src, detCap);
+  const ctx = ctxDe(canvas);
+  const { width: w, height: h } = canvas;
+  const img = ctx.getImageData(0, 0, w, h);
+  const data = new Float32Array(w * h * 3);
+  for (let i = 0, px = 0; i < img.data.length; i += 4, px++) {
+    data[px] = (img.data[i + 2] / 255 - 0.5) / 0.5;
+    data[w * h + px] = (img.data[i + 1] / 255 - 0.5) / 0.5;
+    data[2 * w * h + px] = (img.data[i] / 255 - 0.5) / 0.5;
+  }
+  const tensor = new ort.Tensor("float32", data, [1, 3, h, w]);
+  const res = await ses.det.run({ [ses.det.inputNames[0]]: tensor });
+  const out = res[ses.det.outputNames[0]];
+  const pred = out.data;
+  const pw = out.dims[3];
+  const ph = out.dims[2];
+  const msDet = performance.now() - tDet;
+
+  const bitmap = new Uint8Array(pw * ph);
+  for (let i = 0; i < bitmap.length; i++) bitmap[i] = pred[i] > DB_THRESH ? 1 : 0;
+  const dil = new Uint8Array(pw * ph);
+  for (let y = 0; y < ph; y++) {
+    const fila = y * pw;
+    const filaPrev = Math.max(0, y - 1) * pw;
+    for (let x = 0; x < pw; x++) {
+      const xPrev = Math.max(0, x - 1);
+      dil[fila + x] = Math.max(bitmap[fila + x], bitmap[filaPrev + x], bitmap[fila + xPrev], bitmap[filaPrev + xPrev]);
+    }
+  }
+  const labels = new Int32Array(pw * ph);
+  let nComp = 0;
+  const rects = [];
+  const stack = new Int32Array(pw * ph);
+  const coords = [];
+  for (let y = 0; y < ph && nComp < DB_MAX_CANDIDATES; y++) {
+    for (let x = 0; x < pw && nComp < DB_MAX_CANDIDATES; x++) {
+      const idx = y * pw + x;
+      if (dil[idx] === 0 || labels[idx] !== 0) continue;
+      nComp++;
+      let sp = 0;
+      stack[sp++] = idx;
+      labels[idx] = nComp;
+      coords.length = 0;
+      while (sp > 0) {
+        const cur = stack[--sp];
+        const cy = (cur / pw) | 0;
+        const cx = cur - cy * pw;
+        coords.push(cx, cy);
+        if (cx > 0 && dil[cur - 1] === 1 && labels[cur - 1] === 0) { labels[cur - 1] = nComp; stack[sp++] = cur - 1; }
+        if (cx < pw - 1 && dil[cur + 1] === 1 && labels[cur + 1] === 0) { labels[cur + 1] = nComp; stack[sp++] = cur + 1; }
+        if (cy > 0 && dil[cur - pw] === 1 && labels[cur - pw] === 0) { labels[cur - pw] = nComp; stack[sp++] = cur - pw; }
+        if (cy < ph - 1 && dil[cur + pw] === 1 && labels[cur + pw] === 0) { labels[cur + pw] = nComp; stack[sp++] = cur + pw; }
+      }
+      const nPx = coords.length / 2;
+      if (nPx < 10) continue;
+      const stride = nPx > 20000 ? Math.ceil(nPx / 20000) : 1;
+      const pts = [];
+      for (let k = 0; k < nPx; k += stride) pts.push({ x: coords[k * 2], y: coords[k * 2 + 1] });
+      const hull = convexHull(pts);
+      const rect = minAreaRect(hull);
+      if (!rect) continue;
+      const sside = Math.min(rect.w, rect.h);
+      if (sside < MIN_SIDE_DESCARTAR) continue;
+      const esq = esquinasRect(rect);
+      const score = boxScoreFast(pred, pw, ph, esq);
+      if (score < DB_BOX_THRESH) continue;
+      const perim = 2 * (rect.w + rect.h);
+      const dUnclip = (rect.w * rect.h * DB_UNCLIP_RATIO) / perim;
+      const wU = rect.w + 2 * dUnclip;
+      const hU = rect.h + 2 * dUnclip;
+      if (Math.min(wU, hU) < MIN_SIDE_TRAS_UNCLIP) continue;
+      rects.push({ cx: rect.cx, cy: rect.cy, w: wU, h: hU, theta: rect.theta });
+    }
+  }
+  const boxesFuente = rects
+    .map((r) => esquinasRect(r).map((p) => mapearAFuente(p, ops, src.naturalWidth, src.naturalHeight)))
+    .filter((b) => b.every((p) => p.x >= 0 && p.y >= 0));
+  const cajasOrdenadas = ordenarCajas(boxesFuente);
+
+  if (cajasOrdenadas.length === 0) {
+    return { lineas: [], texto: "", confMedia: 0, msDet, msCls: 0, msRec: 0, nBoxes: 0, msTotal: performance.now() - t0 };
+  }
+
+  // crops
+  const crops = cajasOrdenadas.map((b) => cropLinea(src, b));
+
+  // cls (lote 6 — producción)
+  const t1 = performance.now();
+  const rotar = new Array(crops.length).fill(false);
+  for (let i = 0; i < crops.length; i += 6) {
+    const lote = crops.slice(i, i + 6).map((c) => c.canvas);
+    const tensors = lote.map((cv) => {
+      const ratio = cv.width / cv.height;
+      const wObj = Math.min(192, Math.max(1, Math.ceil(48 * ratio)));
+      const tmp = document.createElement("canvas");
+      tmp.width = wObj;
+      tmp.height = 48;
+      ctxDe(tmp).drawImage(cv, 0, 0, wObj, 48);
+      return tmp;
+    });
+    const tensorCls = tensorDeCanvases(tensors, 192);
+    const resCls = await ses.cls.run({ [ses.cls.inputNames[0]]: tensorCls });
+    const outCls = resCls[ses.cls.outputNames[0]];
+    const dataCls = outCls.data;
+    for (let k = 0; k < lote.length; k++) {
+      const [p0, p180] = outCls.dims[1] === 2 ? softmax2(dataCls[k * 2], dataCls[k * 2 + 1]) : [1, 0];
+      if (p180 > 0.9 && p180 > p0) rotar[i + k] = true;
+    }
+  }
+  const msCls = performance.now() - t1;
+
+  const cropsFinales = crops.map((c, i) => {
+    if (!rotar[i]) return c.canvas;
+    const cv = c.canvas;
+    const tmp = document.createElement("canvas");
+    tmp.width = cv.width;
+    tmp.height = cv.height;
+    const ctmp = ctxDe(tmp);
+    ctmp.translate(cv.width, cv.height);
+    ctmp.rotate(Math.PI);
+    ctmp.drawImage(cv, 0, 0);
+    return tmp;
+  });
+
+  // rec (lote 6 ordenado por ratio — producción)
+  const t2 = performance.now();
+  const orden = cropsFinales
+    .map((c, i) => ({ i, ratio: c.width / c.height }))
+    .sort((a, b) => a.ratio - b.ratio);
+  const lineas = new Array(cropsFinales.length);
+  for (let k = 0; k < orden.length; k += 6) {
+    const lote = orden.slice(k, k + 6);
+    const maxRatio = Math.max(320 / 48, ...lote.map((o) => o.ratio));
+    const W = Math.floor(48 * maxRatio);
+    const canvases = lote.map((o) => cropsFinales[o.i]);
+    const tensorRec = tensorDeCanvases(canvases, W);
+    const resRec = await ses.rec.run({ [ses.rec.inputNames[0]]: tensorRec });
+    const outRec = resRec[ses.rec.outputNames[0]];
+    for (let m = 0; m < lote.length; m++) {
+      const dims = outRec.dims;
+      const sub = {
+        dims: [1, dims[1], dims[2]],
+        data: outRec.data.subarray(m * dims[1] * dims[2], (m + 1) * dims[1] * dims[2]),
+        type: outRec.type,
+      };
+      const { texto, conf } = ctcDecode(sub, dict);
+      if (conf >= TEXT_SCORE && texto.trim().length > 0) {
+        lineas[lote[m].i] = { texto: texto.trim(), conf, box: cajasOrdenadas[lote[m].i] };
+      }
+    }
+  }
+  const msRec = performance.now() - t2;
+
+  const aceptadas = lineas.filter((l) => !!l);
+  const texto = aceptadas.map((l) => l.texto).join("\n");
+  const confMedia = aceptadas.length === 0 ? 0 : aceptadas.reduce((s, l) => s + l.conf, 0) / aceptadas.length;
+  return {
+    lineas: aceptadas,
+    texto,
+    confMedia,
+    msDet,
+    msCls,
+    msRec,
+    nBoxes: cajasOrdenadas.length,
+    msTotal: performance.now() - t0,
+  };
+}
+
+// ─── Evaluación de una página con GT ─────────────────────────────────────────
+function evaluarPagina(acta, res) {
+  const votosLeidos = acta.votos.filter((v) => new RegExp(`\\b${v.valor}\\b`).test(norm(res.texto))).map((v) => v.valor);
+  const votosPerdidos = acta.votos.filter((v) => !new RegExp(`\\b${v.valor}\\b`).test(norm(res.texto))).map((v) => v.valor);
+  const anclasLista = ANCLAS_LECTURA.filter(([, re]) => re.test(res.texto)).map(([n]) => n);
+  const senal = senalDeLectura(res.texto);
+  return {
+    nBoxes: res.nBoxes,
+    msDet: +res.msDet.toFixed(1),
+    msCls: +res.msCls.toFixed(1),
+    msRec: +res.msRec.toFixed(1),
+    msTotal: +res.msTotal.toFixed(1),
+    confMedia: +res.confMedia.toFixed(4),
+    lineas: res.lineas.length,
+    votosLeidos: votosLeidos.length,
+    votosTotal: acta.votos.length,
+    votosPerdidos,
+    anclas: anclasLista.length,
+    anclasLista,
+    nivel: senal.nivel,
+    chars: senal.chars,
+  };
+}
+
+// ─── Corrida principal ───────────────────────────────────────────────────────
+let ultimoJson = null;
+
+async function correr() {
+  $("btn-correr").disabled = true;
+  $("btn-descargar").disabled = true;
+  $("caja-resultados").innerHTML = '<p class="info">Corriendo…</p>';
+  $("caja-detalle").innerHTML = '<p class="info">Corriendo…</p>';
+  $("log").innerHTML = "";
+  $("fila-thumbs").innerHTML = "";
+  ultimoJson = null;
+
+  try {
+    ort.env.wasm.wasmPaths = new URL("../../public/vendor/onnxruntime/", location.href).href;
+    const coi = typeof SharedArrayBuffer !== "undefined" && self.crossOriginIsolated;
+    const numThreads = coi ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+    ort.env.wasm.numThreads = numThreads;
+    ort.env.wasm.simd = true;
+    log(`ORT-web ${(ort.env && ort.env.versions && ort.env.versions["onnxruntime-web"]) || "?"} · wasmPaths=vendido · numThreads=${numThreads} · COI=${coi} · cores=${navigator.hardwareConcurrency}`);
+
+    setEstado("Generando corpus acta-like (seed fija)…");
+    const actas = generarActas();
+    const paginas = [];
+    for (let i = 0; i < actas.length; i++) {
+      const cv = renderizarActa(actas[i]);
+      const dataUrl = cv.toDataURL("image/png");
+      paginas.push({ acta: actas[i], dataUrl, cv });
+      const thumb = document.createElement("img");
+      thumb.src = dataUrl;
+      thumb.className = "thumb";
+      thumb.width = 120;
+      thumb.alt = `acta sintética ${i + 1}`;
+      $("fila-thumbs").appendChild(thumb);
+    }
+    const totalVotos = actas.reduce((s, a) => s + a.votos.length, 0);
+    log(`Corpus: ${actas.length} páginas ${W_ACTA}×${H_ACTA} · ${totalVotos} votos manuscritos (seed ${SEMILLA}) — mismas páginas para los 2 caps`);
+
+    setEstado("Creando sesiones det+cls+rec (EP wasm)…");
+    const tCrea = performance.now();
+    const opts = { executionProviders: ["wasm"] };
+    const ses = {
+      det: await ort.InferenceSession.create(URL_DET, opts),
+      cls: await ort.InferenceSession.create(URL_CLS, opts),
+      rec: await ort.InferenceSession.create(URL_REC, opts),
+    };
+    const dictResp = await fetch(URL_DICT);
+    if (!dictResp.ok) throw new Error(`ppocr_keys.txt HTTP ${dictResp.status}`);
+    const dict = (await dictResp.text()).split("\n").filter((l) => l.length > 0);
+    log(`Sesiones creadas en ${Math.round(performance.now() - tCrea)} ms · dict ${dict.length} entradas · SESIONES COMPARTIDAS entre los 2 caps (solo cambia el pre-det)`);
+
+    const imgs = [];
+    for (const p of paginas) imgs.push(await loadImage(p.dataUrl));
+
+    const correrArm = async (detCap, etiqueta, medir) => {
+      const tArm = performance.now();
+      if (!medir) {
+        setEstado(`${etiqueta}: pasada caliente (descartada)…`);
+        for (let i = 0; i < imgs.length; i++) await ocrPagina(ses, dict, imgs[i], detCap);
+        return null;
+      }
+      setEstado(`${etiqueta}: pasada medida…`);
+      const porPagina = [];
+      for (let i = 0; i < imgs.length; i++) {
+        const res = await ocrPagina(ses, dict, imgs[i], detCap);
+        const ev = evaluarPagina(paginas[i].acta, res);
+        porPagina.push(ev);
+        log(`${etiqueta} pág ${i + 1}: det=${ev.msDet} cls=${ev.msCls} rec=${ev.msRec} total=${ev.msTotal} ms · ${ev.nBoxes} cajas · votos ${ev.votosLeidos}/${ev.votosTotal} · anclas ${ev.anclas}/10 · nivel ${ev.nivel}${ev.votosPerdidos.length ? ` · PERDIDOS: ${ev.votosPerdidos.join(",")}` : ""}`, ev.votosPerdidos.length ? "mal" : "info");
+      }
+      const tot = {
+        msDet: +porPagina.reduce((s, p) => s + p.msDet, 0).toFixed(1),
+        msCls: +porPagina.reduce((s, p) => s + p.msCls, 0).toFixed(1),
+        msRec: +porPagina.reduce((s, p) => s + p.msRec, 0).toFixed(1),
+        msTotal: +(performance.now() - tArm).toFixed(1),
+      };
+      log(`${etiqueta}: Σ det=${tot.msDet} Σ cls=${tot.msCls} Σ rec=${tot.msRec} · total ${tot.msTotal} ms`);
+      return { porPagina, tot };
+    };
+
+    // Protocolo: por cada arm, pasada caliente descartada + pasada medida.
+    await correrArm(CAP_PRODUCCION, `det ${CAP_PRODUCCION}`, false);
+    const r1920 = await correrArm(CAP_PRODUCCION, `det ${CAP_PRODUCCION}`, true);
+    await correrArm(CAP_CANDIDATO, `det ${CAP_CANDIDATO}`, false);
+    const r1280 = await correrArm(CAP_CANDIDATO, `det ${CAP_CANDIDATO}`, true);
+
+    // ── Comparación y criterio GO/NO-GO DURO (kit §3) ─────────────────────────
+    const votosPerdidos = r1280.porPagina.reduce((s, p) => s + p.votosPerdidos.length, 0);
+    const fuertesIdenticas = r1920.porPagina.every((p, i) =>
+      p.nivel === "FUERTE" ? r1280.porPagina[i].nivel === "FUERTE" : true,
+    );
+    const nivelDifiere = r1920.porPagina
+      .map((p, i) => (p.nivel !== r1280.porPagina[i].nivel ? `p${i + 1}:${p.nivel}→${r1280.porPagina[i].nivel}` : null))
+      .filter(Boolean);
+    // 2.ª pasada en el esquema escalonado: página cuyo 1280 pierde votos o sale DEBIL
+    const a2aPasada = r1280.porPagina
+      .map((p, i) => (p.votosPerdidos.length > 0 || p.nivel === "DEBIL" ? i : null))
+      .filter((x) => x !== null);
+    const msEscalonado =
+      r1280.tot.msTotal +
+      a2aPasada.reduce((s, i) => s + r1920.porPagina[i].msTotal, 0);
+    const ahorroPct = 100 * (1 - msEscalonado / r1920.tot.msTotal);
+    const go = votosPerdidos === 0 && fuertesIdenticas;
+
+    ultimoJson = {
+      hardware: `${navigator.hardwareConcurrency} núcleos lógicos (navigator.hardwareConcurrency)`,
+      navegador: navigator.userAgent,
+      numThreads,
+      crossOriginIsolated: coi,
+      corpus: {
+        paginas: actas.length,
+        tamano: `${W_ACTA}×${H_ACTA}`,
+        votosTotal: totalVotos,
+        seed: `0x${SEMILLA.toString(16)}`,
+        nota: "acta-like sintético determinista (cabecera gruesa + grilla de votos manuscritos + banda KIT + código 1D 15d + pie) — cero fotos reales",
+      },
+      det1920: {
+        totales: r1920.tot,
+        porPagina: r1920.porPagina,
+      },
+      det1280: {
+        totales: r1280.tot,
+        porPagina: r1280.porPagina,
+      },
+      comparacion: {
+        votosPerdidos,
+        fuertesIdenticas,
+        nivelDifiere,
+        paginasA2aPasada: a2aPasada.map((i) => i + 1),
+        msEscalonado: +msEscalonado.toFixed(1),
+        ahorroPct: +ahorroPct.toFixed(2),
+      },
+      umbrales: { votosPerdidos: 0, fuertesIdenticas: true },
+      veredicto: go ? "GO" : "NO-GO",
+      ep: "wasm (vendido public/vendor/onnxruntime/, byte-idéntico a onnxruntime-web 1.30.0)",
+      ortWeb: (ort.env && ort.env.versions && ort.env.versions["onnxruntime-web"]) || "?",
+      fecha: new Date().toISOString(),
+    };
+    window.__benchJson = ultimoJson;
+    pintarResultados(ultimoJson);
+    $("btn-descargar").disabled = false;
+    setEstado(go ? "Corrida completa — veredicto GO (cero votos perdidos + FUERTE idénticas)." : `Corrida completa — veredicto NO-GO (${votosPerdidos} votos perdidos · FUERTE idénticas: ${fuertesIdenticas ? "sí" : "NO"}).`, go ? "ok" : "warn");
+    try { ses.det.release?.(); ses.cls.release?.(); ses.rec.release?.(); } catch { /* noop */ }
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    setEstado(`ERROR: ${msg}`, "mal");
+    log(`ERROR: ${msg}`, "mal");
+    console.error(e);
+  } finally {
+    $("btn-correr").disabled = false;
+  }
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function pintarResultados(j) {
+  const cls = j.veredicto === "GO" ? "go" : "nogo";
+  const fila = (arm, p, i) => `
+    <tr>
+      <td class="num">${i + 1}</td>
+      <td class="num">${p.nBoxes}</td>
+      <td class="num">${p.msDet}</td>
+      <td class="num">${p.msCls}</td>
+      <td class="num">${p.msRec}</td>
+      <td class="num">${p.lineas}</td>
+      <td class="num ${p.votosPerdidos.length ? "mal" : "ok"}">${p.votosLeidos}/${p.votosTotal}</td>
+      <td class="num">${p.anclas}/10</td>
+      <td>${p.nivel}</td>
+      <td>${esc(p.votosPerdidos.length ? p.votosPerdidos.join(", ") : "—")}</td>
+    </tr>`;
+  const filasArm = (arm, datos) => datos.porPagina.map((p, i) => fila(arm, p, i)).join("");
+  $("caja-resultados").innerHTML = `
+    <table>
+      <tr><th>Arm</th><th>Σ det ms</th><th>Σ cls ms</th><th>Σ rec ms</th><th>total ms</th></tr>
+      <tr><td>det ${CAP_PRODUCCION}</td><td class="num">${j.det1920.totales.msDet}</td><td class="num">${j.det1920.totales.msCls}</td><td class="num">${j.det1920.totales.msRec}</td><td class="num">${j.det1920.totales.msTotal}</td></tr>
+      <tr><td>det ${CAP_CANDIDATO}</td><td class="num">${j.det1280.totales.msDet}</td><td class="num">${j.det1280.totales.msCls}</td><td class="num">${j.det1280.totales.msRec}</td><td class="num">${j.det1280.totales.msTotal}</td></tr>
+    </table>
+    <table>
+      <tr><th>votos perdidos (1280)</th><th>FUERTE idénticas</th><th>Δ niveles</th><th>páginas a 2.ª pasada</th><th>esquema escalonado</th><th>ahorro estimado</th></tr>
+      <tr>
+        <td class="num ${j.comparacion.votosPerdidos ? "mal" : "ok"}">${j.comparacion.votosPerdidos}</td>
+        <td>${j.comparacion.fuertesIdenticas ? '<span class="ok">sí</span>' : '<span class="mal">NO</span>'}</td>
+        <td>${esc(j.comparacion.nivelDifiere.join(", ") || "—")}</td>
+        <td>${esc(j.comparacion.paginasA2aPasada.length ? j.comparacion.paginasA2aPasada.join(", ") : "ninguna")}</td>
+        <td class="num">${j.comparacion.msEscalonado} ms</td>
+        <td class="num">${j.comparacion.ahorroPct}%</td>
+      </tr>
+    </table>
+    <div class="veredicto ${cls}">${j.veredicto}</div>
+    <p class="info">Criterio kit §3 (GO/NO-GO DURO): mismos votos leídos que a ${CAP_PRODUCCION} en TODO el corpus + lecturas FUERTE idénticas. Un solo voto perdido → NO-GO.</p>`;
+  $("caja-detalle").innerHTML = `
+    <table>
+      <tr><th>#</th><th>cajas 1920</th><th>det 1920</th><th>cls 1920</th><th>rec 1920</th><th>lín 1920</th><th>votos 1920</th><th>cajas 1280</th><th>det 1280</th><th>cls 1280</th><th>rec 1280</th><th>lín 1280</th><th>votos 1280</th><th>anclas 1920</th><th>nivel 1920</th><th>nivel 1280</th></tr>
+      ${j.det1920.porPagina.map((p, i) => {
+        const q = j.det1280.porPagina[i];
+        const nivelMal = p.nivel !== q.nivel;
+        return `<tr style="${p.votosLeidos !== q.votosLeidos || nivelMal ? "background:#2e0a0a;" : ""}">
+          <td class="num">${i + 1}</td>
+          <td class="num">${p.nBoxes}</td><td class="num">${p.msDet}</td><td class="num">${p.msCls}</td><td class="num">${p.msRec}</td><td class="num">${p.lineas}</td><td class="num">${p.votosLeidos}/${p.votosTotal}</td>
+          <td class="num">${q.nBoxes}</td><td class="num">${q.msDet}</td><td class="num">${q.msCls}</td><td class="num">${q.msRec}</td><td class="num">${q.lineas}</td><td class="num">${q.votosLeidos}/${q.votosTotal}</td>
+          <td class="num">${p.anclas}/10</td>
+          <td>${p.nivel}</td><td class="${nivelMal ? "mal" : "ok"}">${q.nivel}</td>
+        </tr>`;
+      }).join("")}
+    </table>`;
+}
+
+$("btn-descargar").addEventListener("click", () => {
+  if (!ultimoJson) return;
+  const blob = new Blob([JSON.stringify(ultimoJson, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bench-det1280-resultado.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("btn-correr").addEventListener("click", () => void correr());
+
+$("meta").textContent = `UA: ${navigator.userAgent}`;
+void correr();
+</script>
+</body>
+</html>
