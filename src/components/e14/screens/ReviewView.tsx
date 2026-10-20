@@ -151,6 +151,20 @@ export function ReviewView() {
     return { words, chars: text.length };
   }, [acta?.ocrTexto]);
 
+  // FIX C3 (auditoría 2-b): quadInicial del editor MEMOIZADO — defaultQuad()
+  // es una factory (array NUEVO por render) y el effect de aterrizaje del
+  // QuadEditor depende de [quadInicial]: cualquier re-render de REVISIÓN
+  // mientras el editor está abierto (errorRecorte al fallar APLICAR,
+  // recortando, revelando del upgrade silencioso) re-tweeneaba el quad al
+  // marco completo y BORRABA el recorte del usuario (contrato T2 roto:
+  // «reintenta SIN perder su quad»). Memoizado: identidad estable mientras
+  // status/quadDetectado no cambien de verdad.
+  const quadInicialEditor = useMemo(
+    () =>
+      acta?.status === "RECHAZADA" ? defaultQuad() : (acta?.quadDetectado ?? defaultQuad()),
+    [acta?.status, acta?.quadDetectado],
+  );
+
   // L5: Esc cierra el visor (el cierre por toque lo resuelve el
   // ZoomableVisor dentro del modal — ver §4 del sync-visor).
   useEffect(() => {
@@ -379,7 +393,9 @@ export function ReviewView() {
         <ToolbarBtn
           icon={<StitchRotateIcon />}
           label="Rotar 90°"
-          onClick={esReal ? () => void rotarFoto() : undefined}
+          // FIX (auditoría 2-b #9): mismo gate que la barra de 3 — rotarFoto
+          // exige fotoProcesada; con solo esReal el tap era un no-op mudo.
+          onClick={acta.fotoProcesada ? () => void rotarFoto() : undefined}
         />
         <ToolbarBtn
           icon={<SlidersIcon />}
@@ -566,6 +582,10 @@ export function ReviewView() {
             role="button"
             aria-label="Ver acta a pantalla completa"
             tabIndex={hayFoto ? 0 : -1}
+            // FIX (auditoría 2-b #10): role=button con onClick — un tap en el
+            // padding de la tarjeta no hacía nada (solo la imagen interna
+            // abría el visor); WCAG 4.1.2 (el rol promete lo que no cumple).
+            onClick={hayFoto ? () => setVisorAbierto(true) : undefined}
             onKeyDown={
               hayFoto
                 ? (e) => {
@@ -630,6 +650,8 @@ export function ReviewView() {
             role="button"
             aria-label="Ver acta a pantalla completa"
             tabIndex={hayFoto ? 0 : -1}
+            // FIX (auditoría 2-b #10): idem tarjeta ENVIADA — tap completo.
+            onClick={hayFoto ? () => setVisorAbierto(true) : undefined}
             onKeyDown={
               hayFoto
                 ? (e) => {
@@ -744,7 +766,7 @@ export function ReviewView() {
           // partida: el marco completo (puntos a arrastrar al papel).
           // ADVERTENCIA conserva quadDetectado (la detección acertó el
           // marco; solo hay que corregir una esquina).
-          quadInicial={acta.status === "RECHAZADA" ? defaultQuad() : (acta.quadDetectado ?? defaultQuad())}
+          quadInicial={quadInicialEditor}
           rotation={acta.rotation ?? 0}
           aplicando={recortando}
           onCancelar={() => setEditando(false)}

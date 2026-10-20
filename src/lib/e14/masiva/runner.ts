@@ -15,7 +15,10 @@
 import { getBridge } from "../get-bridge";
 // KIT e14-masiva-ux-v1 (T4): tipo con el presupuesto de timeout opcional
 // (intersección LOCAL en el bridge — kit §1 prohíbe tocar bridge.ts).
-import type { OpcionesEscaneoConTimeout } from "../scanner-core-bridge";
+// KIT e14-masiva-tiempos-v1 (PR-2): precargarDecodeArchivo — MISMA memo
+// WeakMap del pipeline: el prefetch comparte la instancia del File y el
+// decode de la fila N+1 golpea HIT (~0 ms) cuando le toca.
+import { precargarDecodeArchivo, type OpcionesEscaneoConTimeout } from "../scanner-core-bridge";
 import { useE14Store } from "../store";
 import { guardarRegistro, leerRegistro } from "./cola";
 import { useMasivaStore } from "./store";
@@ -89,22 +92,101 @@ function motivoCorto(err: unknown): string {
   return (corto || "ERROR DEL PIPELINE").toUpperCase();
 }
 
-/** Siguiente PENDIENTE (FIFO por agregadaEn) — el ORDEN vive en las filas
- *  livianas (mini-store), los DATOS viven en IDB (leerRegistro uno-a-uno).
- *  Las filas temporales (copia a IDB aún en vuelo — «GUARDANDO N…») se
- *  saltan: su id real llega al resolver agregarLote y el loop las toma
- *  en la siguiente pasada. */
+/** Siguiente PENDIENTE o DUPLICADA (FIFO por agregadaEn) — el ORDEN vive en
+ *  las filas livianas (mini-store), los DATOS viven en IDB (leerRegistro
+ *  uno-a-uno). Las filas temporales (copia a IDB aún en vuelo — «GUARDANDO
+ *  N…») se saltan: su id real llega al resolver agregarLote y el loop las
+ *  toma en la siguiente pasada. KIT e14-masiva-tiempos-v1 (PR-1): las
+ *  DUPLICADAS ENTRAN al loop — su procesamiento es la copia rápida (<1 s). */
 function siguientePendiente(): FilaMasiva | null {
   const pendientes = useMasivaStore
     .getState()
-    .filas.filter((f) => f.estado === "PENDIENTE" && !f.id.startsWith("masiva-temp-"))
+    .filas.filter(
+      (f) =>
+        (f.estado === "PENDIENTE" || f.estado === "DUPLICADA") &&
+        !f.id.startsWith("masiva-temp-"),
+    )
     .sort((a, b) => a.agregadaEn - b.agregadaEn);
   return pendientes[0] ?? null;
 }
 
+/** KIT e14-masiva-tiempos-v1 (PR-1): la fila DUPLICADA REUTILIZA el resultado
+ *  de su original (kit §2 — copia registro+status+thumb, sin pipeline, sin
+ *  contadores: el desenlace del acta gemela YA fue registrado con la
+ *  original). El acta copiada se RE-IDENTIFICA con el id de ESTA fila
+ *  (contrato de sincronizarAlVolver: acta.id === id de la fila abierta).
+ *  Devuelve false ante CUALQUIER falta (original quitada/ERROR/sin acta) →
+ *  la fila cae al reproceso completo — jamás inventar. */
+async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolean> {
+  if (!fila.dupOf) return false;
+  try {
+    const [registro, original] = await Promise.all([
+      leerRegistro(fila.id),
+      leerRegistro(fila.dupOf),
+    ]);
+    const actaOrigen = original.acta;
+    if (!actaOrigen) return false; // original sin desenlace (ERROR/en vuelo)
+    if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return false;
+    const actaCopia = { ...actaOrigen, id: fila.id };
+    const registroListo: RegistroMasiva = {
+      ...registro,
+      estado: "LISTA",
+      acta: actaCopia,
+      thumb: original.thumb,
+      hashDedup: registro.hashDedup,
+      dupOf: fila.dupOf,
+    };
+    await guardarRegistro(registroListo);
+    const ms = Date.now() - t0;
+    console.info(
+      `[e14] dedup fila=${fila.id} dupOf=${fila.dupOf} reutiliza score=${actaCopia.score ?? "-"} ms=${ms}`,
+    );
+    marcarFila(fila.id, {
+      estado: "LISTA",
+      statusActa: actaCopia.status,
+      score: actaCopia.score,
+      nivel: actaCopia.clasificacion?.nivel ?? null,
+      pagina: paginaDeActa(actaCopia),
+      motivo: actaCopia.rechazo?.tipo ?? null,
+      thumb: original.thumb,
+      enviadaAuto: actaCopia.status === "ENVIADA" && !!actaCopia.enviadoAutomaticamente,
+      envioEnCola: actaCopia.hashSha256 === "EN COLA",
+      error: null,
+    });
+    return true;
+  } catch {
+    return false; // original fuera de la cola / IDB caído → reprocesa completo
+  }
+}
+
 /** Desenlace de UNA foto — byte a byte el pipeline real (kit §6-C: el
- *  desenlace DEBE ser idéntico al del IMPORTAR normal). */
-async function procesarUno(fila: FilaMasiva): Promise<void> {
+ *  desenlace DEBE ser idéntico al del IMPORTAR normal).
+ *  KIT e14-masiva-tiempos-v1 (PR-2): `archivoPredecode` = la MISMA instancia
+ *  de File que el prefetch ya decodificó (memo HIT, decode ~0 ms) — null si
+ *  no hubo prefetch (decode de siempre, identidad intacta AC-P3). */
+async function procesarUno(
+  filaEntrante: FilaMasiva,
+  archivoPredecode: File | null = null,
+): Promise<void> {
+  // KIT e14-masiva-tiempos-v1 (PR-1): rama DEDUP — copia del resultado de la
+  // original (<1 s). Si la original no sirve, la fila cae al pipeline
+  // completo AQUÍ MISMO (fallback honesto — el dueño nunca pierde la foto).
+  let fila = filaEntrante;
+  if (fila.estado === "DUPLICADA") {
+    marcarFila(fila.id, { estado: "PROCESANDO", error: null });
+    const t0 = Date.now();
+    if (await reutilizarResultado(fila, t0)) return;
+    // Fallback: des-marcar y reprocesar como fila normal (mismo pase).
+    fila = { ...fila, estado: "PENDIENTE", dupOf: null };
+    marcarFila(fila.id, { estado: "PENDIENTE", dupOf: null });
+    try {
+      const registro = await leerRegistro(fila.id);
+      await guardarRegistro({ ...registro, estado: "PENDIENTE", dupOf: undefined });
+    } catch {
+      /* IDB caído — la fila ya está PENDIENTE en memoria (honesto) */
+    }
+    console.info(`[e14] dedup fila=${fila.id} sin-original reprocesa-completo`);
+  }
   marcarFila(fila.id, { estado: "PROCESANDO", error: null });
   useMasivaStore.setState({ progreso: { id: fila.id, etapa: "DETECTANDO", fraccion: 0 } });
   let registro: RegistroMasiva | null = null;
@@ -116,6 +198,12 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
     // genérico (OpcionesEscaneo.archivo espera File — A5).
     if (!(archivo instanceof File)) throw new Error("ARCHIVO_FUERA_DE_LA_COLA");
 
+    // KIT e14-masiva-tiempos-v1 (PR-2): si el prefetch ya decodificó ESTA
+    // fila, pasar la MISMA instancia del File → el pipeline golpea la memo
+    // del bridge (decode ~0 ms — AC-P1). Sin prefetch → el archivo de
+    // SIEMPRE (identidad de desenlace intacta, AC-P3).
+    const archivoPipeline = archivoPredecode ?? archivo;
+
     // T4: variable tipada con la intersección (sin excess-check de literal —
     // el parámetro de la interfaz E14Bridge sigue siendo OpcionesEscaneo).
     const opcionesMasiva: OpcionesEscaneoConTimeout = {
@@ -123,11 +211,17 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
       intento: 1, // A6 — semántica de PRIMERA captura
       maxIntentos: 4, // fallos → RECHAZADA repetible / rescate por recorte manual
       fuente: "ARCHIVO", // A5 — MASIVA SIEMPRE archivo
-      archivo,
+      archivo: archivoPipeline,
       onProgreso: (p) => progresoThrottled(fila.id, p),
       timeoutMs: TIMEOUT_MASIVA_MS, // T4 — ver constante (individual: 15 s intacto)
     };
     const acta = await getBridge().escanearActa(opcionesMasiva);
+
+    // FIX M8 (auditoría 2-c): la decisión del dueño manda TAMBIÉN para el
+    // ENVÍO — si quitó la fila mientras el OCR corría, el desenlace NO se
+    // transmite (antes registrarEnvioMasiva corría ANTES del guard: fila de
+    // historial + completadas + hueco archivado de un acta descartado).
+    if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return;
 
     // Desenlace → la MISMA vía que el flujo normal (T3.3/T3.2). El envío
     // automático reutiliza registrarEnvio (historial + completadas + hueco
@@ -160,11 +254,22 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
       acta: actaFinal,
       thumb,
     };
-    // El dueño pudo QUITAR/VACIAR la fila mientras el OCR corría: su
-    // decisión manda — no se re-persiste un registro borrado (0 zombis).
-    if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return;
-
-    await guardarRegistro(registroListo);
+    // FIX M14 (auditoría 2-c): persistencia fallida TRAS el envío — la fila
+    // NO pasa a ERROR (el acta SÍ se transmitió; una fila ERROR invita a
+    // reprocesar → doble envío tras recarga) y el registro JAMÁS queda
+    // PENDIENTE con el archivo (el reproceso automático re-enviaría).
+    // Reintento MÍNIMO: estado LISTA + desenlace liviano, SIN el acta
+    // completa (la causa típica del fallo es quota — el registro con acta
+    // de ~15 MB no cabe; el liviano sí).
+    try {
+      await guardarRegistro(registroListo);
+    } catch {
+      try {
+        await guardarRegistro({ ...registro, estado: "LISTA", thumb });
+      } catch {
+        /* IDB caída del todo — la fila vive honesta en memoria (LISTA) */
+      }
+    }
     marcarFila(fila.id, {
       estado: "LISTA",
       statusActa: actaFinal.status,
@@ -181,6 +286,9 @@ async function procesarUno(fila: FilaMasiva): Promise<void> {
     // Errores de IDB/decode/pipeline NUNCA tumban la UI (kit §3): la
     // entrada pasa a ERROR con motivo corto (repetible — quitar y
     // re-soltar la foto vuelve a encolarla).
+    // FIX M8-b (auditoría 2-c): el guard anti-zombi TAMBIÉN en el catch —
+    // re-persistir el registro de una fila QUITADA lo revivía al recargar.
+    if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return;
     marcarFila(fila.id, { estado: "ERROR", error: motivoCorto(err), thumb: undefined });
     if (registro) {
       try {
@@ -199,8 +307,62 @@ async function bucle(): Promise<void> {
   while (!stopFlag) {
     const fila = siguientePendiente();
     if (!fila) break;
-    await procesarUno(fila);
+    // KIT e14-masiva-tiempos-v1 (PR-2): prefetch de 1 slot — al INICIAR el
+    // procesamiento de N, disparar el decode de N+1 en background (kit §3):
+    // el decode HEIC (~1-2 s) queda OCULTO tras el OCR de N (AC-P1). Primero
+    // se CONSUME el slot de ESTA fila (capturado — la misma instancia que la
+    // memo ya decodificó); en fila DUPLICADA el slot SE CONSERVA (la copia
+    // no decoda — el prefetch en vuelo sirve a la siguiente pipeline-able).
+    const predecode =
+      prefetchSlot && prefetchSlot.id === fila.id ? prefetchSlot.archivo : null;
+    if (predecode || fila.estado !== "DUPLICADA") prefetchSlot = null;
+    dispararPrefetch(fila.id);
+    await procesarUno(fila, predecode);
   }
+}
+
+/** KIT e14-masiva-tiempos-v1 (PR-2): prefetch de decode — guarda la MISMA
+ *  instancia del File de la próxima fila pipeline-able (PENDIENTE, no temp,
+ *  no DUPLICADA — la copia no decoda) y precalienta la memo del bridge.
+ *  Fallo → catch silencioso + slot fuera: la fila re-decodifica sola
+ *  (comportamiento de hoy — jamás bloquea, AC-P2). stopFlag/pausa → no
+ *  dispara (el prefetch en vuelo muere solo — nadie lo consume). El ciclo
+ *  de vida del slot vive en bucle() (captura → null → disparo siguiente). */
+let prefetchSlot: { id: string; archivo: File } | null = null;
+
+function dispararPrefetch(filaActualId: string): void {
+  if (stopFlag) return;
+  const proxima = useMasivaStore
+    .getState()
+    .filas.filter(
+      (f) =>
+        f.estado === "PENDIENTE" &&
+        f.id !== filaActualId &&
+        !f.id.startsWith("masiva-temp-"),
+    )
+    .sort((a, b) => a.agregadaEn - b.agregadaEn)[0];
+  if (!proxima) return;
+  // Ya hay prefetch (en vuelo o listo) para ESA fila → no re-disparar con
+  // otra instancia (sería un segundo decode del mismo contenido).
+  if (prefetchSlot && prefetchSlot.id === proxima.id) return;
+  prefetchSlot = null;
+  void (async () => {
+    try {
+      const registro = await leerRegistro(proxima.id);
+      const archivo = registro.archivo;
+      if (!(archivo instanceof File)) return;
+      prefetchSlot = { id: proxima.id, archivo };
+      const t0 = Date.now();
+      await precargarDecodeArchivo(archivo);
+      console.info(
+        `[e14] masiva-prefetch fila=${proxima.id} listo ms=${Date.now() - t0}`,
+      );
+    } catch {
+      // Decode fallido: la memo del bridge ya liberó la entrada — la fila
+      // re-decodifica en su turno (comportamiento actual, AC-P2).
+      if (prefetchSlot?.id === proxima.id) prefetchSlot = null;
+    }
+  })();
 }
 
 /** UN solo runner global (módulo singleton) — `iniciar()` double-call →

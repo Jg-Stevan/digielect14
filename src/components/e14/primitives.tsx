@@ -123,16 +123,22 @@ export function ToolbarBtn({
    *  alta calidad»). */
   ariaLabel?: string;
 }) {
+  // FIX (auditoría 2-b #9): sin onClick el botón era un muerto ACTIVO —
+  // parecía pulsable (y accesible al teclado) sin hacer nada. Ahora se
+  // deshabilita de verdad (visual + aria + tab).
+  const inhabilitado = !onClick;
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={inhabilitado}
+      aria-disabled={inhabilitado || undefined}
       aria-label={ariaLabel}
       className={`min-h-11 py-2 px-2 rounded-xl border font-sans font-medium text-xs flex items-center justify-center gap-1.5 tap-action transition-colors leading-tight text-center ${
         active
           ? "bg-brand-surface border-brand-green/50 text-brand-green"
           : "bg-brand-surface border-brand-border text-gray-300 hover:bg-brand-surfacelight"
-      }`}
+      } ${inhabilitado ? "opacity-40 cursor-not-allowed" : ""}`}
     >
       <span className={`shrink-0 flex items-center justify-center ${active ? "text-brand-green" : "text-gray-300"}`}>
         {icon}
