@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIT bench e14-tiempos-v1 — banco lote 6 vs 12 del rec/cls PP-OCRv4 (SOLO banco, cero producción)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: #0c0c0d; color: #e4e4e7;
+    font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 22px 0 8px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .06em; }
+  .sub { color: #a1a1aa; margin: 0 0 18px; font-size: 12.5px; }
+  .caja { border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; background: #131316; margin-bottom: 14px; }
+  .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; padding: 10px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #3f3f46; background: #1f1f23; color: #e4e4e7; min-height: 44px;
+  }
+  button:hover:not(:disabled) { background: #2d2d33; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #btn-descargar { border-color: #3f6212; background: #1a2e05; color: #bef264; }
+  #btn-descargar:hover:not(:disabled) { background: #274008; }
+  .estado { margin: 10px 0 0; white-space: pre-wrap; }
+  .ok { color: #a3e635; } .mal { color: #f87171; } .info { color: #d4d4d8; } .warn { color: #fbbf24; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { border: 1px solid #27272a; padding: 6px 10px; text-align: left; font-size: 13px; }
+  th { background: #18181b; color: #a1a1aa; font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .veredicto { font-size: 22px; font-weight: 700; padding: 10px 18px; border-radius: 10px; display: inline-block; margin-top: 8px; }
+  .veredicto.go { background: #1a2e05; color: #a3e635; border: 1px solid #3f6212; }
+  .veredicto.nogo { background: #2e0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+  .veredicto.bloq { background: #2e2305; color: #fbbf24; border: 1px solid #713f12; }
+  pre#log {
+    max-height: 240px; overflow-y: auto; font-size: 12px; color: #a1a1aa;
+    background: #0f0f11; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin: 8px 0 0;
+  }
+  pre#log::-webkit-scrollbar { width: 8px; }
+  pre#log::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  .detalle-tabla { max-height: 360px; overflow-y: auto; }
+  code { color: #bef264; }
+</style>
+</head>
+<body>
+<h1>KIT bench e14-tiempos-v1 · B2 — Lote del rec/cls: 6 → 12 (PP-OCRv4)</h1>
+<p class="sub">SOLO banco de pruebas (instrumento de medición, cero producción) · EP wasm idéntico al de producción
+(<code>public/vendor/onnxruntime/</code>) · corpus sintético determinista de 60 líneas (el MISMO del kit bench-rec-int8,
+seed <code>0xe14be6c5</code>) · protocolo: pasada caliente descartada + pasada medida · menos overhead de
+<code>session.run</code>: la hipótesis es que doblar el lote reduce llamadas e inferencia total sin cambiar el texto.</p>
+
+<div class="caja">
+  <div class="fila">
+    <button id="btn-correr" type="button">▶ REPETIR CORRIDA</button>
+    <button id="btn-descargar" type="button" disabled>⬇ DESCARGAR JSON</button>
+    <span id="meta" class="info"></span>
+  </div>
+  <p id="estado" class="estado info">Cargando ORT-web…</p>
+</div>
+
+<h2>Resultados</h2>
+<div class="caja" id="caja-resultados"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Detalle línea a línea (rec — mismo orden para ambos lotes)</h2>
+<div class="caja detalle-tabla" id="caja-detalle"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Log</h2>
+<pre id="log"></pre>
+
+<script type="module">
+import * as ort from "../../node_modules/onnxruntime-web/dist/ort.wasm.min.mjs";
+
+// ─── Config del banco (réplica fiel de src/lib/e14/ocr/rapidocr.ts @ b8b3e12) ─
+const URL_REC = "../../public/models/rapidocr/ch_PP-OCRv4_rec_infer.onnx";
+const URL_CLS = "../../public/models/rapidocr/ch_ppocr_mobile_v2.0_cls_infer.onnx";
+const URL_DICT = "../../public/models/rapidocr/ppocr_keys.txt";
+const TEXT_SCORE = 0.5;          // umbral de aceptación del motor (rapidocr.ts:299)
+const LOTE_PRODUCCION = 6;       // rec k+=6 / cls i+=6 (rapidocr.ts:740,783)
+const LOTE_CANDIDATO = 12;       // la palanca B2 del kit
+const SEMILLA = 0xe14be6c5;      // corpus determinista — MISMO del bench-rec-int8
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls = "info") => {
+  const linea = document.createElement("div");
+  if (cls) linea.className = cls;
+  linea.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $("log").appendChild(linea);
+  $("log").scrollTop = $("log").scrollHeight;
+};
+const setEstado = (msg, cls = "info") => { $("estado").textContent = msg; $("estado").className = `estado ${cls}`; };
+
+// ─── PRNG determinista (mulberry32, seed fija — sin aleatoriedad de ejecución) ─
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const entero = (rnd, min, max) => min + Math.floor(rnd() * (max - min + 1));
+const digitos = (rnd, n) => Array.from({ length: n }, () => entero(rnd, 0, 9)).join("");
+
+// ─── Corpus sintético: 60 líneas estilo acta — copia EXACTA del generador del
+//     kit bench-rec-int8 (mismas plantillas, fuentes, tamaños y seed) para que
+//     los números de ambos bancos sean comparables. SINTÉTICO 100% (kit §0.7). ──
+const FUENTES = ['"Courier New", monospace', "Consolas, monospace", "monospace"];
+const TAMANOS = [28, 32, 36, 40, 44];
+
+function plantillas(rnd) {
+  const dd = (n) => digitos(rnd, n);
+  const fecha = `${dd(2)}/${dd(2)}/20${dd(2)}`;
+  const hora = `${dd(2)}:${dd(2)}`;
+  return [
+    `ACTA ${dd(3)} DE ${dd(4)} - MESA ${dd(2)}`,
+    `PUESTO ${dd(5)} MUNICIPIO ${dd(3)} DEPARTAMENTO ${dd(2)}`,
+    `FECHA ${fecha} HORA ${hora}`,
+    `TRANSMISION ${dd(6)} ${dd(4)} ESTADO OK`,
+    `CODIGO E14 ${dd(13)}`,
+    `TOTAL VOTOS ${dd(4)} ${dd(4)} ${dd(3)} ${dd(2)}`,
+    `TESTIGO ${dd(5)} FIRMA ${dd(6)} ${dd(2)}`,
+    `URNA ${dd(4)} - SUFRAGIOS ${dd(4)} - BLANCOS ${dd(3)}`,
+    `CANDIDATO ${dd(3)} VOTOS ${dd(4)} PUESTO ${dd(2)}`,
+    `DIGIELECT VERIF ${dd(2)}:${dd(2)}:${dd(2)} LOTE ${dd(3)}`,
+  ];
+}
+
+function generarCorpus() {
+  const rnd = mulberry32(SEMILLA);
+  const corpus = [];
+  for (let i = 0; i < 60; i++) {
+    const plantilla = plantillas(rnd)[i % 10];
+    const tamano = TAMANOS[i % TAMANOS.length];
+    const fuente = FUENTES[i % FUENTES.length];
+    const medidor = document.createElement("canvas").getContext("2d");
+    medidor.font = `${tamano}px ${fuente}`;
+    const ancho = Math.ceil(medidor.measureText(plantilla).width) + 16;
+    const alto = Math.ceil(tamano * 1.35) + 8;
+    const cv = document.createElement("canvas");
+    cv.width = ancho; cv.height = alto;
+    const ctx = cv.getContext("2d", { willReadFrequently: true });
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, ancho, alto);
+    ctx.fillStyle = "#000000";
+    ctx.font = `${tamano}px ${fuente}`;
+    ctx.textBaseline = "middle";
+    ctx.fillText(plantilla, 8, alto / 2);
+    corpus.push({ canvas: cv, esperado: plantilla });
+  }
+  return corpus;
+}
+
+// ─── Pre/post IDÉNTICOS al motor de producción (rapidocr.ts:512-588) ─────────
+// tensor NCHW, resize punto-fijo a h=48 con pad de ceros a la derecha,
+// canales BGR, normalización (x/255 - 0.5)/0.5.
+function ctxDe(canvas) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("canvas 2d no disponible");
+  return ctx;
+}
+
+function tensorDeCanvases(canvases, targetW) {
+  const b = canvases.length;
+  const data = new Float32Array(b * 3 * 48 * targetW);
+  for (let i = 0; i < b; i++) {
+    const c = canvases[i];
+    const ctx = ctxDe(c);
+    const { width: cw, height: ch } = c;
+    const img = ctx.getImageData(0, 0, cw, ch);
+    const rw = Math.min(Math.max(1, Math.ceil((48 * cw) / ch)), targetW);
+    for (let y = 0; y < 48; y++) {
+      const sy = Math.min(ch - 1, Math.floor((y * ch) / 48));
+      for (let x = 0; x < rw; x++) {
+        const sx = Math.min(cw - 1, Math.floor((x * cw) / rw));
+        const idx = (sy * cw + sx) * 4;
+        const o = i * 3 * 48 * targetW + y * targetW + x;
+        data[o] = (img.data[idx + 2] / 255 - 0.5) / 0.5; // B
+        data[o + 48 * targetW] = (img.data[idx + 1] / 255 - 0.5) / 0.5; // G
+        data[o + 2 * 48 * targetW] = (img.data[idx] / 255 - 0.5) / 0.5; // R
+      }
+    }
+  }
+  return new ort.Tensor("float32", data, [b, 3, 48, targetW]);
+}
+
+// CTC greedy (rapidocr.ts:552-588): argmax por t; colapsar repetidos; ignorar
+// blank (0); 1..dict.length → dict[idx-1]; resto → " "; conf = media de las
+// probs de los tokens seleccionados (el ONNX del rec ya sale con softmax).
+function ctcDecode(tensor, dict) {
+  const dims = tensor.dims;
+  const T = dims[1];
+  const C = dims[2];
+  const data = tensor.data;
+  let texto = "";
+  let sumaConf = 0;
+  let cuenta = 0;
+  let ultimo = -1;
+  for (let t = 0; t < T; t++) {
+    const base = t * C;
+    let mejor = 0;
+    let mejorV = -Infinity;
+    for (let c = 0; c < C; c++) {
+      const v = data[base + c];
+      if (v > mejorV) { mejorV = v; mejor = c; }
+    }
+    if (mejor !== 0 && mejor !== ultimo) {
+      const prob = mejorV;
+      if (mejor <= dict.length) texto += dict[mejor - 1];
+      else texto += " ";
+      sumaConf += prob;
+      cuenta++;
+    }
+    ultimo = mejor;
+  }
+  return { texto, conf: cuenta === 0 ? 0 : sumaConf / cuenta };
+}
+
+function softmax2(a, b) {
+  const m = Math.max(a, b);
+  const ea = Math.exp(a - m);
+  const eb = Math.exp(b - m);
+  return [ea / (ea + eb), eb / (ea + eb)];
+}
+
+// ─── rec por lotes de N ordenados por ratio w/h — réplica de rapidocr.ts:783-808
+//     (W = floor(48 · max(320/48, ratios del lote)); el resize individual ocurre
+//     dentro de tensorDeCanvases con pad de ceros). Con N=12 los lotes mezclan
+//     MÁS ratios → W por lote puede crecer — es exactamente el efecto a medir. ─
+async function correrRec(session, corpus, dict, tamanoLote, { decodificar }) {
+  const t0 = performance.now();
+  const resultados = new Array(corpus.length);
+  let wMax = 0;
+  const orden = corpus
+    .map((c, i) => ({ i, ratio: c.canvas.width / c.canvas.height }))
+    .sort((a, b) => a.ratio - b.ratio);
+  for (let k = 0; k < orden.length; k += tamanoLote) {
+    const lote = orden.slice(k, k + tamanoLote);
+    const maxRatio = Math.max(320 / 48, ...lote.map((o) => o.ratio));
+    const W = Math.floor(48 * maxRatio);
+    if (W > wMax) wMax = W;
+    const tensor = tensorDeCanvases(lote.map((o) => corpus[o.i].canvas), W);
+    const res = await session.run({ [session.inputNames[0]]: tensor });
+    const out = res[session.outputNames[0]];
+    if (!decodificar) continue;
+    for (let m = 0; m < lote.length; m++) {
+      const dims = out.dims;
+      const sub = {
+        dims: [1, dims[1], dims[2]],
+        data: out.data.subarray(m * dims[1] * dims[2], (m + 1) * dims[1] * dims[2]),
+        type: out.type,
+      };
+      resultados[lote[m].i] = ctcDecode(sub, dict);
+    }
+  }
+  return {
+    ms: performance.now() - t0,
+    resultados,
+    wMax,
+    tensorBytesMax: tamanoLote * 3 * 48 * wMax * 4, // float32 = 4 bytes (kit §2)
+    nRuns: Math.ceil(corpus.length / tamanoLote),
+  };
+}
+
+// ─── cls por lotes de N — réplica de rapidocr.ts:740-761 (orden de cajas tal
+//     cual llega — el cls NO se ordena por ratio en producción; h=48, w=
+//     min(192, ceil(48·ratio)) con pad a 192; softmax2; p180 > 0.9 → rotar). ──
+async function correrCls(session, corpus, tamanoLote) {
+  const t0 = performance.now();
+  const rotar = new Array(corpus.length).fill(false);
+  let nRuns = 0;
+  for (let i = 0; i < corpus.length; i += tamanoLote) {
+    nRuns++;
+    const lote = corpus.slice(i, i + tamanoLote).map((c) => c.canvas);
+    const tensors = lote.map((cv) => {
+      const ratio = cv.width / cv.height;
+      const wObj = Math.min(192, Math.max(1, Math.ceil(48 * ratio)));
+      const tmp = document.createElement("canvas");
+      tmp.width = wObj;
+      tmp.height = 48;
+      ctxDe(tmp).drawImage(cv, 0, 0, wObj, 48);
+      return tmp;
+    });
+    const tensor = tensorDeCanvases(tensors, 192);
+    const res = await session.run({ [session.inputNames[0]]: tensor });
+    const out = res[session.outputNames[0]];
+    const data = out.data;
+    for (let k = 0; k < lote.length; k++) {
+      const [p0, p180] = out.dims[1] === 2 ? softmax2(data[k * 2], data[k * 2 + 1]) : [1, 0];
+      if (p180 > 0.9 && p180 > p0) rotar[i + k] = true;
+    }
+  }
+  return {
+    ms: performance.now() - t0,
+    rotar,
+    tensorBytesMax: tamanoLote * 3 * 48 * 192 * 4,
+    nRuns,
+  };
+}
+
+const confMedia = (resultados) =>
+  resultados.reduce((s, r) => s + r.conf, 0) / resultados.length;
+const aceptadas = (resultados) =>
+  resultados.filter((r) => r.conf >= TEXT_SCORE && r.texto.trim().length > 0).length;
+const accGT = (resultados, corpus) =>
+  (100 * resultados.filter((r, i) => r.texto.trim() === corpus[i].esperado).length) / corpus.length;
+
+// ─── Corrida principal ───────────────────────────────────────────────────────
+let ultimoJson = null;
+
+async function correr() {
+  $("btn-correr").disabled = true;
+  $("btn-descargar").disabled = true;
+  $("caja-resultados").innerHTML = '<p class="info">Corriendo…</p>';
+  $("caja-detalle").innerHTML = '<p class="info">Corriendo…</p>';
+  $("log").innerHTML = "";
+  ultimoJson = null;
+
+  try {
+    // EP idéntico a producción (rapidocr.ts:133-147): wasmPaths vendido, SIMD,
+    // numThreads = min(4, cores) SOLO con SAB+COI. proxy omitido (igual que el
+    // kit bench-rec-int8 — no afecta cifras, solo quién ejecuta la inferencia).
+    ort.env.wasm.wasmPaths = new URL("../../public/vendor/onnxruntime/", location.href).href;
+    const coi = typeof SharedArrayBuffer !== "undefined" && self.crossOriginIsolated;
+    const numThreads = coi ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+    ort.env.wasm.numThreads = numThreads;
+    ort.env.wasm.simd = true;
+    log(`ORT-web ${(ort.env && ort.env.versions && ort.env.versions["onnxruntime-web"]) || "?"} · wasmPaths=vendido · numThreads=${numThreads} · COI=${coi} · cores=${navigator.hardwareConcurrency}`);
+
+    setEstado("Cargando dict CTC y corpus…");
+    const dictResp = await fetch(URL_DICT);
+    if (!dictResp.ok) throw new Error(`ppocr_keys.txt HTTP ${dictResp.status}`);
+    const dict = (await dictResp.text()).split("\n").filter((l) => l.length > 0);
+    log(`Dict CTC: ${dict.length} entradas`);
+    const corpus = generarCorpus();
+    log(`Corpus sintético: ${corpus.length} líneas (seed fija ${SEMILLA}) — MISMAS imágenes para los 2 lotes`);
+
+    const tCrea = performance.now();
+    const sesRec = await ort.InferenceSession.create(URL_REC, { executionProviders: ["wasm"] });
+    const sesCls = await ort.InferenceSession.create(URL_CLS, { executionProviders: ["wasm"] });
+    log(`Sesiones rec+cls creadas en ${Math.round(performance.now() - tCrea)} ms (EP wasm)`);
+
+    const medirRec = async (tamanoLote, etiqueta) => {
+      log(`rec ${etiqueta}: pasada 1 (caliente, descartada)…`);
+      await correrRec(sesRec, corpus, dict, tamanoLote, { decodificar: false });
+      log(`rec ${etiqueta}: pasada 2 (medida)…`);
+      const r = await correrRec(sesRec, corpus, dict, tamanoLote, { decodificar: true });
+      log(`rec ${etiqueta}: ${r.ms.toFixed(1)} ms total · ${(r.ms / corpus.length).toFixed(3)} ms/línea · ${r.nRuns} runs · W máx ${r.wMax} · tensor máx ${(r.tensorBytesMax / 1048576).toFixed(2)} MiB · conf ${(confMedia(r.resultados) * 100).toFixed(2)}%`);
+      return r;
+    };
+    const medirCls = async (tamanoLote, etiqueta) => {
+      log(`cls ${etiqueta}: pasada 1 (caliente, descartada)…`);
+      await correrCls(sesCls, corpus, tamanoLote);
+      log(`cls ${etiqueta}: pasada 2 (medida)…`);
+      const r = await correrCls(sesCls, corpus, tamanoLote);
+      log(`cls ${etiqueta}: ${r.ms.toFixed(1)} ms total · ${(r.ms / corpus.length).toFixed(3)} ms/línea · ${r.nRuns} runs · rotaciones ON = ${r.rotar.filter(Boolean).length}`);
+      return r;
+    };
+
+    // Orden alternado para no favorecer a nadie con el calor residual
+    const r6 = await medirRec(LOTE_PRODUCCION, `lote ${LOTE_PRODUCCION}`);
+    const r12 = await medirRec(LOTE_CANDIDATO, `lote ${LOTE_CANDIDATO}`);
+    const c6 = await medirCls(LOTE_PRODUCCION, `lote ${LOTE_PRODUCCION}`);
+    const c12 = await medirCls(LOTE_CANDIDATO, `lote ${LOTE_CANDIDATO}`);
+
+    // ── Comparación rec: texto línea a línea en el MISMO orden ────────────────
+    let identicas = 0;
+    const detalle = corpus.map((c, i) => {
+      const a = r6.resultados[i];
+      const b = r12.resultados[i];
+      const igual = a.texto.trim() === b.texto.trim();
+      if (igual) identicas++;
+      return {
+        i, esperado: c.esperado,
+        lote6: { texto: a.texto.trim(), conf: +a.conf.toFixed(4) },
+        lote12: { texto: b.texto.trim(), conf: +b.conf.toFixed(4) },
+        identico: igual,
+      };
+    });
+    const pctIdentico = (100 * identicas) / corpus.length;
+    const deltaConf = (confMedia(r6.resultados) - confMedia(r12.resultados)) * 100; // puntos 0-100
+    const msL6 = r6.ms / corpus.length;
+    const msL12 = r12.ms / corpus.length;
+    const speedupRec = msL6 / msL12;
+
+    // ── Comparación cls: flags de rotación línea a línea ─────────────────────
+    let flagsIguales = 0;
+    for (let i = 0; i < corpus.length; i++) if (c6.rotar[i] === c12.rotar[i]) flagsIguales++;
+    const pctFlags = (100 * flagsIguales) / corpus.length;
+    const msLC6 = c6.ms / corpus.length;
+    const msLC12 = c12.ms / corpus.length;
+    const speedupCls = msLC6 / msLC12;
+
+    // Umbrales kit §2: GO = texto idéntico 100% + Δconf ≤ 0.5 + speedup ≥ 1.05×
+    const goRec = pctIdentico === 100 && Math.abs(deltaConf) <= 0.5 && speedupRec >= 1.05;
+    const goCls = pctFlags === 100 && speedupCls >= 1.05;
+    const go = goRec && goCls;
+
+    const heap = performance.memory
+      ? { usedJSHeapSizeIni: performance.memory.usedJSHeapSize }
+      : null;
+
+    ultimoJson = {
+      hardware: `${navigator.hardwareConcurrency} núcleos lógicos (navigator.hardwareConcurrency)`,
+      navegador: navigator.userAgent,
+      numThreads,
+      crossOriginIsolated: coi,
+      corpus: corpus.length,
+      rec: {
+        lote6: {
+          msTotal: +r6.ms.toFixed(1), msPorLinea: +msL6.toFixed(3), runs: r6.nRuns,
+          confMedia: +confMedia(r6.resultados).toFixed(4),
+          lineasAceptadasTEXT05: aceptadas(r6.resultados),
+          accTextoGT: +accGT(r6.resultados, corpus).toFixed(2),
+          wMax: r6.wMax, tensorBytesMax: r6.tensorBytesMax,
+        },
+        lote12: {
+          msTotal: +r12.ms.toFixed(1), msPorLinea: +msL12.toFixed(3), runs: r12.nRuns,
+          confMedia: +confMedia(r12.resultados).toFixed(4),
+          lineasAceptadasTEXT05: aceptadas(r12.resultados),
+          accTextoGT: +accGT(r12.resultados, corpus).toFixed(2),
+          wMax: r12.wMax, tensorBytesMax: r12.tensorBytesMax,
+        },
+      },
+      cls: {
+        lote6: { msTotal: +c6.ms.toFixed(1), msPorLinea: +msLC6.toFixed(3), runs: c6.nRuns, rotacionesOn: c6.rotar.filter(Boolean).length, tensorBytesMax: c6.tensorBytesMax },
+        lote12: { msTotal: +c12.ms.toFixed(1), msPorLinea: +msLC12.toFixed(3), runs: c12.nRuns, rotacionesOn: c12.rotar.filter(Boolean).length, tensorBytesMax: c12.tensorBytesMax },
+      },
+      comparacion: {
+        rec: {
+          pctTextoIdéntico: +pctIdentico.toFixed(2),
+          lineasIdenticas: identicas,
+          deltaConf: +deltaConf.toFixed(3),
+          speedup: +speedupRec.toFixed(3),
+          go: goRec,
+        },
+        cls: {
+          pctFlagsIdénticos: +pctFlags.toFixed(2),
+          flagsIdenticos: flagsIguales,
+          speedup: +speedupCls.toFixed(3),
+          go: goCls,
+        },
+      },
+      umbrales: { textoIdentico: "100%", deltaConfMaxPuntos: 0.5, speedupMin: "1.05x" },
+      veredicto: go ? "GO" : "NO-GO",
+      veredictoDetalle: { rec: goRec ? "GO" : "NO-GO", cls: goCls ? "GO" : "NO-GO" },
+      heap,
+      ortWeb: (ort.env && ort.env.versions && ort.env.versions["onnxruntime-web"]) || "?",
+      ep: "wasm (vendido public/vendor/onnxruntime/, byte-idéntico a onnxruntime-web 1.30.0)",
+      fecha: new Date().toISOString(),
+      detalle,
+    };
+    window.__benchJson = ultimoJson; // lectura programática de evidencia (el botón sigue siendo el canal manual)
+    pintarResultados(ultimoJson);
+    $("btn-descargar").disabled = false;
+    setEstado(go ? "Corrida completa — veredicto GO según umbrales del kit." : `Corrida completa — veredicto NO-GO (rec: ${goRec ? "GO" : "NO-GO"} · cls: ${goCls ? "GO" : "NO-GO"}).`, go ? "ok" : "warn");
+    try { sesRec.release?.(); sesCls.release?.(); } catch { /* noop */ }
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    setEstado(`ERROR: ${msg}`, "mal");
+    log(`ERROR: ${msg}`, "mal");
+    console.error(e);
+  } finally {
+    $("btn-correr").disabled = false;
+  }
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function pintarResultados(j) {
+  const cls = j.veredicto === "GO" ? "go" : "nogo";
+  $("caja-resultados").innerHTML = `
+    <table>
+      <tr><th>Palanca</th><th>Lote</th><th>ms total</th><th>ms/línea</th><th>runs</th><th>conf media</th><th>aceptadas (0.5)</th><th>% vs GT</th><th>W máx</th><th>tensor máx</th></tr>
+      <tr><td>rec</td><td class="num">6</td><td class="num">${j.rec.lote6.msTotal}</td><td class="num">${j.rec.lote6.msPorLinea}</td><td class="num">${j.rec.lote6.runs}</td><td class="num">${(j.rec.lote6.confMedia * 100).toFixed(2)}%</td><td class="num">${j.rec.lote6.lineasAceptadasTEXT05}/60</td><td class="num">${j.rec.lote6.accTextoGT}%</td><td class="num">${j.rec.lote6.wMax}</td><td class="num">${(j.rec.lote6.tensorBytesMax / 1048576).toFixed(2)} MiB</td></tr>
+      <tr><td>rec</td><td class="num">12</td><td class="num">${j.rec.lote12.msTotal}</td><td class="num">${j.rec.lote12.msPorLinea}</td><td class="num">${j.rec.lote12.runs}</td><td class="num">${(j.rec.lote12.confMedia * 100).toFixed(2)}%</td><td class="num">${j.rec.lote12.lineasAceptadasTEXT05}/60</td><td class="num">${j.rec.lote12.accTextoGT}%</td><td class="num">${j.rec.lote12.wMax}</td><td class="num">${(j.rec.lote12.tensorBytesMax / 1048576).toFixed(2)} MiB</td></tr>
+      <tr><td>cls</td><td class="num">6</td><td class="num">${j.cls.lote6.msTotal}</td><td class="num">${j.cls.lote6.msPorLinea}</td><td class="num">${j.cls.lote6.runs}</td><td class="num">—</td><td class="num">rot ON ${j.cls.lote6.rotacionesOn}</td><td class="num">—</td><td class="num">—</td><td class="num">${(j.cls.lote6.tensorBytesMax / 1048576).toFixed(2)} MiB</td></tr>
+      <tr><td>cls</td><td class="num">12</td><td class="num">${j.cls.lote12.msTotal}</td><td class="num">${j.cls.lote12.msPorLinea}</td><td class="num">${j.cls.lote12.runs}</td><td class="num">—</td><td class="num">rot ON ${j.cls.lote12.rotacionesOn}</td><td class="num">—</td><td class="num">—</td><td class="num">${(j.cls.lote12.tensorBytesMax / 1048576).toFixed(2)} MiB</td></tr>
+    </table>
+    <table>
+      <tr><th>Comparación</th><th>texto / flags idénticos</th><th>Δconf (puntos)</th><th>speedup</th><th>umbral kit §2</th><th>sub-veredicto</th></tr>
+      <tr><td>rec (lote 6 ÷ 12)</td><td class="num">${j.comparacion.rec.pctTextoIdéntico}% (${j.comparacion.rec.lineasIdenticas}/60)</td><td class="num">${j.comparacion.rec.deltaConf}</td><td class="num">${j.comparacion.rec.speedup}×</td><td>100% · |Δconf| ≤ 0.5 · ≥1.05×</td><td class="${j.comparacion.rec.go ? "ok" : "mal"}">${j.veredictoDetalle.rec}</td></tr>
+      <tr><td>cls (lote 6 ÷ 12)</td><td class="num">${j.comparacion.cls.pctFlagsIdénticos}% (${j.comparacion.cls.flagsIdenticos}/60)</td><td class="num">n/a (flags)</td><td class="num">${j.comparacion.cls.speedup}×</td><td>100% flags · ≥1.05×</td><td class="${j.comparacion.cls.go ? "ok" : "mal"}">${j.veredictoDetalle.cls}</td></tr>
+    </table>
+    <div class="veredicto ${cls}">${j.veredicto}</div>`;
+  const filas = j.detalle.map((d) => `
+    <tr style="${d.identico ? "" : "background:#2e0a0a;"}">
+      <td class="num">${d.i}</td><td>${esc(d.esperado)}</td>
+      <td>${esc(d.lote6.texto)} <span class="info">(${(d.lote6.conf * 100).toFixed(1)}%)</span></td>
+      <td>${esc(d.lote12.texto)} <span class="info">(${(d.lote12.conf * 100).toFixed(1)}%)</span></td>
+      <td>${d.identico ? '<span class="ok">✓</span>' : '<span class="mal">✗</span>'}</td>
+    </tr>`).join("");
+  $("caja-detalle").innerHTML = `
+    <table>
+      <tr><th>#</th><th>esperado (GT)</th><th>lote 6</th><th>lote 12</th><th>¿idéntico?</th></tr>
+      ${filas}
+    </table>`;
+}
+
+$("btn-descargar").addEventListener("click", () => {
+  if (!ultimoJson) return;
+  const blob = new Blob([JSON.stringify(ultimoJson, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bench-lote12-resultado.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("btn-correr").addEventListener("click", () => void correr());
+
+$("meta").textContent = `UA: ${navigator.userAgent}`;
+void correr();
+</script>
+</body>
+</html>
