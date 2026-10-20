@@ -241,3 +241,15 @@ Mandato: «8 de las 16 actas del informe eran duplicados (.heic+.jpg) — cada u
 - [x] T5 — Verificación E2E arnés: gemelas cross-formato (jpg↔png, jpg↔webp) marcadas al instante; copias 42-141 ms con desenlace idéntico; `decode=0 ms` (HIT) en filas 2..N; pausa/reanudación + archivo corrupto (ERROR honesto, sin crash); identidad sana=8.5 AUTO en los 3 caminos. lint 0 · tsc 0 · build OK (cada rama sola).
 - [x] T6 — Docs: REPORTE (evidencia verbatim + 3 desviaciones documentadas) + D52 + AGENTS + worklog.
 - [ ] Del dueño: merge PR-1 → PR-2 (apilada) · AC-B1 con sus gemelas reales .heic+.jpg en su equipo · medir el ahorro B5 con HEIC reales (aquí jpg 0.3-0.5 s/acta ocultos; HEIC esperado 1-2 s).
+
+## ORIENTACION-PRESUPUESTO — e14-orientacion-presupuesto-v1 (2026-10-20): el probe que sí llega en hardware lento (D56)
+
+Mandato P0: «es lo único que separa a la flota HP del resultado bueno del informe 20/10» — en la HP 4 cores el probe (D51) agotaba su presupuesto de 4000 ms con el baseline a 0° (det1920 3037 ms + rec0 ~3000 ms) y jamás sondeaba un desafiante → acta rotada 90° = 42 s de OCR vertical = 4.9 RECHAZADA.
+
+- [x] T1 — Atajo de lectura-sana (`orientacion.ts`): scores[0] no-DEBIL → break (la sana sale en ~4 s, sin desafiantes).
+- [x] T2 — det del probe a `DET_CAP_RAPIDO` (`rapidocr.ts`, única edición: `inferDet` de `rapidOcrCropsOrientacion`): 3037 → ~1183 ms en la HP (banco B3).
+- [x] T3 — `PROBE_BUDGET_MS` 4000 → 12000 (solo lo pagan actas DEBIL a 0°; caso roto ~10.2 s < 12 s).
+- [x] T4 — Traza aditiva final `cortes=sana|presupuesto|vacio|completo` (contrato D51 intacto).
+- [x] T5 — Docs: REPORTE + D56 + ROADMAP + worklog.
+- [x] Validación (actas REALES KIT 399): rotada 90° → `aplicado=1 cortes=completo` + 8.5 AUTO cod:710003993010102 · sana → `cortes=sana aplicado=0 ms=3965` (A/B main: 5315 ms sin campo — −25%, desenlace idéntico) · SIM 8.2/7.0/4.3 con 0 trazas · lint 0 · tsc 0 · build OK.
+- [ ] Del dueño: AC-5-D56 en SU flota (HP 4 cores — traza `cortes=` y acta rotada ≥ 7) · merge.
