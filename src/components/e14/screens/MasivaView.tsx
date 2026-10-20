@@ -435,6 +435,19 @@ export function MasivaView() {
                       >
                         {pildora.label}
                       </span>
+                      {/* D66 — KIT e14-decode-unico-precalor-v1 (T3.5): mini-señal
+                          PREPARADA — la fila PENDIENTE ya tiene master esperando
+                          (el precalor trabajó en la espera; D45 intacto: la fila
+                          NO procesa sola). Chip pequeñito y nada más — sin % ni
+                          promesas. Flag transitorio (muere con la recarga). */}
+                      {f.estado === "PENDIENTE" && f.precalentada === true && (
+                        <span
+                          className="px-1.5 py-0.5 rounded-full border border-brand-green/40 text-brand-green/90 font-mono text-[9px] font-bold uppercase tracking-wider"
+                          title="El precalor ya decodificó esta fila (master listo)"
+                        >
+                          PREPARADA
+                        </span>
+                      )}
                       {/* KIT e14-masiva-tiempos-v1 (PR-1): la DUPLICADA señala
                           a su original — transparencia total del dedup. */}
                       {f.estado === "DUPLICADA" && f.dupOf && (

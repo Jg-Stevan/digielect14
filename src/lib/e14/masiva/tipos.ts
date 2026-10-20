@@ -40,6 +40,13 @@ export interface FilaMasiva {
    *  string|null: null = sin datos → la fila solo pinta el nombre de archivo
    *  (honestidad, jamás inventar). */
   infoTitulo?: string | null;
+  /** D66 — KIT e14-decode-unico-precalor-v1 (T3.2/T3.5): flag TRANSITORIO
+   *  del precalor — esta fila PENDIENTE ya tiene master (blob JPEG a escala
+   *  de trabajo) esperando en el mapa del precalor. SOLO memoria del
+   *  mini-store: NUNCA viaja a IDB (al recargar se pierde y el precalor
+   *  vuelve a precalentar si aplica — kit T3.2 literal). El chip PREPARADA
+   *  de la bandeja lo pinta; consumirMaestro/descartarMaestro lo limpian. */
+  precalentada?: boolean;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
@@ -65,6 +72,24 @@ export interface RegistroMasiva {
    *  junto al registro (misma desviación aditiva documentada de thumb) —
    *  la bandeja lo repinta tras recargar sin re-procesar nada. */
   infoTitulo?: string | null;
+  // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
+  /** ms SOLO del decodificado a MASTER (T4: separado de procesoMs, que
+   *  conserva su semántica). Filas precalentadas → 0 (el decode ya pasó en
+   *  el precalor; el coste vive en precalorMs). Sin master (fallback a la
+   *  ruta de siempre / fila ERROR / registros previos) → campo AUSENTE
+   *  (jamás inventar). */
+  decodeMs?: number;
+  /** D66 (T4): quién fabricó el master — el decode nativo del navegador o
+   *  la reserva wasm (heic2any). null/ausente = sin master (fallback). */
+  origenDecode?: "nativo" | "wasm" | null;
+  /** D66 (T4): el desenlace nació de un master PRECALENTADO (el runner lo
+   *  consumió del precalor — decode ≈ 0). Documenta el PROVENANCE del
+   *  desenlace y SÍ persiste (a diferencia del flag transitorio de
+   *  FilaMasiva, que es estado vivo de la cola). */
+  precalentada?: boolean;
+  /** D66 (T4): ms TOTALES del precalor para esta fila (solo precalentadas;
+   *  null = no precalentada). */
+  precalorMs?: number | null;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del

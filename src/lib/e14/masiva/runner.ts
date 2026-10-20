@@ -15,10 +15,14 @@
 import { getBridge } from "../get-bridge";
 // KIT e14-masiva-ux-v1 (T4): tipo con el presupuesto de timeout opcional
 // (intersección LOCAL en el bridge — kit §1 prohíbe tocar bridge.ts).
-// KIT e14-masiva-tiempos-v1 (PR-2): precargarDecodeArchivo — MISMA memo
-// WeakMap del pipeline: el prefetch comparte la instancia del File y el
-// decode de la fila N+1 golpea HIT (~0 ms) cuando le toca.
-import { precargarDecodeArchivo, type OpcionesEscaneoConTimeout } from "../scanner-core-bridge";
+// D66 — KIT e14-decode-unico-precalor-v1: el prefetch (D61) se RE-APUNTA —
+// ya no calienta la memo del original (el pipeline ya no la consume: recibe
+// el MASTER) sino que asegura el master de N+1 vía el precalor (T3.6/T3.1).
+import { type OpcionesEscaneoConTimeout } from "../scanner-core-bridge";
+// D66 — KIT e14-decode-unico-precalor-v1 (T1/T3): maestro único a escala de
+// trabajo + precalor de la cola (consumo T3.3 + prefetch re-apuntado).
+import { maestroDeImagen, type MaestroImagen } from "./archivos";
+import { asegurarMaestro, consumirMaestro } from "./precalor";
 import { useE14Store } from "../store";
 import { guardarRegistro, leerRegistro } from "./cola";
 import { useMasivaStore } from "./store";
@@ -167,13 +171,11 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
 
 /** Desenlace de UNA foto — byte a byte el pipeline real (kit §6-C: el
  *  desenlace DEBE ser idéntico al del IMPORTAR normal).
- *  KIT e14-masiva-tiempos-v1 (PR-2): `archivoPredecode` = la MISMA instancia
- *  de File que el prefetch ya decodificó (memo HIT, decode ~0 ms) — null si
- *  no hubo prefetch (decode de siempre, identidad intacta AC-P3). */
-async function procesarUno(
-  filaEntrante: FilaMasiva,
-  archivoPredecode: File | null = null,
-): Promise<void> {
+ *  D66 — KIT e14-decode-unico-precalor-v1: el pipeline recibe el MASTER
+ *  (T1: un solo decodificado a escala de trabajo) — precalentado (T3.3:
+ *  decode = 0 s) o recién horneado con `maestroDeImagen`; sin master →
+ *  fallback HONESTO a la ruta de siempre (identidad AC-P3 intacta). */
+async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
   // KIT e14-masiva-tiempos-v1 (PR-1): rama DEDUP — copia del resultado de la
   // original (<1 s). Si la original no sirve, la fila cae al pipeline
   // completo AQUÍ MISMO (fallback honesto — el dueño nunca pierde la foto).
@@ -193,7 +195,20 @@ async function procesarUno(
     }
     console.info(`[e14] dedup fila=${fila.id} sin-original reprocesa-completo`);
   }
-  marcarFila(fila.id, { estado: "PROCESANDO", error: null });
+  // D66 — KIT e14-decode-unico-precalor-v1 (T3.3): consumir el MASTER
+  // precalentado ANTES de marcar PROCESANDO (orden crítico: el precalor
+  // descarta masters de filas que dejan de ser PENDIENTE — si marcáramos
+  // primero, la suscripción descartaría el master que estamos a punto de
+  // consumir). decode = 0 s — el coste ya vivió en precalorMs durante la
+  // espera en cola. Un master se consume UNA vez; el chip PREPARADA muere
+  // con la fila al pasar a PROCESANDO.
+  const entradaPrecalor = consumirMaestro(fila.id);
+  if (entradaPrecalor) {
+    console.info(
+      `[e14] precalor fila=${fila.id} consumido precalorMs=${entradaPrecalor.precalorMs} origen=${entradaPrecalor.maestro.origenDecode}`,
+    );
+  }
+  marcarFila(fila.id, { estado: "PROCESANDO", error: null, precalentada: false });
   useMasivaStore.setState({ progreso: { id: fila.id, etapa: "DETECTANDO", fraccion: 0 } });
   let registro: RegistroMasiva | null = null;
   try {
@@ -204,11 +219,10 @@ async function procesarUno(
     // genérico (OpcionesEscaneo.archivo espera File — A5).
     if (!(archivo instanceof File)) throw new Error("ARCHIVO_FUERA_DE_LA_COLA");
 
-    // KIT e14-masiva-tiempos-v1 (PR-2): si el prefetch ya decodificó ESTA
-    // fila, pasar la MISMA instancia del File → el pipeline golpea la memo
-    // del bridge (decode ~0 ms — AC-P1). Sin prefetch → el archivo de
-    // SIEMPRE (identidad de desenlace intacta, AC-P3).
-    const archivoPipeline = archivoPredecode ?? archivo;
+    // KIT e14-masiva-tiempos-v1 (PR-2): la instancia del File de SIEMPRE —
+    // base de origen/pre-proceso (D63-A/B corren sobre el ORIGINAL: EXIF y
+    // márgenes viven ahí; el master es un re-encode sin EXIF).
+    const archivoPipeline = archivo;
 
     // D63-A — KIT e63a-origen-escaneo-v1 (punto ÚNICO del kit, T1/T2):
     // origen del archivo — detector heurístico conservador (origen.ts),
@@ -236,6 +250,29 @@ async function procesarUno(
     }
     const archivoCorregido = preProceso.archivo;
 
+    // D66 — KIT e14-decode-unico-precalor-v1 (T1.2/T1.5): MASTER de la fila —
+    // el precalentado (T3.3) o uno recién horneado con el MISMO helper del
+    // precalor (un solo decodificado a la escala de trabajo — 4032, R4 sin
+    // cambio). Sin master (decode imposible/cancelado) → fallback HONESTO:
+    // el pipeline recibe el ORIGINAL exactamente como hoy (AC-P3).
+    const tMaestro = Date.now();
+    const maestro: MaestroImagen | null =
+      entradaPrecalor?.maestro ??
+      (await maestroDeImagen(archivoPipeline, { nombre: fila.nombre }));
+    const decodeMasterMs = maestro
+      ? entradaPrecalor
+        ? 0 // T3.3/T4: precalentada → el decode ya pasó en la espera (≈0)
+        : Math.max(1, Math.round(Date.now() - tMaestro))
+      : null;
+    if (maestro) {
+      console.info(
+        `[e14] decode-maestro fila=${fila.id} ms=${decodeMasterMs} origen=${maestro.origenDecode} precalentada=${!!entradaPrecalor} ${maestro.ancho}x${maestro.alto}`,
+      );
+    }
+    // D66 (T1.3): el pipeline consume el MASTER — thumb/quad/OCR se derivan
+    // de él vía el pipeline normal (una sola decodificación en el bridge).
+    const archivoParaBridge = maestro?.archivo ?? archivoPipeline;
+
     // T4: variable tipada con la intersección (sin excess-check de literal —
     // el parámetro de la interfaz E14Bridge sigue siendo OpcionesEscaneo).
     const opcionesMasiva: OpcionesEscaneoConTimeout = {
@@ -243,7 +280,7 @@ async function procesarUno(
       intento: 1, // A6 — semántica de PRIMERA captura
       maxIntentos: 4, // fallos → RECHAZADA repetible / rescate por recorte manual
       fuente: "ARCHIVO", // A5 — MASIVA SIEMPRE archivo
-      archivo: archivoPipeline,
+      archivo: archivoParaBridge, // D66 — el master (fallback: original)
       // D63-C — KIT e63c-quad-gate-escaneo-v1: origen del detector D63-A
       // alimenta T1 (quad página-completa) y T2 (gate del marco impreso).
       // SIM y el flujo individual JAMÁS lo traen (nada de escaneos les aplica).
@@ -339,6 +376,17 @@ async function procesarUno(
       // D59 — KIT e14-info-acta-filas-v1 (T2): título con la info reconocida
       // del desenlace REAL (persiste — desviación aditiva de thumb).
       infoTitulo: tituloDeActa(actaFinal),
+      // D66 — KIT e14-decode-unico-precalor-v1 (T4): trazas de decodificación
+      // ADITIVAS (solo con master — sin él los campos VIAJAN AUSENTES:
+      // registros previos/ERROR/fallback quedan como hoy — jamás inventar).
+      ...(maestro
+        ? {
+            decodeMs: decodeMasterMs ?? 0,
+            origenDecode: maestro.origenDecode,
+            precalentada: !!entradaPrecalor,
+            precalorMs: entradaPrecalor?.precalorMs ?? null,
+          }
+        : {}),
     };
     // FIX M14 (auditoría 2-c): persistencia fallida TRAS el envío — la fila
     // NO pasa a ERROR (el acta SÍ se transmitió; una fila ERROR invita a
@@ -437,29 +485,23 @@ async function bucle(): Promise<void> {
   while (!stopFlag) {
     const fila = siguientePendiente();
     if (!fila) break;
-    // KIT e14-masiva-tiempos-v1 (PR-2): prefetch de 1 slot — al INICIAR el
-    // procesamiento de N, disparar el decode de N+1 en background (kit §3):
-    // el decode HEIC (~1-2 s) queda OCULTO tras el OCR de N (AC-P1). Primero
-    // se CONSUME el slot de ESTA fila (capturado — la misma instancia que la
-    // memo ya decodificó); en fila DUPLICADA el slot SE CONSERVA (la copia
-    // no decoda — el prefetch en vuelo sirve a la siguiente pipeline-able).
-    const predecode =
-      prefetchSlot && prefetchSlot.id === fila.id ? prefetchSlot.archivo : null;
-    if (predecode || fila.estado !== "DUPLICADA") prefetchSlot = null;
+    // D66 — KIT e14-decode-unico-precalor-v1: prefetch RE-APUNTADO (D61) —
+    // al iniciar N se asegura el MASTER de N+1 (decode oculto tras el OCR
+    // de N, AC-P1 intacto) vía el precalor. El consumo vive en procesarUno
+    // (consumirMaestro — el master de N pudo venir del precalor de la cola
+    // ociosa o de este prefetch; DUPLICADA no consume master: es copia).
     dispararPrefetch(fila.id);
-    await procesarUno(fila, predecode);
+    await procesarUno(fila);
   }
 }
 
-/** KIT e14-masiva-tiempos-v1 (PR-2): prefetch de decode — guarda la MISMA
- *  instancia del File de la próxima fila pipeline-able (PENDIENTE, no temp,
- *  no DUPLICADA — la copia no decoda) y precalienta la memo del bridge.
- *  Fallo → catch silencioso + slot fuera: la fila re-decodifica sola
- *  (comportamiento de hoy — jamás bloquea, AC-P2). stopFlag/pausa → no
- *  dispara (el prefetch en vuelo muere solo — nadie lo consume). El ciclo
- *  de vida del slot vive en bucle() (captura → null → disparo siguiente). */
-let prefetchSlot: { id: string; archivo: File } | null = null;
-
+/** D66 — KIT e14-decode-unico-precalor-v1 (prefetch D61 re-apuntado, T3.1):
+ *  asegura el MASTER de la próxima fila pipeline-able (PENDIENTE, no temp,
+ *  no DUPLICADA) con `ignorarOciosidad` — el decode de N+1 se esconde tras
+ *  el OCR de N igual que hoy (AC-P1), pero produce el master que el
+ *  pipeline SÍ consume (la memo del original quedó sin consumidor).
+ *  Idempotente (asegurarMaestro no duplica) y jamás bloquea: si falla, la
+ *  fila procesa con build inline o fallback (AC-P2). */
 function dispararPrefetch(filaActualId: string): void {
   if (stopFlag) return;
   const proxima = useMasivaStore
@@ -472,27 +514,7 @@ function dispararPrefetch(filaActualId: string): void {
     )
     .sort((a, b) => a.agregadaEn - b.agregadaEn)[0];
   if (!proxima) return;
-  // Ya hay prefetch (en vuelo o listo) para ESA fila → no re-disparar con
-  // otra instancia (sería un segundo decode del mismo contenido).
-  if (prefetchSlot && prefetchSlot.id === proxima.id) return;
-  prefetchSlot = null;
-  void (async () => {
-    try {
-      const registro = await leerRegistro(proxima.id);
-      const archivo = registro.archivo;
-      if (!(archivo instanceof File)) return;
-      prefetchSlot = { id: proxima.id, archivo };
-      const t0 = Date.now();
-      await precargarDecodeArchivo(archivo);
-      console.info(
-        `[e14] masiva-prefetch fila=${proxima.id} listo ms=${Date.now() - t0}`,
-      );
-    } catch {
-      // Decode fallido: la memo del bridge ya liberó la entrada — la fila
-      // re-decodifica en su turno (comportamiento actual, AC-P2).
-      if (prefetchSlot?.id === proxima.id) prefetchSlot = null;
-    }
-  })();
+  void asegurarMaestro(proxima.id);
 }
 
 /** UN solo runner global (módulo singleton) — `iniciar()` double-call →
