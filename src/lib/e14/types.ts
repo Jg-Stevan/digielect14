@@ -118,6 +118,19 @@ export interface DiagnosticoActa {
      *  cola). Opcional: los registros previos y el flujo individual van sin
      *  él — jamás inventar (kit §2). */
     esperaMs?: number;
+    /** D61 — KIT e14-tiempos-ocultos-v1 (T1): coste de DECODE del archivo
+     *  (heic2any/imagen→canvas). Ya se medía en el bridge (traza) — ahora
+     *  persiste. null/ausente en canvas-path y SIM. */
+    decodeMs?: number | null;
+    /** D61 — KIT e14-tiempos-ocultos-v1 (T1): coste de la DETECCIÓN de página
+     *  del core (worker). ídem. */
+    detectMs?: number | null;
+    /** D61 — KIT e14-tiempos-ocultos-v1 (T1): MASIVA — persistencia del
+     *  desenlace en IDB (guardarRegistro). */
+    persistMs?: number;
+    /** D61 — KIT e14-tiempos-ocultos-v1 (T1): MASIVA — envío (SHA-256 + POST
+     *  / reintentos offline). */
+    envioMs?: number;
   };
   /** D57 — KIT e14-instrumentos-espera-v1 (T2): coste del probe de
    *  orientación (`probe.ms` de `probeOrientacion()`) persistido en la ficha
