@@ -876,7 +876,9 @@ export async function rapidOcrCropsOrientacion(
   k: number,
 ): Promise<{ crops: HTMLCanvasElement[]; w: number; h: number; msDet: number }> {
   const src = await loadImage(dataUrl);
-  const { boxesFuente, msDet } = await inferDet(rt, src);
+  // D56 §3 T2: det del probe a DET_CAP_RAPIDO (banco B3 GO: −56%, 0 cajas
+  // perdidas) — el probe no necesita det de producción, sí caber en presupuesto.
+  const { boxesFuente, msDet } = await inferDet(rt, src, DET_CAP_RAPIDO);
   const n = boxesFuente.length;
   const crops: HTMLCanvasElement[] = [];
   if (n > 0) {
