@@ -1,0 +1,211 @@
+{
+  "kit": "e14-bancos-b5-b7-pagnull-v1 (D58) — SOLO EVIDENCIA, CERO PRODUCCIÓN",
+  "banco": "B7 — tolerancia dedup heic/jpg (dhash 64-bit de dedup.ts — copia congelada — vía fileToCaptureDataUrl del core)",
+  "umbral": 6,
+  "sintetico": {
+    "grupos": [
+      {
+        "stem": "sintetica-1",
+        "variantes": [
+          {
+            "stem": "sintetica-1",
+            "variante": "png",
+            "bytes": 274301,
+            "hash": "5096954d45696161",
+            "msDecode": 62
+          },
+          {
+            "stem": "sintetica-1",
+            "variante": "jpg-q92",
+            "bytes": 257053,
+            "hash": "5096954d45696161",
+            "msDecode": 60
+          },
+          {
+            "stem": "sintetica-1",
+            "variante": "jpg-q50",
+            "bytes": 142778,
+            "hash": "5096954945696961",
+            "msDecode": 56
+          }
+        ]
+      },
+      {
+        "stem": "sintetica-2",
+        "variantes": [
+          {
+            "stem": "sintetica-2",
+            "variante": "png",
+            "bytes": 276673,
+            "hash": "5496564d45696161",
+            "msDecode": 65
+          },
+          {
+            "stem": "sintetica-2",
+            "variante": "jpg-q92",
+            "bytes": 256129,
+            "hash": "5496564d45696161",
+            "msDecode": 55
+          },
+          {
+            "stem": "sintetica-2",
+            "variante": "jpg-q50",
+            "bytes": 142241,
+            "hash": "5496564945696161",
+            "msDecode": 52
+          }
+        ]
+      },
+      {
+        "stem": "sintetica-3",
+        "variantes": [
+          {
+            "stem": "sintetica-3",
+            "variante": "png",
+            "bytes": 270331,
+            "hash": "5056166945697169",
+            "msDecode": 62
+          },
+          {
+            "stem": "sintetica-3",
+            "variante": "jpg-q92",
+            "bytes": 253643,
+            "hash": "5056166945697169",
+            "msDecode": 65
+          },
+          {
+            "stem": "sintetica-3",
+            "variante": "jpg-q50",
+            "bytes": 141350,
+            "hash": "5056154d45696169",
+            "msDecode": 57
+          }
+        ]
+      }
+    ],
+    "paresIntra": [
+      {
+        "par": "sintetica-1",
+        "a": "png",
+        "b": "jpg-q92",
+        "hashA": "5096954d45696161",
+        "hashB": "5096954d45696161",
+        "hamming": 0
+      },
+      {
+        "par": "sintetica-1",
+        "a": "png",
+        "b": "jpg-q50",
+        "hashA": "5096954d45696161",
+        "hashB": "5096954945696961",
+        "hamming": 2
+      },
+      {
+        "par": "sintetica-1",
+        "a": "jpg-q92",
+        "b": "jpg-q50",
+        "hashA": "5096954d45696161",
+        "hashB": "5096954945696961",
+        "hamming": 2
+      },
+      {
+        "par": "sintetica-2",
+        "a": "png",
+        "b": "jpg-q92",
+        "hashA": "5496564d45696161",
+        "hashB": "5496564d45696161",
+        "hamming": 0
+      },
+      {
+        "par": "sintetica-2",
+        "a": "png",
+        "b": "jpg-q50",
+        "hashA": "5496564d45696161",
+        "hashB": "5496564945696161",
+        "hamming": 1
+      },
+      {
+        "par": "sintetica-2",
+        "a": "jpg-q92",
+        "b": "jpg-q50",
+        "hashA": "5496564d45696161",
+        "hashB": "5496564945696161",
+        "hamming": 1
+      },
+      {
+        "par": "sintetica-3",
+        "a": "png",
+        "b": "jpg-q92",
+        "hashA": "5056166945697169",
+        "hashB": "5056166945697169",
+        "hamming": 0
+      },
+      {
+        "par": "sintetica-3",
+        "a": "png",
+        "b": "jpg-q50",
+        "hashA": "5056166945697169",
+        "hashB": "5056154d45696169",
+        "hamming": 5
+      },
+      {
+        "par": "sintetica-3",
+        "a": "jpg-q92",
+        "b": "jpg-q50",
+        "hashA": "5056166945697169",
+        "hashB": "5056154d45696169",
+        "hamming": 5
+      }
+    ],
+    "resumen": {
+      "maxHammingIntraPar": 5,
+      "minHammingEntreActas": 4,
+      "mecanismoAtrapaGemelas": true
+    }
+  },
+  "sensibilidadColor": {
+    "hashBase": "5096956945696161",
+    "filas": [
+      {
+        "deltaCanalR": 1,
+        "hammingVsBase": 2,
+        "hash": "5096954d45696161"
+      },
+      {
+        "deltaCanalR": 2,
+        "hammingVsBase": 2,
+        "hash": "5096954d45696161"
+      },
+      {
+        "deltaCanalR": 3,
+        "hammingVsBase": 2,
+        "hash": "5096956945496961"
+      },
+      {
+        "deltaCanalR": 5,
+        "hammingVsBase": 2,
+        "hash": "5096956945496961"
+      },
+      {
+        "deltaCanalR": 8,
+        "hammingVsBase": 2,
+        "hash": "5096956d45696961"
+      },
+      {
+        "deltaCanalR": 12,
+        "hammingVsBase": 3,
+        "hash": "50969549556d6161"
+      }
+    ]
+  },
+  "reales": [],
+  "hipotesisOrden": {
+    "nota": "Si las gemelas reales NO se marcaron (sin traza 'marcada'), es hash/color; si se marcaron y luego cayó 'sin-original reprocesa-completo', es ORDEN (runner llegó antes de que la original tuviera acta — runner.ts L128/L188, store.ts L174-175). Trazas a buscar en capturas del dueño.",
+    "trazas": [
+      "[e14] dedup fila=<id> marcada hamming=<d> dupOf=<origen> hash=<hex>",
+      "[e14] dedup fila=<id> dupOf=<origen> reutiliza score=<s> ms=<ms>",
+      "[e14] dedup fila=<id> sin-original reprocesa-completo"
+    ]
+  },
+  "fecha": "2026-10-20T13:42:59.633Z"
+}
