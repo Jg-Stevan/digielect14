@@ -823,7 +823,18 @@ function conRampa<T>(
   emitir: (p: ProgresoAnalisis) => void,
 ): Promise<T> {
   const inicio = performance.now();
+  // FIX (auditoría 2-a #7): autolímite del ramp — si la promesa envuelta
+  // cuelga SIN resolver (worker OpenCV muerto), el intervalo seguía
+  // disparando indefinidamente (un timer fugado por pipeline colgado; el
+  // timeout externo recupera la UI pero no el timer). 20× el estimado es
+  // inalcanzable en operación normal y cubre el peor caso real.
+  let ticks = 0;
+  const maxTicks = Math.ceil((msEstimados * 20) / 140);
   const timer = setInterval(() => {
+    if (++ticks > maxTicks) {
+      clearInterval(timer);
+      return;
+    }
     const f = Math.min(1, (performance.now() - inicio) / msEstimados);
     emitir(evento(f * 0.95));
   }, 140);
@@ -1561,6 +1572,14 @@ export class RealCoreBridge implements E14Bridge {
           status: "RECHAZADA",
           rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_TIMEOUT },
           firmas: this.firmasPorStatus(acta.firmas, "RECHAZADA"),
+          // FIX (auditoría 2-a #8): el invariante del gate (RECHAZADA ⇒
+          // clasificación descartada) también en el timeout del recorte —
+          // el spread conservaba una clasificación AUTO previa (p. ej. de
+          // un acta ADVERTENCIA que se re-recortaba) y el título/historial
+          // mostraban mesa/tipo/página de una identificación que el propio
+          // gate acaba de descartar (undefined = sin clasificación, mismo
+          // convenio del contrato Acta).
+          clasificacion: undefined,
         });
       }, RECORTE_TIMEOUT_MS);
 
