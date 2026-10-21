@@ -1160,6 +1160,22 @@ export const useE14Store = create<E14Store>((set, get) => {
       } else if (acta.status === "EN_REVISION_HUMANA") {
         const nivel = acta.clasificacion?.nivel;
         clave = nivel ? `revision:clasif-${nivel}` : "revision:sin-diag";
+        // KIT e63f-autoenvio-v1 (F0 — balde fino, solo-aditivo): clave NUEVA
+        // `revision:clasif-<nivel>:<motivo>` con el motivo EXACTO del
+        // clasificador (clasifDebil — puesto-lugar/tipo/mesa-registro/ruta).
+        // Las claves viejas (`revision:clasif-<nivel>`) quedan INTACTAS y
+        // siguen contando byte-idénticas (nada que las consume se rompe).
+        const motivo = acta.clasificacion?.clasifDebil;
+        if (nivel && motivo) {
+          const actualesFino = get().motivosNoEnvio;
+          const claveFina = `revision:clasif-${nivel}:${motivo}`;
+          set({
+            motivosNoEnvio: {
+              ...actualesFino,
+              [claveFina]: (actualesFino[claveFina] ?? 0) + 1,
+            },
+          });
+        }
       } else if (acta.status === "RECHAZADA") {
         clave = `rechazo:${acta.rechazo?.tipo.toLowerCase() ?? "desconocido"}`;
       }
