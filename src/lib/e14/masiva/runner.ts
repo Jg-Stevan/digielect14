@@ -47,6 +47,10 @@ import { desenlaceTrasRelectura, procedeRelecturaInterna } from "./relectura";
 // impresa (código 1D consensuado — identidad.ts es lógica pura; aquí solo
 // la orquestación post-OCR, punto ÚNICO del kit).
 import { identidadDeActa } from "./identidad";
+// e63g — PLAN e63g-e63h-ruta-unica (E1/F0): tope de la re-lectura interna —
+// tríada {vencido} | {valor} | {error}, jamás throw (tope.ts es lógica
+// pura; aquí solo la orquestación del bloque relectura).
+import { conTope } from "./tope";
 
 // ─── D65 — KIT e14-progreso-watchdog-dedup-v1 (T1): WATCHDOG HUMANO ───
 // Antes (e14-masiva-ux-v1 T4): presupuesto ÚNICO de 120 s — un colgado moría
@@ -74,6 +78,17 @@ const DETALLE_TIMEOUT = "TIEMPO DE PROCESADO EXCEDIDO";
 // · WATCHDOG_GRACIA_MS — gracia de la carrera EXTERNA sobre WATCHDOG_MS:
 //   cubre colgajes FUERA del bridge (origen/pre-proceso) que su timeout no ve.
 
+// ─── e63g — PLAN e63g-e63h-ruta-unica (E1/F0): TOPE DE LA RE-LECTURA ───
+// La re-lectura interna (e63f F2) corre FUERA del watchdog D65 (solo
+// presupuesta el pipeline del intento): un colgaje de reconocerTexto ahí
+// dejaba la cola esperando PARA SIEMPRE (sin veredicto, sin error, sin
+// reintento posible — agujero latente desde e63f; no disparó en 181622).
+// Presupuesto PROPIO y SEPARADO del watchdog: 45 s ≈ 2× el peor caso real
+// del re-OCR a cap fino (~22 s) — vencido eso ya no es lentitud, es
+// colgaje. Vencido: workers muertos y re-creados (misma infraestructura
+// del watchdog), veredicto de la 1.ª lectura INTACTO y CERO reintentos.
+const RELECTURA_TOPE_MS = 45_000;
+
 /** Throttle del progreso (250 ms — kit D65 T3.1 literal): el OCR emite decenas
  *  de eventos por etapa; la bandeja solo necesita el último. */
 const PROGRESO_MS = 250;
@@ -81,6 +96,10 @@ const PROGRESO_MS = 250;
 let corriendoFlag = false;
 let stopFlag = false;
 let ultimoProgresoEn = 0;
+// e63g FASE 1: ¿el dueño arrancó la cola ALGUNA VEZ en esta sesión? El
+// re-arranque tras el swap temp→id solo procede en sesión viva (D45
+// intacto: encolar en sesión fría JAMÁS procesa por sí solo).
+let colaSesionIniciada = false;
 
 // ─── % ÚNICO DEL PROCESO COMPLETO POR ACTA (cambio pedido por el dueño) ───
 // Antes: el chip de la fila saltaba por tramos fijos por FASE (25→50→OCR
@@ -765,21 +784,45 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     // gate incompleta. Trazas aditivas: token ` RelecturaInterna=` (D51) y
     // flag `relectura` en la fila. Cualquier falla interna (runtime OCR,
     // base divipol) deja el veredicto de siempre — jamás empeora.
+    //
+    // e63g (E1/F0): el bloque va envuelto en conTope (RELECTURA_TOPE_MS) —
+    // era el ÚNICO await de la fila sin presupuesto propio (el watchdog D65
+    // no lo cubre) y un colgaje de reconocerTexto congelaba la cola PARA
+    // SIEMPRE. Tríada: valor → desenlace de la re-lectura; error →
+    // sin-cambio (como el catch de siempre); VENCIDO → matarYRecrear-
+    // Workers() + veredicto de la 1.ª lectura INTACTO (actaDesenlace sigue
+    // siendo `acta`) + token `tope` (D51 aditivo) + CERO reintentos. La
+    // traza SIEMPRE (también con tope).
     let actaDesenlace = acta;
     let relecturaDesenlace: "auto" | "sin-cambio" | null = null;
+    let relecturaToken: "auto" | "sin-cambio" | "tope" | null = null;
     if (procedeRelecturaInterna(acta)) {
       const tRelectura = performance.now();
-      try {
-        const textoRe = await getBridge().reconocerTexto(acta);
-        const clasifRe = clasificarCabecera(textoRe, await cargarDivipol());
-        const aplicado = desenlaceTrasRelectura(acta, textoRe, clasifRe);
-        actaDesenlace = aplicado.acta;
-        relecturaDesenlace = aplicado.desenlace;
-      } catch {
+      const r = await conTope(
+        (async () => {
+          const textoRe = await getBridge().reconocerTexto(acta);
+          const clasifRe = clasificarCabecera(textoRe, await cargarDivipol());
+          return desenlaceTrasRelectura(acta, textoRe, clasifRe);
+        })(),
+        RELECTURA_TOPE_MS,
+      );
+      if (r.vencido) {
+        // Tope vencido — infraestructura muerta y re-creada (misma doctrina
+        // del watchdog T1.2); el VEREDICTO de la 1.ª lectura queda intacto.
+        // La relectura JAMÁS reintenta (red line): sin-cambio y fuera.
+        await matarYRecrearWorkers();
         relecturaDesenlace = "sin-cambio";
+        relecturaToken = "tope";
+      } else if ("valor" in r) {
+        actaDesenlace = r.valor.acta;
+        relecturaDesenlace = r.valor.desenlace;
+        relecturaToken = r.valor.desenlace;
+      } else {
+        relecturaDesenlace = "sin-cambio";
+        relecturaToken = "sin-cambio";
       }
       console.info(
-        `[e14] relectura-interna fila=${fila.id} ms=${Math.round(performance.now() - tRelectura)} RelecturaInterna=${relecturaDesenlace}`,
+        `[e14] relectura-interna fila=${fila.id} ms=${Math.round(performance.now() - tRelectura)} RelecturaInterna=${relecturaToken}`,
       );
     }
 
@@ -1101,6 +1144,7 @@ export function iniciarRunner(): void {
   if (corriendoFlag) return;
   corriendoFlag = true;
   stopFlag = false;
+  colaSesionIniciada = true; // e63g FASE 1: sesión viva — el swap puede rearrancar
   useMasivaStore.setState({ corriendo: true });
   void bucle().finally(() => {
     corriendoFlag = false;
@@ -1115,4 +1159,28 @@ export function iniciarRunner(): void {
  *  el main thread y actaActual, no pelear). Reanudar es MANUAL (botón). */
 export function pausarRunner(): void {
   stopFlag = true;
+}
+
+/** e63g — PLAN e63g-e63h-ruta-unica (E1/FASE 1): RE-ARRANQUE del bucle tras
+ *  el swap temp→id real (lo llama `agregarFiles` del store). El agujero:
+ *  `siguientePendiente` salta los ids `masiva-temp-` — si la copia a IDB
+ *  aterriza DESPUÉS de que el bucle rompió (cola que se vació mientras el
+ *  lote copiaba), las filas nuevas quedaban PENDIENTE para siempre.
+ *  Guard IDEMPOTENTE (triple):
+ *  · sesión fría (el dueño JAMÁS pulsó PROCESAR) → NO arranca (D45
+ *    intacto: encolar no procesa por sí solo);
+ *  · pausa activa (stopFlag — manual o auto-pausa de REVISIÓN) → NO
+ *    arranca (reanudar es MANUAL — contrato del botón);
+ *  · cola viva → iniciarRunner() es no-op (corriendoFlag) y el bucle vivo
+ *    toma las nuevas en su siguiente pasada.
+ *  El re-check va DIFERIDO (macrotask): cierra la ventana en la que el
+ *  bucle rompe ENTRE el swap y este llamado — al disparar el timer el
+ *  `finally` del bucle ya limpió corriendoFlag, y si hay pendientes
+ *  reales el bucle renace exactamente por la puerta de siempre. */
+export function rearrancarTrasEncolar(): void {
+  if (!colaSesionIniciada || stopFlag) return;
+  setTimeout(() => {
+    if (stopFlag) return; // pausa llegando tarde — el dueño manda
+    if (siguientePendiente()) iniciarRunner();
+  }, 0);
 }
