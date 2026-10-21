@@ -21,24 +21,24 @@ import { ChevronDownIcon, MapPinIcon, SensorsIcon } from "../icons";
 function chipPagina(p: MesaPagina): { label: string; clases: string } {
   switch (p.estado) {
     case "OK":
-      return { label: `P${p.pagina} ✓`, clases: "px-2 py-0.5 bg-[#00E676]/10 border border-[#00E676]/40 text-brand-green font-mono" };
+      return { label: `P${p.pagina} ✓`, clases: "px-2.5 py-1 bg-[#10b981]/15 border border-[#10b981]/40 text-[#10b981] font-mono font-bold shadow-xs" };
     case "RESCANEO":
-      return { label: `P${p.pagina} ⚠ Rescaneo`, clases: "px-2 py-0.5 bg-red-500/10 border border-red-500/40 text-red-500 font-mono" };
+      return { label: `P${p.pagina} ⚠ Rescaneo`, clases: "px-2.5 py-1 bg-[#ef4444]/15 border border-[#ef4444]/40 text-[#ef4444] font-mono font-bold shadow-xs" };
     case "EN_PROCESO":
-      return { label: `P${p.pagina} ⏳`, clases: "px-2 py-0.5 bg-amber-400/10 border border-amber-400/40 text-amber-400 font-mono" };
+      return { label: `P${p.pagina} ⏳`, clases: "px-2.5 py-1 bg-amber-400/15 border border-amber-400/40 text-amber-400 font-mono font-bold shadow-xs" };
     default:
-      return { label: `P${p.pagina}`, clases: "px-2 py-0.5 bg-brand-surfacelight border border-brand-border text-gray-400 font-mono" };
+      return { label: `P${p.pagina}`, clases: "px-2.5 py-1 bg-slate-800/60 border border-slate-700/60 text-slate-400 font-mono" };
   }
 }
 
 function estadoMesa(mesa: Mesa): { label: string; clases: string; dot: string } {
   switch (mesa.estado) {
     case "COMPLETADA":
-      return { label: `COMPLETADA ${mesa.progresoPct}%`, clases: "bg-brand-surface border-brand-green/30 text-brand-green", dot: "bg-brand-green" };
+      return { label: `COMPLETADA ${mesa.progresoPct}%`, clases: "bg-[#10b981]/10 border-[#10b981]/40 text-[#10b981]", dot: "bg-[#10b981]" };
     case "EN_PROCESO":
-      return { label: "EN PROCESO", clases: "bg-amber-950/60 border-amber-500 text-amber-400", dot: "bg-amber-400" };
+      return { label: `EN PROCESO ${mesa.progresoPct}%`, clases: "bg-amber-400/10 border-amber-400/40 text-amber-400", dot: "bg-amber-400" };
     default:
-      return { label: "PENDIENTE", clases: "bg-brand-surface border-brand-border text-gray-400", dot: "bg-gray-400" };
+      return { label: "PENDIENTE", clases: "bg-slate-800/40 border-slate-700/40 text-slate-400", dot: "bg-slate-500" };
   }
 }
 
@@ -50,18 +50,20 @@ function CardMesa({ mesa, abierta, onToggle }: { mesa: Mesa; abierta: boolean; o
   const estado = estadoMesa(mesa);
 
   return (
-    <div className="bg-brand-surface border border-brand-border p-2.5 flex flex-col gap-2 rounded-2xl">
+    <div className={`bg-[#10161f] border transition-all duration-200 p-3.5 flex flex-col gap-2.5 rounded-2xl shadow-sm ${
+      mesa.estado === "COMPLETADA" ? "border-[#10b981]/30 hover:border-[#10b981]/50" : "border-slate-800 hover:border-slate-700"
+    }`}>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={abierta}
-        className="flex justify-between items-center cursor-pointer select-none w-full"
+        className="flex justify-between items-center cursor-pointer select-none w-full text-left"
       >
-        <span className="text-lg font-mono font-bold text-white flex items-center gap-2">
+        <span className="text-base font-mono font-bold text-white flex items-center gap-2">
           {mesa.id}
           <ChevronDownIcon
-            className={`w-4 h-4 text-gray-400 transition-transform duration-100 ease-linear ${
-              abierta ? "rotate-180" : ""
+            className={`w-4 h-4 text-slate-400 transition-transform duration-200 ease-out ${
+              abierta ? "rotate-180 text-white" : ""
             }`}
           />
         </span>
@@ -73,15 +75,15 @@ function CardMesa({ mesa, abierta, onToggle }: { mesa: Mesa; abierta: boolean; o
         </span>
       </button>
       {abierta && (
-        <div className="grid grid-cols-2 gap-1 text-[12px] pt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-800/80">
           {grupos.map(({ tipo, paginas }) => (
-            <div key={tipo} className="p-2 bg-brand-black/40 border border-brand-border rounded-xl flex flex-col gap-1">
-              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-gray-400">{tipo}</span>
-              <div className="flex gap-1 flex-wrap">
+            <div key={tipo} className="p-2.5 bg-[#090d12]/60 border border-slate-800/70 rounded-xl flex flex-col gap-1.5">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">{tipo}</span>
+              <div className="flex gap-1.5 flex-wrap">
                 {paginas.map((p) => {
                   const chip = chipPagina(p);
                   return (
-                    <span key={`${p.tipo}-${p.pagina}`} className={`${chip.clases} rounded-full text-[10px] whitespace-nowrap`}>
+                    <span key={`${p.tipo}-${p.pagina}`} className={`${chip.clases} rounded-lg text-[10px] whitespace-nowrap`}>
                       {chip.label}
                     </span>
                   );
@@ -112,6 +114,7 @@ export function ActasView() {
   const alternarConexion = useE14Store((s) => s.alternarConexion);
   const [mesaAbierta, setMesaAbierta] = useState<string | null>(null);
   const [totalMesas, setTotalMesas] = useState<number | null>(null);
+  const [busqueda, setBusqueda] = useState<string>("");
 
   // Puesto mostrado: el real manda; en simulación (sin puesto real) el demo.
   const puestoActual: PuestoActual | null = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
@@ -208,115 +211,167 @@ export function ActasView() {
   // cada render y por eso el mock nunca avanzaba); si no, real.
   const mesasMostradas: Mesa[] = enSimulacion ? mesas : mesasDelPuesto;
 
-  // KIT actas-vivas-paginas-v1 (FASE A): progreso del puesto demo (páginas
-  // OK del guion vivo) — contador bajo «MESAS SIMULADAS».
+  const mesasFiltradas = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return mesasMostradas;
+    return mesasMostradas.filter((m) => m.id.toLowerCase().includes(q));
+  }, [mesasMostradas, busqueda]);
+
+  // Progreso del puesto demo o real
   const paginasOcupadas = mesas.reduce(
     (n, m) => n + m.paginas.filter((p) => p.estado === "OK").length,
     0,
   );
   const paginasTotales = mesas.reduce((n, m) => n + m.paginas.length, 0);
-
-  // KIT e14-esquinas-suaves-v1 (T-R): el useEffect del tick del SIM VIVÍA
-  // AQUÍ (actas-vivas-paginas-v1 FASE A, L218-226) — se SUBIÓ al shell
-  // (page.tsx) para que el SIM corra en TODAS las vistas. QUITARLO de aquí
-  // es obligatorio: si se dejara, correría DOBLE (duplicado de mount).
-  // El pulso `animate-pulse-sync` del botón SIM se queda (solo visual).
+  const pctGeneral = paginasTotales > 0 ? Math.round((paginasOcupadas / paginasTotales) * 100) : 0;
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-brand-black flex flex-col">
-      <header className="sticky top-0 z-40 w-full bg-brand-black/95 backdrop-blur border-b border-brand-border/60 flex items-center justify-between px-4 h-14 shrink-0">
-        <h1 className="font-mono text-sm font-bold tracking-widest text-brand-green uppercase">
-          CONTROL ACTAS E-14
-        </h1>
+    <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-[#090d12] flex flex-col">
+      <header className="sticky top-0 z-40 w-full bg-[#090d12]/92 backdrop-blur-xl border-b border-slate-800/80 flex items-center justify-between px-4 h-14 shrink-0 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[#10b981]" />
+          <h1 className="font-mono text-sm font-bold tracking-widest text-[#10b981] uppercase">
+            CONTROL ACTAS E-14
+          </h1>
+        </div>
+        <span className="font-mono text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/60">
+          {mesasFiltradas.length} {mesasFiltradas.length === 1 ? "MESA" : "MESAS"}
+        </span>
       </header>
 
-      <div className="flex-grow flex flex-col gap-6 px-4 pt-4 pb-6 max-w-md mx-auto w-full">
-        {/* Puesto actual — REAL (última clasificación archivada) o SIMULADO.
-            Píldoras: EN LÍNEA (siempre) + SIMULACIÓN (toggle del dueño). */}
-        <section className="flex justify-between items-end border-b border-brand-border pb-2">
-          <div className="flex flex-col gap-1 w-full">
-            <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-400">
-              PUESTO ACTUAL
-            </span>
-            <h2 className="text-xl font-bold text-white uppercase tracking-wide">
-              {puestoActual?.titulo ?? "SIN PUESTO"}
-            </h2>
-            <div className="flex items-center justify-between mt-1">
-              <span className="font-mono text-xs text-gray-400">
-                {puestoActual
-                  ? `${puestoActual.municipio} > ZONA ${puestoActual.zona} > PUESTO ${puestoActual.puesto}` +
-                    (totalMesas != null ? ` · ${totalMesas} MESAS` : "")
-                  : "ESCANEA UN ACTA PARA IDENTIFICAR EL PUESTO"}
+      <div className="flex-grow flex flex-col gap-5 px-4 pt-4 pb-8 max-w-md mx-auto w-full">
+        {/* Puesto actual — Card Ejecutiva */}
+        <section className="bg-[#10161f] border border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+          <div className="flex justify-between items-start gap-2">
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                PUESTO DE VOTACIÓN
               </span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={alternarModoSimulacion}
-                  aria-pressed={modoSimulacion}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-[11px] font-bold uppercase tracking-wider ${
-                    modoSimulacion
-                      ? "bg-amber-950/60 border-amber-500 text-amber-400"
-                      : "bg-brand-surface border-brand-border text-gray-400"
-                  } ${enSimulacion && !simCompleta ? "animate-pulse-sync" : ""}`}
-                >
-                  SIM
-                </button>
-                <button
-                  type="button"
-                  onClick={alternarConexion}
-                  aria-pressed={!online}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-[11px] font-bold uppercase tracking-wider ${
-                    online
-                      ? "bg-brand-greendark border-brand-green/40 text-brand-green"
-                      : "bg-amber-950/60 border-amber-500 text-amber-400"
-                  }`}
-                >
-                  <SensorsIcon className={`w-3 h-3 ${online ? "text-brand-green animate-pulse-sync" : "text-amber-400"}`} />
-                  {online ? "EN LÍNEA" : "OFFLINE"}
-                </button>
-              </div>
+              <h2 className="text-lg font-bold text-white uppercase tracking-wide truncate">
+                {puestoActual?.titulo ?? "SIN PUESTO REGISTRADO"}
+              </h2>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={alternarModoSimulacion}
+                aria-pressed={modoSimulacion}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full border font-mono text-[10px] font-bold uppercase tracking-wider transition ${
+                  modoSimulacion
+                    ? "bg-amber-400/20 border-amber-400 text-amber-400 shadow-xs shadow-amber-400/10"
+                    : "bg-slate-800/80 border-slate-700 text-slate-400 hover:text-white"
+                } ${enSimulacion && !simCompleta ? "animate-pulse-sync" : ""}`}
+              >
+                SIM
+              </button>
+              <button
+                type="button"
+                onClick={alternarConexion}
+                aria-pressed={!online}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-[10px] font-bold uppercase tracking-wider transition ${
+                  online
+                    ? "bg-[#10b981]/15 border-[#10b981]/40 text-[#10b981]"
+                    : "bg-amber-400/20 border-amber-400 text-amber-400"
+                }`}
+              >
+                <SensorsIcon className={`w-3 h-3 ${online ? "text-[#10b981]" : "text-amber-400"}`} />
+                {online ? "EN LÍNEA" : "OFFLINE"}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-t border-slate-800/80 pt-2.5">
+            <span className="truncate">
+              {puestoActual
+                ? `${puestoActual.municipio} › ZONA ${puestoActual.zona} › PTO ${puestoActual.puesto}`
+                : "Escanee un acta para identificar el puesto"}
+            </span>
+            {totalMesas != null && (
+              <span className="shrink-0 font-bold text-slate-300 ml-2">
+                {totalMesas} MESAS
+              </span>
+            )}
+          </div>
+
+          {/* Barra de progreso global del puesto */}
+          <div className="flex flex-col gap-1.5 mt-1">
+            <div className="flex justify-between items-center text-[11px] font-mono">
+              <span className="text-slate-400">PROGRESO DEL PUESTO:</span>
+              <span className="font-bold text-[#10b981]">{pctGeneral}%</span>
+            </div>
+            <div className="w-full h-1.5 rounded-full bg-slate-800/80 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#10b981] to-[#059669] transition-all duration-300 rounded-full"
+                style={{ width: `${pctGeneral}%` }}
+              />
             </div>
           </div>
         </section>
 
-        {/* Acordeón de mesas DEL PUESTO ACTUAL (1..countTable DIVIPOL o seed
-            en simulación). La alerta «N MESAS INCOMPLETAS» quedó FUERA. */}
-        <div className="flex flex-col gap-4">
-          {puestoActual && (
-            <div className="flex items-center gap-2 pt-1">
-              <MapPinIcon className="w-3.5 h-3.5 text-brand-green shrink-0" />
-              <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-brand-green">
-                {enSimulacion ? "MESAS SIMULADAS" : "MESAS DEL PUESTO"} ({totalMesas ?? mesasMostradas.length})
-              </span>
-              <span className="h-px flex-1 bg-brand-border" />
-            </div>
+        {/* Buscador de Mesas */}
+        <div className="relative w-full">
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar mesa... (ej. 01, 12)"
+            className="w-full h-10 pl-9 pr-8 bg-[#10161f] border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-[#10b981]/60 focus:ring-1 focus:ring-[#10b981]/30 transition shadow-xs"
+          />
+          <span className="absolute left-3 top-3 text-slate-500 text-xs">🔍</span>
+          {busqueda && (
+            <button
+              type="button"
+              onClick={() => setBusqueda("")}
+              className="absolute right-2.5 top-2 text-slate-400 hover:text-white p-1 text-xs"
+              aria-label="Limpiar búsqueda"
+            >
+              ✕
+            </button>
           )}
-          {/* KIT actas-vivas-paginas-v1 (FASE A): feedback del SIM VIVO —
-              última página subida + progreso del guion; al completarse,
-              fila verde PUESTO COMPLETADO ✓ (estilo del bloque ENVIADO). */}
+        </div>
+
+        {/* Acordeón de mesas */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 pt-1">
+            <MapPinIcon className="w-3.5 h-3.5 text-[#10b981] shrink-0" />
+            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#10b981]">
+              {enSimulacion ? "MESAS SIMULADAS" : "MESAS DEL PUESTO"} ({mesasFiltradas.length})
+            </span>
+            <span className="h-px flex-1 bg-slate-800" />
+          </div>
+
+          {/* Feedback de simulación */}
           {enSimulacion && (
-            <div className="flex flex-col gap-1 -mt-3">
-              <p className="font-mono text-[11px] tracking-wider text-gray-400">
-                ÚLTIMA: {simUltima ?? "—"}
-              </p>
-              <p className="font-mono text-[11px] tracking-wider text-gray-400">
-                PROGRESO: {paginasOcupadas} DE {paginasTotales} PÁGINAS
-              </p>
+            <div className="flex flex-col gap-1 -mt-1 p-2.5 rounded-xl bg-[#10161f]/60 border border-slate-800 text-[11px] font-mono text-slate-400">
+              <div className="flex justify-between">
+                <span>ÚLTIMA TRANSMISIÓN:</span>
+                <span className="text-white font-bold">{simUltima ?? "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>TRANSMITIDAS:</span>
+                <span className="text-[#10b981] font-bold">{paginasOcupadas} DE {paginasTotales} PÁGINAS</span>
+              </div>
               {simCompleta && (
-                <div className="flex items-center justify-center px-3 py-2.5 rounded-2xl bg-brand-greendark/60 border border-brand-green/60">
-                  <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-brand-green">
-                    PUESTO COMPLETADO ✓
-                  </span>
+                <div className="mt-1 flex items-center justify-center py-1.5 rounded-lg bg-[#10b981]/15 border border-[#10b981]/40 text-[#10b981] font-bold uppercase">
+                  PUESTO COMPLETADO ✓
                 </div>
               )}
             </div>
           )}
-          {mesasMostradas.length === 0 && (
-            <p className="font-mono text-[11px] uppercase tracking-wider text-gray-500">
-              {puestoActual ? "SIN MESAS ARCHIVADAS" : "AÚN NO HAY ACTAS ESCANEADAS"}
-            </p>
+
+          {mesasFiltradas.length === 0 && (
+            <div className="p-6 text-center rounded-2xl bg-[#10161f]/50 border border-slate-800/60">
+              <p className="font-mono text-xs uppercase tracking-wider text-slate-400">
+                {busqueda
+                  ? `NO SE ENCONTRARON MESAS PARA "${busqueda}"`
+                  : puestoActual
+                    ? "SIN MESAS ARCHIVADAS"
+                    : "AÚN NO HAY ACTAS ESCANEADAS"}
+              </p>
+            </div>
           )}
-          {mesasMostradas.map((mesa) => (
+
+          {mesasFiltradas.map((mesa) => (
             <CardMesa
               key={mesa.id}
               mesa={mesa}

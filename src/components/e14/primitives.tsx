@@ -10,17 +10,17 @@ import type { ReactNode } from "react";
 export type Tone = "ok" | "warn" | "crit" | "neutral";
 
 const toneDot: Record<Tone, string> = {
-  ok: "bg-brand-green",
-  warn: "bg-amber-400",
-  crit: "bg-red-500",
-  neutral: "bg-gray-400",
+  ok: "bg-[#10b981]",
+  warn: "bg-[#f59e0b]",
+  crit: "bg-[#ef4444]",
+  neutral: "bg-slate-400",
 };
 
 const toneText: Record<Tone, string> = {
-  ok: "text-brand-green",
-  warn: "text-amber-400",
-  crit: "text-red-500",
-  neutral: "text-gray-400",
+  ok: "text-[#10b981]",
+  warn: "text-[#f59e0b]",
+  crit: "text-[#ef4444]",
+  neutral: "text-slate-400",
 };
 
 /** Dot de estado (mock: w-2 h-2 rounded-full del color del estado). */
@@ -51,14 +51,14 @@ export function Chip({
   if (solid) {
     return (
       <span
-        className={`py-2 px-1 rounded-xl font-mono font-extrabold text-xs tracking-wider uppercase shadow-sm tap-action flex items-center justify-center ${
+        className={`py-2 px-2.5 rounded-xl font-mono font-bold text-xs tracking-wider uppercase shadow-md flex items-center justify-center transition-all ${
           tone === "ok"
-            ? "bg-brand-green text-black"
+            ? "bg-[#10b981] text-[#090d12] shadow-[#10b981]/20 font-extrabold"
             : tone === "warn"
-              ? "bg-[#F59E0B] text-black"
+              ? "bg-[#f59e0b] text-[#090d12] shadow-[#f59e0b]/20 font-extrabold"
               : tone === "crit"
-                ? "bg-red-600 text-white"
-                : "bg-brand-surfacelight text-white"
+                ? "bg-[#ef4444] text-white shadow-[#ef4444]/25 font-extrabold"
+                : "bg-slate-800 text-slate-200 border border-slate-700"
         } ${className}`}
       >
         {children}
@@ -67,7 +67,7 @@ export function Chip({
   }
   return (
     <span
-      className={`py-2 px-1 rounded-xl bg-brand-surfacelight border border-brand-border text-white font-mono font-bold text-xs tracking-wider uppercase tap-action flex items-center justify-center ${className}`}
+      className={`py-2 px-2.5 rounded-xl bg-[#10161f]/90 border border-slate-800 text-slate-200 font-mono font-semibold text-xs tracking-wider uppercase flex items-center justify-center backdrop-blur-sm shadow-sm ${className}`}
     >
       {children}
     </span>
@@ -86,12 +86,21 @@ export function SegmentedBar({
   tone?: Tone;
   className?: string;
 }) {
+  const safeTotal = Math.max(1, total);
   return (
-    <div className={`flex items-center gap-1 w-full h-1 ${className}`} role="progressbar" aria-valuenow={filled} aria-valuemin={0} aria-valuemax={total}>
-      {Array.from({ length: total }, (_, i) => (
+    <div
+      className={`flex items-center gap-1 w-full h-1.5 ${className}`}
+      role="progressbar"
+      aria-valuenow={filled}
+      aria-valuemin={0}
+      aria-valuemax={total}
+    >
+      {Array.from({ length: safeTotal }, (_, i) => (
         <span
           key={i}
-          className={`h-1 flex-1 rounded-[1px] ${i < filled ? toneDot[tone] : "bg-brand-border"}`}
+          className={`h-1.5 flex-1 rounded-[2px] transition-all duration-300 ${
+            i < filled ? toneDot[tone] : "bg-slate-800/80"
+          }`}
         />
       ))}
     </div>
@@ -123,9 +132,6 @@ export function ToolbarBtn({
    *  alta calidad»). */
   ariaLabel?: string;
 }) {
-  // FIX (auditoría 2-b #9): sin onClick el botón era un muerto ACTIVO —
-  // parecía pulsable (y accesible al teclado) sin hacer nada. Ahora se
-  // deshabilita de verdad (visual + aria + tab).
   const inhabilitado = !onClick;
   return (
     <button
@@ -134,13 +140,13 @@ export function ToolbarBtn({
       disabled={inhabilitado}
       aria-disabled={inhabilitado || undefined}
       aria-label={ariaLabel}
-      className={`min-h-11 py-2 px-2 rounded-xl border font-sans font-medium text-xs flex items-center justify-center gap-1.5 tap-action transition-colors leading-tight text-center ${
+      className={`min-h-11 py-2 px-2 rounded-xl border font-sans font-medium text-xs flex items-center justify-center gap-1.5 transition-all duration-150 leading-tight text-center active:scale-[0.98] ${
         active
-          ? "bg-brand-surface border-brand-green/50 text-brand-green"
-          : "bg-brand-surface border-brand-border text-gray-300 hover:bg-brand-surfacelight"
-      } ${inhabilitado ? "opacity-40 cursor-not-allowed" : ""}`}
+          ? "bg-[#10b981]/15 border-[#10b981]/50 text-[#10b981] shadow-sm shadow-[#10b981]/10"
+          : "bg-[#10161f] border-slate-800 text-slate-300 hover:bg-[#17222f] hover:text-white hover:border-slate-700"
+      } ${inhabilitado ? "opacity-35 cursor-not-allowed" : "cursor-pointer"}`}
     >
-      <span className={`shrink-0 flex items-center justify-center ${active ? "text-brand-green" : "text-gray-300"}`}>
+      <span className={`shrink-0 flex items-center justify-center ${active ? "text-[#10b981]" : "text-slate-400"}`}>
         {icon}
       </span>
       <span className="truncate">{label}</span>
@@ -170,17 +176,17 @@ export function PrimaryBtn({
   disabled?: boolean;
 }) {
   const base =
-    "flex-1 min-w-0 px-3 flex items-center justify-center gap-2 uppercase tracking-wider leading-tight text-center transition-all tap-action";
+    "flex-1 min-w-0 px-4 flex items-center justify-center gap-2 uppercase tracking-wider leading-tight text-center transition-all duration-150 active:scale-[0.98] cursor-pointer select-none";
   const styles: Record<string, string> = {
-    ok: "bg-brand-green hover:bg-emerald-400 text-black font-extrabold text-sm py-3.5 px-6 rounded-2xl shadow-[0_4px_20px_rgba(0,230,118,0.35)]",
-    crit: "bg-[#E52222] hover:bg-red-600 text-white font-black text-xs sm:text-sm py-3.5 rounded-2xl shadow-[0_4px_20px_rgba(229,34,34,0.4)]",
-    warn: "bg-brand-surface hover:bg-brand-surfacelight border border-amber-500/80 text-amber-400 font-mono font-bold text-[10px] py-2.5 rounded-xl shadow-sm",
+    ok: "bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-black text-sm py-3.5 px-6 rounded-2xl shadow-[0_4px_24px_rgba(16,185,129,0.35)]",
+    crit: "bg-[#ef4444] hover:bg-red-600 text-white font-black text-xs sm:text-sm py-3.5 rounded-2xl shadow-[0_4px_24px_rgba(239,68,68,0.4)]",
+    warn: "bg-[#10161f] hover:bg-[#17222f] border border-amber-500/80 text-amber-400 font-mono font-bold text-xs py-3 rounded-xl shadow-sm",
     outline:
-      "bg-brand-surface hover:bg-brand-surfacelight border border-brand-border text-gray-200 font-bold text-xs py-3.5 rounded-2xl",
+      "bg-[#10161f] hover:bg-[#17222f] border border-slate-700 text-slate-200 font-bold text-xs py-3.5 rounded-2xl",
     "outline-crit":
-      "bg-brand-surface hover:bg-brand-surfacelight border border-brand-border text-gray-200 font-bold text-xs py-3.5 rounded-2xl",
+      "bg-[#10161f] hover:bg-[#17222f] border border-red-500/50 text-red-400 font-bold text-xs py-3.5 rounded-2xl",
     "outline-warn":
-      "bg-brand-surface hover:bg-brand-surfacelight border border-brand-border text-gray-200 font-bold text-xs py-3.5 rounded-2xl",
+      "bg-[#10161f] hover:bg-[#17222f] border border-amber-500/50 text-amber-400 font-bold text-xs py-3.5 rounded-2xl",
   };
   return (
     <button
@@ -189,9 +195,17 @@ export function PrimaryBtn({
       disabled={disabled}
       aria-label={ariaLabel}
       aria-disabled={disabled}
-      className={`${base} ${styles[variant]} ${disabled ? "opacity-40 cursor-not-allowed shadow-none" : ""}`}
+      className={`${base} ${styles[variant]} ${disabled ? "opacity-40 cursor-not-allowed shadow-none active:scale-100" : ""}`}
     >
-      {icon && <span className={`shrink-0 flex items-center justify-center ${toneText[variant === "ok" ? "ok" : variant === "crit" ? "crit" : variant === "warn" ? "warn" : "neutral"]}`}>{icon}</span>}
+      {icon && (
+        <span
+          className={`shrink-0 flex items-center justify-center ${
+            variant === "ok" ? "text-[#090d12]" : toneText[variant === "crit" ? "crit" : variant === "warn" ? "warn" : "neutral"]
+          }`}
+        >
+          {icon}
+        </span>
+      )}
       <span>{children}</span>
     </button>
   );
