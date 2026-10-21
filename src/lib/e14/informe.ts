@@ -224,8 +224,12 @@ function extensionDe(reg: RegistroMasiva): string {
   return porMime[reg.archivo?.type ?? ""] ?? "bin";
 }
 
-/** Mapa liviano de un registro (lectura del listado — CERO dataURLs aquí). */
-function filaLiviana(reg: RegistroMasiva): FilaInforme {
+/** Mapa liviano de un registro (lectura del listado — CERO dataURLs aquí).
+ *  D63-A2 rev.2: exportada PURO para el humo de integración REAL
+ *  (RegistroMasiva → filaLiviana → actaLivianaJson — el humo rev.1 validó
+ *  el spread con una FilaInforme fabricada y se saltó exactamente este
+ *  constructor, donde estaba el hueco). */
+export function filaLiviana(reg: RegistroMasiva): FilaInforme {
   const acta = reg.acta;
   const diag = acta?.diagnostico;
   const conCarpeta =
@@ -272,6 +276,13 @@ function filaLiviana(reg: RegistroMasiva): FilaInforme {
     skewGrados: diag?.skewGrados ?? null,
     deskewMs: diag?.deskewMs ?? null,
     gateMarco: diag?.gate?.gateMarco ?? null,
+    // D63-A2 (T2): presente SOLO si origen escaneo + provenance del master
+    // (fotos/WhatsApp/SIM/registros previos → ausente; jamás inventar).
+    // false ES dato (escaneo recto — maestroFuente "original").
+    preprocesoAplicado:
+      diag?.origen === "escaneo" && diag.maestroFuente != null
+        ? diag.maestroFuente === "corregido"
+        : undefined,
     // D66 — trazas de decodificación del REGISTRO (null/ausente = sin master
     // — fallback a la ruta de siempre, ERROR, registros previos; jamás
     // inventar). decodeMs top-level ≠ tiempos.decodeMs (D61, decode del

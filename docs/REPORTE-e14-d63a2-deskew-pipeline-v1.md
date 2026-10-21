@@ -2,7 +2,7 @@
 
 **Task ID D63-A2** · ejecutado por Z.ai Code · kit `AGENTE-D63-A2-deskew-pipeline-v1.md` · **rama `feat/e14-d63a2-deskew-pipeline-v1`** desde `origin/main @ 6095197` (merge del PR docs #62 — YA MERGEADO como exige el kit, one-off autorizado por el dueño).
 
-**Estado: FASES A/B/C COMPLETAS (implementación + gates locales + humo end-to-end). Fase D es del DUEÑO (corrida formal en canal canónico). Fase E (A/B vs 200613) pendiente de esa corrida.**
+**Estado: FASES A/B/C COMPLETAS — rev.2: bug T2 reportado por el dueño (preprocesoAplicado nunca asignado) CORREGIDO + humo de integración real 6/6 con control negativo (§4.1). Fase D es del DUEÑO (corrida formal en canal canónico). Fase E (A/B vs 200613) pendiente de esa corrida.**
 
 ---
 
@@ -69,8 +69,8 @@ if (fila.viaPdf && veredictoOrigen.origen !== "escaneo") {
 
 ### T2 — Informe aditivo (`informe.ts`, SOLO añadir)
 - `FilaInforme`: `preprocesoAplicado?: boolean` (presente SOLO si origen escaneo y el diagnóstico trae `maestroFuente`; ausente para fotos/WhatsApp/SIM/registros previos — jamás inventar; `false` ES dato = escaneo recto).
-- `filaLiviana`: spread condicional desde `diag.maestroFuente === "corregido"`.
-- `actaLivianaJson`: spread condicional al final (informes previos no cambian de forma — `JSON.stringify` omite undefined; probado en humo puro).
+- `filaLiviana` (rev.2 — asignación REAL, el claim rev.1 «spread condicional desde `diag.maestroFuente === "corregido"`» era FALSO: el constructor rev.1 nunca asignaba el campo → siempre `undefined` → el JSON de cada acta moría sin él; tsc no lo pesca — optional sin asignar es legal): asignación condicional tras el bloque D63-D — presente SOLO si `diag.origen === "escaneo" && diag.maestroFuente != null`, valor `maestroFuente === "corregido"`; fotos/WhatsApp/SIM/registros previos y escaneos sin provenance → `undefined` (ausente; jamás inventar).
+- `actaLivianaJson`: spread condicional al final (informes previos no cambian de forma — `JSON.stringify` omite undefined).
 - La línea ORIGEN esperada del lote formal quedó verificada con humo puro: `ORIGEN: escaneo 8 - foto 16 - null 2 (null: borde-no-blanco 2)`; la línea ESCANEOS con deskew medio de corregidos YA EXISTÍA (D63-D rev.2, `informe.ts` «deskew medio Nms (k corregidos)») — se llena sola.
 
 ## 4. Desviaciones DECLARADAS (kit §7: se declaran, nunca se ocultan)
@@ -78,7 +78,25 @@ if (fila.viaPdf && veredictoOrigen.origen !== "escaneo") {
 - **D-1 (`cola.ts`, 5.º archivo src)**: el tope del kit («4 archivos: runner.ts, store.ts, tipos.ts, y NADA más») es incompatible con el T1-persistencia: la construcción del `RegistroMasiva` vive en `agregarLote` (cola.ts). Alternativa descartada: un 2.º write post-`agregarLote` competiría con el write del hash de `cadenaDedup` (whole-object — riesgo real de pérdida de hash/traza). Solución: parámetro OPCIONAL aditivo + estampado en el primer write. El T2 también exige `informe.ts` («SOLO añadir»), que el propio título del §2 excluye — conteo textual del kit inconsistente con sus tareas; se siguió el espíritu (src mínimo aditivo): **6 archivos tocados: runner.ts, store.ts, tipos.ts, cola.ts (D-1), informe.ts (T2), types.ts (D-2)**.
 - **D-2 (`types.ts`)**: el campo T0 `maestroFuente` viaja en el diagnóstico del acta → el tipo `DiagnosticoActa` vive en types.ts. Aditivo al final del contrato (tras `limpieza`).
 - **D-3 (`as const` en el ternario de `maestroFuente`)**: TS exigía literal tipado para la inferencia del union (`"corregido" | "original"`) — sin cambio de semántica.
-- **D-4 (arnés local)**: el humo navegador requiere un server COOP/COEP local (mini-service `arness-e14`, puerto 3417, fuera del repo). Con `bun --hot` el server moría ~30 s (crash silencioso del watch en el sandbox) → `bun index.ts` estable. El residuo "FAILED TO LOAD CHUNK" de los primeros intentos fue el server muerto a mitad de los fetchs del chunk async de pdfjs — **pre-existente y ajeno al kit** (con el server vivo, `extraerPdf` funcionó completo).
+- **D-5 (rev.2, `export` de `filaLiviana`)**: el humo de integración REAL exige llamar al constructor — `RegistroMasiva → filaLiviana → actaLivianaJson`. rev.1 lo tenía privado y por eso el humo validó con una FilaInforme fabricada (exactamente el hueco que el dueño destapó). Un keyword `export`, cero cambio de semántica (patrón ya usado: `actaLivianaJson`/`renderTxt` exportados por la misma razón).
+
+### 4.1 REV.2 — bug T2 reportado por el dueño, causa raíz y corrección
+
+- **Reporte del dueño**: `FilaInforme.preprocesoAplicado` se declara y `actaLivianaJson` lo printa condicional, pero **nadie lo asigna** — el constructor `filaLiviana` nunca lo setea → siempre `undefined` → el JSON de cada acta muere sin el campo. El claim del §3-T2 rev.1 («`filaLiviana`: spread condicional») es FALSO.
+- **Por qué se escapó**: (a) tsc no pesca un optional sin asignar (legal); (b) el humo rev.1 validó el spread de `actaLivianaJson` con una FilaInforme FABRICADA a mano (con el campo ya puesto) en vez de la integración real — el humo probó el eslabón de abajo, no el que estaba roto.
+- **Corrección (rev.2, `informe.ts`)**: asignación condicional en `filaLiviana`, tras el bloque D63-D (`skewGrados`/`deskewMs`/`gateMarco`):
+```ts
+// D63-A2 (T2): presente SOLO si origen escaneo + provenance del master
+// (fotos/WhatsApp/SIM/registros previos → ausente; jamás inventar).
+// false ES dato (escaneo recto — maestroFuente "original").
+preprocesoAplicado:
+  diag?.origen === "escaneo" && diag.maestroFuente != null
+    ? diag.maestroFuente === "corregido"
+    : undefined,
+```
+- **Humo puro de INTEGRACIÓN REAL (bun, `/home/z/tmp/humo-d63a2-t2-rev2.ts` — desechable, fuera del repo): 6/6 OK** — recorre `RegistroMasiva → filaLiviana → actaLivianaJson → JSON.stringify`: (1) foto → AUSENTE (json y stringify); (2) escaneo recto (`maestroFuente:"original"`) → `false` PRESENTE; (3) escaneo torcido (`"corregido"`) → `true` PRESENTE; (4a) origen null (WhatsApp) → AUSENTE; (4b) escaneo con `maestroFuente:null` (pre-T0) → AUSENTE; (4c) sin diagnóstico (SIM) → AUSENTE; (5) trio literal del dueño en el JSON: foto→ausente · recto→false · torcido→true.
+- **Control negativo (el que faltaba en rev.1)**: el humo rev.2 ejecutado sobre el código PRE-fix → FALLO (exit 1 — sin el export y con las aserciones de campo muertas). El humo SÍ detecta el hueco que rev.1 dejó pasar.
+- Gates rev.2 re-emitidos: `tsc --noEmit` 0 · `bun run lint` limpio. Cero toques fuera de `informe.ts` (asignación + export + comentarios).
 
 ## 5. FASE B/C — Gates locales y humo
 
@@ -86,12 +104,16 @@ if (fila.viaPdf && veredictoOrigen.origen !== "escaneo") {
 - `tsc --noEmit` **0 errores** (tras D-1/D-2/D-3). `bun run lint` **limpio**.
 - `BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH=/digielect14 bunx next build` **OK** (out/ emitido — misma receta del workflow de GH Pages).
 
-### Humo puro (bun, `/home/z/tmp/humo-d63a2.ts` — desechable, fuera del repo): **5/5 OK**
-1. `actaLivianaJson` respeta `preprocesoAplicado=true` (escaneo).
-2. Foto → `preprocesoAplicado` AUSENTE.
+### Humo puro rev.1 (bun, `/home/z/tmp/humo-d63a2.ts` — desechable, fuera del repo): **5/5 OK** — INVALIDADO en su base por el bug T2 (ver §4.1)
+> ⚠️ Los puntos 1-2 corrían sobre una **FilaInforme FABRICADA** (con el campo ya puesto a mano) — no ejercían el constructor `filaLiviana`, donde estaba el hueco. El humo rev.1 NO podía detectar el bug. Puntos 3-5 (omite-undefined / renderTxt / línea ORIGEN) no dependían del constructor y siguen valiendo.
+1. `actaLivianaJson` respeta `preprocesoAplicado=true` (escaneo) — ⚠️ sobre fila fabricada.
+2. Foto → `preprocesoAplicado` AUSENTE — ⚠️ sobre fila fabricada.
 3. `JSON.stringify` omite el campo ausente (informes previos sin cambio de forma).
 4. `renderTxt` byte-idéntico con/sin el campo para no-escaneos (contrato D57).
 5. **Línea ORIGEN del lote formal esperada**: `escaneo 8 - foto 16 - null 2 (null: borde-no-blanco 2)` — literal del kit.
+
+### Humo puro rev.2 — INTEGRACIÓN REAL (bun, `/home/z/tmp/humo-d63a2-t2-rev2.ts`): **6/6 OK** + control negativo
+- Ruta ejercida: `RegistroMasiva → filaLiviana → actaLivianaJson → JSON.stringify` — sin filas fabricadas. Detalle completo y control negativo (pre-fix → exit 1) en **§4.1**.
 
 ### Humo navegador (arnés COOP/COEP :3417, `crossOriginIsolated=true`, build estático del PR)
 1. **SIM 8.2 VERDE**: captura sintética óptima → `[e14] pipeline SIMULACION/file total=11333ms … score=8.2 … sim=8.2 … nivel:AUTO` — chips del SIM intactos, autoenvío OK (`ACTAS (1)`). Los SIM no traen viaPdf/escaneo (prueba de lectura §3-T1): sin cambios esperados, sin cambios observados.

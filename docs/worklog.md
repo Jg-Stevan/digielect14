@@ -1830,3 +1830,17 @@ Nota: GitHub conserva los PRs y sus diffs aunque se borre la rama; nada se pierd
 **Gates**: tsc 0 · lint 0 · build estático OK · humo navegador completo (§5 del REPORTE) · contrato D57 (solo campos añadidos — renderTxt byte-idéntico probado) · CONGELADOS intactos.
 
 **Pendiente (del dueño — Fase D)**: (1) REVOCAR/ROTAR el `ghp_` viejo + token nuevo one-off; (2) cargar `rastreador-sesion-e14-v1.js` (NO está en la máquina — bloqueante de la firma pre-vuelo); (3) revisar el diff (el arquitecto revisa diff por diff ANTES del merge); (4) merge + deploy canónico con firma de build (bundle sha256 del PR == desplegado); (5) lote 20261019 COMPLETO (26) en un solo pase + informe zip sin editar → Fase E del agente (A/B vs 200613: invariancia 18 no-PDF + escaneos con atribución + RED LINES).
+
+---
+
+## 2026-10-21 · D63-A2 rev.2 — KIT e14-d63a2-deskew-pipeline-v1 (bug T2 reportado por el dueño, CORREGIDO)
+
+**Estado**: rev.1 (ee68225) tenía el T2 ROTO: `FilaInforme.preprocesoAplicado` se declaraba y `actaLivianaJson` lo printaba condicional, pero **nadie lo asignaba** — el constructor `filaLiviana` nunca lo seteaba → siempre `undefined` → el JSON de cada acta moría sin el campo. Reportado por el DUEÑO (el claim del REPORTE §3-T2 rev.1 «filaLiviana: spread condicional» era FALSO). Esta rev.2 lo corrige en su única pieza correcta.
+
+- Causa raíz doble: (a) tsc no pesca un optional sin asignar (legal); (b) el humo puro rev.1 validó el spread con una **FilaInforme FABRICADA** (campo puesto a mano) en vez de la integración real — probó el eslabón de abajo, no el roto.
+- FIX (`src/lib/e14/informe.ts`, ~5 líneas tras el bloque D63-D skewGrados/deskewMs/gateMarco): asignación condicional literal del dueño — presente SOLO si `diag.origen === "escaneo" && diag.maestroFuente != null`, valor `maestroFuente === "corregido"`; fotos/WhatsApp/SIM/registros previos y escaneos sin provenance → `undefined` (AUSENTE — jamás inventar; `false` ES dato = escaneo recto con maestroFuente "original").
+- D-5 (desviación declarada en REPORTE §4): `export` de `filaLiviana` (un keyword, cero semántica — patrón actaLivianaJson/renderTxt) para que el humo ejerza la integración REAL.
+- Humo puro rev.2 de INTEGRACIÓN REAL (bun, `/home/z/tmp/humo-d63a2-t2-rev2.ts`, fuera del repo): **6/6 OK** sobre `RegistroMasiva → filaLiviana → actaLivianaJson → JSON.stringify` — **foto → AUSENTE · escaneo recto → false PRESENTE · escaneo torcido → true PRESENTE** (trio literal del dueño) + guards: origen null (WhatsApp) AUSENTE · escaneo maestroFuente null (pre-T0) AUSENTE · sin diagnóstico (SIM) AUSENTE.
+- **Control negativo** (el que faltaba en rev.1): el humo rev.2 sobre el código PRE-fix → exit 1 (detecta el hueco). El humo ya no puede validar un spread sin constructor.
+- Gates re-emitidos: tsc 0 · lint 0. Cero toques fuera de `informe.ts` (asignación + export + comentarios). CONGELADOS intactos. REPORTE rev.2: claim §3-T2 corregido + §4.1 (bug/causa/fix/humo) + §5 humo rev.1 marcado INVALIDADO en su base.
+- Fase D sigue del DUEÑO (corrida formal + firma de build); Fase E tras esa corrida.
