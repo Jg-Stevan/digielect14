@@ -1861,12 +1861,12 @@ export function ScanView() {
       aria-label="Capturar fotografía del acta E-14"
       onClick={alDisparar}
       disabled={procesando}
-      className={`shutter-glow relative w-[72px] h-[72px] rounded-full p-1 bg-transparent border-[3.5px] border-white flex items-center justify-center active:scale-90 transition-transform duration-100 shadow-[0_0_20px_rgba(0,0,0,0.8)] focus:outline-none focus:border-brand-green ${
-        procesando ? "opacity-50" : ""
+      className={`relative w-[74px] h-[74px] rounded-full p-1 bg-transparent border-2 border-white/80 flex items-center justify-center active:scale-90 transition-all duration-100 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:border-[#10b981] focus:outline-none focus:border-[#10b981] cursor-pointer ${
+        procesando ? "opacity-50 cursor-not-allowed" : ""
       }`}
     >
-      <div className="w-full h-full rounded-full bg-brand-panel border border-brand-green/40 flex items-center justify-center text-white active:bg-brand-green/20">
-        <StitchShutterDocIcon className="w-8 h-8 text-white" />
+      <div className="w-full h-full rounded-full bg-[#10161f] border border-[#10b981]/50 flex items-center justify-center text-white active:bg-[#10b981]/20 transition-colors shadow-inner">
+        <StitchShutterDocIcon className="w-8 h-8 text-[#10b981]" />
       </div>
     </button>
   );
@@ -1923,146 +1923,99 @@ export function ScanView() {
             />
           )}
 
-          {/* §3.1.1 HEADER (mock 1): píldora [IA][grid][AUTO] a la izquierda +
-              botón AMARILLO de modo a la derecha (⋮ oculto por defecto §6.6). */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 px-4 py-3">
-            {/* Píldora IA — el HUD §B re-vestido: AUTO alterna autoArmado (el
-                armado/overlay/estados §B INTACTOS), grid alterna la retícula
-                visual, IA es el badge blanco del mock. */}
-            <div className="pointer-events-auto flex items-center gap-2 bg-black/60 border border-white/10 rounded-full px-2.5 py-1 backdrop-blur-md shadow-sm">
-              <span className="inline-flex items-center justify-center bg-white text-black text-[10px] font-black rounded px-1.5 py-0.5 leading-none select-none">
-                IA
-              </span>
-              <button
-                type="button"
-                aria-label="Alternar cuadrícula"
-                aria-pressed={gridOn}
-                onClick={() => setGridOn((v) => !v)}
-                className={`p-0.5 transition flex items-center justify-center ${
-                  gridOn ? "text-brand-green" : "text-white/80 hover:text-white"
-                }`}
-              >
-                <StitchGridIcon className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                aria-label="Captura automática"
-                aria-pressed={modoCamara ? autoArmado : undefined}
-                title={
-                  modoCamara
-                    ? "Captura automática (dispara sola con el acta quieta y nítida)"
-                    : "Captura automática (disponible en modo cámara)"
-                }
-                onClick={alternarAutoHUD}
-                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-white tracking-wide pr-1 select-none"
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"
-                  aria-hidden
-                />
-                AUTO
-              </button>
-            </div>
-
-            {/* Derecha: botón amarillo de encuadre = SELECTOR DE MODO (§6.3:
-                abre la fila compacta con los 3 modos re-vestidos — el cambio
-                de modo queda INTACTO). */}
-            <div className="pointer-events-auto flex items-center gap-2">
-              <button
-                type="button"
-                aria-label="Modo de escaneo y detección"
-                aria-haspopup="menu"
-                aria-expanded={modoMenuAbierto}
-                onClick={() => setModoMenuAbierto((v) => !v)}
-                className="w-9 h-9 flex items-center justify-center rounded-full bg-yellow-500/10 border-2 border-yellow-400 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.25)] hover:scale-105 active:scale-95 transition"
-              >
-                <StitchFrameIcon className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* §6.3 — SELECTOR DE MODO (reemplaza la barra de pills y al menú ⋮):
-              fondo clickeable que cierra; panel anclado bajo el botón
-              amarillo con los 3 modos actuales; IMPORTAR abre el picker real. */}
-          {modoMenuAbierto && (
-            <>
-              <button
-                type="button"
-                aria-label="Cerrar selector de modo"
-                onClick={() => setModoMenuAbierto(false)}
-                // FIX (auditoría 2-b #16): backdrop FIXED — el absolute solo
-                // cubría el visor y el footer (chips de simulación/obturador)
-                // quedaba vivo con el menú abierto; un tap ahí no cerraba y
-                // podía disparar el escaneo con el selector encima.
-                className="fixed inset-0 z-50 cursor-default"
-              />
-              <div
-                role="menu"
-                aria-label="Fuente de captura"
-                className={`absolute right-3 top-[60px] z-50 w-64 origin-top-right rounded-2xl border border-white/10 bg-brand-surface/95 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-xl divide-y divide-white/[0.08] transition-[opacity,transform] duration-150 ${
-                  modoMenuMontado ? "opacity-100 scale-100" : "opacity-0 scale-[0.97]"
-                }`}
-              >
+          {/* Header con segmented selector [ CÁMARA | SIMULACIÓN | IMPORTAR ] + controles */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col gap-2 p-3">
+            <div className="flex items-center justify-between w-full">
+              {/* Píldora IA: AUTO + Grid */}
+              <div className="pointer-events-auto flex items-center gap-1.5 bg-[#10161f]/90 border border-slate-800 rounded-full px-2.5 py-1 backdrop-blur-md shadow-md">
+                <span className="inline-flex items-center justify-center bg-white text-slate-900 text-[10px] font-black rounded px-1.5 py-0.5 leading-none select-none">
+                  IA
+                </span>
                 <button
                   type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setModoMenuAbierto(false);
-                    setFuente("SIMULACION");
-                  }}
-                  className="flex w-full items-center gap-3 min-h-[44px] px-4 active:bg-white/10"
+                  aria-label="Alternar cuadrícula"
+                  aria-pressed={gridOn}
+                  onClick={() => setGridOn((v) => !v)}
+                  className={`p-1 rounded-full transition flex items-center justify-center ${
+                    gridOn ? "text-[#10b981] bg-[#10b981]/15" : "text-slate-400 hover:text-white"
+                  }`}
                 >
-                  <SparklesIcon className="w-[18px] h-[18px] text-gray-400" />
-                  <span className="text-[13px] font-medium text-white">
-                    Simulación (IA)
-                  </span>
-                  {fuente === "SIMULACION" && (
-                    <span className="ml-auto text-[13px] font-semibold text-brand-green">
-                      Sí
-                    </span>
-                  )}
+                  <StitchGridIcon className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setModoMenuAbierto(false);
-                    setFuente("CAMARA");
-                  }}
-                  className="flex w-full items-center gap-3 min-h-[44px] px-4 active:bg-white/10"
+                  aria-label="Captura automática"
+                  aria-pressed={modoCamara ? autoArmado : undefined}
+                  title={
+                    modoCamara
+                      ? "Captura automática (dispara sola con el acta quieta y nítida)"
+                      : "Captura automática (disponible en modo cámara)"
+                  }
+                  onClick={alternarAutoHUD}
+                  className={`inline-flex items-center gap-1.5 text-[11px] font-bold tracking-wide px-2 py-0.5 rounded-full select-none transition ${
+                    autoArmado && modoCamara ? "bg-[#10b981]/15 text-[#10b981]" : "text-slate-300 hover:text-white"
+                  }`}
                 >
-                  <CameraNavIcon className="w-[18px] h-[18px] text-gray-400" />
-                  <span className="text-[13px] font-medium text-white">
-                    Escanear con cámara
-                  </span>
-                  {fuente === "CAMARA" && (
-                    <span className="ml-auto text-[13px] font-semibold text-brand-green">
-                      Sí
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setModoMenuAbierto(false);
-                    inputRef.current?.click();
-                  }}
-                  className="flex w-full items-center gap-3 min-h-[44px] px-4 active:bg-white/10"
-                >
-                  <FolderImportIcon className="w-[18px] h-[18px] text-gray-400" />
-                  <span className="text-[13px] font-medium text-white">
-                    Importar desde galería
-                  </span>
-                  {fuente === "ARCHIVO" && (
-                    <span className="ml-auto text-[13px] font-semibold text-brand-green">
-                      Sí
-                    </span>
-                  )}
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      autoArmado && modoCamara ? "bg-[#10b981] animate-ping" : "bg-slate-500"
+                    }`}
+                    aria-hidden
+                  />
+                  AUTO
                 </button>
               </div>
-            </>
-          )}
+
+              {/* Selector de modo rápido segmented */}
+              <div className="pointer-events-auto flex items-center p-0.5 bg-[#10161f]/90 border border-slate-800 rounded-full backdrop-blur-md shadow-md">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFuente("CAMARA");
+                    setModoMenuAbierto(false);
+                  }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                    fuente === "CAMARA"
+                      ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <CameraNavIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">CÁMARA</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFuente("SIMULACION");
+                    setModoMenuAbierto(false);
+                  }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                    fuente === "SIMULACION"
+                      ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <SparklesIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">SIM</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    inputRef.current?.click();
+                    setModoMenuAbierto(false);
+                  }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                    fuente === "ARCHIVO"
+                      ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <FolderImportIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">SUBIR</span>
+                </button>
+              </div>
+            </div>
+          </div>
 
           {modoCamara ? (
             <>
@@ -2087,41 +2040,53 @@ export function ScanView() {
                 </div>
               )}
 
-              {/* §E: aviso de cámara con REINTENTO — re-vestido como franja
-                  del visor (§3.1.4) con las acciones intactas. La app
-                  PERMANECE en CÁMARA; [ACTIVAR CÁMARA] re-ejecuta el
-                  arranque, [VOLVER A SIMULACIÓN] regresa al modo SIM. */}
+              {/* Aviso de cámara con opciones claras y botón destacado para simulación */}
               {avisoCamara && camEstado !== "viva" && (
-                <div className="absolute inset-x-4 top-[64px] z-40 rounded-xl border border-red-500/40 bg-black/70 backdrop-blur-md p-4 shadow-[0_8px_32px_rgba(0,0,0,0.45)]">
-                  <p className="text-[13px] font-bold text-red-400 font-mono uppercase tracking-wider">
-                    {avisoCamara === "denied" ? "SIN ACCESO A LA CÁMARA" : "SE PERDIÓ LA CÁMARA"}
-                  </p>
-                  <p className="mt-1 text-[12px] leading-snug text-white/70 font-mono">
+                <div className="absolute inset-x-4 top-[72px] z-40 rounded-2xl border border-amber-500/40 bg-[#10161f]/95 backdrop-blur-xl p-5 shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                    <p className="text-xs font-bold text-amber-400 font-mono uppercase tracking-wider">
+                      {avisoCamara === "denied" ? "ACCESO A CÁMARA NO DISPONIBLE" : "SEÑAL DE CÁMARA INTERRUMPIDA"}
+                    </p>
+                  </div>
+                  <p className="text-xs leading-relaxed text-slate-300 font-sans">
                     {avisoCamara === "denied"
-                      ? "Permiso denegado o cámara ocupada. Toca el candado 🔒 en la barra de direcciones › Permisos › Cámara › Permitir, o cierra otra app que use la cámara."
-                      : "El stream se cortó (permiso revocado o otra app tomó la cámara)."}
+                      ? "El navegador o el entorno iframe bloquea el acceso directo a la cámara. Puede usar el modo Simulación para probar todas las funciones o importar una foto desde su disco."
+                      : "La cámara se desconectó o fue requerida por otra aplicación."}
                   </p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAvisoCamara(null);
-                        setCamEstado("iniciando");
-                        setReintentoCamara((n) => n + 1); // re-dispara el efecto
-                      }}
-                      className="h-9 rounded-full px-4 text-[12px] font-bold text-black bg-brand-green transition-transform active:scale-95"
-                    >
-                      ACTIVAR CÁMARA
-                    </button>
+                  <div className="mt-4 flex flex-col sm:flex-row gap-2">
                     <button
                       type="button"
                       onClick={() => {
                         setAvisoCamara(null);
                         setFuente("SIMULACION");
                       }}
-                      className="h-9 rounded-full px-4 text-[12px] font-bold text-white/80 bg-white/10 ring-1 ring-inset ring-white/15 transition-transform active:scale-95"
+                      className="h-10 rounded-xl px-4 text-xs font-bold text-[#090d12] bg-[#10b981] hover:bg-[#059669] transition shadow-md shadow-[#10b981]/20 flex items-center justify-center gap-1.5"
                     >
-                      VOLVER A SIMULACIÓN
+                      <SparklesIcon className="w-4 h-4" />
+                      ACTIVAR SIMULACIÓN
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAvisoCamara(null);
+                        setCamEstado("iniciando");
+                        setReintentoCamara((n) => n + 1);
+                      }}
+                      className="h-10 rounded-xl px-3 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 transition flex items-center justify-center"
+                    >
+                      Reintentar cámara
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAvisoCamara(null);
+                        inputRef.current?.click();
+                      }}
+                      className="h-10 rounded-xl px-3 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 transition flex items-center justify-center gap-1"
+                    >
+                      <FolderImportIcon className="w-3.5 h-3.5" />
+                      Subir archivo
                     </button>
                   </div>
                 </div>
@@ -2183,14 +2148,7 @@ export function ScanView() {
               )}
 
               {/* HUD (§7 rev.3): medidor de captura EN VIVO (G7 del kit
-                  camara-visor-v1) + estado de detección. La pill del texto
-                  «CALIDAD NN%» se reemplaza por la pill VISUAL del lab:
-                  Fuente: apps/scanner-lab/src/components/scanner/
-                  CameraView.tsx L3393-3441 (LOTE 5.7) — icono Gauge + barra
-                  w-14 + número; verde >80 (umbral del shutter), azul >55,
-                  gris debajo. Datos = el MISMO live.score que el loop ya
-                  computa a ~10 Hz (scorePct) — cero lógica nueva, solo UI
-                  (framer-motion del lab → render condicional CSS de e14). */}
+                  camara-visor-v1) + estado de detección. */}
               {camaraViva && !procesando && (
                 <>
                   {scorePct !== null && (
@@ -2239,8 +2197,7 @@ export function ScanView() {
                 </>
               )}
 
-              {/* Overlay "armado" (lab L1802): pill centrada cuando AUTO está
-                  armado y el score supera el umbral del disparo. */}
+              {/* Overlay "armado" */}
               {camaraViva && autoArmado && scoreAlto && !procesando && (
                 <div className="pointer-events-none absolute inset-x-0 top-[42%] z-30 flex justify-center px-6">
                   <div className="flex items-center gap-2.5 rounded-full bg-black/75 border border-white/10 px-4 py-2.5 shadow-[0_4px_12px_rgba(0,0,0,0.3)] backdrop-blur-sm">
@@ -2252,7 +2209,7 @@ export function ScanView() {
                 </div>
               )}
 
-              {/* Procesando captura (lab L1889-1912, re-vestido). */}
+              {/* Procesando captura */}
               {procesando && (
                 <div
                   className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/70 backdrop-blur-[3px]"
@@ -2270,7 +2227,7 @@ export function ScanView() {
                 </div>
               )}
 
-              {/* Destello blanco de captura (mock 1: overlay ~320 ms) */}
+              {/* Destello blanco de captura */}
               {destelloKey > 0 && (
                 <div
                   key={destelloKey}
@@ -2279,13 +2236,61 @@ export function ScanView() {
                 />
               )}
             </>
-          ) : null /* SIMULACIÓN/ARCHIVO: visor con las capas del mock (§3.1.2) */}
+          ) : (
+            /* SIMULACIÓN/ARCHIVO: Visor con marco táctico E-14 */
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center select-none">
+              <div className="relative w-full max-w-[280px] h-[64vh] max-h-[440px] rounded-2xl border-2 border-dashed border-[#10b981]/30 bg-[#10b981]/[0.03] flex flex-col items-center justify-between p-5 backdrop-blur-[2px] shadow-[0_0_40px_rgba(16,185,129,0.05)]">
+                {/* Esquinas tácticas */}
+                <span className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-[#10b981]" />
+                <span className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-[#10b981]" />
+                <span className="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-[#10b981]" />
+                <span className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-[#10b981]" />
 
-          {/* §3.1.4 FRANJA DE AVISOS del visor (reemplaza los toasts — D2):
-              NO DETECTO · permisos · HTTPS · iOS · importar · linterna… */}
+                <div className="w-full flex items-center justify-between text-[10px] font-mono font-bold tracking-widest text-[#10b981] uppercase">
+                  <span>FORMATO E-14</span>
+                  <span>{fuente}</span>
+                </div>
+
+                <div className="flex flex-col items-center gap-2.5 my-auto px-2">
+                  <div className="w-14 h-14 rounded-2xl bg-[#10161f] border border-slate-800 flex items-center justify-center text-[#10b981] shadow-lg">
+                    {fuente === "SIMULACION" ? (
+                      <SparklesIcon className="w-7 h-7" />
+                    ) : (
+                      <FolderImportIcon className="w-7 h-7" />
+                    )}
+                  </div>
+                  <h3 className="text-sm font-bold text-white tracking-wide uppercase">
+                    {fuente === "SIMULACION" ? "SIMULADOR ELECTORAL" : "IMPORTAR ARCHIVO"}
+                  </h3>
+                  <p className="text-[11px] font-mono text-slate-400 leading-relaxed max-w-[220px]">
+                    {fuente === "SIMULACION"
+                      ? "Presione el obturador abajo o elija un nivel de score (Óptima, Medio, Baja) para probar la validación."
+                      : "Seleccione un archivo de imagen o fotografía de acta electoral E-14."}
+                  </p>
+                  {fuente === "ARCHIVO" && (
+                    <button
+                      type="button"
+                      onClick={() => inputRef.current?.click()}
+                      className="mt-2 px-4 py-2 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] text-xs font-bold uppercase tracking-wider transition shadow-md shadow-[#10b981]/20 cursor-pointer"
+                    >
+                      Elegir imagen
+                    </button>
+                  )}
+                </div>
+
+                <div className="w-full py-1 border-t border-slate-800/80 flex items-center justify-center">
+                  <span className="text-[9px] font-mono text-slate-500 tracking-wider uppercase">
+                    DIGITALIZADOR OFICIAL E-14
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* §3.1.4 FRANJA DE AVISOS del visor */}
           {avisoVisor && !procesando && (
             <div
-              className={`absolute inset-x-4 top-[64px] z-40 rounded-xl bg-black/70 border px-3 py-2 font-mono text-xs shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-md ${
+              className={`absolute inset-x-4 top-[72px] z-40 rounded-xl bg-[#10161f]/95 border px-3.5 py-2.5 font-mono text-xs shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md ${
                 avisoVisor.tono === "crit"
                   ? "border-red-500/40 text-red-400"
                   : "border-amber-500/40 text-amber-400"
@@ -2299,25 +2304,20 @@ export function ScanView() {
         </div>
       </div>
 
-      {/* §3.1.3 DOCK INFERIOR (mock 1): fila de contexto mono (● MODO REAL +
-          TEST SCORES) + barra de SIMULACIÓN (3 chips con scores REALES) +
-          fila de disparo [Importar | obturador | Flash]. La nav vive en el
-          BottomNav del shell (misma franja visual continua). */}
-      <footer className="relative z-20 bg-[#0a0e0c]/90 border-t border-brand-borderdim/60 backdrop-blur-xl px-4 pt-3 pb-4 flex flex-col items-center shrink-0">
-        {/* Fila de contexto (mono 10px tracking-widest uppercase) */}
-        <div className="w-full max-w-sm mx-auto mb-1 px-1 flex items-center justify-between text-[10px] font-mono font-medium tracking-widest uppercase text-gray-400 select-none">
-          <span className="flex items-center gap-1">
-            <span className="w-1 h-1 rounded-full bg-brand-green/60" aria-hidden />
+      {/* Dock inferior con botones de simulación y obturador */}
+      <footer className="relative z-20 bg-[#090d12]/92 border-t border-slate-800/80 backdrop-blur-2xl px-4 pt-3 pb-4 flex flex-col items-center shrink-0">
+        {/* Fila de contexto */}
+        <div className="w-full max-w-sm mx-auto mb-1.5 px-1 flex items-center justify-between text-[10px] font-mono font-medium tracking-widest uppercase text-slate-400 select-none">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" aria-hidden />
             {labelModo}
           </span>
-          <span className="text-[9px] text-gray-400 opacity-75">TEST SCORES</span>
+          <span className="text-[9px] text-slate-500">TEST SCORES</span>
         </div>
 
-        {/* §D2/§D3 Barra de SIMULACIÓN (mock 1 — bg-black/60 rounded-xl p-1.5):
-            chips = BOTONES con los MISMOS handlers/aria/guards del PR #35,
-            estética del mock (verde/ámbar/rojo) y scores REALES (§6.1). */}
+        {/* Barra de SIMULACIÓN */}
         <div
-          className="w-full max-w-sm mx-auto mb-3 px-1 flex items-center justify-between gap-1.5 bg-black/60 border border-white/10 rounded-xl p-1.5 backdrop-blur-md shadow-sm z-30"
+          className="w-full max-w-sm mx-auto mb-3 px-1 flex items-center justify-between gap-2 bg-[#10161f]/90 border border-slate-800 rounded-xl p-1.5 backdrop-blur-md shadow-md z-30"
           data-purpose="score-simulation-bar"
         >
           {NIVELES_CALIDAD.map(({ id, label, score, chip, dot, aria }) => (
@@ -2328,13 +2328,13 @@ export function ScanView() {
               title={`Simular score ${label.toLowerCase()}`}
               disabled={procesando}
               onClick={() => simularScore(id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg border transition-all cursor-pointer active:scale-95 disabled:cursor-default disabled:opacity-50 ${chip}`}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg border transition-all cursor-pointer active:scale-95 disabled:cursor-default disabled:opacity-50 ${chip}`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden />
               <span className="text-[10px] font-bold tracking-wider uppercase font-mono">
                 {label}
               </span>
-              <span className="text-[9px] opacity-75 font-mono">({score})</span>
+              <span className="text-[9px] opacity-80 font-mono">({score})</span>
             </button>
           ))}
         </div>
