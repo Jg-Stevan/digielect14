@@ -1865,3 +1865,26 @@ Nota: GitHub conserva los PRs y sus diffs aunque se borre la rama; nada se pierd
 **Humo**: GH Pages — chips SIM 8.2/7.0/4.3 presentes en la UI; solo 8.2 corrido aquí → autoenvío OK · MASIVA 3 fixtures sobre Vercel **queda para post-deploy** (kit §4.2 — el humo MASIVA pre-merge lo documentó el HOTFIX-D67 con arnés COOP/COEP: gemela DUPLICADA hamming=6, borrosa RECHAZADA 4.9).
 
 **Pendiente del dueño**: (1) **deploy Vercel prod** — Modo A (recomendado): `git switch main && git pull && bunx vercel --prod` o Deploy Hook; Modo B: token one-off en `/home/z/tmp/vercel-token` (chmod 600, JAMÁS por el chat) y el agente ejecuta §2 con verificación §3-§5; (2) tras deploy: humo MASIVA 3 fixtures en Vercel + firma `intento=1` en consola (lección 152835 — build viejo SIN firma ya demostrado arriba); (3) **REVOCAR/ROTAR el `ghp_` expuesto en el chat** (persistente); (4) corrida mixta F1 desbloqueada (8 escaneos + 16 fotos reales, informe ↓ con rastreador — combustible D63-A2).
+---
+
+## 2026-10-21 · DEPLOY-D63A2 — producción Vercel + firma de build (merge #63, delegación one-off del dueño)
+
+**Hecho**: PR #63 (D63-A2 + rev.2 T2) MERGEADO por delegación one-off del dueño («✅ APROBADO — listo para merge tal cual») con merge commit de 2 padres (doctrina repo, cero squash) → main `@ a742953`. Deploy canónico Vercel por la receta `docs/DEPLOY-vercel.md` §2 MODO B (token one-off por ENV, jamás impreso): `bunx vercel --prod` desde la raíz → **Ready en 31 s**, target production, commit `a742953` (merge #63), branch main.
+
+**Base**: main `@ a742953` (merge del PR #63) · tsc 0 · `bun install --frozen-lockfile` sin cambios.
+
+**Firma de build — huella 3 canales idéntica (mecanismo F1)**: build local del merge con el comando EXACTO de `vercel.json` (`BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH=/digielect14 bun run build`):
+
+| Canal | bytes | sha256 |
+|---|---|---|
+| Build local (a742953) | 1,351,742 | `561051942ec21cd201cd8398b994827d0d6350124c0d2f0f5614a4c9b0a26f88` |
+| Vercel PROD (`digielect14.vercel.app/digielect14/`) | 1,351,742 | `561051942ec21cd201cd8398b994827d0d6350124c0d2f0f5614a4c9b0a26f88` |
+| GH Pages (`jg-stevan.github.io/digielect14/`) | 1,351,742 | `561051942ec21cd201cd8398b994827d0d6350124c0d2f0f5614a4c9b0a26f88` |
+
+Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `1aeb70bb44eceb82442f01a79ba0fc6c570639b71edd769558a3c6f16738f578`) también IDÉNTICO en los 3 canales y contiene los identificadores del fix (`preprocesoAplicado`, `maestroFuente`, `filaLiviana`) — el binario desplegado ES el D63-A2 rev.2. Nota: GH Pages dio 404 transitorio del chunk async DURANTE el deploy `in_progress` (propagación); re-verificado 200/idéntico tras el run `completed success`.
+
+**Verificación Vercel**: COOP/COEP vivas (`cross-origin-opener-policy: same-origin` · `cross-origin-embedder-policy: require-corp`) · HTTP 200 · deployment `Ready`, production, mensaje = «Merge pull request #63…». **Humo de arranque (agent-browser sobre el canónico)**: app viva (ESCANEAR/ACTAS/MASIVA/RESUMEN), chips SIM 8.2/7.0/4.3 intactos (zona congelada), prowarm OCR corriendo (det 567ms/cls 57ms/rec 1023ms — multihilo activo), consola limpia (0 errores). El humo SIM/MASIVA completo de la Fase D es del DUEÑO (protocolo del kit: firma pre-vuelo `intento=1` + lote 20261019 en un pase + informe zip sin editar).
+
+**Gates**: CI en `a742953`: Quality Gate ✅ · Worker parity ❌×2 (rojo heredado D57, 0 fallos nuevos — perfil idéntico a rev.1/rev.2 y a main previa) · Deploy to GitHub Pages ✅.
+
+**Pendiente del dueño**: (1) REVOCAR AMBOS tokens expuestos en chat hoy (`ghp_` de GitHub y `vcp_` de Vercel) — protocolo one-off; (2) Ctrl+Shift+R en sus navegadores (caché del index.html — no toca IndexedDB); (3) Fase D: firma pre-vuelo con foto sintética `intento=1` + lote 20261019 COMPLETO (26) en un solo pase + informe zip sin editar → Fase E del agente (A/B vs 200613 + RED LINES).
