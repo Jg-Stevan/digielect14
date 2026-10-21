@@ -124,41 +124,56 @@ export function paginaDeActa(acta: Acta): string {
   return acta.pagina ? `${acta.pagina.index}/${acta.pagina.total}` : "-/-";
 }
 
-/** D59 — KIT e14-info-acta-filas-v1 (T1) · REVISIÓN D59REV — KIT
- *  e14-titulo-compacto-v1: título compuesto con la info reconocida del acta,
- *  EXACTAMENTE como el diseño (decisión textual del dueño: «Según el diseño
- *  solo aparece el país-puesto, mesa, d/t, pág. Déjalo así, porque no cabe
- *  tanta info en el espacio»):
- *
- *  "{dep.codigo} {dep.nombre} - {puesto.nombre} - {tipo} - MESA {nnn} - PAG {i} DE {t}"
- *
- *  (unido con " - ", en mayúsculas). Contrato CONGELADO (D59REV §2):
- *  · Campos SOLO de ClasificacionE14 — único fallback honesto: puesto →
- *    acta.titulo (tabla §0 del kit). Se ELIMINAN los fallbacks
- *    ubicacion.mesa/acta.pagina del D59 (no están en el diseño).
- *  · Campo ausente → se OMITE ese trozo y sus guiones sobrantes (jamás
- *    «—», «N/A» ni vacíos). Prohibido AGREGAR nada (T2): sin municipio,
- *    score, nivel, tiempos, «ACTA», ni segundo renglón.
- *  · SIN clasificacion → null → la fila solo pinta el nombre de archivo
- *    (mata el leak de la plantilla ACTA_MOCK «ROMA - CONSULADO» del D59,
- *    hallazgo §2 de su REPORTE).
- *  · PAG solo si hay index Y total, SIN tilde («PAG 1 DE 2» — mockup).
- *  · Mesa zero-pad 3 («MESA 001», mismo estilo del chip REVISIÓN).
- *  · La fila lo pinta con truncate + title= (MasivaView D59 T4 intacto). */
+/** D72 — KIT e14-masiva-formato-ancho-v1: título compacto del acta para la fila
+ *  en Carga Masiva: solo código del departamento, país/municipio, lugar/puesto,
+ *  tipo, mesa y página. Formato optimizado para espacio:
+ *  "{dep.codigo} - {país/municipio} - {lugar/puesto} - {tipo} - MESA {nnn} - PAG {i}/{t}"
+ */
 export function tituloDeActa(acta: Acta): string | null {
   const c = acta.clasificacion;
-  if (!c) return null; // D59REV: sin clasificación NUNCA hay título (honestidad)
+  if (!c) return null; // sin clasificación NUNCA hay título (honestidad)
   const partes: string[] = [];
-  const depto = c.departamento
-    ? [c.departamento.codigo, c.departamento.nombre].filter(Boolean).join(" ").trim()
-    : null;
-  if (depto) partes.push(depto);
+
+  // 1. Código del departamento (solo código, e.g. "88" o "11")
+  if (c.departamento?.codigo) {
+    partes.push(c.departamento.codigo.trim());
+  } else if (c.departamento?.nombre && !c.municipio?.nombre) {
+    partes.push(c.departamento.nombre.trim());
+  }
+
+  // 2. País / Municipio / Nombre (e.g. "ALEMANIA", "ITALIA", "MEDELLIN", "BOGOTA D.C.")
+  if (c.municipio?.nombre) {
+    partes.push(c.municipio.nombre.trim());
+  }
+
+  // 3. Lugar / Puesto (e.g. "CONSULADO", "FRANKFURT", "CORFERIAS")
   const puesto = c.puesto?.nombre?.trim() || acta.titulo?.trim() || null;
-  if (puesto) partes.push(puesto);
-  if (c.tipo) partes.push(c.tipo);
-  if (c.mesa != null) partes.push(`MESA ${String(c.mesa).padStart(3, "0")}`);
-  if (c.pagina && c.pagina.index != null && c.pagina.total != null)
-    partes.push(`PAG ${c.pagina.index} DE ${c.pagina.total}`);
+  if (puesto) {
+    const puestoNorm = puesto.toUpperCase();
+    const munNorm = c.municipio?.nombre?.trim().toUpperCase();
+    if (!munNorm || puestoNorm !== munNorm) {
+      partes.push(puesto);
+    }
+  }
+
+  // 4. Tipo (e.g. "TRANSMISION", "DELEGADOS")
+  if (c.tipo) {
+    partes.push(c.tipo);
+  }
+
+  // 5. Mesa (zero-pad 3, e.g. "MESA 002")
+  if (c.mesa != null) {
+    partes.push(`MESA ${String(c.mesa).padStart(3, "0")}`);
+  }
+
+  // 6. Página (e.g. "PAG 1/2")
+  if (c.pagina && c.pagina.index != null && c.pagina.total != null) {
+    partes.push(`PAG ${c.pagina.index}/${c.pagina.total}`);
+  } else if (acta.pagina && acta.pagina.index != null && acta.pagina.total != null) {
+    partes.push(`PAG ${acta.pagina.index}/${acta.pagina.total}`);
+  }
+
   const t = partes.join(" - ").toUpperCase();
   return t.length > 0 ? t : null;
 }
+
