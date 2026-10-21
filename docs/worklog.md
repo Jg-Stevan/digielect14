@@ -2002,3 +2002,12 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 1816: - **Commits:** N/A (sesión interactiva AI Studio)
 1817: - **Cómo probar:** Abrir la aplicación, navegar a **MASIVA**, soltar archivos en cualquier parte y observar el título compacto de las filas, el ancho completo de la ventana, la barra de acciones fija superior y el porcentaje limpio sin barra de estado inferior.
 1818: - **Pendiente/Bloqueado:** Compilación y linter verificados con éxito (0 errores).
+
+---
+
+### [2026-10-21 13:53] — merge ai-studio-d69-d72 (fusión 3-way del export AI Studio sobre main) — agente Z.ai Code (orquestador principal) (delegación del dueño)
+- **Hecho:** El export del zip AI Studio (21-oct 12:42 BOG) partió de la foto `e8c98de` de main (20-oct 19:26 BOG) y avanzó por su lado (migración D68 + D69 rediseño slate-noir + D70 drop-anywhere/sticky + D71 pct-proceso + D72 compacto-ancho) mientras main recibía F1 + D63-A2 + e63d (#65). Fusión reconstruida: rama `zip-ai-studio` = zip sobre la base (bun.lock/ONNX/ort-wasm ausentes por el export — NO borrados; modos 755 de docs restaurados) + merge contra main → rama `feat/e14-ai-studio-d69-d72-v1`. Resolución: worklog/DECISIONS/ROADMAP = appends de ambos lados (main primero — precedente 7392672); `masiva/store.ts` y `masiva/tipos.ts` auto-fusionados (D72 infoTitulo/tituloDeActa ∥ D63-A2 viaPdf, regiones disjuntas); CONFLICTO SEMÁNTICO en `ocr/rapidocr.ts` resuelto a favor de producción: el export traía `proxy=false` (workaround ambiental AI Studio) → restaurado `proxy=true` (T2 optimizacion-v1) con NOTA in-código. Se conservó del zip: metadata.json + allowedDevOrigins + dev/start `-p 3000 -H 0.0.0.0` + TODO el rediseño y MASIVA D70/D71/D72. Se conservó de main: e63d completo + D63-A2 + REPORTEs + qa script.
+- **Archivos:** 21 fusionados (src/components/e14/*, src/lib/e14/*, docs/*, package.json, next.config.ts, metadata.json, src/lib/e14/ocr/rapidocr.ts)
+- **Commits:** merge en rama `feat/e14-ai-studio-d69-d72-v1` (export reconstruido 1 commit + merge + docs)
+- **Cómo probar:** `bun install && bun run dev` → la app abre en estética slate-noir D69 con SIM 8.2/7.0/4.3; en MASIVA: soltar archivos en cualquier parte de la ventana (D70), píldora % de proceso por fila (D71), título compacto de acta (D72); pipeline e63d/D63-A2 intacto (escaneos ceñidos no se re-recortan; PDF → `pdf-render+`).
+- **Pendiente/Bloqueado:** Gates locales: tsc 0 · lint 0 · build estático OK. Humo navegador del dueño pendiente (SIM + corrida real).
