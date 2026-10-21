@@ -68,51 +68,44 @@ const FILTROS: { valor: FiltroMasiva; label: string }[] = [
   { valor: "ERROR", label: "ERROR" },
 ];
 
-/** D65 (T3.3) — etiqueta de vida HONESTA (kit: el número % SOLO si es dato
- *  real → solo OCR, cuya fracción es REAL del reconocedor; las demás etapas
- *  van SIN número — barra animada, jamás inventar %). */
-function etiquetaVida(p: { etapa: EtapaVidaKit; ocrFraccion?: number }): string {
+/** Etiqueta de vida de la fila activa: FASE + el % ÚNICO del proceso
+ *  COMPLETO del acta (cambio pedido por el dueño: UN solo % por acta que
+ *  NO se reinicia entre fases — antes cada fase tenía su número y el OCR
+ *  escalonado con 2 pasadas lo hacía retroceder 95→50→95). El % viene del
+ *  runner (`fracGlobal`, monotónico); la fase es solo contexto. */
+function etiquetaVida(p: { etapa: EtapaVidaKit; fracGlobal?: number }): string {
+  const pct =
+    p.fracGlobal != null
+      ? `${Math.min(99, Math.max(0, Math.round(p.fracGlobal * 100)))}%`
+      : "…";
   switch (p.etapa) {
     case "preparando":
-      return "PREPARANDO…";
+      return `PREPARANDO · ${pct}`;
     case "deteccion":
-      return "DETECCIÓN…";
+      return `DETECCIÓN · ${pct}`;
     case "verificacion":
-      return "VERIFICANDO…";
+      return `VERIFICANDO · ${pct}`;
     case "ocr":
-      return p.ocrFraccion != null
-        ? `OCR ${Math.min(100, Math.max(0, Math.round(p.ocrFraccion * 100)))}%`
-        : "OCR…";
+      return `OCR · ${pct}`;
   }
 }
 
-/** Porcentaje del proceso del acta (0% a 100%) para la fila. */
+/** % ÚNICO del PROCESO COMPLETO del acta (0% a 100%) — pedido del dueño:
+ *  un solo número por acta, sin reinicios por fase. `fracGlobal` lo computa
+ *  el runner (monotónico, todas las fases sumadas). LISTA = 100 · ERROR = 0 ·
+ *  fila PROCESANDO sin señal viva (zombi de recarga) = 20 como hoy. */
 function porcentajeProcesoActa(
   f: FilaMasiva,
   esActiva: boolean,
-  progreso: { etapa: EtapaVidaKit; ocrFraccion?: number } | null,
+  progreso: { fracGlobal?: number } | null,
 ): number {
   if (f.estado === "LISTA") return 100;
   if (f.estado === "ERROR") return 0;
-  if (!esActiva && f.estado !== "PROCESANDO") return 0;
-  if (!progreso) return 20;
-  switch (progreso.etapa) {
-    case "preparando":
-      return 25;
-    case "deteccion":
-      return 50;
-    case "ocr": {
-      const frac =
-        progreso.ocrFraccion != null
-          ? Math.min(1, Math.max(0, progreso.ocrFraccion))
-          : 0.5;
-      return Math.min(95, Math.max(50, Math.round(50 + frac * 45)));
-    }
-    case "verificacion":
-      return 98;
-    default:
-      return 35;
+  if (!esActiva) return f.estado === "PROCESANDO" ? 20 : 0;
+  if (progreso?.fracGlobal != null) {
+    return Math.min(99, Math.max(1, Math.round(progreso.fracGlobal * 100)));
   }
+  return 20;
 }
 
 export function MasivaView() {
