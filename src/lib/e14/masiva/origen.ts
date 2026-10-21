@@ -16,9 +16,12 @@
  *     limpio).
  *  3. Ratio de hoja compatible con carta/A4/oficio (±tolerancia generosa).
  *
- *  Regla de decisión (kit T1): «escaneo» si (1) Y (2); «foto» si EXIF de
- *  cámara; null en cualquier duda. El (3) actúa como guard de dudas: bordes
- *  blancos con forma absurda (pantalla 16:9) quedan en null, no en escaneo.
+ *  Regla de decisión (kit T1 + e63d F1.2): «escaneo» si sin-EXIF Y
+ *  tinta-al-filo simétrica (ceñido) O borde-blanco con forma de hoja
+ *  (clásica O alargada E-14) O forma E-14 sin borde blanco; «foto» si EXIF
+ *  de cámara; null en cualquier duda (forma de foto estándar sin blanco ni
+ *  tinta al filo, pantalla absurda, sin bitmap). El guard clásico
+ *  (borde-blanco con forma absurda) sigue en null, no en escaneo.
  *  Fallar (decode sin canvas, bytes raros, excepción) → null — el detector
  *  JAMÁS tumba el pipeline (misma filosofía del thumb cosmético). */
 
@@ -62,6 +65,41 @@ const BLANCO_DESV_MAX = 14;
  *  o landscape — se mide min/max para aceptar ambos). Tolerancia generosa. */
 const RATIO_HOJA_MIN = 0.58;
 const RATIO_HOJA_MAX = 0.87;
+
+/** KIT e63d-escaneo-ya-recortado-v1 (F1): banda del E-14 REAL — el formulario
+ *  es alargado (ratio ≈ 0.31: actas impresas de sangre, no carta). HOY cae
+ *  fuera del guard (0.58–0.87) → los escaneos del E-14 caen null aunque
+ *  traigan borde-blanco, y sin borde-blanco ni se consideran. La relajación
+ *  del guard es SOLO para la forma del E-14 (calibración declarada en el
+ *  REPORTE): la banda clásica SIN borde-blanco NO se relaja — una imagen
+ *  sin-EXIF con forma de foto estándar (WhatsApp 4:3/16:9) sigue en null
+ *  honesto (pipeline foto, desenlaces intactos — invariancia de la Fase E). */
+const RATIO_E14_MIN = 0.22;
+const RATIO_E14_MAX = 0.45;
+
+/** (F1.1) Grosor de la franja de FILO analizada por lado (~1.5% del lado
+ *  menor): el contenido pegado al filo de un escaneo ceñido vive ahí. */
+const FILO_FRACCION = 0.015;
+
+/** (F1.1) Tinta = luminancia BT.601 por debajo de este umbral (mismo
+ *  criterio que UMBRAL_TINTA_MARCO de marco-escaneo.ts — trazo impreso). */
+const UMBRAL_TINTA_FILO = 150;
+
+/** (F1.1) Fracción mínima de tinta de un lado del filo para contar como
+ *  «contenido al filo» (≥25%: texto/marco cortado — un filo con polvo o
+ *  sombra tenue no alcanza). */
+const FILO_TINTA_MIN = 0.25;
+
+/** (F1.1 — calibración declarada en el REPORTE) El lado del filo cuenta SOLO
+ *  si es MIXTO: tinta ≥25% Y papel claro ≥10%. La firma del plan es
+ *  «contenido pegado al filo» = trazo impreso CORTADO sobre papel (mezcla
+ *  tinta+papel). Un fondo oscuro UNIFORME (mesa/sombra incluida en la foto)
+ *  no tiene papel en la franja → NO cuenta (protege las fotos sin-EXIF con
+ *  fondo oscuro — la banda clásica queda null como hoy). */
+const FILO_CLARO_MIN = 0.1;
+
+/** Papel = luminancia ≥ este valor (blanco del papel impreso). */
+const UMBRAL_CLARO_FILO = 200;
 
 /** Luminancia BT.601 de un píxel RGBA (el orden del canal es fijo en ImageData). */
 function luma(r: number, g: number, b: number): number {
@@ -199,9 +237,91 @@ function lumaBordes(b: OrigenBitmap): { media: number; desv: number } {
   return { media, desv };
 }
 
-/** Decisión (kit T1, literal) — SOLO de señales, jamás de score/gate:
- *  «foto» si EXIF de cámara · «escaneo» si sin-EXIF Y borde-blanco Y forma
- *  de hoja plausible · null en cualquier duda. */
+/** KIT e63d (F1.1) — señal PURA de ESCANEO CEÑIDO: fracción de tinta en la
+ *  franja exterior ~1.5% por lado; ≥2 lados OPUESTOS con tinta ≥25% →
+ *  «contenido pegado al filo de forma simétrica» = firma de escaneo ceñido
+ *  (la hoja ES el borde de la imagen). Una FOTO de papel sobre mesa casi
+ *  nunca tiene tinta al filo en dos lados opuestos (el papel flota sobre el
+ *  fondo); una captura de pantalla plana SÍ puede — y le conviene el camino
+ *  escaneo (página plana, identidad, sin guard de fotos). Lados contados:
+ *  top/bottom/left/right de la franja exterior de FILO_FRACCION. */
+export function tintaAlFiloSimetrica(b: OrigenBitmap): boolean {
+  const t = Math.max(1, Math.round(Math.min(b.ancho, b.alto) * FILO_FRACCION));
+  const tintaLado = (esFila: boolean, principal: number, desde: number, hasta: number): number => {
+    const total = esFila ? b.ancho : b.alto;
+    let oscuros = 0;
+    let n = 0;
+    for (let i = desde; i < hasta; i++) {
+      const px = esFila ? (principal * b.ancho + i) * 4 : (i * b.ancho + principal) * 4;
+      const L = luma(b.rgba[px], b.rgba[px + 1], b.rgba[px + 2]);
+      if (L < UMBRAL_TINTA_FILO) oscuros++;
+      n++;
+    }
+    return n === 0 ? 0 : oscuros / total;
+  };
+  // Fracción de tinta por lado: máximo de las filas/columnas de la franja
+  // de cada lado (una sola línea de marco cortada basta — el contenido NO
+  // necesita llenar todo el grosor de la franja).
+  const maxFranja = (
+    esFila: boolean,
+    principalDesde: number,
+    principalHasta: number,
+    desde: number,
+    hasta: number,
+  ): number => {
+    let max = 0;
+    for (let p = principalDesde; p < principalHasta; p++) {
+      const f = tintaLado(esFila, p, desde, hasta);
+      if (f > max) max = f;
+    }
+    return max;
+  };
+  const top = maxFranja(true, 0, t, 0, b.ancho);
+  const bottom = maxFranja(true, b.alto - t, b.alto, 0, b.ancho);
+  const left = maxFranja(false, 0, t, 0, b.alto);
+  const right = maxFranja(false, b.ancho - t, b.ancho, 0, b.alto);
+  // Fracción de PAPEL (claro) de la franja de cada lado — el lado MIXTO
+  // (tinta sobre papel) es contenido cortado; el uniforme oscuro es fondo.
+  const claroFranja = (
+    esFila: boolean,
+    principalDesde: number,
+    principalHasta: number,
+    desde: number,
+    hasta: number,
+  ): number => {
+    let claros = 0;
+    let n = 0;
+    for (let p = principalDesde; p < principalHasta; p++) {
+      for (let i = desde; i < hasta; i++) {
+        const px = esFila ? (p * b.ancho + i) * 4 : (i * b.ancho + p) * 4;
+        const L = luma(b.rgba[px], b.rgba[px + 1], b.rgba[px + 2]);
+        if (L >= UMBRAL_CLARO_FILO) claros++;
+        n++;
+      }
+    }
+    return n === 0 ? 0 : claros / n;
+  };
+  const topClaro = claroFranja(true, 0, t, 0, b.ancho);
+  const bottomClaro = claroFranja(true, b.alto - t, b.alto, 0, b.ancho);
+  const leftClaro = claroFranja(false, 0, t, 0, b.alto);
+  const rightClaro = claroFranja(false, b.ancho - t, b.ancho, 0, b.alto);
+  const alFilo = (tinta: number, claro: number): boolean =>
+    tinta >= FILO_TINTA_MIN && claro >= FILO_CLARO_MIN;
+  const vertical = alFilo(top, topClaro) && alFilo(bottom, bottomClaro);
+  const horizontal = alFilo(left, leftClaro) && alFilo(right, rightClaro);
+  return vertical || horizontal;
+}
+
+/** Decisión (kit T1 + KIT e63d F1.2) — SOLO de señales, jamás de score/gate:
+ *  «foto» si EXIF de cámara · «escaneo» si sin-EXIF Y cualquiera de:
+ *  (1) tinta-al-filo simétrica (escaneo CEÑIDO — firma del plan),
+ *  (2) borde-blanco + forma de hoja (clásico — ahora también la forma
+ *      alargada del E-14, antes condenada por ratio-fuera),
+ *  (3) forma alargada E-14 sin borde blanco (relajación del guard — el
+ *      escáner cortó ceñido con margen no-blanco; SOLO banda E-14: la banda
+ *      clásica sin blanco sigue null para no tocar WhatsApp sin-EXIF).
+ *  · null en cualquier duda (sin bitmap, forma de foto estándar sin blanco
+ *    ni tinta-al-filo, borde blanco con forma absurda). */
 export function clasificarOrigen(
   bitmap: OrigenBitmap | null,
   exifSenal: "exif-camara" | "heic" | null,
@@ -211,9 +331,23 @@ export function clasificarOrigen(
   const { media, desv } = lumaBordes(bitmap);
   const blanco = media >= BLANCO_MEDIA_MIN && desv <= BLANCO_DESV_MAX;
   const ratio = Math.min(bitmap.ancho, bitmap.alto) / Math.max(bitmap.ancho, bitmap.alto);
-  const ratioOk = ratio >= RATIO_HOJA_MIN && ratio <= RATIO_HOJA_MAX;
-  const senalRatio = ratioOk ? "ratio-hoja" : "ratio-fuera";
-  if (blanco && ratioOk) return { origen: "escaneo", senales: `sin-exif+borde-blanco+${senalRatio}` };
+  const ratioClasico = ratio >= RATIO_HOJA_MIN && ratio <= RATIO_HOJA_MAX;
+  const ratioE14 = ratio >= RATIO_E14_MIN && ratio <= RATIO_E14_MAX;
+  const senalRatio = ratioClasico ? "ratio-hoja" : ratioE14 ? "ratio-e14" : "ratio-fuera";
+  // (1) CEÑIDO — la firma del plan: contenido al filo en ≥2 lados opuestos.
+  if (tintaAlFiloSimetrica(bitmap)) {
+    return { origen: "escaneo", senales: `sin-exif+tinta-al-filo+${senalRatio}` };
+  }
+  // (2) CLÁSICO — borde blanco uniforme + forma de hoja (carta/A4/oficio O
+  // forma alargada del E-14: un escaneo CON márgenes ya no cae por ratio).
+  if (blanco && (ratioClasico || ratioE14)) {
+    return { origen: "escaneo", senales: `sin-exif+borde-blanco+${senalRatio}` };
+  }
+  // (3) RELAJACIÓN E-14 — forma alargada sin borde blanco (el escáner cortó
+  // ceñido y la franja no pasó el test de blanco uniforme).
+  if (ratioE14) {
+    return { origen: "escaneo", senales: `sin-exif+${senalRatio}` };
+  }
   if (blanco) return { origen: null, senales: `sin-exif+borde-blanco+${senalRatio}` };
   return { origen: null, senales: `sin-exif+borde-no-blanco+${senalRatio}` };
 }

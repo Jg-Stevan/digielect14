@@ -107,8 +107,9 @@ export interface FilaInforme {
   deskewMs: number | null;
   /** D63-D — (T1) veredicto del marco impreso (D63-C): "completo" |
    *  "cortado" | "no-encontrado". null = no evaluado (fotos, SIM, registros
-   *  previos a D63-C) — jamás inventar. */
-  gateMarco: "completo" | "cortado" | "no-encontrado" | null;
+   *  previos a D63-C) — jamás inventar. KIT e63d (F3.2): nuevo valor
+   *  "ceñido" (marco EN el filo — escáner atravesó el marco: nunca bloquea). */
+  gateMarco: "completo" | "ceñido" | "cortado" | "no-encontrado" | null;
   // ─── D65 — KIT e14-progreso-watchdog-dedup-v1: trazas aditivas (T1.4/T2.3) ───
   /** (T1) intentos consumidos por el watchdog (0/1/2). null = registro
    *  pre-D65 o fila que no corrió pipeline (gemela copiada) — jamás inventar. */

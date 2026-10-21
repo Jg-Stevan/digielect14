@@ -12,8 +12,14 @@
  *    fotos NO bloquea (completa=true) y el RECT del formulario alimenta la
  *    región de la zona de votos (el marco ES el borde del acta — mismo
  *    sistema de referencia que las fracciones ZONA_* de marcadores.ts).
- *  · Marco cortado por el borde de la página (2–3 líneas) → "cortado" →
- *    INCOMPLETA como hoy (honesto: el scanner sí cortó la hoja).
+ *  · KIT e63d (F3.1): marco EN el filo (≥2 lados opuestos con línea en los
+ *    primeros px — el escáner atravesó el marco) → "ceñido" → NUNCA bloquea:
+ *    cortar EN el marco no pierde contenido (insertado ~2%), solo margen
+ *    muerto. La lectura/score deciden el desenlace.
+ *  · Marco cortado dentro del contenido (2–3 líneas inset) → "cortado" →
+ *    INCOMPLETA como hoy (honesto: el scanner cortó el área de contenido) —
+ *    PERO la LECTURA lo perdona si es FUERTE sin secciones faltantes
+ *    (e63d F0.2 en el bridge: la lectura perdona al marco, no al contenido).
  *  · Marco no encontrable (0–1 líneas — escaneo sin marco legible o acta
  *    encasquetada con el marco al filo) → "no-encontrado" → el gate NO
  *    bloquea; el veredicto lo deciden lectura/score/SIM como siempre.
@@ -24,8 +30,14 @@
  *  Parte PURA (sin DOM, testeable con bun): evaluarMarcoDeBitmap. Parte DOM
  *  (decode del data URL): evaluarMarcoImpreso. */
 
-/** Veredicto del marco impreso (traza aditiva `gateMarco` — kit T2.3). */
-export type MarcoImpreso = "completo" | "cortado" | "no-encontrado";
+/** Veredicto del marco impreso (traza aditiva `gateMarco` — kit T2.3).
+ *  KIT e63d-escaneo-ya-recortado-v1 (F3.1): nuevo veredicto "ceñido" — el
+ *  marco vive EN el filo (el escáner cortó atravesándolo): NO pierde
+ *  contenido (el marco va insertado ~2% del ancho; cortar EN el marco solo
+ *  recorta margen muerto) → NUNCA bloquea. "cortado" queda RESERVADO para
+ *  el caso real: lados dentro del inset Y la lectura no rescata (F0.2 del
+ *  bridge) — el escáner cortó DENTRO del área de contenido. */
+export type MarcoImpreso = "completo" | "ceñido" | "cortado" | "no-encontrado";
 
 /** Resultado del detector: veredicto + rect del formulario en FRACCIONES del
  *  bitmap (0..1) cuando las 4 líneas cerraron un rectángulo (veredicto
@@ -133,6 +145,23 @@ export function evaluarMarcoDeBitmap(
       rect.x0 < rect.x1 &&
       rect.y0 < rect.y1;
     if (rectSano) return { veredicto: "completo", rect };
+  }
+  // KIT e63d (F3.1): líneas EN el filo (0..INSET_MIN_PX) contadas APARTE —
+  // «ladoEnFilo». Un escaneo CEÑIDO dejó el marco atravesado por el corte:
+  // sus lados viven exactamente donde el inset los descarta. ≥2 lados
+  // OPUESTOS con línea al filo = el marco vive en el filo = escaneo ceñido
+  // (corte GEOMÉTRICO de la hoja, no pérdida de contenido) → "ceñido" —
+  // NUNCA bloquea. Se evalúa ANTES de "cortado": los 2–3 lados inset que
+  // hoy producen "cortado" en un ceñido son los lados RESTANTES del mismo
+  // marco que el escáner atravesó — el mismo fenómeno, veredicto honesto.
+  const topFilo = mejorLinea(true, 0, INSET_MIN_PX, ancho, alto, rgba);
+  const bottomFilo = mejorLinea(true, alto - INSET_MIN_PX, alto, ancho, alto, rgba);
+  const leftFilo = mejorLinea(false, 0, INSET_MIN_PX, ancho, alto, rgba);
+  const rightFilo = mejorLinea(false, ancho - INSET_MIN_PX, ancho, ancho, alto, rgba);
+  const parVerticalFilo = topFilo != null && bottomFilo != null;
+  const parHorizontalFilo = leftFilo != null && rightFilo != null;
+  if (parVerticalFilo || parHorizontalFilo) {
+    return { veredicto: "ceñido", rect: null };
   }
   if (lados >= 2) return { veredicto: "cortado", rect: null };
   return { veredicto: "no-encontrado", rect: null };
