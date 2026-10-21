@@ -1601,6 +1601,147 @@ Stage Summary:
 - **Cómo probar:** build estático + servidor COOP/COEP → MASIVA → soltar fotos → esperar ~2 s (chips PREPARADA, traza `[e14] precalor … listo`) → PROCESAR → trazas `precalor … consumido` + `decode-maestro … ms=0 precalentada=true` · INFORME ↓ → líneas nuevas al final del bloque de TIEMPOS.
 - **Pendiente/Bloqueado:** del dueño — A/B 16/16 veredictos (lote 20261019 corrida 162728, ±0.3; divergencia = NO-GO y revertir) · tiempos reales JPG/HEIC (registrar qué máquinas dan nativo — T2.4) · 26 actas de memoria · decidir activación de `archivoCorregido` (D63-B muerta) · merge (el agente NUNCA mergea) · REVOCAR el token del chat.
 
+### [2026-10-20 23:4x (Bogotá)] — KIT AGENTE-PR-DOCTOR-saneamiento-prs.md (PR-DOC-1) — inventario de ramas + anti-PR-vacío + lista de limpieza — Z.ai Code
+
+**Hecho**
+- Inventario solo-lectura de las 53 ramas remotas (excl. `main`): commit/f+fecha, commits propios vs main (`rev-list origin/main..rama`), diff three-dot (`git diff --stat origin/main...rama`), cruce con PRs vía API GitHub (token del dueño, sin imprimirlo).
+- Verificación de pushes pendientes de agentes: **0** — ninguna rama local tiene commits ausentes en origin (los «push pendiente de token» históricos ya llegaron todos). `origin/feat/e14-quad-gate-escaneo-v1` (690b234) está ADELANTADA a la local (31b4afd): nada que pushear.
+- PRs abiertos: **0** (los 14 PRs de la historia: #44–#57 mergeados).
+- Lección PR #49 verificada con evidencia API: su «cero diff de código» fue real en `src/` (trajo solo 5 archivos de docs: AGENTS/DECISIONS/REPORTE/ROADMAP/worklog). El código del kit entró después por #54/#55.
+- Reglas respetadas: cero merges, cero force-push, cero `reset --hard`, cero cambios en `src/`.
+
+**Inventario (todas las ramas — estado al 53 refs)**
+
+| Rama | Último commit | Fecha | Estado vs main | Acción |
+|---|---|---|---|---|
+| `bench/e14-bancos-b5-b7-pagnull-v1` | 726d918 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `bench/e14-rec-int8-v1` | 63ad770 | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `bench/e14-tiempos-bancos-v1` | 6ac79a9 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `chore/docs-deploy-vercel` | 27eb243 | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `chore/docs-registro-deploy-orientacion` | af1be47 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `chore/docs-registro-prowarm-bench` | ac6d99f | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `chore/e14-fuera-informes-v1` | 400e1d8 | 2026-10-18 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `chore/e14-union-cascada-registro` | e5cd174 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `chore/limpieza-tests` | d79a4dd | 2026-10-18 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/actas-resumen-puesto` | e2e2262 | 2026-10-16 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/actas-vivas-paginas` | f220105 | 2026-10-16 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/camara-visor-lab-v1` | 0bf23bd | 2026-10-16 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/consenso-frankfurt` | 5794c50 | 2026-10-16 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/diagnostico-autoenvio` | d5d60bf | 2026-10-17 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-carga-masiva-v1` | bdca382 | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-decode-unico-precalor-v1` | cd6a3b5 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-deskew-escaneo-v1` | 3595031 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-info-acta-filas-v1` | 0977fbd | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-informe-analisis-v1` | 3b2cfe2 | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-informe-trazas-escaneo-v1` | 6e0bbc1 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-instrumentos-espera-v1` | 5d67289 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-masiva-dedup-v1` | 126e75f | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-masiva-watchdog-dedup-v1` | 80406a2 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-ocr-escalonado-v1` | ce95f86 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-orientacion-auto-v1` | 4e7558a | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-origen-escaneo-v1` | fbe1459 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-pdf-masiva-v1` | 066fafd | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-probe-adaptativo-v1` | a013a55 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-prowarm-ocr-v1` | 046d94f | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-pwa-persistencia-y-mejoras` | feebd1c | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-quad-gate-escaneo-v1` | 690b234 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-tiempos-ocultos-v1` | 31867d0 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-titulo-compacto-v1` | ed8e7cd | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/e14-vercel-perf-v1` | bd12a70 | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/esquinas-suaves` | 928ddfe | 2026-10-18 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/gate-marcadores-v2` | 9803d2f | 2026-10-16 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/identificacion-codigo` | 00d12c3 | 2026-10-16 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/informe-telemetria-ocr` | 8443ff4 | 2026-10-17 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/luz-sim-puntos` | 9429286 | 2026-10-18 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/motor-rapidocr` | 498723e | 2026-10-17 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/ocr-lee-original` | 609f324 | 2026-10-17 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/quad-origen-token` | f606d38 | 2026-10-17 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/score-lectura` | ed041db | 2026-10-17 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `feat/visor-accion-score` | 45fbf73 | 2026-10-16 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `fix/e14-masiva-ux-v1` | 52605f0 | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `fix/e14-orientacion-presupuesto-v1` | c4b4b92 | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `fix/e14-recorte-manual-v1` | fed648d | 2026-10-18 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `fix/e14-vercel-framework-v1` | ec3e349 | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `fix/lectura-perdona-lazo` | e93a02a | 2026-10-17 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `lab/filtros-1` | d4f5912 | 2026-10-17 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `lab/quad-repro` | 2ae7894 | 2026-10-17 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `perf/e14-masiva-prefetch-v1` | b119f1a | 2026-10-20 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+| `perf/e14-optimizacion-v1` | e290977 | 2026-10-19 | MERGEADA-INTEGRAL | candidata a borrar (lista §resumen, comando listo) |
+
+**Resumen del estado**: 53/53 ramas = MERGEADA-INTEGRAL (0 commits propios, 0 diff vs main — su contenido ya está íntegro en main). Ninguna CON-DIFF, ninguna SIN-MERGE-BASE pendiente.
+
+**Limpieza propuesta (T4 — NO ejecutada, lista para el dueño)**
+```bash
+# Borrar las 53 ramas mergeadas (verificado: sin pérdida de commits)
+while read r; do git push origin --delete "$r"; done <<'RAMAS'
+bench/e14-bancos-b5-b7-pagnull-v1
+bench/e14-rec-int8-v1
+bench/e14-tiempos-bancos-v1
+chore/docs-deploy-vercel
+chore/docs-registro-deploy-orientacion
+chore/docs-registro-prowarm-bench
+chore/e14-fuera-informes-v1
+chore/e14-union-cascada-registro
+chore/limpieza-tests
+feat/actas-resumen-puesto
+feat/actas-vivas-paginas
+feat/camara-visor-lab-v1
+feat/consenso-frankfurt
+feat/diagnostico-autoenvio
+feat/e14-carga-masiva-v1
+feat/e14-decode-unico-precalor-v1
+feat/e14-deskew-escaneo-v1
+feat/e14-info-acta-filas-v1
+feat/e14-informe-analisis-v1
+feat/e14-informe-trazas-escaneo-v1
+feat/e14-instrumentos-espera-v1
+feat/e14-masiva-dedup-v1
+feat/e14-masiva-watchdog-dedup-v1
+feat/e14-ocr-escalonado-v1
+feat/e14-orientacion-auto-v1
+feat/e14-origen-escaneo-v1
+feat/e14-pdf-masiva-v1
+feat/e14-probe-adaptativo-v1
+feat/e14-prowarm-ocr-v1
+feat/e14-pwa-persistencia-y-mejoras
+feat/e14-quad-gate-escaneo-v1
+feat/e14-tiempos-ocultos-v1
+feat/e14-titulo-compacto-v1
+feat/e14-vercel-perf-v1
+feat/esquinas-suaves
+feat/gate-marcadores-v2
+feat/identificacion-codigo
+feat/informe-telemetria-ocr
+feat/luz-sim-puntos
+feat/motor-rapidocr
+feat/ocr-lee-original
+feat/quad-origen-token
+feat/score-lectura
+feat/visor-accion-score
+fix/e14-masiva-ux-v1
+fix/e14-orientacion-presupuesto-v1
+fix/e14-recorte-manual-v1
+fix/e14-vercel-framework-v1
+fix/lectura-perdona-lazo
+lab/filtros-1
+lab/quad-repro
+perf/e14-masiva-prefetch-v1
+perf/e14-optimizacion-v1
+RAMAS
+```
+Nota: GitHub conserva los PRs y sus diffs aunque se borre la rama; nada se pierde.
+
+**Base**: origin/main @ 1a5b203 (sigue ROTA por el conflicto D65×D66 — pendiente el hotfix D67; este PR es docs-only y no la empeora).
+
+**Archivos**: `docs/worklog.md` (único archivo tocado — cero `src/`).
+
+**Cómo probar**: `git diff main...HEAD --stat` → 1 archivo, solo worklog. `git diff main...HEAD -- src/` → vacío.
+
+**Humo**: N/A (operación de docs — no hay módulos que testear; la validación es el diff y el inventario de arriba).
+
+**Gates**: no aplica build por ser docs-only; el CI del PR puede salir rojo por herencia del build roto de main (no es de este PR).
+
+**Pendiente (del dueño)**: (1) decidir la limpieza de ramas con el comando de arriba; (2) merge del hotfix D67 para desbloquear checks; (3) seguir mirando Files changed antes de mergear (lección #49); (4) rotar el token `ghp_` expuesto en el chat.
 ### [2026-10-20 23:5x (Bogotá)] — KIT AGENTE-HOTFIX-D67-fusion-d65-d66.md (HOTFIX-D67) — fusión semántica D65×D66: main vuelve a la vida — Z.ai Code
 
 **Hecho**
