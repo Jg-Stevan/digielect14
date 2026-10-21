@@ -64,8 +64,15 @@ function transaccion(db: IDBDatabase, modo: IDBTransactionMode): IDBObjectStore 
 let contadorId = 0;
 
 /** 1 registro por File, id «masiva-<ts>-<contador>», estado PENDIENTE.
- *  Una sola transacción (lote atómico): todo entra o nada entra. */
-export async function agregarLote(files: File[]): Promise<string[]> {
+ *  Una sola transacción (lote atómico): todo entra o nada entra.
+ *  D63-A2 (T1): `pdfPages` opcional — los File que estén en el Set estampan
+ *  `viaPdf: true` en su registro DESDE EL PRIMER write (sin segundo write
+ *  post-hoc que compita con el write del hash de cadenaDedup — write
+ *  whole-object). Ausente = no-PDF (jamás inventar). */
+export async function agregarLote(
+  files: File[],
+  pdfPages?: Set<File>,
+): Promise<string[]> {
   const db = await abrirCola();
   const store = transaccion(db, "readwrite");
   const ahora = Date.now();
@@ -78,6 +85,7 @@ export async function agregarLote(files: File[]): Promise<string[]> {
       agregadaEn: ahora + i, // FIFO estable DENTRO del lote (orden de suelta)
       estado: "PENDIENTE",
       archivo: file,
+      ...(pdfPages?.has(file) ? { viaPdf: true } : {}),
     };
     ids.push(id);
     store.put(registro);
