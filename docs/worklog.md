@@ -1951,3 +1951,54 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 **Ramas**: las 3 de los PRs borradas en remoto (`chore/deploy-d67-worklog-v1`, `chore/deploy-d63a2-worklog-v1`, `feat/e63d-escaneo-ya-recortado-v1`) — GitHub conserva los PRs y sus diffs; el resto de ramas (lab/, bench/, etc.) intocadas.
 
 **Pendiente del dueño**: (1) REVOCAR los tokens `ghp_`/`vcp_` expuestos en chat (deuda persistente); (2) deploy Vercel canónico del main nuevo `0ccdf16` (receta `docs/DEPLOY-vercel.md` §2 — GH Pages ya se auto-desplegó ✅); (3) Ctrl+Shift+R en sus navegadores tras el deploy (no toca IndexedDB); (4) kit siguiente en cola del agente: `INSTRUCCIONES-e63f-autoenvio-v1.md`.
+
+### [2026-10-20 18:23] — migración-ai-studio — AI Studio Agent
+- **Hecho:** Migración para entorno de ejecución Web en AI Studio según skill `github-import-migration`: actualización de scripts `dev` y `start` en `package.json` a `-p 3000 -H 0.0.0.0`; adición de dominios cloud (`*.run.app`, `*.aistudio.google.com`) en `allowedDevOrigins` de `next.config.ts`; creación de `.env.example` y `metadata.json`. Instalación de dependencias con npm e inspección de compilación y linter con éxito sin alterar la lógica de negocio ni el diseño visual.
+- **Archivos:** `package.json`, `next.config.ts`, `.env.example`, `metadata.json`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/worklog.md`
+- **Commits:** N/A (sesión de importación AI Studio)
+- **Cómo probar:** `npm run dev` en puerto 3000 con host 0.0.0.0; `npm run build` y `npm run lint`.
+- **Pendiente/Bloqueado:** Ningún bloqueo. Servidor de desarrollo corriendo en puerto 3000.
+
+### [2026-10-21 16:45] — e14-modern-dark-redesign-v1 (D69) — AI Studio Agent
+- **Hecho:** Rediseño visual integral de la aplicación a estética de campo ejecutiva y profesional en paleta slate-noir (`#090d12`, superficies `#10161f`, esmeralda `#10b981`, ámbar `#f59e0b`, carmesí `#ef4444`) manteniendo el 100% de la lógica de negocio electoral colombiana:
+  - `globals.css` y `primitives.tsx`: Variables de tema dark modernizadas con micro-bordes en slate-800, micro-sombras y botones de acción con respuesta táctil.
+  - `TopBar.tsx` y `BottomNav.tsx`: Barra de navegación inferior flotante con efecto cristal (`backdrop-blur-2xl`), target de 48px, badges de estado claros y conteo de sesión.
+  - `ScanView.tsx`: Selector superior HUD con tres modos explícitos (`[ 📷 CÁMARA | ⚡ SIM | 📁 SUBIR ]`), alerta de rescate de permisos de cámara en iframes con 1-tap "ACTIVAR SIMULACIÓN", visor de simulación con corchetes de encuadre E-14, botón obturador concéntrico con resplandor y botones de simulación fieles (8.2 ÓPTIMA, 7.0 MEDIO, 4.3 BAJA).
+  - `ActasView.tsx`: Filtro/buscador instantáneo por número de mesa, cabecera de puesto electoral con jerarquía DIVIPOL y progreso, y tarjetas de mesa con acordeón fluido y tags DELEGADOS / TRANSMISIÓN.
+  - `ResumenView.tsx`: Tarjetas KPI de estado con bordes de color temático, indicador segmentado global de transmisión, registro de transmisiones y acciones de informe ZIP y reinicio de jornada con confirmación en dos toques.
+  - `AnalyzingView.tsx`: Radar concéntrico con línea de barrido, checklist interactivo de etapas y latencia en vivo.
+  - `ReviewView.tsx` y `MasivaView.tsx`: Barra de herramientas inferior fija de 5 acciones en revisión y panel de arrastre para carga masiva con lista de estados.
+- **Archivos:** `src/app/globals.css`, `src/app/page.tsx`, `src/components/e14/primitives.tsx`, `src/components/e14/TopBar.tsx`, `src/components/e14/BottomNav.tsx`, `src/components/e14/screens/ScanView.tsx`, `src/components/e14/screens/ActasView.tsx`, `src/components/e14/screens/ResumenView.tsx`, `src/components/e14/screens/AnalyzingView.tsx`, `src/components/e14/screens/ReviewView.tsx`, `src/components/e14/screens/MasivaView.tsx`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/worklog.md`
+- **Commits:** N/A (sesión de rediseño AI Studio)
+- **Cómo probar:** Abrir la aplicación en la preview. En la pantalla principal de Escanear, usar el selector superior `[ 📷 CÁMARA | ⚡ SIM | 📁 SUBIR ]` o pulsar "ACTIVAR SIMULACIÓN" para probar el pipeline con el acta real Frankfurt y los tres niveles de score (8.2 / 7.0 / 4.3). Navegar por las pestañas inferiores ACTAS (con filtro por mesa), RESUMEN (con tarjetas KPI) y MASIVA.
+- **Pendiente/Bloqueado:** Cero errores de compilación (`compile_applet`) y linter (`lint_applet`). Listo para validación en campo por el usuario.
+
+### [2026-10-21 17:05] — e14-masiva-drop-anywhere-sticky-v1 (D70) — AI Studio Agent
+- **Hecho:** Mejora de experiencia en el módulo de carga masiva (`MasivaView.tsx`):
+  - **Drag & Drop global estilo DeepSeek**: Interceptor global en ventana (`window.addEventListener`) con ref counter anti-parpadeo. Al arrastrar cualquier archivo sobre el módulo de carga masiva o sobre la ventana, se despliega una capa overlay completa (`fixed inset-0 z-50 backdrop-blur-md bg-[#090d12]/92 border-4 border-dashed border-[#10b981]`) invitando a soltar los archivos; al soltarlos en cualquier punto, se encolan automáticamente mediante `agregarFiles()`.
+  - **Barra de acción fija superior (`sticky top-0 z-30`)**: La barra superior con el botón principal «PROCESAR COLA» (conmutando a «PAUSAR» cuando está activo), el contador de pendientes, el estado de progreso y el botón «VACIAR» permanecen fijados arriba durante todo el scroll, permitiendo iniciar o pausar la cola en cualquier momento sin necesidad de desplazarse de vuelta hacia el inicio.
+  - **Scroll natural de bandeja**: Se eliminó la restricción `max-h-96` de la lista de actas y se configuró un `pb-24` para que el listado fluya cómodamente en el contenedor sin colisionar con la barra de navegación inferior.
+- **Archivos:** `src/components/e14/screens/MasivaView.tsx`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/worklog.md`
+- **Commits:** N/A (sesión interactiva AI Studio)
+- **Cómo probar:** En la barra de navegación inferior, pulsar en **MASIVA**. Arrastrar una o más imágenes o PDFs desde el explorador del sistema hacia cualquier parte de la ventana: se activará la capa visual con borde esmeralda punteado «SUELTA LOS ARCHIVOS AQUÍ». Al soltar, los archivos se agregan de inmediato a la cola. Al hacer scroll hacia abajo para revisar las actas, el botón «PROCESAR COLA» y «PAUSAR» permanecerán anclados y listos para pulsar en la parte superior.
+- **Pendiente/Bloqueado:** Ningún bloqueo. Servidor dev activo en puerto 3000, `compile_applet` y `lint_applet` con 0 errores.
+
+1800: ### [2026-10-21 17:15] — e14-masiva-pct-proceso-v1 (D71) — AI Studio Agent
+1801: - **Hecho:** Enfoque en el elemento métrico de fila (`div:nth-of-type(3) > span:nth-of-type(1)`) en la bandeja de carga masiva (`MasivaView.tsx`) para proyectar el porcentaje del proceso del acta:
+1802:   - Función `porcentajeProcesoActa()` que calcula con exactitud la etapa: `0%` en cola, `25%` preparando/decodificando, `50%` detección de bordes y recorte, progresión de `50%–95%` durante la inferencia OCR de RapidOCR, `98%` en verificación/calidad y `100%` al completar (`LISTA`).
+1803:   - El elemento seleccionado (`span:nth-of-type(1)`) ahora renderiza una píldora con el porcentaje en tiempo real (`% del proceso del acta`), con punto pulsante esmeralda en la fila activa, manteniendo el score de calidad, la página y el nivel de clasificación adyacentes.
+1804:   - Sincronización de la barra de vida inferior para reflejar el mismo porcentaje de proceso con transición suave de ancho CSS.
+1805: - **Archivos:** `src/components/e14/screens/MasivaView.tsx`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/worklog.md`
+1806: - **Commits:** N/A (sesión interactiva AI Studio)
+1807: - **Cómo probar:** En **MASIVA**, soltar una o varias actas y pulsar **PROCESAR COLA**. Observar cómo en la columna de la derecha de cada acta la píldora muestra el avance porcentual del proceso (`25%` → `50%` → `75%` → `98%` → `100%`) en sintonía con la barra de progreso inferior.
+1808: - **Pendiente/Bloqueado:** Cero errores de compilación (`compile_applet`) y linter (`lint_applet`).
+1809: 
+1810: ### [2026-10-21 17:35] — e14-masiva-compacto-ancho-v1 (D72) — AI Studio Agent
+1811: - **Hecho:** Ajustes finales solicitados para Carga Masiva (`MasivaView.tsx` y `tipos.ts`):
+1812:   - **Título compacto del acta**: Actualizado `tituloDeActa()` para mostrar exclusivamente el código del departamento, país/municipio, lugar/puesto, tipo, mesa y página, resolviendo problemas de espacio en filas.
+1813:   - **Ancho ampliado**: Encabezado y contenedor principal ampliados a `max-w-6xl` para ocupar el ancho completo de la ventana.
+1814:   - **Eliminación de barra de estado en filas**: Se removió la barra de vida/estado inferior de cada fila, dejando únicamente la píldora de porcentaje (`%`) limpia y clara.
+1815: - **Archivos:** `src/lib/e14/masiva/tipos.ts`, `src/lib/e14/masiva/store.ts`, `src/components/e14/screens/MasivaView.tsx`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/worklog.md`
+1816: - **Commits:** N/A (sesión interactiva AI Studio)
+1817: - **Cómo probar:** Abrir la aplicación, navegar a **MASIVA**, soltar archivos en cualquier parte y observar el título compacto de las filas, el ancho completo de la ventana, la barra de acciones fija superior y el porcentaje limpio sin barra de estado inferior.
+1818: - **Pendiente/Bloqueado:** Compilación y linter verificados con éxito (0 errores).
