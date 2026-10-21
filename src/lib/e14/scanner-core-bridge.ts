@@ -1743,7 +1743,11 @@ export class RealCoreBridge implements E14Bridge {
         // KIT e14-masiva-ux-v1 (T1.3): quién fabricó el quad EN la detección
         // del pipeline + si corrió el reintento post-Sobel (campos AÑADIDOS
         // al final — formato previo intacto).
-        `${quadOrigen ? ` detectOrigen=${quadOrigen}` : ""}${detectReintento ? " detectReintento=1" : ""}`,
+        `${quadOrigen ? ` detectOrigen=${quadOrigen}` : ""}${detectReintento ? " detectReintento=1" : ""}` +
+        // KIT e63f-autoenvio-v1 (F0): balde fino del no-AUTO — token ADITIVO
+        // AL FINAL (contrato D51). Ausente si AUTO o sin motivo de los
+        // listados (puesto-lugar/tipo/mesa-registro/ruta).
+        `${gate.clasificacion?.clasifDebil ? ` ClasifDebil=${gate.clasificacion.clasifDebil}` : ""}`,
     );
 
     // KIT e14-diagnostico-autoenvio-v1 (C1): adjuntar el registro con el id
@@ -2328,7 +2332,11 @@ export class RealCoreBridge implements E14Bridge {
         `crop=${cropLog} ` +
         `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
         `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
-        `level:${calidad.level}})${diag ? " diag=1" : ""}`,
+        `level:${calidad.level}})${diag ? " diag=1" : ""}` +
+        // KIT e63f-autoenvio-v1 (F0): balde fino del no-AUTO — token ADITIVO
+        // AL FINAL (contrato D51). Ausente si AUTO o sin motivo de los
+        // listados (puesto-lugar/tipo/mesa-registro/ruta).
+        `${gate.clasificacion?.clasifDebil ? ` ClasifDebil=${gate.clasificacion.clasifDebil}` : ""}`,
     );
 
     // Acta ACTUALIZADA: identidad intacta (spread), campos reales nuevos y
