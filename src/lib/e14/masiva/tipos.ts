@@ -47,6 +47,12 @@ export interface FilaMasiva {
    *  vuelve a precalentar si aplica — kit T3.2 literal). El chip PREPARADA
    *  de la bandeja lo pinta; consumirMaestro/descartarMaestro lo limpian. */
   precalentada?: boolean;
+  /** D63-A2 — KIT e14-d63a2-deskew-pipeline-v1 (T1): la fila nació de la
+   *  extracción de un PDF (D60 — página renderizada a JPEG). Campo aditivo:
+   *  SOLO nace en la rama PDF del store (fotos/WhatsApp/ZIP jamás lo traen
+   *  — prueba de lectura en el REPORTE del kit). Persiste en IDB (T1) para
+   *  que el override de origen sobreviva la recarga a mitad de corrida. */
+  viaPdf?: boolean;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
@@ -115,6 +121,15 @@ export interface RegistroMasiva {
   /** D66 (T4): ms TOTALES del precalor para esta fila (solo precalentadas;
    *  null = no precalentada). */
   precalorMs?: number | null;
+  // ---------- D63-A2 — KIT e14-d63a2-deskew-pipeline-v1 (T1) ----------
+  /** La fila nació de la extracción de un PDF (D60 — página renderizada
+   *  a JPEG por extraerPdf). ADITIVO al final del contrato D57: se estampa
+   *  en el PRIMER write (cola.ts — agregarLote) y `filaDeRegistro` lo
+   *  restaura en la recarga. Ausente = no-PDF (fotos/WhatsApp/registros
+   *  previos — jamás inventar). El runner lo consume para el override de
+   *  origen por CONSTRUCCIÓN (T1 — el detector D63-A por señales nunca
+   *  dirá «escaneo» para un E-14 impreso a sangre). */
+  viaPdf?: boolean;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del
