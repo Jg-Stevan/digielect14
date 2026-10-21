@@ -54,7 +54,7 @@ export default function Page() {
     // barra de controles vive SIEMPRE pegada a los CTAs/BottomNav, sin importar
     // la orientación del documento. Cada vista gestiona su propio scroll
     // (Actas/Resumen ya son overflow-y-auto; ScanView cabe por diseño).
-    <div className="h-dvh bg-brand-black text-gray-100 flex flex-col font-sans overflow-hidden">
+    <div className="h-dvh bg-[#090d12] text-slate-100 flex flex-col font-sans overflow-hidden">
       {vista === "revision" && <TopBar />}
 
       <main className="flex-1 min-h-0 flex flex-col relative overflow-hidden">

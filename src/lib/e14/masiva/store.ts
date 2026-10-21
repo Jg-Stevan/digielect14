@@ -38,6 +38,7 @@ import {
 import { dhashDeArchivo, hamming64, DEDUP_HAMMING_MAX } from "./dedup";
 import {
   paginaDeActa,
+  tituloDeActa,
   type EstadoEntrada,
   type FilaMasiva,
   type RegistroMasiva,
@@ -143,9 +144,8 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
     pagina: acta ? paginaDeActa(acta) : null,
     motivo: acta?.rechazo?.tipo ?? null,
     thumb: r.thumb,
-    // D59 — KIT e14-info-acta-filas-v1 (T3): el título compuesto sobrevive
-    // la recarga (persiste en el registro — desviación aditiva de thumb).
-    infoTitulo: r.infoTitulo ?? null,
+    // D72: el título compuesto usa el formato compacto cuando r.acta existe
+    infoTitulo: (r.acta ? tituloDeActa(r.acta) : r.infoTitulo) ?? null,
     enviadaAuto: r.acta?.status === "ENVIADA" && !!r.acta?.enviadoAutomaticamente,
     // KIT e14-masiva-ux-v1 (T3.2): el estado de envío se deriva DEL REGISTRO
     // (kit-literal: hashSha256 === "EN COLA") — sobrevive la recarga.

@@ -27,7 +27,15 @@ const nextConfig: NextConfig = {
         basePath,
       }
     : { output: "standalone" as const }),
-  allowedDevOrigins: ["*.space-z.ai", "localhost", "127.0.0.1"],
+  allowedDevOrigins: [
+    "ais-dev-xny3nt46h5fmgcss6g6ir2-462073476889.us-west2.run.app",
+    "ais-pre-xny3nt46h5fmgcss6g6ir2-462073476889.us-west2.run.app",
+    "*.run.app",
+    "*.aistudio.google.com",
+    "*.space-z.ai",
+    "localhost",
+    "127.0.0.1",
+  ],
   images: { unoptimized: true },
   typescript: {
     ignoreBuildErrors: true,
