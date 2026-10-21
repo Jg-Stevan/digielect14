@@ -2,7 +2,9 @@
 
 **Task ID F1** · ejecutado por Z.ai Code · informe de la corrida: `e14-informe-20261020-200613.zip` (generado `2026-10-21T01:06:13.740Z`) · baseline de referencia: corrida **162728** (zip pendiente de entrega — el detalle score-a-score queda marcado donde aplica).
 
-**Veredicto del A/B (arquitecto + este análisis): 24 OK · 2 divergencias → NO-GO por la letra.** La decisión revert/aceptar es del **DUEÑO** — este reporte no ejecuta ni propone revert. Si el dueño acepta las divergencias documentadas, el siguiente es D63-A2 (lo escribe el arquitecto con la tabla §4). Si ordena revert, lo ejecuta el dueño.
+**Veredicto del A/B (arquitecto + este análisis): 24 OK · 2 divergencias → NO-GO por la letra.**
+
+**DECISIÓN DEL DUEÑO (cerrada): ACEPTAR las 2 divergencias documentadas — NO hay revert; el siguiente es D63-A2** (kit del arquitecto, con esta tabla como insumo). Este reporte no ejecuta ni propone revert. Las 2 divergencias quedan aceptadas como documentadas: D1 por confianza de lectura de cabecera (no de calidad), D2 con macro-veredicto idéntico y motivo mejor fundado en F1.
 
 ---
 
@@ -75,14 +77,16 @@ Lado 162728 reconstruido de: (a) A/B oficial del arquitecto (24 OK + 2 divergenc
 
 Resumen: **24 OK · 2 divergencias** (filas 6 y 19) — coincide con el A/B oficial del arquitecto.
 
+**CIERRE del A/B:** el dueño ACEPTÓ las 2 divergencias documentadas (sin revert) — el A/B del kit F1 queda **cerrado**; la verificación score-a-score de las 24 filas OK y el A/B `ocrMs` por fila los computó el arquitecto con el zip 162728 (conclusión: sin regresión sistemática — §8).
+
 ## 5. Las 2 divergencias (análisis con el código en main e8c98de)
 
 ### D1 — `20261019_171446.jpg`: ENVIADA → EN_REVISION_HUMANA (Δscore 0.0, 8.5 → 8.5)
 
 - El nivel de clasificación **NO lo decide el score** (`clasificador.ts:928-934`): `AUTO` exige dep+mun+puesto resueltos + mesa válida leída + tipo leído; con algo resuelto pero no todo → `SUGERIDA`. Δscore 0.0 es consistente: el score mide legibilidad, no completitud de cabecera.
-- La ficha F1 trae los parciales leídos (display-only, `clasificador.ts:949-952`): CONSULADOS/EGIPTO, zona 05, puesto 02, mesa 001, tipo SENADO — pero el OCR de cabecera salió con ruido (`CONSULADO:B&-CONSULADOS`, `PAIS:335-EGIPTO`, `ELECCIONPRESDENCIAY`). Sin resolución divipol completa → `SUGERIDA` → en MASIVA (fuente ARCHIVO, intento 1/4) el acta viaja `EN_REVISION_HUMANA` «repetir-primero» (`scanner-core-bridge.ts:2320-2323`).
-- Contexto: su gemela heic (fila 5) sí fue AUTO en F1 y la misma jpg fue AUTO (ENVIADA) en 162728 — **ruido estocástico del OCR de cabecera en la frontera** (una corrida con suerte, otra sin ella). Comportamiento conservador CORRECTO del sistema (§D.4: prohibido asumir), no bug del D67: nada del D65/D66/D67 toca la lectura de cabecera.
-- Causa raíz exacta pendiente (el informe MASIVA no persiste los avisos de clasificación — p. ej. `MESA_REGISTRO_DISCREPAN` — ni qué campo faltó): requeriría reproducir con consola o ampliar el informe. Para D63-A2.
+- La ficha F1 trae los parciales leídos (display-only, `clasificador.ts:949-952`): CONSULADOS/EGIPTO, zona 05, puesto 02, mesa 1 (por kit del pie — `kitFuente: "PIE"`, kit 399), **tipo de cabecera clasificado: TRANSMISION** — el «SENADO DE LA REPÚBLICA» del campo raíz de la ficha es el tipo del ACTA (display), no el clasificado. El OCR de cabecera salió con ruido (`CONSULADO:B&-CONSULADOS`, `PAIS:335-EGIPTO`, `EI Calro-Consulado`). Sin resolución divipol completa → `SUGERIDA` → en MASIVA (fuente ARCHIVO, intento 1/4) el acta viaja `EN_REVISION_HUMANA` «repetir-primero» (`scanner-core-bridge.ts:2320-2323`).
+- **Causa raíz CERRADA (confianzas de la ficha):** `confianzas.puesto = 0.75 < 0.82` (umbral §3.4 «código o ≥0.82» — `clasificador.ts:917`) → `puestoResuelto false` → no AUTO → `SUGERIDA`. El ruido OCR del nombre del puesto («EI Calro-Consulado») deprimió la confianza del puesto (dep 0.9 · mun 1.0 · tipo 1.0 — el resto leyó bien). `avisos: []` — sin discrepancia mesa↔registro.
+- Contexto: su gemela heic (fila 5) sí fue AUTO en F1 y la misma jpg fue AUTO (ENVIADA) en 162728 — **ruido estocástico del OCR de cabecera en la frontera de confianza (0.75 vs 0.82)** (una corrida con suerte, otra sin ella). Comportamiento conservador CORRECTO del sistema (§D.4: prohibido asumir), no bug del D67: nada del D65/D66/D67 toca la lectura de cabecera.
 
 ### D2 — `E14_XXX_X_88_495_010_02_000_X_XXX-P1.jpg`: RECHAZADA → RECHAZADA, pero BAJO 4.9 → INCOMPLETA 6.4
 
@@ -95,7 +99,7 @@ Resumen: **24 OK · 2 divergencias** (filas 6 y 19) — coincide con el A/B ofic
 
 Todas las 10 filas con `origen null` traen la **misma triple señal**: `sin-exif+borde-no-blanco+ratio-fuera` — las 8 páginas-PDF (sin EXIF de cámara; borde no parece de escáner; ratio fuera) + las 2 WhatsApp (sin EXIF — requemada por WhatsApp). Es la clasificación de fuente D63-A funcionando (origen null NO es error: caen al pipeline foto).
 
-**Delta vs 162728** (línea ORIGEN citada en `docs/worklog.md`, rev.2 D63-A): en 162728 el conteo fue `null: borde-no-blanco 8 · sin-bitmap 2` — las 2 WhatsApp eran `sin-bitmap` (su decode **fallaba**); en F1 decodean nativo (gracias al master D66 + HEIC nativo primero) y su señal dominante pasó a `borde-no-blanco`. Los veredictos no cambiaron (ENVIADAS en ambas corridas). Mejora observable del D66, sin impacto en el A/B.
+**Delta vs 162728 (CORREGIDO):** la línea `null: borde-no-blanco 8 · sin-bitmap 2` **NO es la ORIGEN del 162728** — es el **ejemplo LITERAL del kit D63-D rev.2 y su fixture de humo** (`docs/worklog.md`, sección Humo rev.2: «ejemplo LITERAL del kit»). El build del 162728 es **PRE-rev.2**: su informe no trae señales (por eso existe la rev.2 — su pendiente explícito era «correr el lote real y usar `(null: …)` para calibrar D63-A»). **Evidencia directa del baseline (zip del arquitecto):** las 2 WhatsApp decodificaron BIEN en 162728 (`tiempos.decodeMs=2ms`, `detectMs=65ms`) — NO eran `sin-bitmap`; su null era casi seguro `borde-no-blanco` como en F1. **La mejora real del D66 es decode nativo + señal VISIBLE en el informe** (el pre-rev.2 no mostraba señales), no una transición `sin-bitmap→borde-no-blanco`. Los veredictos no cambiaron (ENVIADAS en ambas corridas).
 
 ## 7. Dedup v2 — 4 matches, y el hallazgo transmision-P2 (hipótesis del arquitecto: VERIFICADA → REFUTADA)
 
@@ -119,8 +123,7 @@ Matches del informe: dedup v2 activo, 4 matches, distancia media 2.
 `ocrMs` medio F1 = **13,427 ms** vs ~7.1 s en 162728 (+89%). Outliers: 22.3–25.0 s (`355_003-P2`, `170755` heic+jpg, `171454.heic`).
 
 - **No es regresión de código**: el motor OCR no cambió D65→D67 (los kits tocaron dedup/watchdog/decode-precalor, no OCR).
-- HIPÓTESIS principal (verificar con el zip): **contención de CPU** — máquina del dueño con 4 núcleos, lote de 26 vs 16, cola escalonada (espera media en cola 352 s ⇒ el lote convivió con la corrida ~10 min). Las gemelas reutilizadas no aportan OCR propio (el informe copia el valor).
-- A/B de `ocrMs` por fila pendiente del zip 162728 (subconjunto común: 16 fotos).
+- **CIERRE (A/B `ocrMs` por fila computado por el arquitecto con el zip 162728): sin regresión sistemática** — deltas de **−13.9 s a +19.3 s dispersos en AMBAS direcciones**; el baseline también tenía outliers (495-010-P1: 25.5 s → 11.6 s). Contención en 4 núcleos, no código. Nota de lectura: 3 filas F1 son reusos con `ocrMs` copiado de su gemela (no OCR propio).
 
 ## 9. Salud del stack
 
@@ -138,5 +141,6 @@ Matches del informe: dedup v2 activo, 4 matches, distancia media 2.
 
 ## 10. Pendientes
 
-- **Del dueño:** (1) zip `e14-informe-20261020-162728.zip` → cerrar el A/B score-a-score 26/26 y el watch OCR por fila; (2) decisión sobre las 2 divergencias (aceptar documentado → D63-A2 lo escribe el arquitecto con la tabla §4; revert → lo ejecuta el dueño); (3) REVOCAR/ROTAR el `ghp_` expuesto en chat (deuda persistente).
-- **Del agente (siguiente kit):** nada en vuelo. `rastreador-sesion-e14-v1.js` sigue sin estar en la máquina — para futuras corridas con firma pre-vuelo.
+- **DECIDIDO por el dueño:** las 2 divergencias quedan **ACEPTADAS documentadas** (NO revert) → **avanzar a D63-A2** (kit del arquitecto; cuando llegue a la máquina, se ejecuta).
+- **Del dueño (restante):** (1) merge de este PR docs (el agente NUNCA mergea); (2) REVOCAR/ROTAR el `ghp_` expuesto en chat (deuda persistente).
+- **Del agente (siguiente kit):** esperar el kit D63-A2 (deskew→pipeline — `archivoCorregido` de D63-B sigue MUERTA por diseño, «UNA línea cuando lo ordene» el kit). `rastreador-sesion-e14-v1.js` sigue sin estar en la máquina — para futuras corridas con firma pre-vuelo.
