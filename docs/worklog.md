@@ -1787,3 +1787,22 @@ Nota: GitHub conserva los PRs y sus diffs aunque se borre la rama; nada se pierd
 **Gates**: no aplica build por ser docs-only (CI del PR puede salir rojo por herencia si main está rota — no es de este PR; main e8c98de está VIVA).
 
 **Pendiente (del dueño)**: (1) entregar `e14-informe-20261020-162728.zip` → cerrar A/B score-a-score 26/26 + watch OCR por fila; (2) DECISIÓN: aceptar las 2 divergencias documentadas → D63-A2 (lo escribe el arquitecto con la tabla §4 del reporte) u ordenar revert → lo ejecuta el dueño (el agente NUNCA revierte); (3) merge de este PR docs (el agente NUNCA mergea); (4) REVOCAR/ROTAR el `ghp_` expuesto en el chat (deuda persistente); (5) `rastreador-sesion-e14-v1.js` sigue sin estar en la máquina — necesario para firmas pre-vuelo en futuras corridas.
+### [2026-10-20 21:3x (Bogotá)] — F1 rev.2 del reporte — CORRECCIÓN 1 (§6) + CORRECCIÓN 2 (§5 D1) + CIERRE §10.1 del arquitecto + DECISIÓN del dueño (aceptar divergencias documentadas, avanzar a D63-A2) — Z.ai Code
+
+**Hecho**
+- CORRECCIÓN 1 (§6, obligatoria, aplicada): la línea `null: borde-no-blanco 8 · sin-bitmap 2` NO era la ORIGEN del 162728 — es el ejemplo LITERAL del kit D63-D rev.2 y su fixture de humo (worklog rev.2, sección Humo). El build 162728 es PRE-rev.2 (su informe no trae señales — por eso existe la rev.2). Evidencia directa del baseline (zip del arquitecto): las 2 WhatsApp decodificaron BIEN en 162728 (decodeMs=2ms, detectMs=65ms) — no eran sin-bitmap; su null casi seguro borde-no-blanco como en F1. Reescrito: la mejora real del D66 es decode nativo + señal VISIBLE, no una transición sin-bitmap→borde-no-blanco.
+- CORRECCIÓN 2 (§5 D1, obligatoria, aplicada): el tipo de cabecera clasificado es TRANSMISION (kitFuente PIE, kit 399) — el «SENADO DE LA REPÚBLICA» es el tipo del acta/display de la ficha, no el clasificado. Causa raíz CERRADA con las confianzas de la ficha: puesto 0.75 < 0.82 (umbral §3.4 «código o ≥0.82», clasificador.ts:917) → puestoResuelto false → SUGERIDA; el ruido OCR «EI Calro-Consulado» deprimió la confianza del puesto (dep 0.9 · mun 1.0 · tipo 1.0, avisos []). La hipótesis del ruido estocástico queda como contexto, la causa como dato.
+- CIERRE §10.1 (datos del arquitecto, aplicado): A/B ocrMs por fila ya computado — sin regresión sistemática (deltas −13.9s a +19.3s en ambas direcciones; el baseline también tenía outliers: 495-010-P1 25.5s→11.6s). Contención en 4 núcleos, no código. Nota: 3 filas F1 son reusos con ocrMs copiado de su gemela.
+- DECISIÓN registrada en el reporte (encabezado + §4 CIERRE del A/B + §10): las 2 divergencias ACEPTADAS documentadas — NO revert — avanzar a D63-A2 (kit del arquitecto; cuando llegue, se ejecuta). El NO-GO por la letra queda levantado por decisión del dueño.
+
+**Base**: origin/main @ e8c98de (misma rama `docs/reporte-f1-corrida-mixta-v1` del PR #62 — commit adicional).
+
+**Archivos**: `docs/REPORTE-e14-f1-corrida-mixta-evidencia.md` (4 secciones corregidas + decisión) · `docs/worklog.md` (esta entrada).
+
+**Cómo probar**: `git diff main...HEAD` sobre el reporte → §6 con el ejemplo literal citado como tal; §5 D1 con causa cerrada (0.75 < 0.82) y tipo TRANSMISION; §8 con cierre del A/B por fila; §10 con la decisión.
+
+**Humo**: N/A (docs-only; los datos nuevos vienen de la ficha del zip 200613 y del zip 162728 del arquitecto — ambos citados en el reporte).
+
+**Gates**: no aplica build por ser docs-only.
+
+**Pendiente (del dueño)**: (1) merge del PR #62 (docs — el agente NUNCA mergea); (2) REVOCAR/ROTAR el `ghp_` (deuda persistente); (3) entrega del kit D63-A2 cuando el arquitecto lo escriba. Del agente: nada en vuelo — a la espera del kit D63-A2.
