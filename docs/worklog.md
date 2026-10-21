@@ -1845,6 +1845,26 @@ Nota: GitHub conserva los PRs y sus diffs aunque se borre la rama; nada se pierd
 - Gates re-emitidos: tsc 0 · lint 0. Cero toques fuera de `informe.ts` (asignación + export + comentarios). CONGELADOS intactos. REPORTE rev.2: claim §3-T2 corregido + §4.1 (bug/causa/fix/humo) + §5 humo rev.1 marcado INVALIDADO en su base.
 - Fase D sigue del DUEÑO (corrida formal + firma de build); Fase E tras esa corrida.
 
+### [2026-10-21 00:3x (Bogotá)] — KIT AGENTE-DEPLOY-e14-prod-d67.md (DEPLOY-D67) — merges #58+#60 ejecutados por delegación del dueño · GH Pages vivo con firma D67 · Vercel pendiente de token — Z.ai Code
+
+**Hecho**
+- Merges autorizados por el dueño en el chat («Mergea el PR #58 y luego el del D67»): #58 (PR-DOC-1, docs-only) ready→merge = `c8b6bb4`; #60 (HOTFIX-D67) chocó en `docs/worklog.md` — conflicto trivial de dos appends resuelto en local conservando AMBAS entradas en orden cronológico (PR-DOC-1 23:4x → HOTFIX-D67 23:5x, commit `f5aad33`, push a la rama del PR, sin force) → merge = `e8c98de`. #59 (FIX-1, variante duplicada del kit previo) cerrado como superado con comentario explicativo (reabrible si el dueño quiere rescatar sus toques de AGENTS/DECISIONS/ROADMAP).
+- Gate 0 del kit sobre `main @ e8c98de`: `bun install --frozen-lockfile` OK · `npx tsc --noEmit` **0 errores** (main VIVA — se apaga el bloqueante P0) · `bun run lint` 0 · `bun run build` OK. Ambas entradas de worklog presentes en main (PR-DOC-1 y HOTFIX-D67).
+- Canal canónico (GH Pages, AUTO): workflow «Deploy to GitHub Pages» **success** para `e8c98de` · URL HTTP 200 · **firma de build D67 verificada en el bundle DESPLEGADO**: `[e14] decode-maestro fila=${…} intento=${…} ms=${…} origen=${…} precalentada=${1===t…` (el token `intento=` de la lección 152835) + campos D65 en el bundle (`etapaAlMorir`, `dedupDistancia`) + D66 (`precalentada=`). 12 chunks ≈1.42 MB.
+- Humo navegador sobre GH Pages (build desplegado, sin arnés local): carga limpia, **0 errores JS**; SIM chip 8.2 → pipeline real `total=9158ms sim=8.2 lectura=FUERTE clasif AUTO` (OCR conf 93.3%, cabeceraE14=true) → autoenvío, ACTAS(1), RESUMEN del puesto actualizado (0 en reescaneo). SIM 8.2 intacta.
+- Canal Vercel (demo multihilo): cabeceras COOP/COEP vivas (`same-origin` + `require-corp`) pero su bundle **NO** trae la firma (`decode-maestro` 0 matches, 1.41 MB — build PRE-D65/D67) → confirma la receta: `deploymentEnabled.main: false`, el merge NO despliega Vercel. Deploy manual NO ejecutado: sin token Vercel en la máquina (búsqueda exhaustiva: solo `gh-token`) — el kit prohíbe improvisar credenciales.
+
+**Base**: `origin/main @ e8c98de` (post #58+#60).
+
+**Archivos**: `docs/worklog.md` (este append — docs-only, cero `src/`; `git diff` de este PR = 1 archivo).
+
+**Cómo probar**: (1) `git log --oneline -4` → `e8c98de` merge #60 / `f5aad33` resolución / `c8b6bb4` merge #58; (2) abrir https://jg-stevan.github.io/digielect14/ → escaneo SIM 8.2 → desenlace óptimo normal; (3) verificar firma en producción Vercel tras el deploy del dueño (kit §3.2/§4).
+
+**Gates**: tsc 0 · lint 0 · build OK (docs-only: el CI del PR puede heredar rojo de parity, no de checks).
+
+**Humo**: GH Pages — chips SIM 8.2/7.0/4.3 presentes en la UI; solo 8.2 corrido aquí → autoenvío OK · MASIVA 3 fixtures sobre Vercel **queda para post-deploy** (kit §4.2 — el humo MASIVA pre-merge lo documentó el HOTFIX-D67 con arnés COOP/COEP: gemela DUPLICADA hamming=6, borrosa RECHAZADA 4.9).
+
+**Pendiente del dueño**: (1) **deploy Vercel prod** — Modo A (recomendado): `git switch main && git pull && bunx vercel --prod` o Deploy Hook; Modo B: token one-off en `/home/z/tmp/vercel-token` (chmod 600, JAMÁS por el chat) y el agente ejecuta §2 con verificación §3-§5; (2) tras deploy: humo MASIVA 3 fixtures en Vercel + firma `intento=1` en consola (lección 152835 — build viejo SIN firma ya demostrado arriba); (3) **REVOCAR/ROTAR el `ghp_` expuesto en el chat** (persistente); (4) corrida mixta F1 desbloqueada (8 escaneos + 16 fotos reales, informe ↓ con rastreador — combustible D63-A2).
 ---
 
 ## 2026-10-21 · DEPLOY-D63A2 — producción Vercel + firma de build (merge #63, delegación one-off del dueño)
