@@ -89,6 +89,7 @@
 ## 7. Pendiente
 - **Del dueño (F4/Fase D)**: correr la cola real (zip 20261021-091545) sobre el PR desplegado → P1 sin `recortada` · P2 deja de ser RECHAZADA (lectura FUERTE) · chips SIM intactos · trazas nuevas en el informe (`quadOrigen=pagina-completa`, `gateMarco=ceñido|cortado-perdonado`, origen `tinta-al-filo`). Si algo salta → tabla de atribución antes del merge.
 - **Del agente (post-corrida)**: análisis A/B del informe + revisión de la tabla dedup (los fixtures del zip no están en esta máquina — lab/bench del plan F4 se ejecutan con esa evidencia).
+- **RESOLUCIÓN (ANEXO C del kit e63e)**: el dueño corrió la cola real (26 actas) sobre el preview del PR y entregó la atribución completa con veredicto GO — A/B, no-ENVIADA, dedup e invariancias transcritas en §10. **Fase E del kit e63d CERRADA.**
 
 ## 8. Desviaciones de proceso (cerradas en e63e)
 1. **Commit único (`d671c29`) en vez de 4 commits convencionales** — se documenta y NO se reescribe (doctrina: sin force-push). Los commits nuevos sobre la rama (hotfix rev.2, QA script, resolución del rebase, esta sección) sí son convencionales.
@@ -107,3 +108,37 @@ Por De Morgan `!(A && B) = !A || !B`, el código ejecutaba: *cortado condena si 
 **Hotfix `e63d-rev2` (commit `b5f847d`, en esta rama, convencional)**: helper `marcoPerdonadoPorLectura(veredicto, nivelLectura, faltaSeccion)` EXPORTADO con la tabla §3-A literal (patrón D-5, un solo predicado puro) + call site del gate usa el perdón SIN negar: `completa = cortado ? marcoPerdonadoPorLectura(...) : true`. Un cambio semántico: el signo del predicado en el gate F0.2. QA headless 24/24 (bloques: tabla §3-A 8/8 · bitmaps sintéticos del marco 4/4 · origen 9/9 · control negativo 3/3).
 
 **Pendiente del dueño (re-autorización)**: rev.1 quedó refutada por inspección — la validación de campo del preview («solo 1 acta rechazada») NO alcanza para merge: si esa acta era P2, su rechazo FUE el bug (atribuible ahora con esta §9). Se recomienda: (1) revisar el diff `b5f847d` (2 hunk de bridge + QA script); (2) re-corrida corta de validación (o aceptar el QA + la tabla §3-A como evidencia) y re-autorizar el merge de #65; (3) kit futuro (opcional): token de traza ` Marco=perdonado` junto a `lazo=` para atribución por ficha en las siguientes corridas (el ANEXO A lo asume y hoy no existe).
+
+**RESOLUCIÓN de la re-autorización (post-ANEXO C del dueño, mismo día)**: el dueño ejecutó el (2) — re-corrida de validación en campo sobre el preview del PR, transcrita en §10 — y re-autorizó el merge con veredicto explícito: *«el caso 4 NO ocurre → GO para el merge de #65 (y #61/#64). El e63d queda validado en campo por la corrida del dueño.»* El (3) queda como deuda opcional registrada (kit futuro).
+
+## 10. Validación en campo — ANEXO C del kit e63e (atribución resuelta por el dueño) → GO #65
+
+**Corrida real del dueño** (preview Vercel del PR #65 — `digielect14-git-feat-e63d-escaneo-ya-recortado-v1-j-d85a.vercel.app`, informe `e14-informe-20261021-120553`): **26 actas · 25 ENVIADA · 0 RECHAZADAS · 1 EN_REVISION_HUMANA · 0 colgadas** · dedup 4 matches (distancia media 2, máx 6) sin rechazos.
+
+**Veredicto del dueño (ANEXO C, literal)**: *«el caso 4 NO ocurre → GO para el merge de #65 (y #61/#64). El e63d queda validado en campo por la corrida del dueño.»*
+
+### 10.1 — A/B de las actas objetivo (ANTES sin e63d → DESPUÉS corrida `20261021-120553`)
+
+| Acta | ANTES (sin e63d) | DESPUÉS (con e63d) |
+|---|---|---|
+| `delegados el cairo-P1.jpg` | EN_REVISION_HUMANA · 7.9 · techo `recortada:7.9` · el worker RE-ENCUADRA (quadOrigen `worker`, recortada sup-izq) → OCR degradado a MEDIA | **ENVIADA · 10 · AUTO** · gateMarco `completo` · quadOrigen `null` (detect 0 ms — F2) · lectura **FUERTE** |
+| `delegados el cairo-P2.jpg` | **RECHAZADA · 6.4** · INCOMPLETA «EL ACTA ESTÁ CORTADA EN EL ENCUADRE…» · gateMarco `cortado` (artefacto del re-crop) · completa:false | **ENVIADA · 10 · AUTO** · gateMarco `completo` (evaluado sobre el escaneo ORIGINAL) · completa:true |
+| `transmision el cairo-P1.jpg` | — | **ENVIADA · 10 · AUTO** · gateMarco `cortado` REAL + lectura FUERTE + secciones presentes → **perdón F0.2 aplicó** (el caso exacto del kit) |
+
+Los 8 escaneos del lote: `origen=escaneo (sin-exif+ratio-e14)` · 8/8 ENVIADAS · `detectMs=0` y `quadOrigen=null` en todos (identidad por construcción — nadie re-encuadra).
+
+### 10.2 — La única no-ENVIADA: `20261019_171446.jpg` → NO es un rechazo (caso 5 de la matriz ANEXO A)
+
+- `statusActa: EN_REVISION_HUMANA`, `rechazo: null` · lectura FUERTE (7 anclas, 502 chars) · score 8.5 (`piso-lectura-FUERTE:8.5`) · `recortada: false` · intento 1 — **el acta se leyó completa y bien**.
+- Causa exacta (ficha.json → `clasificacion`): tipo **TRANSMISION** con confianza del puesto **0.75 < 0.82** (umbral AUTO) → nivel `SUGERIDA` → el sistema no se la juega y la manda a revisión humana con todo el dato listo.
+- Es la **divergencia CONOCIDA de la F1** (worklog F1 rev.2: «CORRECCIÓN 2 (D1: tipo TRANSMISION, causa cerrada puesto 0.75<0.82)»), ya aceptada por el dueño. Es foto de cámara (`exif-camara`) → e63d ni interviene (camino foto intacto, como exige el kit). **NO bloquea nada.**
+
+### 10.3 — Invariancias de la Fase E verificadas en esta corrida
+
+- **WhatsApp ×2** (`IMG-20260621-WA0000*`): `origen null (sin-exif+borde-no-blanco+ratio-fuera)` — NO se voltearon a escaneo con la banda nueva → ENVIADAS 10. **Invariancia viva.**
+- **SIM/fotos**: 16 fotos cámara `exif-camara` → camino foto normal (scores 8.5/10), sin señales de regresión.
+- **Dedup v2**: gemelas P1/P2 detectadas (dist 6 y 2) sin falsos rechazos.
+
+### 10.4 — Reconciliación §9 ↔ ANEXO C (nota de cierre)
+
+El desenlace observado para `transmision el cairo-P1.jpg` (gateMarco `cortado` + FUERTE + secciones presentes → **ENVIADA/perdonada**) coincide con la semántica de la tabla §3-A que implementa el hotfix rev.2 — bajo la polaridad invertida de rev.1 (§9, control negativo del QA: 6/6 divergencias) ese mismo caso habría salido **RECHAZADA INCOMPLETA**. La corrida del dueño valida, pues, la rama TAL COMO ESTÁ (con `e63d-rev2` incluido): caso 4 con **0 ocurrencias en campo** (0 RECHAZADAS). Evidencia combinada del GO: QA headless 24/24 (tabla §3-A 8/8 + control negativo) + corrida real del dueño (§10.1–§10.3). Merge de #65 **RE-AUTORIZADO por el ANEXO C** — el merge de 2 padres sigue a esta sección; SHA registrado en la entrada de cierre e63e de main (FASE 4.6 del kit e63e).
