@@ -384,7 +384,7 @@ export function ReviewView() {
     status === "OPTIMA" && esReal ? (
       // Rama OPTIMA (defensa G4 — transitoria, inalcanzable en REVISIÓN):
       // Recortar · Rotar 90° · Filtros · Imagen · Texto (5). Handlers intactos.
-      <div className="grid grid-cols-3 gap-2 w-full select-none">
+      <div className="grid grid-cols-3 gap-2 lg:gap-3 w-full select-none">
         <ToolbarBtn
           icon={<StitchCropIcon />}
           label="Recortar"
@@ -431,7 +431,7 @@ export function ReviewView() {
       // fija (KIT e14-fuera-informes-v1 R-3: fuera la 4ª celda «DIAGNÓSTICO ↓»
       // y el grid-cols-4 condicional — el botón manual del paquete ZIP muere
       // con el sistema de informes; grid-cols-3 como toda la barra).
-      <div className="grid grid-cols-3 gap-2 w-full select-none">
+      <div className="grid grid-cols-3 gap-2 lg:gap-3 w-full select-none">
         <ToolbarBtn
           icon={<StitchCropIcon />}
           label="Recortar"
@@ -462,11 +462,12 @@ export function ReviewView() {
     <div className="flex-1 min-h-0 flex flex-col">
       {/* ZONA SCROLL — contenido de siempre, MISMO orden (banner + chips +
           tarjeta + nota + bloque ENVIADO + panel). max-w-md centrado aquí y
-          en la zona fija: el centrado no baile. */}
-      <div className="flex-1 min-h-0 overflow-y-auto max-w-md mx-auto w-full px-4 py-3 space-y-3">
+          en la zona fija: el centrado no baile. Task 2-b: lg:max-w-2xl —
+          escritorio 2 columnas de ancho útil sin tocar el shell. */}
+      <div className="flex-1 min-h-0 overflow-y-auto max-w-md lg:max-w-2xl xl:max-w-3xl mx-auto w-full px-4 lg:px-6 py-3 space-y-3 lg:space-y-4">
         {/* Banner de ubicación (mock §3.2.2 — mono, dot del estado). */}
         {status === "ENVIADA" || status === "OPTIMA" ? (
-          <div className="flex items-center px-3.5 py-2 rounded-xl bg-[#10161f] border border-slate-800 text-[11px] font-mono shadow-xs overflow-x-auto no-scrollbar">
+          <div className="flex items-center px-3.5 py-2 rounded-xl bg-[#10161f] border border-slate-800 text-xs font-mono shadow-xs overflow-x-auto no-scrollbar">
             <span className="text-[#10b981] font-bold tracking-wider whitespace-nowrap uppercase truncate">
               {textoBanner}
             </span>
@@ -483,7 +484,7 @@ export function ReviewView() {
         )}
 
         {/* Chips de estado (mock §3.2.3 — grid-cols-3, activo sólido). */}
-        <div className="grid grid-cols-3 gap-2 w-full select-none">
+        <div className="grid grid-cols-3 gap-2 lg:gap-3 w-full select-none">
           <Chip tone={toneEstado} solid>
             {tipo}
           </Chip>
@@ -511,40 +512,12 @@ export function ReviewView() {
           </Chip>
         </div>
 
-        {/* KIT consenso-frankfurt-v1 (Task 122, FASE 5 §6.2): LÍNEA DE ID —
-            kit FINAL (pie/código/registro, §4.2) + tipo leído + página.
-            Sin kit → «KIT ---» (nunca inventar); tipo/página desconocidas →
-            «---»/«-/-». El chip MESA · POR KIT se conserva (§6.3: todo lo
-            demás SIN CAMBIO).
-            KIT e14-esquinas-suaves-v1 (T-V): el sufijo de procedencia se
-            RETIRA — el dueño no lo lee. */}
-        {(() => {
-          const cl = acta.clasificacion;
-          const kitTxt = cl?.kit != null ? `KIT ${cl.kit}` : "KIT ---";
-          const tipoId = cl?.tipo ? tipoTexto(cl.tipo) : tipoTexto(tipoBanda);
-          // Misma HONESTIDAD que el chip PÁG (§6.3): sin clasificación la
-          // página mostrada sería la del HUECO asignado, no la LEÍDA → "-/-".
-          const pagId = paginaIdentificada ? { index: paginaIdx, total: paginaTotal } : null;
-          const mesaPorKit = cl?.avisos?.includes("MESA_POR_KIT") ?? false;
-          return (
-            <div className="grid gap-2 w-full select-none">
-              <Chip tone="neutral">
-                {`${kitTxt} · ${tipoId} · ${pagId ? `${pagId.index}/${pagId.total}` : "-/-"}`}
-              </Chip>
-              {mesaPorKit && (
-                <Chip tone="neutral">
-                  {`MESA ${String(cl?.mesa ?? 0).padStart(3, "0")}`}
-                  <span
-                    className="ml-1 text-[9px] font-bold tracking-[0.1em] text-gray-400"
-                    title="Mesa recuperada del registro KIT→mesa (cabecera sin MESA legible)"
-                  >
-                    · POR KIT
-                  </span>
-                </Chip>
-              )}
-            </div>
-          );
-        })()}
+        {/* LÍNEA DE ID («KIT --- · --- · -/-» + «MESA · POR KIT») — ELIMINADA
+            a pedido del dueño. La identidad del acta sigue VIVA en el resto de
+            la app: chips de estado de arriba (tipo/MESA/PÁG), clasificación
+            (dedup, infoTitulo de MASIVA) e informe ZIP. Cero cambios de
+            lógica: solo se retiró el bloque visual del KIT consenso-frankfurt
+            (Task 122, FASE 5 §6.2). */}
 
         {/* G4 (KIT e14-gate-v2): el banner informativo del envío manual
             fue ELIMINADO — el recorte es un flujo NORMAL: re-evalúa y si
@@ -599,12 +572,12 @@ export function ReviewView() {
             {pillFlotante && (
               <span
                 data-testid="barra-rechazo"
-                className={`absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md ${
+                className={`absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[11px] px-3.5 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md ${
                   pillFlotante.tono === "crit"
-                    ? "bg-[#ef4444] text-white shadow-[#ef4444]/30"
+                    ? "bg-[#ef4444] text-white shadow-[0_4px_18px_rgba(239,68,68,0.5)]"
                     : pillFlotante.tono === "ok"
-                      ? "bg-[#10b981] text-[#090d12] shadow-[#10b981]/30 font-extrabold"
-                      : "bg-[#f59e0b] text-[#090d12] shadow-[#f59e0b]/30 font-extrabold"
+                      ? "bg-[#10b981] text-[#090d12] shadow-[0_4px_18px_rgba(16,185,129,0.5)] font-extrabold"
+                      : "bg-[#f59e0b] text-[#090d12] shadow-[0_4px_18px_rgba(245,158,11,0.45)] font-extrabold"
                 }`}
               >
                 {pillFlotante.texto}
@@ -615,7 +588,7 @@ export function ReviewView() {
             <div className="scanner-corner-bl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             <div className="scanner-corner-br" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             {fotoVisible ? (
-              <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] relative flex items-center justify-center mt-2">
+              <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] lg:h-[64vh] xl:h-[76vh] lg:max-h-[720px] xl:max-h-[840px] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
                   src={fotoVisible}
@@ -652,12 +625,12 @@ export function ReviewView() {
             {pillFlotante && (
               <span
                 data-testid={status === "RECHAZADA" ? "barra-rechazo" : "banner-revision"}
-                className={`absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md ${
+                className={`absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[11px] px-3.5 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md ${
                   pillFlotante.tono === "crit"
-                    ? "bg-[#ef4444] text-white shadow-[#ef4444]/30"
+                    ? "bg-[#ef4444] text-white shadow-[0_4px_18px_rgba(239,68,68,0.5)]"
                     : pillFlotante.tono === "ok"
-                      ? "bg-[#10b981] text-[#090d12] shadow-[#10b981]/30 font-extrabold"
-                      : "bg-[#f59e0b] text-[#090d12] shadow-[#f59e0b]/30 font-extrabold"
+                      ? "bg-[#10b981] text-[#090d12] shadow-[0_4px_18px_rgba(16,185,129,0.5)] font-extrabold"
+                      : "bg-[#f59e0b] text-[#090d12] shadow-[0_4px_18px_rgba(245,158,11,0.45)] font-extrabold"
                 }`}
               >
                 {pillFlotante.texto}
@@ -668,7 +641,7 @@ export function ReviewView() {
             <div className="scanner-corner-bl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             <div className="scanner-corner-br" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             {fotoVisible ? (
-              <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] relative flex items-center justify-center mt-2">
+              <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] lg:h-[64vh] xl:h-[76vh] lg:max-h-[720px] xl:max-h-[840px] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
                   src={fotoVisible}
@@ -699,7 +672,7 @@ export function ReviewView() {
           <div className="bg-[#10b981]/15 border border-[#10b981]/40 rounded-xl px-4 py-2.5 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[#10b981] font-bold text-sm shrink-0">✓</span>
-              <span className="text-[#10b981] font-bold text-xs uppercase tracking-wider font-mono truncate">
+              <span className="text-[#10b981] font-bold text-[13px] uppercase tracking-wider font-mono truncate">
                 {acta.enviadoAutomaticamente ? "ENVIADO AUTOMÁTICAMENTE" : "ENVIADO CORRECTAMENTE"}
               </span>
             </div>
@@ -723,7 +696,7 @@ export function ReviewView() {
           filaAcciones=null → la zona no se monta: la tarjeta hereda el
           espacio (sin toolbar fantasma). */}
       {filaAcciones && (
-        <div className="shrink-0 max-w-md mx-auto w-full px-4 pb-1 pt-2">
+        <div className="shrink-0 max-w-md lg:max-w-2xl xl:max-w-3xl mx-auto w-full px-4 lg:px-6 pb-1 pt-2">
           {filaAcciones}
         </div>
       )}
@@ -782,14 +755,14 @@ export function ReviewView() {
           <div
             role="dialog"
             aria-label="Filtros del acta"
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md rounded-t-[22px] bg-brand-surface pb-safe outline-none animate-editor-enter"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md lg:max-w-2xl rounded-t-[22px] bg-brand-surface pb-safe outline-none animate-editor-enter"
           >
             <div className="mx-auto mt-2.5 h-1.5 w-9 rounded-full bg-white/25" />
             <h3 className="px-5 pb-1 pt-3 text-center text-[17px] font-semibold text-white">
               Filtros
             </h3>
             <p className="sr-only">Elige un filtro para el acta en edición</p>
-            <div className="flex gap-3 overflow-x-auto px-5 pb-5 pt-2 no-scrollbar">
+            <div className="flex gap-3 lg:gap-4 overflow-x-auto px-5 lg:px-6 pb-5 pt-2 no-scrollbar">
               {FILTER_PRESETS.map((f) => {
                 const activo = acta.filtro === f.id;
                 return (
@@ -800,10 +773,10 @@ export function ReviewView() {
                       void cambiarFiltro(f.id);
                       setFiltrosAbierto(false);
                     }}
-                    className="flex w-[78px] shrink-0 flex-col items-center gap-1.5"
+                    className="flex w-[78px] lg:w-[92px] shrink-0 flex-col items-center gap-1.5"
                   >
                     <span
-                      className={`block h-[104px] w-full overflow-hidden rounded-xl border-2 ${
+                      className={`block h-[104px] lg:h-[118px] w-full overflow-hidden rounded-xl border-2 ${
                         activo
                           ? "border-brand-green shadow-[0_0_0_3px_rgba(0,230,118,0.25)]"
                           : "border-white/10"
@@ -844,7 +817,7 @@ export function ReviewView() {
           <div
             role="dialog"
             aria-label="Texto reconocido del acta"
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md rounded-t-[22px] bg-brand-surface pb-safe outline-none animate-editor-enter"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md lg:max-w-2xl rounded-t-[22px] bg-brand-surface pb-safe outline-none animate-editor-enter"
           >
             <div className="mx-auto mt-2.5 h-1.5 w-9 rounded-full bg-white/25" />
             <h3 className="flex items-center justify-center gap-2 px-5 pb-1 pt-3 text-center text-[17px] font-semibold text-white">
@@ -863,7 +836,7 @@ export function ReviewView() {
                 </div>
               ) : hayTexto ? (
                 <>
-                  <div className="max-h-[38vh] overflow-y-auto rounded-xl bg-black/40 p-3.5 ring-1 ring-inset ring-brand-border thin-scroll">
+                  <div className="max-h-[38vh] lg:max-h-[48vh] overflow-y-auto rounded-xl bg-black/40 p-3.5 ring-1 ring-inset ring-brand-border thin-scroll">
                     <OcrHighlightedText text={acta.ocrTexto ?? ""} query={null} />
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 px-0.5">
@@ -1014,12 +987,15 @@ export function ReviewCtas() {
   if (status === "ENVIADA") {
     // Mock 6 §3.2.7: CTA verde «SEGUIR ESCANEANDO» (bg-brand-green,
     // texto NEGRO, glow verde, mono bold uppercase). El flujo es el
-    // mismo de siempre: navega a escanear.
+    // mismo de siempre: navega a escanear. Task 2-b (crítica VLM #2):
+    // el CTA se calma VISUALMENTE (glow/padding/texto menores) — la
+    // píldora de score ÓPTIMA pasa a ser lo primero que se lee; sigue
+    // siendo la acción primaria funcional (mismo handler/primacía).
     return (
       <button
         type="button"
         onClick={() => navegar("escanear")}
-        className="w-full bg-brand-green hover:bg-emerald-400 text-black font-extrabold text-sm py-3.5 px-6 rounded-2xl shadow-[0_4px_20px_rgba(0,230,118,0.35)] flex items-center justify-center gap-2 tap-action transition-all select-none"
+        className="w-full bg-brand-green hover:bg-emerald-400 text-black font-extrabold text-[13px] py-3.5 px-6 rounded-2xl shadow-[0_2px_12px_rgba(0,230,118,0.25)] flex items-center justify-center gap-2 tap-action transition-all select-none"
       >
         <span className="tracking-wide uppercase font-mono font-bold">
           SEGUIR ESCANEANDO

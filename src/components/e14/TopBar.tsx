@@ -107,7 +107,7 @@ export function TopBar() {
 
   return (
     <header className="relative z-30 pt-safe shrink-0 bg-brand-black/95 backdrop-blur border-b border-brand-border/60">
-      <div className="max-w-md mx-auto px-4 pt-4 pb-2.5 flex items-center justify-between gap-2">
+      <div className="max-w-md lg:max-w-2xl mx-auto px-4 pt-4 pb-2.5 flex items-center justify-between gap-2">
         <button
           aria-label="Volver al menú de escaneo"
           type="button"
