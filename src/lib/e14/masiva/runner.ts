@@ -25,7 +25,7 @@ import { type OpcionesEscaneoConTimeout } from "../scanner-core-bridge";
 // D66 — KIT e14-decode-unico-precalor-v1 (T1/T3): maestro único a escala de
 // trabajo + precalor de la cola (consumo T3.3 + prefetch re-apuntado).
 import { maestroDeImagen, type MaestroImagen } from "./archivos";
-import { asegurarMaestro, consumirMaestro } from "./precalor";
+import { asegurarMaestro, consumirMaestro, descartarMaestro } from "./precalor";
 import { useE14Store } from "../store";
 import { guardarRegistro, leerRegistro } from "./cola";
 import { useMasivaStore } from "./store";
@@ -388,7 +388,11 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
   // consumir). decode = 0 s — el coste ya vivió en precalorMs durante la
   // espera en cola. Un master se consume UNA vez; el chip PREPARADA muere
   // con la fila al pasar a PROCESANDO.
-  const entradaPrecalor = consumirMaestro(fila.id);
+  // D63-A2 (T0): `let` — si el pre-proceso aplicó (deskew), el master
+  // precalentado NO alimenta el pipeline y la referencia se SUELTA
+  // (disciplina de memoria más abajo — el blob muere YA, no al fin del
+  // scope: el OCR domina con ~13 s por fila).
+  let entradaPrecalor = consumirMaestro(fila.id);
   if (entradaPrecalor) {
     console.info(
       `[e14] precalor fila=${fila.id} consumido precalorMs=${entradaPrecalor.precalorMs} origen=${entradaPrecalor.maestro.origenDecode}`,
@@ -460,6 +464,23 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         console.info(
           `[e14] origen=${veredictoOrigen.origen ?? "null"} senales=${veredictoOrigen.senales ?? "null"}`,
         );
+        // ── D63-A2 — KIT e14-d63a2-deskew-pipeline-v1 (T1): calibración por
+        // CONSTRUCCIÓN — una fila nacida de un PDF (viaPdf, rama PDF del
+        // store) ES un escaneo aunque el detector D63-A por señales no lo
+        // diga (un E-14 impreso a sangre NO tiene borde blanco de escáner:
+        // evidencia F1, informe 200613 — 10 null con borde-no-blanco). Las
+        // señales de píxel del detector QUEDAN (honestidad D57) como prefijo
+        // `pdf-render+…`. SIM y captura individual JAMÁS traen viaPdf (campo
+        // de MASIVA — nace SOLO en la rama PDF de agregarFiles).
+        if (fila.viaPdf && veredictoOrigen.origen !== "escaneo") {
+          veredictoOrigen = {
+            origen: "escaneo",
+            senales: `pdf-render+${veredictoOrigen.senales}`,
+          };
+          console.info(
+            `[e14] origen pdf-render → escaneo (señales píxel preservadas: ${veredictoOrigen.senales})`,
+          );
+        }
 
         // ── D63-B — KIT e63b-deskew-escaneo-v1 (bloque de PRE-PROCESO, T2/T3):
         // SOLO escaneos (origen del detector D63-A) — detección de ángulo sobre
@@ -475,6 +496,20 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
             `[e14] preproceso skewGrados=${preProceso.skewGrados ?? "null"} deskewMs=${preProceso.deskewMs ?? "null"} limpiezaMs=${preProceso.limpiezaMs ?? "null"} limpieza=${preProceso.limpieza} aplicado=${preProceso.aplicado} decodeMs=${preProceso.decodeMs ?? "null"}`,
           );
         }
+        // ── D63-A2 (T0) — DISCIPLINA DE MEMORIA: si el CORREGIDO manda, el
+        // master precalentado de esta fila muere AQUÍ (descartado por la vía
+        // del precalor + referencia local soltada — NUNCA huérfano). El
+        // precalor sigue decodificando el ORIGINAL en la espera (sin cambios
+        // — simplicidad del kit): las filas PDF aplicadas pierden el
+        // beneficio del precalor (doble decode por fila escaneada — coste
+        // CONOCIDO y documentado: el OCR domina con ~13 s).
+        if (preProceso?.aplicado && entradaPrecalor) {
+          console.info(
+            `[e14] precalor fila=${fila.id} descartado fuente=corregido precalorMs=${entradaPrecalor.precalorMs}`,
+          );
+          descartarMaestro(fila.id); // vía del precalor (idempotente — defensa)
+          entradaPrecalor = null; // soltar el blob YA (no al fin del scope)
+        }
 
         // ── D66 — KIT e14-decode-unico-precalor-v1 (T1.2/T1.5): MASTER del
         // intento. Intento 1 consume el master PRECALENTADO (T3.3 — el decode
@@ -485,11 +520,21 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         // anterior. Sin master (decode imposible) → fallback HONESTO: el
         // bridge recibe archivoIntento tal cual (AC-P3).
         const tMaestro = Date.now();
+        // ── D63-A2 (T0): FUENTE del master — el CORREGIDO del pre-proceso
+        // (D63-B) cuando aplicó; el original en los demás casos. El bloque
+        // D63-B calcula preProceso.archivo PERO la fusión D65/D66 lo dejó
+        // desconectado (solo sus métricas llegaban — hallazgo del worklog
+        // D65, orden del dueño: despertarlo AQUÍ y NADA más). El master
+        // único D66 queda VERDADERO: el pipeline sigue consumiendo UN master
+        // (`maestro?.archivo ?? archivoIntento` del bridge, sin tocar).
+        const fuenteMaestro: File = preProceso?.aplicado
+          ? preProceso.archivo
+          : archivoIntento;
         const maestro: MaestroImagen | null =
-          intento === 1
+          intento === 1 && !preProceso?.aplicado
             ? (entradaPrecalor?.maestro ??
-              (await maestroDeImagen(archivoIntento, { nombre: fila.nombre })))
-            : await maestroDeImagen(archivoIntento, { nombre: fila.nombre });
+              (await maestroDeImagen(fuenteMaestro, { nombre: fila.nombre })))
+            : await maestroDeImagen(fuenteMaestro, { nombre: fila.nombre });
         const decodeMsIntento = maestro
           ? intento === 1 && entradaPrecalor
             ? 0 // T3.3/T4: precalentada → el decode ya pasó en la espera
@@ -497,7 +542,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           : null;
         if (maestro) {
           console.info(
-            `[e14] decode-maestro fila=${fila.id} intento=${intento} ms=${decodeMsIntento} origen=${maestro.origenDecode} precalentada=${intento === 1 && !!entradaPrecalor} ${maestro.ancho}x${maestro.alto}`,
+            `[e14] decode-maestro fila=${fila.id} intento=${intento} ms=${decodeMsIntento} origen=${maestro.origenDecode} precalentada=${intento === 1 && !!entradaPrecalor} ${maestro.ancho}x${maestro.alto}${preProceso?.aplicado ? " fuente=corregido" : ""}`,
           );
         }
 
@@ -593,6 +638,17 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
               skewGrados: preProceso?.skewGrados ?? null,
               deskewMs: preProceso?.deskewMs ?? null,
               limpieza: preProceso?.limpieza ?? null,
+              // D63-A2 (T0): provenance del master que el bridge CONSUMIÓ —
+              // "corregido" (deskew aplicado) | "original". Aditivo al final
+              // del contrato D57; el informe T2 lo consume como
+              // preprocesoAplicado (bool, presente si origen escaneo).
+              // preProceso existe SIEMPRE en MASIVA (nulo para no-escaneos →
+              // "original") — null solo si no hay diagnóstico (jamás inventar).
+              maestroFuente: preProceso
+                ? preProceso.aplicado
+                  ? ("corregido" as const)
+                  : ("original" as const)
+                : null,
             },
           }
         : actaBruta;
