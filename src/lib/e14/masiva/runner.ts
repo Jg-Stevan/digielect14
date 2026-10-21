@@ -43,6 +43,10 @@ import type { Acta, EtapaAnalisis, ProgresoAnalisis } from "../types";
 import { clasificarCabecera } from "../clasificador";
 import { cargarDivipol } from "../divipol";
 import { desenlaceTrasRelectura, procedeRelecturaInterna } from "./relectura";
+// e63k — KIT e63k-capa2-identidad-v1 (F1.4): CAPA 2 de dedup por IDENTIDAD
+// impresa (código 1D consensuado — identidad.ts es lógica pura; aquí solo
+// la orquestación post-OCR, punto ÚNICO del kit).
+import { identidadDeActa } from "./identidad";
 
 // ─── D65 — KIT e14-progreso-watchdog-dedup-v1 (T1): WATCHDOG HUMANO ───
 // Antes (e14-masiva-ux-v1 T4): presupuesto ÚNICO de 120 s — un colgado moría
@@ -389,6 +393,10 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
     if (!actaOrigen) return false; // original sin desenlace (ERROR/en vuelo)
     if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return false;
     const actaCopia = { ...actaOrigen, id: fila.id };
+    // e63k (F1.4): derivar la serie del acta COPIADA (la gemela ES el mismo
+    // papel — misma identidad). El mapa de identidad de futuras filas
+    // también cubre gemelas copiadas.
+    const serieCopia = identidadDeActa(actaCopia)?.serie ?? null;
     const registroListo: RegistroMasiva = {
       ...registro,
       estado: "LISTA",
@@ -399,6 +407,7 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
       infoTitulo: tituloDeActa(actaCopia),
       hashDedup: registro.hashDedup,
       dupOf: fila.dupOf,
+      serie: serieCopia, // e63k — identidad de la copia (null = sin consenso, honesto)
     };
     await guardarRegistro(registroListo);
     const ms = Date.now() - t0;
@@ -416,6 +425,7 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
       thumb: original.thumb,
       enviadaAuto: actaCopia.status === "ENVIADA" && !!actaCopia.enviadoAutomaticamente,
       envioEnCola: actaCopia.hashSha256 === "EN COLA",
+      serie: serieCopia, // e63k — el mapa de identidad cubre gemelas copiadas
       error: null,
     });
     return true;
@@ -773,6 +783,96 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       );
     }
 
+    // ─── e63k — KIT e63k-capa2-identidad-v1 (F1.4): CAPA 2 DEDUP POR
+    // IDENTIDAD (punto ÚNICO del kit, POST-OCR) ─── La identidad nace SOLO
+    // del código 1D consensuado (identidad.ts — RED LINE 2: sin consenso no
+    // hay identidad, jamás regex suelto sobre el texto). La marca pre-OCR
+    // quedó APLAZADA en la banda 3..6 (store); AQUÍ decide la serie impresa.
+    const identidad = identidadDeActa(actaDesenlace);
+    // ¿Original por identidad? OTRA fila (f.id !== fila.id) con la MISMA
+    // identidadActa (13 dígitos = formulario+PAG — P1 y P2 del mismo
+    // formulario son actas DISTINTAS, nunca se deduplican entre sí) en
+    // estado LISTA|DUPLICADA; la de agregadaEn MÍNIMA es la original.
+    // forzarDedupOff (el dueño pulsó PROCESAR IGUAL) manda sobre la capa 2.
+    let originalIdentidad: FilaMasiva | null = null;
+    if (identidad && !fila.forzarDedupOff) {
+      originalIdentidad =
+        useMasivaStore
+          .getState()
+          .filas.filter(
+            (f) =>
+              f.id !== fila.id &&
+              f.serie != null &&
+              f.serie.slice(0, 13) === identidad.identidadActa &&
+              (f.estado === "LISTA" || f.estado === "DUPLICADA"),
+          )
+          .sort((a, b) => a.agregadaEn - b.agregadaEn)[0] ?? null;
+      if (originalIdentidad) {
+        // DUPLICADA por identidad — SU PROPIO desenlace (no el de la
+        // original): NO reenvía, NO borra, revisión disponible. La capa 2
+        // decide por CUALQUIER status del desenlace (un dup RECHAZADO por
+        // blur de la misma acta también es dup) → return ANTES del envío y
+        // del contador (kit §1.4-5). El guard anti-zombi M8 ya corrió antes
+        // en el flujo (la fila está viva al llegar aquí) — NO se duplica.
+        const thumbIdentidad = await hacerThumb(
+          actaDesenlace.fotoProcesada ?? actaDesenlace.fotoOriginal,
+        );
+        await guardarRegistro({
+          ...registro,
+          estado: "DUPLICADA",
+          dupOf: originalIdentidad.id,
+          acta: actaDesenlace,
+          thumb: thumbIdentidad,
+          serie: identidad.serie,
+          dedup: "identidad",
+          infoTitulo: tituloDeActa(actaDesenlace),
+        });
+        marcarFila(fila.id, {
+          estado: "DUPLICADA",
+          dupOf: originalIdentidad.id,
+          statusActa: actaDesenlace.status,
+          score: actaDesenlace.score,
+          nivel: actaDesenlace.clasificacion?.nivel ?? null,
+          pagina: paginaDeActa(actaDesenlace),
+          infoTitulo: tituloDeActa(actaDesenlace),
+          motivo: actaDesenlace.rechazo?.tipo ?? null,
+          thumb: thumbIdentidad,
+          enviadaAuto: false,
+          // e63k (decisión declarada en el REPORTE §1): la serie TAMBIÉN al
+          // mapa en memoria (regla general del kit — el mapa de identidad de
+          // la sesión ve esta fila aunque la original se haya quitado).
+          serie: identidad.serie,
+          error: null,
+        });
+        console.info(
+          `[e14] dedup-identidad fila=${fila.id} serie=${identidad.identidadActa} original=${originalIdentidad.id}`,
+        );
+        return; // NO registrarEnvioMasiva NI contarMotivoNoEnvioActa
+      }
+    }
+    // Falso-positivo visual EVITADO (el caso 3992/3993 de la consola del
+    // dueño — QA §3.2): la banda visual 3..6 la había dejado sospechosa y
+    // la serie impresa demuestra que es OTRA acta → resolución final
+    // "sin-match" en el registroListo de abajo (conservando dedupDistancia
+    // y dedupVisualDe del write aplazado — post-mortem). La fila sigue al
+    // envío normal — SU desenlace, NUNCA el de otra. La traza vive en el
+    // REGISTRO (kit §1.2 — dedupVisualDe es de RegistroMasiva; el store no
+    // la restaura a la fila).
+    const dedupVisualDeAplazada = registro?.dedupVisualDe ?? null;
+    // Solo se RESUELVE una banda que SIGUE aplazada (registro.dedup ===
+    // "visual-aplazada"): jamás revertir un veredicto "identidad" previo
+    // (el dueño pudo PROCESAR IGUAL una dup real — su traza queda intacta).
+    const falsoPositivoEvitado =
+      identidad != null &&
+      originalIdentidad == null &&
+      dedupVisualDeAplazada != null &&
+      registro?.dedup === "visual-aplazada";
+    if (falsoPositivoEvitado) {
+      console.info(
+        `[e14] dedup-identidad fila=${fila.id} falso-positivo-visual evitado serie=${identidad!.serie} original-visual=${dedupVisualDeAplazada}`,
+      );
+    }
+
     // Desenlace → la MISMA vía que el flujo normal (T3.3/T3.2). El envío
     // automático reutiliza registrarEnvio (historial + completadas + hueco
     // archivado + cola offline); el resto cae al contador T5 con las
@@ -825,6 +925,15 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       // D59 — KIT e14-info-acta-filas-v1 (T2): título con la info reconocida
       // del desenlace REAL (persiste — desviación aditiva de thumb).
       infoTitulo: tituloDeActa(actaFinal),
+      // e63k (F1.4): resolución final del FP visual evitado — "sin-match"
+      // cierra la banda aplazada; dedupDistancia y dedupVisualDe quedan como
+      // estaban (spread de arriba — post-mortem del falso positivo).
+      ...(falsoPositivoEvitado ? { dedup: "sin-match" as const } : {}),
+      // e63k (F1.4): regla general de persistencia de la serie (aplica
+      // SIEMPRE que haya desenlace con identidad leída, también cuando NO
+      // es dup — sirve al mapa de la cola y al informe). Ausente = sin
+      // consenso (jamás inventar — RED LINE 2).
+      ...(identidad ? { serie: identidad.serie } : {}),
       // D66 — KIT e14-decode-unico-precalor-v1 (T4): trazas de decodificación
       // ADITIVAS del master del DESENLACE (solo con master — sin él los
       // campos VIAJAN AUSENTES: registros previos/ERROR/fallback quedan como
@@ -906,6 +1015,8 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       // e63f (F2): el desenlace pasó por la re-lectura interna (trazabilidad
       // — el detalle auto|sin-cambio vive en la traza RelecturaInterna=).
       relectura: relecturaDesenlace != null,
+      // e63k (F1.4): serie impresa al mapa de la cola (identidad capa 2).
+      serie: identidad?.serie ?? null,
       error: null,
     });
   } catch (err) {
