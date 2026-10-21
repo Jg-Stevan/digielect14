@@ -8,6 +8,9 @@
  * toggle que llena la vista con el puesto demo (seed §6.4) cuando NO hay
  * puesto real — jamás escribe en archivadas (overlay de vista). Sin datos →
  * estado vacío honesto. La alerta «N MESAS INCOMPLETAS» quedó FUERA.
+ * Task 3 (agente B): responsive 360→1280 — contenedor hasta max-w-3xl,
+ * tarjetas de mesa en grid de 2 columnas en xl+ (acordeón intacto) y
+ * cabecera/buscador con más aire en lg+.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useE14Store, type ActaArchivada, type PuestoActual } from "@/lib/e14/store";
@@ -57,7 +60,7 @@ function CardMesa({ mesa, abierta, onToggle }: { mesa: Mesa; abierta: boolean; o
         type="button"
         onClick={onToggle}
         aria-expanded={abierta}
-        className="flex justify-between items-center cursor-pointer select-none w-full text-left"
+        className="flex justify-between items-center cursor-pointer select-none w-full text-left min-h-[44px]"
       >
         <span className="text-base font-mono font-bold text-white flex items-center gap-2">
           {mesa.id}
@@ -227,27 +230,31 @@ export function ActasView() {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-[#090d12] flex flex-col">
-      <header className="sticky top-0 z-40 w-full bg-[#090d12]/92 backdrop-blur-xl border-b border-slate-800/80 flex items-center justify-between px-4 h-14 shrink-0 shadow-xs">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#10b981]" />
-          <h1 className="font-mono text-sm font-bold tracking-widest text-[#10b981] uppercase">
-            CONTROL ACTAS E-14
-          </h1>
+      <header className="sticky top-0 z-40 w-full bg-[#090d12]/92 backdrop-blur-xl border-b border-slate-800/80 px-4 h-14 shrink-0 shadow-xs">
+        {/* Task 3: el contenido de la barra se alinea al ancho del contenedor
+            de la vista (en lg+ ya no queda pegado al borde del viewport). */}
+        <div className="max-w-md lg:max-w-2xl xl:max-w-3xl mx-auto w-full h-full flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#10b981]" />
+            <h1 className="font-mono text-sm font-bold tracking-widest text-[#10b981] uppercase">
+              CONTROL ACTAS E-14
+            </h1>
+          </div>
+          <span className="font-mono text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/60">
+            {mesasFiltradas.length} {mesasFiltradas.length === 1 ? "MESA" : "MESAS"}
+          </span>
         </div>
-        <span className="font-mono text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/60">
-          {mesasFiltradas.length} {mesasFiltradas.length === 1 ? "MESA" : "MESAS"}
-        </span>
       </header>
 
-      <div className="flex-grow flex flex-col gap-5 px-4 pt-4 pb-8 max-w-md mx-auto w-full">
-        {/* Puesto actual — Card Ejecutiva */}
-        <section className="bg-[#10161f] border border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+      <div className="flex-grow flex flex-col gap-5 px-4 pt-4 pb-8 max-w-md lg:max-w-2xl xl:max-w-3xl mx-auto w-full">
+        {/* Puesto actual — Card Ejecutiva (Task 3: aire en lg+) */}
+        <section className="bg-[#10161f] border border-slate-800 rounded-2xl p-4 lg:p-5 shadow-sm flex flex-col gap-3 lg:gap-4">
           <div className="flex justify-between items-start gap-2">
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 PUESTO DE VOTACIÓN
               </span>
-              <h2 className="text-lg font-bold text-white uppercase tracking-wide truncate">
+              <h2 className="text-lg lg:text-xl font-bold text-white uppercase tracking-wide truncate">
                 {puestoActual?.titulo ?? "SIN PUESTO REGISTRADO"}
               </h2>
             </div>
@@ -280,7 +287,7 @@ export function ActasView() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs font-mono text-slate-400 border-t border-slate-800/80 pt-2.5">
+          <div className="flex items-center justify-between text-xs lg:text-[13px] font-mono text-slate-400 border-t border-slate-800/80 pt-2.5">
             <span className="truncate">
               {puestoActual
                 ? `${puestoActual.municipio} › ZONA ${puestoActual.zona} › PTO ${puestoActual.puesto}`
@@ -308,21 +315,26 @@ export function ActasView() {
           </div>
         </section>
 
-        {/* Buscador de Mesas */}
+        {/* Buscador de Mesas — Task 3: más cómodo en lg+ (alto 44px, texto sm). */}
         <div className="relative w-full">
           <input
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar mesa... (ej. 01, 12)"
-            className="w-full h-10 pl-9 pr-8 bg-[#10161f] border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-[#10b981]/60 focus:ring-1 focus:ring-[#10b981]/30 transition shadow-xs"
+            className="w-full h-10 lg:h-11 pl-9 pr-10 bg-[#10161f] border border-slate-800 rounded-xl text-xs lg:text-sm text-white placeholder-slate-500 font-mono focus:outline-none focus:border-[#10b981]/60 focus:ring-1 focus:ring-[#10b981]/30 transition shadow-xs"
           />
-          <span className="absolute left-3 top-3 text-slate-500 text-xs">🔍</span>
+          <span
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"
+            aria-hidden
+          >
+            🔍
+          </span>
           {busqueda && (
             <button
               type="button"
               onClick={() => setBusqueda("")}
-              className="absolute right-2.5 top-2 text-slate-400 hover:text-white p-1 text-xs"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1.5 text-xs"
               aria-label="Limpiar búsqueda"
             >
               ✕
@@ -371,14 +383,19 @@ export function ActasView() {
             </div>
           )}
 
-          {mesasFiltradas.map((mesa) => (
-            <CardMesa
-              key={mesa.id}
-              mesa={mesa}
-              abierta={mesaAbierta === mesa.id}
-              onToggle={() => setMesaAbierta(mesaAbierta === mesa.id ? null : mesa.id)}
-            />
-          ))}
+          {/* Task 3 (agente B): en xl+ las tarjetas de mesa van en 2 columnas
+              (items-start: una abierta no estira a su vecina). El acordeón
+              interno (CardMesa/onToggle) queda INTACTO — mismos handlers. */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 xl:gap-4 items-start">
+            {mesasFiltradas.map((mesa) => (
+              <CardMesa
+                key={mesa.id}
+                mesa={mesa}
+                abierta={mesaAbierta === mesa.id}
+                onToggle={() => setMesaAbierta(mesaAbierta === mesa.id ? null : mesa.id)}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>

@@ -65,12 +65,22 @@ export type EtapaVidaKit = "preparando" | "deteccion" | "ocr" | "verificacion";
 /** Progreso de la fila ACTIVA (throttled por el runner 250 ms — D65 T3.1).
  *  Estado TRANSITORIO: NO se persiste en IndexedDB (kit T3.4 — cada tick a
  *  IDB sería caro); al recargar la página las filas vuelven a PENDIENTE como
- *  hoy y no queda % fantasma. */
+ *  hoy y no queda % fantasma.
+ *
+ *  CAMBIO (pedido del dueño): UN % para TODO el proceso del acta — antes el
+ *  chip de la fila saltaba por tramos fijos por fase y el OCR escalonado
+ *  (2 pasadas) hacía que el número RETROCEDIERA (95→50→95). Ahora el runner
+ *  computa `fracGlobal` (0..1): cada fase del pipeline mapea a un tramo del
+ *  TOTAL, las 2 pasadas del OCR reparten sub-tramos y el valor es MONOTÓNICO
+ *  (jamás baja dentro de la misma acta — Math.max por señal). */
 export interface ProgresoFila {
   id: string;
   etapa: EtapaVidaKit;
   /** 0..1 SOLO cuando etapa === "ocr" — dato REAL del reconocedor. */
   ocrFraccion?: number;
+  /** 0..1 del PROCESO COMPLETO del acta (todas las fases sumadas) —
+   *  monotónico: nunca baja dentro de la misma acta. 1 = LISTA. */
+  fracGlobal?: number;
 }
 
 interface MasivaStore {
@@ -125,10 +135,11 @@ interface MasivaStore {
   enviarLote: (estado: "ADVERTENCIA") => Promise<void>;
   /** D65 (T3.1): señal de vida de la fila en curso — action NUEVO del kit;
    *  el runner emite con throttle 250 ms vía bucketDeVida. Transitorio
-   *  (NUNCA a IDB — kit T3.4). */
+   *  (NUNCA a IDB — kit T3.4). `fracGlobal` = % ÚNICO del proceso completo
+   *  del acta (monotónico — ver ProgresoFila). */
   marcarProgreso: (
     id: string,
-    progreso: { etapa: EtapaVidaKit; ocrFraccion?: number },
+    progreso: { etapa: EtapaVidaKit; ocrFraccion?: number; fracGlobal?: number },
   ) => void;
   setFiltro: (filtro: FiltroMasiva) => void;
 }
