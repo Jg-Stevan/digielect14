@@ -1888,3 +1888,49 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 **Gates**: CI en `a742953`: Quality Gate ✅ · Worker parity ❌×2 (rojo heredado D57, 0 fallos nuevos — perfil idéntico a rev.1/rev.2 y a main previa) · Deploy to GitHub Pages ✅.
 
 **Pendiente del dueño**: (1) REVOCAR AMBOS tokens expuestos en chat hoy (`ghp_` de GitHub y `vcp_` de Vercel) — protocolo one-off; (2) Ctrl+Shift+R en sus navegadores (caché del index.html — no toca IndexedDB); (3) Fase D: firma pre-vuelo con foto sintética `intento=1` + lote 20261019 COMPLETO (26) en un solo pase + informe zip sin editar → Fase E del agente (A/B vs 200613 + RED LINES).
+---
+
+## 2026-10-21 · e63d — KIT escaneo-ya-recortado-v1 (los escaneos ceñidos son escaneos)
+
+**Base**: origin/main @ a742953 (merge #63 D63-A2). **Rama**: `feat/e63d-escaneo-ya-recortado-v1`.
+
+**Hecho (plan del dueño verificado línea a línea — todas las citas existían; detalles en REPORTE-e63d)**:
+- F0 (bridge): rescate D63-C generalizado a TODO escaneo (F0.1, defensa en profundidad) + la LECTURA perdona al marco (F0.2: `cortado` condena SOLO sin lectura FUERTE o con `faltaSeccion` — patrón lazoPerdonadoPorLectura; senal/faltaSeccion ya calculadas, costo 0).
+- F1 (origen.ts): `tintaAlFiloSimetrica` (franja ~1.5%/lado, lado MIXTO tinta≥25%+papel≥10%, ≥2 lados opuestos) + regla de decisión con banda E-14 (0.22–0.45): ceñido → escaneo; borde-blanco + ratio (clásico O E-14) → escaneo; banda E-14 sin blanco → escaneo. Trazas aditivas `tinta-al-filo`/`ratio-e14`.
+- F2 (bridge): identidad POR CONSTRUCCIÓN — la detección de bordes NO corre para escaneos (sin worker/Sobel/espera; detect ≈0 ms; informe DETECCION los cuenta por la vía normal) + `verificarCompletitud` no corre para escaneos (efecto declarado: escudo-fondo tampoco — es guard del warp, sin premisa en identidad).
+- F3 (marco-escaneo.ts/types.ts/informe.ts): veredicto `ceñido` (≥2 lados opuestos con línea EN el filo — nunca bloquea; evaluado ANTES de `cortado`) + `gateMarco` gana "ceñido" (union aditiva) + copy INCOMPLETA por origen («EL ESCANEO PARECE CORTADO — REPITE EL ESCANEO…»; fotos byte a byte como hoy; pipelineRecorte sin cambios).
+
+**Calibraciones declaradas (REPORTE §2)**: (1) relajación del guard SOLO banda E-14 — la banda clásica sin blanco sigue null (protege WhatsApp 4:3/16:9 sin-EXIF; invariancia Fase E); (2) lado del filo MIXTO (tinta+papel) — fondo oscuro uniforme ≠ tinta (foto sobre mesa gris no voltea a escaneo); (3) hallazgo vigilado: WhatsApp reenviado apretado (papel al filo en ≥2 lados) cae escaneo — auditable por traza, calibración de constantes si la cola real pide lo contrario.
+
+**Gates**: tsc 0 · lint 0 · build OK · binario con los tokens nuevos verificado en chunks. **Humo puro 22/22** (`/home/z/tmp/humo-e63d.ts`): F1 (ceñido/invariancias/EXIF/capturas/fondo oscuro) + F3 (completo/ceñido/cortado reservado/no-encontrado + CONTROL NEGATIVO del plan: escaneo mutilado NO es ceñido). Narrativa honesta: 1.ª corrida 2 FAIL por fixture mal hecho (imagen uniformemente oscura = flat page) → re-hechos con textura realista → 22/22.
+
+**Humo navegador NO concluyente (declarado)**: ort-wasm del headless falló persistente en esta sesión (~9 intentos + sesión fresca; `no available backend found ERR: [wasm]`). Evidencia ambiental: el canónico Vercel (a742953, sin e63d) mostró el MISMO fallo en 1.ª carga en el mismo navegador y lo resolvió al reintento. Stack OCR intocado por e63d. La validación end-to-end la da la corrida del dueño con su zip (F4/Fase D del plan).
+
+**Archivos**: `scanner-core-bridge.ts` (F0.1/F0.2/F2.1/F2.3/F3.4) · `masiva/origen.ts` (F1) · `marco-escaneo.ts` (F3.1) · `types.ts` + `informe.ts` (F3.2 aditivo) · REPORTE + DECISIONS + ROADMAP + AGENTS + worklog.
+
+**Pendiente del dueño**: correr la cola real (zip 20261021-091545) sobre el PR desplegado → P1 sin `recortada` · P2 deja de ser RECHAZADA · chips SIM intactos · trazas nuevas en el informe. Post-corrida: análisis A/B del agente.
+---
+
+## 2026-10-21 · e63e — KIT merge-cola-prs-v1: #61+#64 mergeados · #65 NO-GO (ANEXO A caso 4 por inspección de código) + hotfix e63d-rev2 en la rama
+
+**Autorización**: el kit `INSTRUCCIONES-e63e-merge-cola-prs-v1.md` del dueño ES la autorización de merge de los 3 PRs («que mergue los pr pendientes para que no existan conflictos») — con la salvedad de su RED LINE 7: ANEXO A caso 4 cancela el merge de #65.
+
+**Hecho**
+- **#61 (DEPLOY-D67) MERGEADO** = `ed78ffb` (merge commit de 2 padres): conflicto real `docs/worklog.md` (dos appends) resuelto en la rama (`6d3f90b`) — contenido de main intacto + entrada DEPLOY-D67 appendeada ÍNTEGRA al final (precedente `f5aad33`; `grep DEPLOY-D67` = 1; el archivo termina en su bloque «Pendiente del dueño»). CI `6d3f90b`: checks ✅ · parity ❌×2 heredada D57 (0 fallos nuevos). Gate main viva ✅ (install sin cambios · tsc 0 · lint 0 · build OK).
+- **#64 (DEPLOY-D63A2) MERGEADO** = `9151f9a` (2 padres): conflicto trivial resuelto en la rama (`795b32e`) — DEPLOY-D63A2 queda DESPUÉS de DEPLOY-D67 (cronología correcta), ambas entradas intactas. CI `795b32e`: checks ✅ · parity ❌×2 heredada (0 nuevos). Gate main viva ✅.
+- **#65 (e63d) NO MERGEADO — RED LINE 7**: durante la deuda 1 del kit (QA headless §4.2) la tabla §3-A chocó con el código: el gate F0.2 de `d671c29` tenía la **polaridad del perdón INVERTIDA** (`completa = cortado ? !(FUERTE && !faltaSeccion) : true` — por De Morgan condenaba exactamente el caso P2 que debía perdonar y dejaba pasar MEDIA/DEBIL/SIN). Condición exacta del ANEXO A caso 4 confirmada por inspección (sin ficha: 6/6 divergencias de la tabla con la semántica rev.1) — el token ` Marco=perdonado` que el ANEXO A usa como firma jamás existió en `src/`. **main/producción NUNCA afectados** (e63d vive solo en esta rama).
+- **Hotfix `e63d-rev2` EN LA RAMA (NO mergeado — requiere re-autorización del dueño)**: `b5f847d` helper `marcoPerdonadoPorLectura` EXPORTADO con la tabla §3-A literal (patrón D-5) + call site sin negar · `e7c571f` QA headless `scripts/qa-escaneo-ya-recortado.ts` (4 bloques, fixtures sintéticos: tabla 8/8 · marco 4/4 · origen 9/9 · control negativo 3/3 = **24/24 OK**, exit 1) · `a852d7f` REPORTE §8 (3 desviaciones de proceso cerradas) + §9 (hallazgo + hotfix + evidencia).
+- Detalle de la resolución del rebase de esta rama: conflicto trivial `docs/worklog.md` (`7392672`) — entrada e63d appendeada tras DEPLOY-D63A2.
+
+**Base**: rama `feat/e63d-escaneo-ya-recortado-v1` sobre main @ `9151f9a` (post #61+#64).
+
+**Cómo probar**: `bun scripts/qa-escaneo-ya-recortado.ts` → `24/24 OK` · `git show b5f847d -- src/lib/e14/scanner-core-bridge.ts` (2 hunks) · REPORTE §9 con la tabla de evidencia.
+
+**Gates**: tsc 0 · lint 0 · build OK · QA 24/24 · CI de la rama: checks ✅ + parity ❌×2 heredada (perfil documentado). Merges #61/#64: 2 padres, cero squash, cero force-push.
+
+**Pendiente del dueño**: (1) revisar `b5f847d` y re-autorizar el merge de #65 (la validación de campo rev.1 queda refutada por §9 — si la 1 acta rechazada del preview era P2, fue el bug); (2) REVOCAR los tokens `ghp_`/`vcp_` expuestos en chat (deuda persistente de hoy); (3) deploy Vercel canónico del main nuevo (`ed78ffb`→`9151f9a`, docs-only — receta `docs/DEPLOY-vercel.md` §2) si quiere alinear canales; (4) Ctrl+Shift+R tras deploy; (5) kit futuro opcional: token de traza ` Marco=perdonado` junto a `lazo=` (el ANEXO A lo asume); (6) Fase E del agente tras su Fase D con zip real.
+
+**ACTUALIZACIÓN (mismo día 2026-10-21, post-ANEXO C del dueño — kit re-enviado con §8/ANEXO C)**:
+- El dueño respondió al pendiente (1) con la re-corrida pedida en REPORTE §9(2): **ANEXO C** — corrida real sobre el preview del PR (26 actas · **25 ENVIADA · 0 RECHAZADAS · 1 EN_REVISION_HUMANA** [divergencia F1 conocida, caso 5 de la matriz ANEXO A, no bloquea] · dedup 4 matches sin rechazos) con **veredicto explícito: «el caso 4 NO ocurre → GO para el merge de #65 (y #61/#64). El e63d queda validado en campo por la corrida del dueño.»** Transcripción íntegra en REPORTE §10 (A/B 10.1 · la no-ENVIADA 10.2 · invariancias 10.3 · reconciliación 10.4).
+- Reconciliación (REPORTE §10.4): el perdón observado en `transmision el cairo-P1.jpg` (gateMarco `cortado` + FUERTE + secciones presentes → ENVIADA) solo es posible con la polaridad rev.2 — la corrida valida la rama CON el hotfix incluido; caso 4 con 0 ocurrencias en campo. **La Fase E del kit e63d queda CERRADA.**
+- Merge de #65 **RE-AUTORIZADO** por el ANEXO C y ejecutado sobre esta rama (con los commits de transcripción de esta actualización) — SHA del merge de 2 padres registrado en la entrada de cierre e63e de main (FASE 4.6 del kit).
