@@ -14,18 +14,18 @@
    ============================================================ */
 @theme inline {
   /* Superficies (de mayor a menor profundidad) */
-  --color-brand-black: #070a0d;        /* raíz de pantallas de revisión (bg-body) */
-  --color-brand-viewfinder: #050706;   /* raíz del visor de cámara (escaneo) */
-  --color-brand-surface: #0f151b;      /* tarjetas / píldoras / botones secundarios */
-  --color-brand-surfacelight: #18222c; /* chips inactivos / banner de ubicación / hovers */
-  --color-brand-panel: #0a0e0c;        /* dock inferior del escaneo */
-  --color-brand-chip: #121915;         /* contenedor de chips del dock de escaneo */
-  --color-brand-border: #23303d;       /* bordes de revisión */
-  --color-brand-borderdim: #1b2620;    /* bordes del dock de escaneo */
+  --color-brand-black: #090d12;        /* raíz de pantallas de revisión (bg-body) */
+  --color-brand-viewfinder: #05080c;   /* raíz del visor de cámara (escaneo) */
+  --color-brand-surface: #10161f;      /* tarjetas / píldoras / botones secundarios */
+  --color-brand-surfacelight: #17222f; /* chips inactivos / banner de ubicación / hovers */
+  --color-brand-panel: #0b1117;        /* dock inferior del escaneo */
+  --color-brand-chip: #121c26;         /* contenedor de chips del dock de escaneo */
+  --color-brand-border: #1e293b;       /* bordes de revisión */
+  --color-brand-borderdim: #15202b;    /* bordes del dock de escaneo */
   /* Semántica de desenlace */
-  --color-brand-green: #00e676;        /* óptima / enviada / activo */
-  --color-brand-greendark: #08331e;    /* fondo de píldora verde sólida / nube online */
-  --color-brand-greenmuted: #003b20;
+  --color-brand-green: #10b981;        /* óptima / enviada / activo */
+  --color-brand-greendark: #064e3b;    /* fondo de píldora verde sólida / nube online */
+  --color-brand-greenmuted: #065f46;
   /* Tipos — Inter (todo) + JetBrains Mono (scores/chips/códigos/horas/banner) */
   --font-sans: var(--font-inter);
   --font-mono: var(--font-jbmono);

@@ -78,19 +78,19 @@ function PillEstado({ acta }: { acta: Acta }) {
   const est = estiloTopBar(acta.status, acta.score);
   return (
     <div
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs ${est.pill}`}
+      className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs transition-all ${est.pill}`}
       role="status"
     >
       {est.ping ? (
-        <span className="relative flex h-2.5 w-2.5">
+        <span className="relative flex h-2 w-2">
           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${est.dot} opacity-75`} />
-          <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${est.dot}`} />
+          <span className={`relative inline-flex rounded-full h-2 w-2 ${est.dot}`} />
         </span>
       ) : (
         <span className={`w-2 h-2 rounded-full shrink-0 ${est.dot}`} aria-hidden />
       )}
-      <span className={`font-mono font-bold ${est.score}`}>{acta.score.toFixed(1)}/10</span>
-      <span className="text-white font-semibold uppercase tracking-wider text-[11px]">
+      <span className={`font-mono font-bold text-xs tracking-tight ${est.score}`}>{acta.score.toFixed(1)}/10</span>
+      <span className="text-gray-200 font-semibold uppercase tracking-wider text-[10px]">
         {est.palabra}
       </span>
     </div>

@@ -466,13 +466,13 @@ export function ReviewView() {
       <div className="flex-1 min-h-0 overflow-y-auto max-w-md mx-auto w-full px-4 py-3 space-y-3">
         {/* Banner de ubicación (mock §3.2.2 — mono, dot del estado). */}
         {status === "ENVIADA" || status === "OPTIMA" ? (
-          <div className="flex items-center px-3 py-1.5 rounded-xl bg-brand-surfacelight border border-brand-border text-[10px] font-mono shadow-sm overflow-x-auto no-scrollbar">
-            <span className="text-brand-green font-bold tracking-wider whitespace-nowrap uppercase truncate">
+          <div className="flex items-center px-3.5 py-2 rounded-xl bg-[#10161f] border border-slate-800 text-[11px] font-mono shadow-xs overflow-x-auto no-scrollbar">
+            <span className="text-[#10b981] font-bold tracking-wider whitespace-nowrap uppercase truncate">
               {textoBanner}
             </span>
           </div>
         ) : (
-          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-brand-surfacelight border border-brand-border text-xs font-mono shadow-sm">
+          <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#10161f] border border-slate-800 text-xs font-mono shadow-xs">
             <div className="flex items-center gap-2 truncate">
               <span className={`w-2 h-2 rounded-full shrink-0 ${dotUbicacion}`} />
               <span className="text-[11px] font-bold tracking-wider text-white uppercase truncate">
@@ -577,14 +577,12 @@ export function ReviewView() {
             LA FOTO REAL (rounded-lg border-gray-300, §3.5/AC7 — el
             formulario dibujado del mock NO se porta). La tarjeta de
             ENVIADA es táctil (abre el visor fullscreen — ZoomableVisor). */}
+        {/* Tarjeta del acta (mock §3.2.4) */}
         {status === "ENVIADA" ? (
           <div
             role="button"
             aria-label="Ver acta a pantalla completa"
             tabIndex={hayFoto ? 0 : -1}
-            // FIX (auditoría 2-b #10): role=button con onClick — un tap en el
-            // padding de la tarjeta no hacía nada (solo la imagen interna
-            // abría el visor); WCAG 4.1.2 (el rol promete lo que no cumple).
             onClick={hayFoto ? () => setVisorAbierto(true) : undefined}
             onKeyDown={
               hayFoto
@@ -596,18 +594,17 @@ export function ReviewView() {
                   }
                 : undefined
             }
-            className="relative bg-brand-surface rounded-2xl p-2.5 border border-brand-border shadow-xl w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
+            className="relative bg-[#10161f] rounded-2xl p-3 border border-slate-800 shadow-2xl w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/60"
           >
             {pillFlotante && (
               <span
                 data-testid="barra-rechazo"
-                className={`absolute -top-2.5 left-1/2 -translate-x-1/2 z-10 font-mono font-extrabold text-[9px] px-2.5 py-1 rounded uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow ${
-                  // Fix del dueño (14-oct) #3: tono ok → verde (bg-brand-green).
+                className={`absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md ${
                   pillFlotante.tono === "crit"
-                    ? "bg-[#E52222] text-white"
+                    ? "bg-[#ef4444] text-white shadow-[#ef4444]/30"
                     : pillFlotante.tono === "ok"
-                      ? "bg-brand-green text-black"
-                      : "bg-[#F59E0B] text-black"
+                      ? "bg-[#10b981] text-[#090d12] shadow-[#10b981]/30 font-extrabold"
+                      : "bg-[#f59e0b] text-[#090d12] shadow-[#f59e0b]/30 font-extrabold"
                 }`}
               >
                 {pillFlotante.texto}
@@ -618,17 +615,6 @@ export function ReviewView() {
             <div className="scanner-corner-bl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             <div className="scanner-corner-br" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             {fotoVisible ? (
-              // G8 (KIT camara-visor-v1): altura DEFINIDA (patrón exacto del
-              // lab — FIX v3 1.1 de PresentationView L520-531: iOS Safari no
-              // resuelve `max-height:100%` contra padre auto). Con padre de
-              // altura definida el stage `h-full` del paquete queda estable
-              // y la imagen gira DENTRO vía object-contain — ROTAR deja de
-              // mover el marco. NO se toca ZoomableVisor del paquete (pan a
-              // 1× en card exigiría publicación npm — fuera de alcance).
-              // KIT visor-accion-score-v1 (FASE B): 420px → 56vh — la tarjeta
-              // crece con el viewport (AC-B2). INVARIANTE G8 intacto: altura
-              // DEFINIDA en px/vh, JAMÁS derivada del aspecto de la imagen —
-              // ROTAR 90° no mueve el marco.
               <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
@@ -638,8 +624,8 @@ export function ReviewView() {
                 />
               </div>
             ) : (
-              <div className="mt-2 rounded-lg border border-gray-300 bg-brand-black h-48 flex items-center justify-center">
-                <span className="font-mono text-[10px] tracking-widest text-gray-500 uppercase">
+              <div className="mt-2 rounded-xl border border-slate-800 bg-[#090d12] h-48 flex items-center justify-center">
+                <span className="font-mono text-[10px] tracking-widest text-slate-500 uppercase">
                   FOTO NO DISPONIBLE
                 </span>
               </div>
@@ -650,7 +636,6 @@ export function ReviewView() {
             role="button"
             aria-label="Ver acta a pantalla completa"
             tabIndex={hayFoto ? 0 : -1}
-            // FIX (auditoría 2-b #10): idem tarjeta ENVIADA — tap completo.
             onClick={hayFoto ? () => setVisorAbierto(true) : undefined}
             onKeyDown={
               hayFoto
@@ -662,20 +647,17 @@ export function ReviewView() {
                   }
                 : undefined
             }
-            className="relative bg-brand-surface rounded-2xl p-2.5 border border-brand-border shadow-xl w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
+            className="relative bg-[#10161f] rounded-2xl p-3 border border-slate-800 shadow-2xl w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/60"
           >
             {pillFlotante && (
               <span
-                // Fix del dueño (14-oct) #4: data-testid honesto (solo la
-                // RECHAZADA es barra-rechazo; el resto es banner-revision).
                 data-testid={status === "RECHAZADA" ? "barra-rechazo" : "banner-revision"}
-                className={`absolute -top-2.5 left-1/2 -translate-x-1/2 z-10 font-mono font-extrabold text-[9px] px-2.5 py-1 rounded uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow ${
-                  // Fix del dueño (14-oct) #3: tono ok → verde (bg-brand-green).
+                className={`absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[10px] px-3 py-1 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md ${
                   pillFlotante.tono === "crit"
-                    ? "bg-[#E52222] text-white"
+                    ? "bg-[#ef4444] text-white shadow-[#ef4444]/30"
                     : pillFlotante.tono === "ok"
-                      ? "bg-brand-green text-black"
-                      : "bg-[#F59E0B] text-black"
+                      ? "bg-[#10b981] text-[#090d12] shadow-[#10b981]/30 font-extrabold"
+                      : "bg-[#f59e0b] text-[#090d12] shadow-[#f59e0b]/30 font-extrabold"
                 }`}
               >
                 {pillFlotante.texto}
@@ -686,8 +668,6 @@ export function ReviewView() {
             <div className="scanner-corner-bl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             <div className="scanner-corner-br" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             {fotoVisible ? (
-              // G8: misma altura definida (2º wrapper del visor de card) —
-              // FASE B: mismo valor 56vh en ambos (invariante G8 intacto).
               <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
@@ -697,8 +677,8 @@ export function ReviewView() {
                 />
               </div>
             ) : (
-              <div className="mt-2 rounded-lg border border-gray-300 bg-brand-black h-48 flex items-center justify-center">
-                <span className="font-mono text-[10px] tracking-widest text-gray-500 uppercase">
+              <div className="mt-2 rounded-xl border border-slate-800 bg-[#090d12] h-48 flex items-center justify-center">
+                <span className="font-mono text-[10px] tracking-widest text-slate-500 uppercase">
                   FOTO NO DISPONIBLE
                 </span>
               </div>
@@ -706,31 +686,24 @@ export function ReviewView() {
           </div>
         )}
 
-        {/* §D4: nota tenue del respaldo — la tarjeta muestra la ORIGINAL
-            porque la procesada salió vacía.
-            KIT e14-recorte-manual-v1 (T3): tras un recorte MANUAL el swap
-            YA NO se lee como «mi recorte no se aplicó» — el acta carga
-            recorteManualSinTinta y el aviso lo dice honesto. El swap de
-            display permanece; el umbral de tinta NO cambia (A5). */}
         {mostrandoOriginal && (
-          <p className="text-center font-mono text-[9px] font-bold tracking-[0.18em] text-gray-400 uppercase">
+          <p className="text-center font-mono text-[9px] font-bold tracking-[0.18em] text-slate-400 uppercase">
             {acta.recorteManualSinTinta
               ? "TU RECORTE SE APLICÓ — LA FOTO SALIÓ SIN TINTA SUFICIENTE; SE MUESTRA LA ORIGINAL"
               : "SE MUESTRA LA FOTO ORIGINAL"}
           </p>
         )}
 
-        {/* Bloque ENVIADO (mock 6 §3.2.7 — solo ENVIADA): «✓ ENVIADO
-            AUTOMÁTICAMENTE» + chip de la hora real del envío. */}
+        {/* Bloque ENVIADO */}
         {status === "ENVIADA" && (
-          <div className="bg-brand-greendark/60 border border-brand-green/60 rounded-xl px-3.5 py-2 flex items-center justify-between shadow-sm">
+          <div className="bg-[#10b981]/15 border border-[#10b981]/40 rounded-xl px-4 py-2.5 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-brand-green font-bold text-xs shrink-0">✓</span>
-              <span className="text-brand-green font-bold text-[11px] uppercase tracking-wider font-mono truncate">
+              <span className="text-[#10b981] font-bold text-sm shrink-0">✓</span>
+              <span className="text-[#10b981] font-bold text-xs uppercase tracking-wider font-mono truncate">
                 {acta.enviadoAutomaticamente ? "ENVIADO AUTOMÁTICAMENTE" : "ENVIADO CORRECTAMENTE"}
               </span>
             </div>
-            <span className="font-mono text-xs text-white font-bold bg-black/60 px-2.5 py-1 rounded-md border border-brand-border shrink-0">
+            <span className="font-mono text-xs text-white font-bold bg-[#090d12] px-2.5 py-1 rounded-md border border-slate-800 shrink-0">
               {acta.enviadoAutomaticamente ?? "--:--:--"}
             </span>
           </div>

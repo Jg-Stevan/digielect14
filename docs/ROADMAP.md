@@ -334,3 +334,34 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] Gates: tsc 0 · lint 0 · build OK · humo puro 22/22 (invariancias + control negativo mutilado) · binario con tokens nuevos verificado.
 - [ ] F4/Fase D del dueño: cola real (zip 20261021-091545) → P1 sin `recortada` · P2 deja de ser RECHAZADA · chips SIM intactos · trazas nuevas en informe (lab/bench del plan con esa evidencia).
 - [ ] Fase E del agente: A/B del informe post-corrida + tabla dedup + atribución.
+## MIGRACIÓN AI STUDIO — ai-studio-web-runtime (2026-10-20, D68): habilitación para ejecución en Google AI Studio
+
+- [x] T1 — `package.json`: scripts `dev` y `start` actualizados a `-p 3000 -H 0.0.0.0` (puerto accesible único de AI Studio).
+- [x] T2 — `next.config.ts`: dominios `*.run.app` y `*.aistudio.google.com` incorporados a `allowedDevOrigins`.
+- [x] T3 — Creación de `.env.example` (variables `NEXT_PUBLIC_BASE_PATH` y `BUILD_STATIC`) y `metadata.json` requerido por la plataforma.
+- [x] T4 — Verificación con `install_applet_dependencies` y compilación exitosa con `compile_applet` y `lint_applet` (cero errores).
+
+## REDISEÑO VISUAL Y CONTINUIDAD DE NEGOCIO — e14-modern-dark-redesign-v1 (2026-10-21, D69): estética slate-noir de campo sin regresión de negocio
+
+- [x] T1 — Paleta y primitivas: tokens slate-noir en `globals.css` + modernización de `primitives.tsx` (`StatusDot`, `Chip`, `SegmentedBar`, `ToolbarBtn`, `PrimaryBtn`).
+- [x] T2 — Navegación y Shell: `TopBar` refinado y `BottomNav` con efecto cristal esmerilado, targets táctiles de 48px e indicador de actas.
+- [x] T3 — Escaneo y Visor (`ScanView.tsx`): selector HUD segmentado `[ CÁMARA | SIM | SUBIR ]`, rescate interactivo de permisos bloqueados en iframe sandbox, visor de simulación con brackets, botón obturador concéntrico y botones de score de simulación (8.2 / 7.0 / 4.3).
+- [x] T4 — Control de Mesas (`ActasView.tsx`): buscador en tiempo real por número de mesa, cabecera de puesto electoral y tarjetas de mesa con jerarquía visual nítida.
+- [x] T5 — Resumen de Jornada (`ResumenView.tsx`): tarjetas KPI (Transmitidas, Pendientes, En Rescaneo), medidor de progreso por segmentos y botones de acción rápida.
+- [x] T6 — Flujos de Análisis y Revisión (`AnalyzingView.tsx`, `ReviewView.tsx`, `MasivaView.tsx`): radar de escaneo visual, editor de revisión con barra fija y panel de carga masiva modernizado.
+- [x] T7 — Verificación: `compile_applet` y `lint_applet` limpios con cero errores.
+
+## MASIVA DROP-ANYWHERE & STICKY HEADER — e14-masiva-drop-anywhere-sticky-v1 (2026-10-21, D70)
+
+- [x] T1 — Drag & drop global estilo DeepSeek: detector por eventos `window` con ref counter anti-parpadeo y overlay a pantalla completa (`fixed inset-0 z-50`) con animaciones, bordes punteados esmeralda e ingesta directa en `agregarFiles()`.
+- [x] T2 — Barra de acciones superior fija (`sticky top-0 z-30`): botón «PROCESAR COLA» / «PAUSAR» accesible permanentemente durante el scroll de actas, con contador dinámico de pendientes y botón «VACIAR».
+- [x] T3 — Scroll fluido sin contenedor rígido: eliminación del `max-h-96` en la lista de filas y padding inferior `pb-24` para no tapar elementos con el BottomNav.
+- [x] T4 — Verificación: `compile_applet` y `lint_applet` limpios con cero errores.
+
+## MASIVA % DE PROCESO DEL ACTA — e14-masiva-pct-proceso-v1 (2026-10-21, D71)
+
+- [x] T1 — Cálculo en tiempo real de porcentaje de proceso (`porcentajeProcesoActa`): 0% en espera, 25% preparando, 50% detección/recorte, 50-95% OCR continuo y 98% verificación, 100% al quedar LISTA.
+- [x] T2 — Transformación de la métrica de fila (`div:nth-of-type(3) > span:nth-of-type(1)`): píldora visual con el porcentaje de proceso y punto animado en la fila activa, manteniendo score y página adyacentes.
+- [x] T3 — Barra de vida inferior sincronizada con la progresión porcentual mediante transición fluida en CSS.
+- [x] T4 — Verificación: `compile_applet` y `lint_applet` limpios con cero errores.
+

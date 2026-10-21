@@ -129,22 +129,27 @@ export function AnalyzingView() {
   const barras = Math.ceil((progreso / 100) * 4);
 
   return (
-    <div className="flex-1 flex flex-col bg-black/80 backdrop-blur pt-safe pb-6 select-none">
+    <div className="flex-1 flex flex-col bg-[#090d12] backdrop-blur pt-safe pb-6 select-none">
       <div className="flex-1 flex flex-col justify-between items-center w-full max-w-md mx-auto px-4">
         {/* Beacon superior: EN PROCESO + latencia */}
         <div className="w-full flex items-center justify-between pt-4">
-          <div className="flex items-center gap-2 bg-brand-surface border border-brand-border/60 px-3.5 py-1.5 rounded-full">
-            <span className="inline-block w-2 h-2 rounded-full bg-brand-green animate-pulse" />
-            <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-gray-400">EN PROCESO</span>
+          <div className="flex items-center gap-2 bg-[#10161f] border border-slate-800 px-3.5 py-1.5 rounded-full shadow-xs">
+            <span className="inline-block w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
+            <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-slate-300">
+              PROCESANDO MOTOR OCR
+            </span>
           </div>
-          <span className="font-mono text-xs text-gray-500 tabular-nums">{latencia}ms</span>
+          <span className="font-mono text-xs text-slate-400 tabular-nums bg-slate-800/50 px-2 py-0.5 rounded-md border border-slate-700/50">
+            {latencia}ms
+          </span>
         </div>
 
         {/* Área focal: anillo concéntrico */}
         <div className="flex flex-col items-center justify-center my-auto w-full max-w-xs">
-          <div className="relative flex items-center justify-center w-48 h-48 mb-6">
+          <div className="relative flex items-center justify-center w-52 h-52 mb-6">
             {/* Glow ambiental */}
-            <div className="absolute inset-0 rounded-full bg-brand-green/10 blur-xl" aria-hidden />
+            <div className="absolute inset-0 rounded-full bg-[#10b981]/15 blur-2xl" aria-hidden />
+
             {/* Pista + anillo de progreso */}
             <svg
               className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
@@ -152,16 +157,16 @@ export function AnalyzingView() {
               aria-hidden
             >
               <circle
-                className="text-white/10"
+                className="text-slate-800/80"
                 cx="80"
                 cy="80"
                 fill="none"
                 r="68"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="3"
               />
               <circle
-                className="text-brand-green transition-all duration-200 ease-out"
+                className="text-[#10b981] transition-all duration-200 ease-out"
                 cx="80"
                 cy="80"
                 fill="none"
@@ -170,59 +175,65 @@ export function AnalyzingView() {
                 strokeDasharray={CIRCUNFERENCIA}
                 strokeDashoffset={offset}
                 strokeLinecap="round"
-                strokeWidth="3"
+                strokeWidth="3.5"
               />
             </svg>
+
             {/* Anillo medio */}
-            <div className="absolute w-36 h-36 rounded-full bg-brand-surface flex items-center justify-center">
+            <div className="absolute w-40 h-40 rounded-full bg-[#10161f] border border-slate-800/80 flex items-center justify-center shadow-lg">
               {/* Núcleo de escaneo */}
-              <div className="relative w-28 h-28 rounded-full bg-brand-black border border-brand-border/60 flex flex-col items-center justify-center overflow-hidden">
+              <div className="relative w-30 h-30 rounded-full bg-[#090d12] border border-slate-800 flex flex-col items-center justify-center overflow-hidden">
                 <div
-                  className="absolute left-[12%] right-[12%] h-[2px] bg-brand-green/70 shadow-[0_0_12px_rgba(0,230,118,0.55)] animate-scan"
+                  className="absolute left-[10%] right-[10%] h-[2px] bg-[#10b981] shadow-[0_0_12px_rgba(16,185,129,0.7)] animate-scan"
                   aria-hidden
                 />
-                <div className="relative z-10 flex items-center justify-center">
-                  <DocScannerIcon className="w-9 h-9 text-brand-green drop-shadow-[0_0_8px_rgba(0,230,118,0.45)]" />
+                <div className="relative z-10 flex items-center justify-center mb-1">
+                  <DocScannerIcon className="w-9 h-9 text-[#10b981] drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                 </div>
-                <span className="absolute bottom-2 z-10 font-mono text-xs text-brand-green">
+                <span className="relative z-10 font-mono text-xs font-bold text-white tabular-nums">
                   {Math.round(progreso)}%
                 </span>
               </div>
             </div>
+
             {/* Micro marcas de esquina */}
-            <div className="absolute -top-1 -left-1 w-2.5 h-2.5 border-t border-l border-brand-green/40 pointer-events-none" aria-hidden />
-            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-t border-r border-brand-green/40 pointer-events-none" aria-hidden />
-            <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 border-b border-l border-brand-green/40 pointer-events-none" aria-hidden />
-            <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 border-b border-r border-brand-green/40 pointer-events-none" aria-hidden />
+            <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-[#10b981]" aria-hidden />
+            <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-[#10b981]" aria-hidden />
+            <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-[#10b981]" aria-hidden />
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-[#10b981]" aria-hidden />
           </div>
 
           {/* Jerarquía tipográfica */}
-          <div className="flex flex-col items-center text-center gap-1">
-            <h1 className="text-xl font-bold text-white tracking-tight">Analizando acta</h1>
-            <p className="font-mono text-xs text-brand-green tracking-widest uppercase max-w-[260px] min-h-[18px] transition-opacity duration-200">
+          <div className="flex flex-col items-center text-center gap-1.5">
+            <h2 className="text-xl font-bold text-white tracking-tight">Analizando acta E-14</h2>
+            <p className="font-mono text-xs text-[#10b981] tracking-widest uppercase max-w-[280px] min-h-[18px] transition-opacity duration-200 font-semibold">
               {progreso >= 100 ? "VALIDACIÓN COMPLETADA CON ÉXITO" : ETAPAS[etapa]}
             </p>
           </div>
 
-          {/* 4 barras de paso (4px) */}
-          <div className="w-40 flex items-center justify-between gap-1 mt-4">
+          {/* 4 barras de paso */}
+          <div className="w-44 flex items-center justify-between gap-1.5 mt-5">
             {Array.from({ length: 4 }, (_, i) => (
               <span
                 key={i}
-                className={`h-1 flex-1 rounded ${i < barras ? "bg-brand-green" : "bg-brand-border"}`}
+                className={`h-1.5 flex-1 rounded-[2px] transition-colors duration-300 ${
+                  i < barras ? "bg-[#10b981] shadow-xs shadow-[#10b981]/50" : "bg-slate-800"
+                }`}
               />
             ))}
           </div>
         </div>
 
         {/* Sello de integridad */}
-        <div className="w-full flex flex-col items-center gap-1">
-          <div className="flex items-center gap-2 bg-brand-surface border border-brand-border/60 px-3.5 py-1.5 rounded-full">
-            <ShieldCheckIcon className="w-4 h-4 text-gray-500" />
-            <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-500">E-14 DIGITALIZADOR</span>
+        <div className="w-full flex flex-col items-center gap-1 pt-2">
+          <div className="flex items-center gap-2 bg-[#10161f] border border-slate-800 px-3.5 py-1.5 rounded-full shadow-xs">
+            <ShieldCheckIcon className="w-4 h-4 text-[#10b981]" />
+            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-300">
+              DIGITALIZADOR OFICIAL E-14
+            </span>
           </div>
-          <span className="font-mono text-xs text-gray-500 text-center">
-            HASH SHA-256 EN COLA · MODO BA
+          <span className="font-mono text-[11px] text-slate-500 text-center">
+            VALIDACIÓN AUTOMÁTICA DE REGISTRO ELECTORAL
           </span>
         </div>
       </div>
