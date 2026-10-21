@@ -154,6 +154,12 @@ export interface FilaInforme {
   pesoImagenes: number;
   /** Extensión real para original.<ext> de filas ERROR con Blob (T1.3). */
   extArchivo: string;
+  // ---------- e63f — KIT e63f-autoenvio-v1 (F0) ----------
+  /** Balde fino del no-AUTO del clasificador (F0): "puesto-lugar" | "tipo" |
+   *  "mesa-registro" | "ruta". null = AUTO o sin motivo de los listados —
+   *  jamás inventar (fuente: clasificacion.clasifDebil; clasificaciones
+   *  pre-e63f no traen el campo → null). */
+  clasifDebil: string | null;
 }
 
 /** Resumen para la UI (T2) — espejo de lo importante del informe.json. */
@@ -304,6 +310,9 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
     conCarpeta,
     pesoImagenes,
     extArchivo: extensionDe(reg),
+    // e63f (F0): balde fino del no-AUTO (null si AUTO/sin motivo — la
+    // clasificación vieja no trae el campo → null, jamás inventar).
+    clasifDebil: acta?.clasificacion?.clasifDebil ?? null,
   };
 }
 
@@ -720,6 +729,21 @@ export function renderTxt(
   linea(
     `ESCANEOS: ENVIADAS ${escPorStatus["ENVIADA"]} - ADVERTENCIA ${escPorStatus["ADVERTENCIA"]} - RECHAZADAS ${escPorStatus["RECHAZADA"]} (motivos: ${motivosEscaneos || "ninguno"})${extensionEscaneos}`,
   );
+  // KIT e63f-autoenvio-v1 (F0 — línea ADITIVA nueva, patrón ESCANEOS): por
+  // qué el clasificador no dio AUTO — censo por motivo de las filas que
+  // traen el balde (una acta enviada a mano TAMBIÉN fue retirada del
+  // autoenvío). Solo se imprime si n > 0 — sin el balde la sección queda
+  // byte-idéntica (los parsers van por prefijo, contrato D51).
+  const conClasifDebil = filas.filter((f) => f.clasifDebil);
+  if (conClasifDebil.length) {
+    const porMotivo = conteo(
+      conClasifDebil.map((f) => f.clasifDebil),
+      ["puesto-lugar", "tipo", "mesa-registro", "ruta"],
+    );
+    linea(
+      `CLASIF-DEBIL: puesto-lugar ${porMotivo["puesto-lugar"]} · tipo ${porMotivo["tipo"]} · mesa ${porMotivo["mesa-registro"]} · ruta ${porMotivo["ruta"]}`,
+    );
+  }
   linea();
   linea(`ACTAS (${filas.length})`);
   filas.forEach((f, i) => {

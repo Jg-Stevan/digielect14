@@ -64,6 +64,13 @@ export interface ClasificacionE14 {
    *  consenso del código 1D (CODIGO) o el registro a distancia de edición 1
    *  (REGISTRO). null sin kit. Display-only (chip de ID de REVISIÓN). */
   kitFuente?: "PIE" | "CODIGO" | "REGISTRO" | null;
+  /** KIT e63f-autoenvio-v1 (F0 — balde fino, solo-aditivo, contrato D51):
+   *  motivo EXACTO por el que el nivel NO fue AUTO, calculado de variables ya
+   *  existentes (cero recomputo). Valores: "puesto-lugar" | "tipo" |
+   *  "mesa-registro" | "ruta". null = AUTO o sin motivo de los listados (el
+   *  score NO es un motivo de clasificación — kit §2.1). Opcional: los
+   *  consumidores pre-e63f lo tragan sin error. */
+  clasifDebil?: string | null;
 }
 
 /** Regla de dominio E-14 (§4.5): la cabecera debe decir E-14/REGISTRADURÍA.
@@ -78,6 +85,25 @@ export function normalizarNombre(s: string): string {
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** KIT e63f-autoenvio-v1 (F1a): normalización OCR-aware de NOMBRES — EXCLUSIVA
+ *  de la verificación LUGAR (regla 4). Hereda normalizarNombre (NFKD, sin
+ *  diacríticos, MAYÚSCULAS, espacios colapsados) y añade:
+ *  (1) guiones/underscores/puntuación → espacio — el E-14 imprime
+ *      «El Cairo - Consulado» con variantes de guion que el OCR come o
+ *      duplica («CALRO-CONSULADO» vs «CAIRO - CONSULADO»);
+ *  (2) equivalencia I ↔ L SOLO a efectos de comparación, aplicada a AMBOS
+ *      lados (canónica simétrica): el error real del informe 120553 es
+ *      «CALRO» vs «CAIRO» y «EI» vs «EL» — exactamente I↔L.
+ *  RED LINE 3 del kit: normalizarNombre queda BYTE-IDÉNTICO en todo lo demás
+ *  (resoluciones dep/mun/puesto, rescate global, desambiguaciones). */
+export function normalizarNombreLugar(s: string): string {
+  return normalizarNombre(s)
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replaceAll("I", "L")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -685,6 +711,12 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
   let puesto: ClasificacionE14["puesto"] = null;
   let confPuesto = 0;
   let puestoResuelto = false;
+  // e63f F0: el cap de la verificación LUGAR DISPARÓ (balde fino
+  // "puesto-lugar" — el informe TOTALES y el contador fine lo consumen).
+  let capLugarAplicado = false;
+  // e63f F1b: ¿el puesto quedó resuelto POR CÓDIGO (no por nombre)? Solo esa
+  // vía puede frenar el cap de la verificación LUGAR con el kit del registro.
+  let puestoPorCodigo = false;
   if (departamento && municipio) {
     const candidatos = puestosDelMunicipio(base, departamento.codigo, municipio.codigo);
 
@@ -699,6 +731,7 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
           puesto = { codigo: enZona.std, nombre: enZona.nombre };
           confPuesto = 1;
           puestoResuelto = true;
+          puestoPorCodigo = true;
         } else if (conCodigo.length === 1) {
           // El código leído vive en otra zona: confía en el código del
           // puesto y deduce su zona real.
@@ -706,12 +739,14 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
           zona = { codigo: conCodigo[0].zon };
           confPuesto = 0.9;
           puestoResuelto = true;
+          puestoPorCodigo = true;
         }
       } else if (conCodigo.length === 1) {
         puesto = { codigo: conCodigo[0].std, nombre: conCodigo[0].nombre };
         zona = { codigo: conCodigo[0].zon };
         confPuesto = 0.9;
         puestoResuelto = true;
+        puestoPorCodigo = true;
       } else if (conCodigo.length > 1 && lugarLeido) {
         // Mismo código en varias zonas (p. ej. ALEMANIA: 02 en zona 15
         // «Frankfurt Consulado» y en 05 «Berlin Consulado») → desambigua
@@ -736,11 +771,45 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
 
     // Verificación LUGAR (regla 4): contra el standName del puesto elegido;
     // si difiere mucho → baja la confianza (techo SUGERIDA).
+    // KIT e63f-autoenvio-v1 (F1a): la similitud usa normalizarNombreLugar
+    // (OCR-aware: puntuación→espacio + I↔L) SOLO aquí — UMBRAL intacto
+    // (0.55), normalizarNombre byte-idéntico en todo lo demás. Efecto medido:
+    // «EI Calro-Consulado» vs «El Cairo - Consulado» pasa de 0.471 (cap
+    // injusto — el caso real del informe 120553) a ≥ 0.55 (sin cap).
+    // KIT e63f-autoenvio-v1 (F1b — CAMBIO DE SEMÁNTICA DECLARADO, aprobación
+    // del dueño en el kit §3b): el consenso del registro KIT FRENA el
+    // downgrade — puesto resuelto POR CÓDIGO ∧ kitEnRegistro(mun, kit) existe
+    // ∧ std del registro == puesto.codigo → NO capar: DOS fuentes
+    // estructuradas de acuerdo (código divipol leído por OCR + kit del
+    // consenso 1D/PIE = la ruta en REGISTRO_KITS) contra UNA línea de texto
+    // libre con ruido. Aviso display LUGAR-DESVIADO (el humano lo ve — la UI
+    // ya pinta avisos; el acta no se pierde). Cualquier otra combinación (sin
+    // kit, kit de otra ruta, puesto resuelto por nombre) → cap como hoy
+    // (byte-idéntico). El registro sigue sin resolver NADA solo: no otorga
+    // upgrade, SOLO frena este cap; la mesa sigue la regla D.6 (kit §3b.3).
     if (puesto && lugarLeido && confPuesto >= UMBRAL_AUTO) {
-      const verificacion = similitud(lugarLeido, normalizarNombre(puesto.nombre));
+      const verificacion = similitud(
+        normalizarNombreLugar(lugarLeido),
+        normalizarNombreLugar(puesto.nombre),
+      );
       if (verificacion < UMBRAL_VERIFICACION_LUGAR) {
-        confPuesto = Math.min(confPuesto, 0.75);
-        puestoResuelto = false;
+        // Kit disponible ANTES del arbitraje (que corre DESPUÉS, con el
+        // municipio FINAL del rescate): consenso del código 1D, con fallback
+        // al pie (kit e63f §3b: «kit 399 del consenso 1D/PIE»). En el
+        // REGISTRO_KITS actual el std es constante por municipio → la señal
+        // coincide con la del kit arbitrado (nota en REPORTE-e63f §3).
+        const kitLugar = consenso?.kit ?? mKitPie;
+        const registroLugar =
+          kitLugar != null
+            ? kitEnRegistro(municipio?.codigo ?? null, kitLugar)
+            : null;
+        if (puestoPorCodigo && registroLugar && registroLugar.std === puesto.codigo) {
+          avisos.push("LUGAR-DESVIADO");
+        } else {
+          confPuesto = Math.min(confPuesto, 0.75);
+          puestoResuelto = false;
+          capLugarAplicado = true;
+        }
       }
     }
   }
@@ -936,6 +1005,21 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
     nivel = "SUGERIDA";
   }
 
+  // ---- KIT e63f-autoenvio-v1 (F0 — balde fino del «por qué no fue AUTO»):
+  //      motivo EXACTO calculado de variables ya existentes (cero recomputo).
+  //      Prioridad si hay varios: puesto-lugar > tipo > mesa-registro > ruta
+  //      (es lo que se pueda arreglar primero — kit §2.1). null si AUTO o si
+  //      nada aplica — el score NO es un motivo de clasificación. Solo-
+  //      aditivo: el informe TOTALES (línea CLASIF-DEBIL) y el contador fino
+  //      del store lo consumen; los consumidores viejos lo ignoran. ----
+  let clasifDebil: string | null = null;
+  if (nivel !== "AUTO") {
+    if (capLugarAplicado) clasifDebil = "puesto-lugar";
+    else if (tipo === null || confianzaTipo < UMBRAL_AUTO) clasifDebil = "tipo";
+    else if (avisos.includes("MESA_REGISTRO_DISCREPAN")) clasifDebil = "mesa-registro";
+    else if (!(depResuelto && munResuelto && puestoResuelto)) clasifDebil = "ruta";
+  }
+
   return {
     departamento,
     municipio,
@@ -961,6 +1045,9 @@ export function clasificarCabecera(ocrTexto: string, base: DivipolBase): Clasifi
     avisos,
     // KIT consenso-frankfurt-v1 (FASE 3, §4.2): procedencia del kit ganador.
     kitFuente,
+    // KIT e63f-autoenvio-v1 (F0): balde fino del no-AUTO (null si AUTO o sin
+    // motivo de los listados) — solo-aditivo, contrato D51.
+    clasifDebil,
     confianzas: {
       departamento: Math.round(confDep * 100) / 100,
       municipio: Math.round(confMun * 100) / 100,
