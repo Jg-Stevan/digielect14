@@ -185,6 +185,11 @@ const DETALLE_GENERICO = "SCORE INSUFICIENTE PARA TRANSMISIÓN";
 // §F-5 (SPEC-camara-funcional): detalle del rechazo por acta INCOMPLETA —
 // la captura corta el papel aunque la cabecera sea legible.
 const DETALLE_INCOMPLETA = "EL ACTA ESTÁ CORTADA EN EL ENCUADRE — ALÉJATE UN POCO Y CAPTURA EL ACTA COMPLETA";
+// KIT e63d-escaneo-ya-recortado-v1 (F3.4): copy del rechazo INCOMPLETA para
+// ARCHIVO/escaneo — «aléjate un poco» no tiene sentido para un archivo
+// subido (no hay cámara que alejar). Mismo tipo de rechazo, copy del medio.
+const DETALLE_INCOMPLETA_ESCANEO =
+  "EL ESCANEO PARECE CORTADO — REPITE EL ESCANEO INCLUYENDO EL ACTA COMPLETA";
 // KIT e14-gate-v2 (FASE G2): detalle del rechazo por el MARCADOR
 // OBLIGATORIO de votos fallido — copy CORTO y descriptivo (decisión del
 // dueño: SIN guía de cámara). El rechazo directo regresa el flujo a
@@ -1080,6 +1085,17 @@ export class RealCoreBridge implements E14Bridge {
     // D63-A) viaja en opciones SOLO para MASIVA — SIM y el flujo individual
     // JAMÁS lo traen (guard doble del kit T3: nada de escaneos les aplica).
     const origenActa = opciones.origenActa ?? null;
+    // KIT e63d-escaneo-ya-recortado-v1 (F2.1): un ESCANEO es rectangular por
+    // construcción — la detección de quad es una herramienta de FOTOS (papel
+    // sobre fondo). En un escaneo ceñido el único rectángulo fuerte es el
+    // MARCO IMPRESO del formulario: dejar que el worker «lo encuentre» =
+    // re-recortar el escaneo (fallo A del plan: P1 → cabecera fuera →
+    // recortada=1 → techo 7.9). Identidad DESDE EL INICIO (sin worker, sin
+    // Sobel, sin espera fría) — el deskew D63-B ya endereza la rotación y el
+    // marco D63-C gobierna el gate. La detección sigue byte a byte para
+    // fotos (identidad ya es la convención de sinRecorte que consume el
+    // editor — plan F2.4).
+    const escaneoIdentidad = origenActa === "escaneo" && !sinRecorte;
     let quad: Quad;
     // KIT e14-quad-sobel-v1 (P1 §4-B): quién fabricó el quad de verdad —
     // "worker" (la cascada ganó) o "sobel" (el fallback, incluido el catch del
@@ -1092,6 +1108,13 @@ export class RealCoreBridge implements E14Bridge {
     let detectReintento = false;
     const tDetect = performance.now();
     if (sinRecorte) {
+      quad = QUAD_IDENTITY;
+    } else if (escaneoIdentidad) {
+      // KIT e63d (F2.1): página completa SIN correr detección — el paso
+      // entero se omite (detect medio ≈ 0 ms en escaneos; el informe
+      // DETECCION contará quadOrigen "pagina-completa" por la vía normal).
+      // La clase entera de quads falsos queda eliminada POR CONSTRUCCIÓN,
+      // no por parche.
       quad = QUAD_IDENTITY;
     } else {
       try {
@@ -1128,7 +1151,14 @@ export class RealCoreBridge implements E14Bridge {
         // evidencia: 3/8 del informe cayeron a sobel) — la PÁGINA COMPLETA
         // es el acta: sin warp de perspectiva (la rotación recta ya la trajo
         // D63-B). Las FOTOS no cambian (T1.3: quad sobel de siempre).
-        if (origenActa === "escaneo" && quadOrigen === "sobel") {
+        // KIT e63d (F0.1): generalizado a TODO escaneo — un quad del worker
+        // sobre un escaneo es un re-recorte en potencia (el marco impreso es
+        // el único rectángulo fuerte y warp-earlo corta el escaneo). Hoy es
+        // camino MUERTO para escaneos (F2.1 ya no corre detección para
+        // ellos) — queda como defensa en profundidad: si la detección
+        // volviera a correr para un escaneo, el desenlace sigue siendo
+        // página completa.
+        if (origenActa === "escaneo") {
           quad = QUAD_IDENTITY;
           quadOrigen = "pagina-completa";
         }
@@ -1271,9 +1301,19 @@ export class RealCoreBridge implements E14Bridge {
     // la rama SIMULACIÓN (AC15 score-ocr) → también cubierto por el skip.
     // FASE 2 (§3): recibe las esquinas — 4 fiduciales presentes → la
     // sospecha geométrica NO condena (papel entero demostrado).
-    const verificacion: Promise<ResultadoCompletitud> | null = opciones.simular
-      ? null
-      : verificarCompletitud(quad, fotoProcesada, esquinas);
+    // KIT e63d (F2.3): verificarCompletitud NO corre para ESCANEOS — hoy
+    // corría y su `completa` se descartaba (el marco lo pisa SIEMPRE para
+    // escaneos: evaluarMarcoImpreso jamás devuelve null). El guard de fotos
+    // mide tinta al filo del warp — un escaneo no tiene warp (identidad) y
+    // su gate es el MARCO (D63-C). Menos trabajo muerto, misma decisión.
+    // EFECTO DECLARADO (plan §4): el escudo anti-fondo (fondo → techo 7.9,
+    // L1461) tampoco aplica a escaneos — es un guard del WARP (fondo/sombra
+    // incluida por el encuadre), sin premisa en identidad. El veredicto del
+    // escaneo lo gobiernan marco + lectura + marcadores (honestos).
+    const verificacion: Promise<ResultadoCompletitud> | null =
+      opciones.simular || origenActa === "escaneo"
+        ? null
+        : verificarCompletitud(quad, fotoProcesada, esquinas);
     // §D4 (SPEC-e14-score-ocr): visor nunca vacío — tinta de la PROCESADA
     // (muestreo 64×64): un warp sin tinta (quad degenerado sobre superficie
     // lisa → blanco puro del B/N adaptativo) marca el acta para que REVISIÓN
@@ -1431,8 +1471,24 @@ export class RealCoreBridge implements E14Bridge {
     // referencia que las fracciones ZONA_* de marcadores.ts).
     const marcoEscaneo: MarcoEscaneo | null =
       origenActa === "escaneo" && !opciones.simular ? await evaluarMarcoImpreso(fotoProcesada) : null;
+    // KIT e63d-escaneo-ya-recortado-v1 (F0.2): la LECTURA perdona al marco
+    // (mismo patrón que lazoPerdonadoPorLectura del kit lectura-perdona-lazo).
+    // Un marco «cortado» en un escaneo CEÑIDO demuestra un corte GEOMÉTRICO
+    // de la hoja, no pérdida de CONTENIDO (el marco vive insertado ~2%:
+    // cortar EN el marco no pierde ni un dato). La lectura FUERTE + secciones
+    // presentes = contenido probado → el veredicto del marco no condena.
+    // El gate sigue HONESTO: falta una sección inferior o lectura débil/media
+    // → «cortado» sigue condenando (la lectura perdona al marco, NO al
+    // contenido faltante — plan §3/§4). "ceñido" (F3) nunca bloquea por
+    // construcción (≠ "cortado"). senal (L1368) y faltaSeccion (L1357) ya
+    // están calculadas aquí — costo cero.
     let completa = opciones.simular ? true : (verificacionResuelta?.completa ?? true);
-    if (marcoEscaneo) completa = marcoEscaneo.veredicto === "cortado" ? false : true;
+    if (marcoEscaneo) {
+      completa =
+        marcoEscaneo.veredicto === "cortado"
+          ? !(senal.nivel === "FUERTE" && !faltaSeccion)
+          : true;
+    }
     // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) — marcador OBLIGATORIO de
     // votos, FUERA de evaluarGate (MISMO patrón del veto INCOMPLETA: D6/
     // AC10). Fallo del 2026-10-16: acta sin votos llegó OPTIMA y se
@@ -1476,7 +1532,15 @@ export class RealCoreBridge implements E14Bridge {
             opciones.intento >= opciones.maxIntentos
               ? ("EN_REVISION_HUMANA" as ActaStatus)
               : ("RECHAZADA" as ActaStatus),
-          rechazo: { tipo: "INCOMPLETA", detalle: DETALLE_INCOMPLETA },
+          // KIT e63d (F3.4): el copy del rechazo depende del ORIGEN — para
+          // escaneos el mensaje de cámara («aléjate») es absurdo: se pide
+          // repetir el ESCANEO. Fotos/cámara conservan el copy de siempre
+          // byte a byte. (pipelineRecorte —rama manual— sin cambios: F2.4.)
+          rechazo: {
+            tipo: "INCOMPLETA",
+            detalle:
+              origenActa === "escaneo" ? DETALLE_INCOMPLETA_ESCANEO : DETALLE_INCOMPLETA,
+          },
           clasificacion: null,
         }
       : !marcadoresOk

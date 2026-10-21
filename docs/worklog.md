@@ -1844,3 +1844,25 @@ Nota: GitHub conserva los PRs y sus diffs aunque se borre la rama; nada se pierd
 - **Control negativo** (el que faltaba en rev.1): el humo rev.2 sobre el código PRE-fix → exit 1 (detecta el hueco). El humo ya no puede validar un spread sin constructor.
 - Gates re-emitidos: tsc 0 · lint 0. Cero toques fuera de `informe.ts` (asignación + export + comentarios). CONGELADOS intactos. REPORTE rev.2: claim §3-T2 corregido + §4.1 (bug/causa/fix/humo) + §5 humo rev.1 marcado INVALIDADO en su base.
 - Fase D sigue del DUEÑO (corrida formal + firma de build); Fase E tras esa corrida.
+
+---
+
+## 2026-10-21 · e63d — KIT escaneo-ya-recortado-v1 (los escaneos ceñidos son escaneos)
+
+**Base**: origin/main @ a742953 (merge #63 D63-A2). **Rama**: `feat/e63d-escaneo-ya-recortado-v1`.
+
+**Hecho (plan del dueño verificado línea a línea — todas las citas existían; detalles en REPORTE-e63d)**:
+- F0 (bridge): rescate D63-C generalizado a TODO escaneo (F0.1, defensa en profundidad) + la LECTURA perdona al marco (F0.2: `cortado` condena SOLO sin lectura FUERTE o con `faltaSeccion` — patrón lazoPerdonadoPorLectura; senal/faltaSeccion ya calculadas, costo 0).
+- F1 (origen.ts): `tintaAlFiloSimetrica` (franja ~1.5%/lado, lado MIXTO tinta≥25%+papel≥10%, ≥2 lados opuestos) + regla de decisión con banda E-14 (0.22–0.45): ceñido → escaneo; borde-blanco + ratio (clásico O E-14) → escaneo; banda E-14 sin blanco → escaneo. Trazas aditivas `tinta-al-filo`/`ratio-e14`.
+- F2 (bridge): identidad POR CONSTRUCCIÓN — la detección de bordes NO corre para escaneos (sin worker/Sobel/espera; detect ≈0 ms; informe DETECCION los cuenta por la vía normal) + `verificarCompletitud` no corre para escaneos (efecto declarado: escudo-fondo tampoco — es guard del warp, sin premisa en identidad).
+- F3 (marco-escaneo.ts/types.ts/informe.ts): veredicto `ceñido` (≥2 lados opuestos con línea EN el filo — nunca bloquea; evaluado ANTES de `cortado`) + `gateMarco` gana "ceñido" (union aditiva) + copy INCOMPLETA por origen («EL ESCANEO PARECE CORTADO — REPITE EL ESCANEO…»; fotos byte a byte como hoy; pipelineRecorte sin cambios).
+
+**Calibraciones declaradas (REPORTE §2)**: (1) relajación del guard SOLO banda E-14 — la banda clásica sin blanco sigue null (protege WhatsApp 4:3/16:9 sin-EXIF; invariancia Fase E); (2) lado del filo MIXTO (tinta+papel) — fondo oscuro uniforme ≠ tinta (foto sobre mesa gris no voltea a escaneo); (3) hallazgo vigilado: WhatsApp reenviado apretado (papel al filo en ≥2 lados) cae escaneo — auditable por traza, calibración de constantes si la cola real pide lo contrario.
+
+**Gates**: tsc 0 · lint 0 · build OK · binario con los tokens nuevos verificado en chunks. **Humo puro 22/22** (`/home/z/tmp/humo-e63d.ts`): F1 (ceñido/invariancias/EXIF/capturas/fondo oscuro) + F3 (completo/ceñido/cortado reservado/no-encontrado + CONTROL NEGATIVO del plan: escaneo mutilado NO es ceñido). Narrativa honesta: 1.ª corrida 2 FAIL por fixture mal hecho (imagen uniformemente oscura = flat page) → re-hechos con textura realista → 22/22.
+
+**Humo navegador NO concluyente (declarado)**: ort-wasm del headless falló persistente en esta sesión (~9 intentos + sesión fresca; `no available backend found ERR: [wasm]`). Evidencia ambiental: el canónico Vercel (a742953, sin e63d) mostró el MISMO fallo en 1.ª carga en el mismo navegador y lo resolvió al reintento. Stack OCR intocado por e63d. La validación end-to-end la da la corrida del dueño con su zip (F4/Fase D del plan).
+
+**Archivos**: `scanner-core-bridge.ts` (F0.1/F0.2/F2.1/F2.3/F3.4) · `masiva/origen.ts` (F1) · `marco-escaneo.ts` (F3.1) · `types.ts` + `informe.ts` (F3.2 aditivo) · REPORTE + DECISIONS + ROADMAP + AGENTS + worklog.
+
+**Pendiente del dueño**: correr la cola real (zip 20261021-091545) sobre el PR desplegado → P1 sin `recortada` · P2 deja de ser RECHAZADA · chips SIM intactos · trazas nuevas en el informe. Post-corrida: análisis A/B del agente.
