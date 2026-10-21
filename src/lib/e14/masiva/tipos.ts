@@ -53,6 +53,11 @@ export interface FilaMasiva {
    *  — prueba de lectura en el REPORTE del kit). Persiste en IDB (T1) para
    *  que el override de origen sobreviva la recarga a mitad de corrida. */
   viaPdf?: boolean;
+  /** e63f — KIT e63f-autoenvio-v1 (F2): el desenlace pasó por la RE-LECTURA
+   *  INTERNA pre-«repetir-primero» (1 pasada OCR extra sobre el MISMO bitmap
+   *  — intento de LECTURA, NO de captura). true = corrió (auto | sin-cambio,
+   *  el detalle en la traza ` RelecturaInterna=`); ausente = no aplicó. */
+  relectura?: boolean;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */

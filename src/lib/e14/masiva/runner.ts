@@ -36,6 +36,13 @@ import { preProcesoEscaneo, type PreProcesoEscaneo } from "./deskew"; // D63-B �
 import { ACTA_MOCK } from "../seed";
 import { paginaDeActa, tituloDeActa, type FilaMasiva, type RegistroMasiva } from "./tipos";
 import type { Acta, EtapaAnalisis, ProgresoAnalisis } from "../types";
+// e63f — KIT e63f-autoenvio-v1 (F2): re-lectura interna pre-«repetir-primero».
+// Lógica pura en masiva/relectura.ts (testeable headless); aquí solo la
+// orquestación: re-OCR del MISMO bitmap (reconocerTexto — cap fino) +
+// re-clasificar con la base divipol.
+import { clasificarCabecera } from "../clasificador";
+import { cargarDivipol } from "../divipol";
+import { desenlaceTrasRelectura, procedeRelecturaInterna } from "./relectura";
 
 // ─── D65 — KIT e14-progreso-watchdog-dedup-v1 (T1): WATCHDOG HUMANO ───
 // Antes (e14-masiva-ux-v1 T4): presupuesto ÚNICO de 120 s — un colgado moría
@@ -659,27 +666,59 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     // historial + completadas + hueco archivado de un acta descartado).
     if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return;
 
+    // ─── e63f — KIT e63f-autoenvio-v1 (F2): RE-LECTURA INTERNA antes de
+    // «repetir-primero» ─── SUGERIDA/MANUAL con captura PERFECTA (score ≥ 8 ∧
+    // lectura FUERTE ∧ gate completa) no vuelve a capturar: se RE-LEE el
+    // MISMO bitmap (reconocerTexto — re-warp con el quad horneado SIN
+    // re-detección + rapidocr a cap fino DET_CAP_PROD, la pasada-2 del
+    // escalonado) → re-clasificar → re-evaluar el gate (desenlaceTrasRelec-
+    // tura). AUTO → OPTIMA → autoenvío normal más abajo; si no → revisión
+    // humana como hoy. UNA pasada MÁXIMA (RED LINE 5) y el humano NUNCA la
+    // ve (intento de LECTURA, no de captura — el «repetir-primero» físico
+    // del flujo individual NO cambia). NUNCA aplica a RECHAZADAS por calidad
+    // (score < 6.5 — ahí re-escanear SÍ ayuda), ADVERTENCIA (red line) ni
+    // gate incompleta. Trazas aditivas: token ` RelecturaInterna=` (D51) y
+    // flag `relectura` en la fila. Cualquier falla interna (runtime OCR,
+    // base divipol) deja el veredicto de siempre — jamás empeora.
+    let actaDesenlace = acta;
+    let relecturaDesenlace: "auto" | "sin-cambio" | null = null;
+    if (procedeRelecturaInterna(acta)) {
+      const tRelectura = performance.now();
+      try {
+        const textoRe = await getBridge().reconocerTexto(acta);
+        const clasifRe = clasificarCabecera(textoRe, await cargarDivipol());
+        const aplicado = desenlaceTrasRelectura(acta, textoRe, clasifRe);
+        actaDesenlace = aplicado.acta;
+        relecturaDesenlace = aplicado.desenlace;
+      } catch {
+        relecturaDesenlace = "sin-cambio";
+      }
+      console.info(
+        `[e14] relectura-interna fila=${fila.id} ms=${Math.round(performance.now() - tRelectura)} RelecturaInterna=${relecturaDesenlace}`,
+      );
+    }
+
     // Desenlace → la MISMA vía que el flujo normal (T3.3/T3.2). El envío
     // automático reutiliza registrarEnvio (historial + completadas + hueco
     // archivado + cola offline); el resto cae al contador T5 con las
     // MISMAS claves.
-    let actaFinal = acta;
+    let actaFinal = actaDesenlace;
     let enviadaAuto = false;
     // D61 — KIT e14-tiempos-ocultos-v1 (T3): coste del ENVÍO del desenlace —
     // registrarEnvioMasiva (hash + historial + completadas + hueco archivado +
     // cola offline; la sección síncrona del envío). SOLO hay envío real ONLINE:
     // offline/EN COLA y no-OPTIMA → campo OMITIDO (jamás 0 falso — kit §2-T3).
     let envioMs: number | null = null;
-    if (acta.status === "OPTIMA") {
+    if (actaDesenlace.status === "OPTIMA") {
       // KIT e14-masiva-ux-v1 (T3.2): el envío respeta la conexión del momento
       // (misma semántica que registrarEnvio para actaActual): OFFLINE →
       // hashSha256 "EN COLA" — la fila pinta «EN COLA» y refrescarEnviosTrasDrenaje
       // la drena al reconectar. Online → el hash lo maneja el flujo normal.
       const onlineAlEnviar = useE14Store.getState().online;
       const tEnvio = onlineAlEnviar ? performance.now() : 0;
-      useE14Store.getState().registrarEnvioMasiva(acta);
+      useE14Store.getState().registrarEnvioMasiva(actaDesenlace);
       actaFinal = {
-        ...acta,
+        ...actaDesenlace, // e63f F2: el desenlace POST re-lectura manda (si AUTO → clasificación nueva viaja al envío)
         status: "ENVIADA",
         enviadoAutomaticamente: getBridge().horaEnvio(),
         ...(onlineAlEnviar ? {} : { hashSha256: "EN COLA" }),
@@ -687,7 +726,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       enviadaAuto = true;
       if (onlineAlEnviar) envioMs = Math.round(performance.now() - tEnvio);
     } else {
-      useE14Store.getState().contarMotivoNoEnvioActa(acta);
+      useE14Store.getState().contarMotivoNoEnvioActa(actaDesenlace);
     }
     // D61 (T3): parche INMUTABLE del diagnóstico con envioMs — MISMO patrón
     // del parche esperaMs de D57 (spread, solo si diagnostico != null). Va
@@ -789,6 +828,9 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       thumb,
       enviadaAuto,
       envioEnCola: actaFinal.hashSha256 === "EN COLA", // KIT e14-masiva-ux-v1 (T3.2)
+      // e63f (F2): el desenlace pasó por la re-lectura interna (trazabilidad
+      // — el detalle auto|sin-cambio vive en la traza RelecturaInterna=).
+      relectura: relecturaDesenlace != null,
       error: null,
     });
   } catch (err) {
