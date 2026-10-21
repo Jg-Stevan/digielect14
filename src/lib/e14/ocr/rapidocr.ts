@@ -173,6 +173,10 @@ async function initReal(): Promise<RapidRuntime> {
   // congelarse. MISMO EP wasm (opts de abajo), MISMO wasm, MISMO resultado.
   // numThreads queda como está: 1 en GH Pages (no hay SAB) — el proxy NO
   // requiere SAB. Revertible en 1 línea si la verificación falla (kit §3-T2.2).
+  // NOTA merge D68-merge (AI Studio): el export de AI Studio trajo proxy=false
+  // («error de resolución dynamic import en bundler») — workaround AMBIENTAL de
+  // ese sandbox; producción (GH Pages/Vercel) verificada con proxy=true. Se
+  // restaura aquí; si AI Studio lo necesita, revertir SOLO en ese entorno.
   ort.env.wasm.proxy = true;
 
   const opts = { executionProviders: ["wasm"] };

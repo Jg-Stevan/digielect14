@@ -44,19 +44,15 @@ export function BottomNav({ mode = "dark", children }: { mode?: "dark" | "app"; 
 
   return (
     <footer className="relative z-30 shrink-0 pb-safe">
-      {/* Slot de CTAs (modo dark/REVISIÓN): sobre la barra, sobre el fondo
-          de página — la barra inferior es una franja propia. */}
-      {children && <div className="max-w-md mx-auto px-4 pt-1 pb-2">{children}</div>}
+      {/* Slot de CTAs (modo dark/REVISIÓN): sobre la barra */}
+      {children && <div className="max-w-lg mx-auto px-4 pt-1 pb-2">{children}</div>}
       <nav
-        className="bg-[#080C0A] border-t border-brand-borderdim/80"
+        className="bg-[#090d12]/92 backdrop-blur-2xl border-t border-slate-800/80 shadow-[0_-8px_32px_rgba(0,0,0,0.55)]"
         aria-label="Navegación principal"
         data-mode={mode}
       >
-        <div className="max-w-md mx-auto px-4 py-2 flex justify-around items-center">
+        <div className="max-w-md mx-auto px-3 py-1.5 flex justify-around items-center">
           {ITEMS.map(({ vista: v, label, Icon }) => {
-            // En REVISIÓN el activo vive en ESCANEAR (misma regla de siempre)
-            // — EXCEPTO cuando el acta se abrió desde MASIVA (masivaOrigen):
-            // entonces el activo es MASIVA y ESCANEAR no (kit §6).
             const activo =
               vista === v ||
               (vista === "revision" && v === "escanear" && !masivaOrigen) ||
@@ -67,31 +63,36 @@ export function BottomNav({ mode = "dark", children }: { mode?: "dark" | "app"; 
                 type="button"
                 onClick={() => navegar(v)}
                 aria-current={activo ? "page" : undefined}
-                className="flex flex-col items-center gap-1 group py-1 px-3 select-none"
+                className="flex flex-col items-center gap-1 group py-1 px-3 select-none transition-all duration-150 min-h-[48px] justify-center"
               >
-                {activo ? (
-                  <div className="w-10 h-8 rounded-full bg-brand-green/20 border border-brand-green flex items-center justify-center text-brand-green shadow-[0_0_10px_rgba(0,230,118,0.2)]">
-                    <Icon className="w-5 h-5" />
-                  </div>
-                ) : (
-                  <div className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-200">
-                    <Icon className="w-5 h-5" />
-                  </div>
-                )}
+                <div
+                  className={`relative flex items-center justify-center transition-all duration-200 rounded-2xl ${
+                    activo
+                      ? "w-11 h-8 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-[0_0_14px_rgba(16,185,129,0.22)] scale-105"
+                      : "w-9 h-7 text-gray-400 group-hover:text-gray-200 group-hover:bg-white/5"
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 transition-transform duration-150 ${activo ? "scale-105" : ""}`} />
+                  {v === "actas" && actasSesion > 0 && (
+                    <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-emerald-500 text-black font-mono font-bold text-[9px] rounded-full shadow-sm">
+                      {actasSesion}
+                    </span>
+                  )}
+                </div>
                 <span
-                  className={`text-[10px] tracking-wider uppercase font-sans ${
-                    activo ? "font-bold text-brand-green" : "font-medium text-gray-400"
+                  className={`text-[9.5px] tracking-wider uppercase font-sans transition-colors ${
+                    activo ? "font-bold text-emerald-400" : "font-medium text-gray-400 group-hover:text-gray-300"
                   }`}
                 >
                   {label}
-                  {v === "actas" ? ` (${actasSesion})` : ""}
+                  {v === "actas" && actasSesion === 0 ? "" : ""}
                 </span>
               </button>
             );
           })}
         </div>
-        {/* Home indicator (mock 1: w-32 h-1 bg-white/30). */}
-        <div className="w-32 h-1 bg-white/30 rounded-full mx-auto my-2" aria-hidden />
+        {/* Home indicator minimalista */}
+        <div className="w-24 h-1 bg-white/20 rounded-full mx-auto my-1.5" aria-hidden />
       </nav>
     </footer>
   );
