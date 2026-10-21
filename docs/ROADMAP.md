@@ -325,3 +325,12 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] Gates: tsc 0 · lint 0 · build OK · humo puro 5/5 · humo navegador (SIM 8.2 intacto · PDF recto: override + deskew corre + precalor + pagina-completa · PDF torcido: skew 1.6° deskew 92ms aplicado + descarte de precalor + `fuente=corregido` en el bridge).
 - [ ] Fase D del dueño: revocar/rotar `ghp_` + token one-off · rastreador en la página · revisión diff por diff del arquitecto · merge · deploy canónico con firma de build · lote 20261019 COMPLETO (26) en un pase + informe zip sin editar.
 - [ ] Fase E del agente: A/B vs 200613 — invariancia 18 no-PDF (carve-out 171446.jpg) · escaneos 8/8 `pdf-render+` con atribución mecanística · RED LINES (PDF→ENVIADA AUTO sin cabecera = STOP; RECHAZADA→ENVIADA = triple verificación + vista del dueño; watchdog muerto en PDFs = FAIL) · tabla dedup con pares de nombres.
+
+### e63d — escaneo-ya-recortado-v1 (rama `feat/e63d-escaneo-ya-recortado-v1`, base main @ a742953)
+- [x] F0 — rescate escaneo generalizado (F0.1) + lectura perdona al marco `cortado` (FUERTE + !faltaSeccion) (F0.2).
+- [x] F1 — `tintaAlFiloSimetrica` (lado MIXTO tinta+papel, ≥2 opuestos) + banda E-14 0.22–0.45: ceñido/borde-blanco+E14/E14-sin-blanco → escaneo; WhatsApp 4:3/16:9 sin-EXIF sigue null (invariancia); trazas `tinta-al-filo`/`ratio-e14`.
+- [x] F2 — identidad por construcción (detección de bordes NO corre para escaneos; detect ≈0 ms) + skip `verificarCompletitud` para escaneos (escudo-fondo sin premisa en identidad — efecto declarado).
+- [x] F3 — veredicto marco `ceñido` (líneas EN el filo, ≥2 opuestos — nunca bloquea) + `gateMarco` aditivo "ceñido" + copy INCOMPLETA por origen (escaneo ≠ cámara); `pipelineRecorte`/editor sin cambios.
+- [x] Gates: tsc 0 · lint 0 · build OK · humo puro 22/22 (invariancias + control negativo mutilado) · binario con tokens nuevos verificado.
+- [ ] F4/Fase D del dueño: cola real (zip 20261021-091545) → P1 sin `recortada` · P2 deja de ser RECHAZADA · chips SIM intactos · trazas nuevas en informe (lab/bench del plan con esa evidencia).
+- [ ] Fase E del agente: A/B del informe post-corrida + tabla dedup + atribución.
