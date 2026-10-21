@@ -1765,3 +1765,44 @@ Nota: GitHub conserva los PRs y sus diffs aunque se borre la rama; nada se pierd
 **Gates**: `bun install --frozen-lockfile` OK · `tsc --noEmit` **0 errores (de ~30)** · `bun run lint` 0 · `BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH=/digielect14 bunx next build` OK · `git diff origin/main --name-status` = EXACTAMENTE los 3 archivos del kit (docs aparte).
 
 **Pendiente del dueño**: (1) merge del PR (desbloquea main — ningún PR nacía verde); (2) corrida mixta F1 + A/B de los 16 veredictos del lote 20261019 (±0.3 — divergencia = NO-GO y revert); (3) decisión deskew→bridge (D63-A2 — sigue muerto, UNA línea cuando lo ordene); (4) lección para futuros merges: los bloques aditivos D57 del lado que pierde el conflicto JAMÁS se descartan.
+### [2026-10-20 21:xx (Bogotá)] — KIT AGENTE-F1-corrida-mixta-evidencia.md (F1) — REPORTE de la corrida mixta (informe 200613, lote 26): 24 OK · 2 divergencias → NO-GO por la letra, decisión del dueño — Z.ai Code
+
+**Hecho**
+- Análisis completo del informe `e14-informe-20261020-200613.zip` (generado 2026-10-21T01:06:13Z = 20:06 Bogotá; corrida del dueño en preview URL `digielect14-gnaxmw4do-j-d85a.vercel.app`, Windows 10 Chrome 155, 4 núcleos, 8 GB, crossOriginIsolated=true): 26/26 LISTA, ERROR 0, colgadas 0 (watchdog D65 sin intervención) — ENVIADA 17 · ADVERTENCIA 1 · RECHAZADA 7 · EN_REVISION_HUMANA 1.
+- Fingerprint POST-corrida (compensa la desviación documentada de correr SIN rastreador-sesion y SIN firma pre-vuelo): el bundle de la PREVIEW de la corrida pesa 1,422,380 bytes y su sha256 `7af5eb8472ac3776a7d828c7b9cf0bb275d287ef1b1d0b49936f3b6f5245fa00` es IDÉNTICO al de GH Pages y Vercel PROD; trae la firma D67 `intento=${t}` + traza decode-maestro completa + campos D65 (`etapaAlMorir`, `dedupDistancia`) y D66 (`precalentada`, `origenDecode`, `precalorMs`). Además el JSON del informe trae los campos estructurales D65+D66 (dedup v2+distancia, colgadas.porEtapa, Decodificacion/precalentadas 23, Outliers) que SOLO existen en el bundle D67 — la corrida misma es evidencia del binario.
+- Tabla A/B de 26 filas construida (cruce por nombre; lado 162728 = A/B oficial del arquitecto + worklog rev.2 D63-A): **24 OK · 2 divergencias**, coincidente con el A/B oficial. D1 `20261019_171446.jpg` ENVIADA→EN_REVISION_HUMANA (Δscore 0.0) — el nivel NO lo decide el score (`clasificador.ts:928-934`: AUTO exige dep+mun+puesto+mesa válida+tipo); ficha F1 con parciales leídos pero OCR de cabecera con ruido (`B&-CONSULADOS`) → SUGERIDA → EN_REVISION_HUMANA «repetir-primero» (`scanner-core-bridge.ts:2320-2323`) — ruido estocástico del OCR en la frontera, comportamiento conservador correcto, no bug D67. D2 `E14_…_495_010-P1` RECHAZADA→RECHAZADA pero BAJO 4.9→INCOMPLETA 6.4 — ficha F1 `recortada:true recorteLado:sup-izq` (recorte detectado → gate incompleta); scores de rechazo son BANDAS FIJAS por motivo (todas las INCOMPLETA=6.4, todas las BAJO=4.9 en F1): Δ+1.5 = salto de banda, no medición distinta.
+- HIPÓTESIS del arquitecto «no se reutiliza desenlace de fuente RECHAZADA» VERIFICADA EN CÓDIGO Y REFUTADA: `cadenaDedup` matchea por contenido sin mirar status (`store.ts:202-226`) y `reutilizarResultado` copia el desenlace SIN condición de status (`runner.ts:312-356`) — una RECHAZADA sí se heredaría. La regla real: la marca DUPLICADA exige fila PENDIENTE en el instante del match (`store.ts:226`) → transmision-P2 (dist 6 = umbral exacto, match legítimo) ya no estaba PENDIENTE cuando su hash llegó → CARRERA cadenaDedup↔runner → procesó completa → su ADVERTENCIA 7.9 propio. La traza `dedup:"v2"+dist` se escribe en el write del hash aunque la marca no ocurra (T2.3). Dedup v2 en producción cerró las 3 gemelas reales: WA dist 0 (la "(2)" subida primero es la original — FIFO), 170755 heic→jpg dist 2, 171125 heic→jpg dist 0 (evidencia de reuse: proc/ocr idénticos, decodeMs/precalorMs ausentes).
+- Los 10 null (8 páginas-PDF + 2 WhatsApp) traen la triple señal `sin-exif+borde-no-blanco+ratio-fuera`; delta vs 162728 (worklog rev.2 D63-A: `borde-no-blanco 8 · sin-bitmap 2`): las WhatsApp pasaron de sin-bitmap (decode fallaba) a borde-no-blanco (decode nativo OK — master D66) — mejora observable, sin impacto en veredictos.
+- Watch item OCR 13.4 s vs 7.1 s: no es regresión (motor OCR sin cambios D65→D67); HIPÓTESIS contención de CPU (4 núcleos, lote 26 vs 16, espera en cola media 352 s). A/B ocrMs por fila pendiente del zip 162728.
+- Corrección adoptada: el lote SIEMPRE fue 26 (8 escaneos-PDF + 16 fotos + 2 WhatsApp).
+
+**Base**: origin/main @ e8c98de (VIVA — tsc 0/lint 0/build OK; contiene D67 fusionado #60 + DOC-1 #58).
+
+**Archivos**: `docs/REPORTE-e14-f1-corrida-mixta-evidencia.md` (NUEVO — el reporte completo con tabla A/B, fingerprint, divergencias con código, hipótesis refutada, salud del stack) · `docs/worklog.md` (esta entrada).
+
+**Cómo probar**: `git diff main...HEAD --stat` → 2 archivos docs-only, cero `src/`. El reporte se lee de corrido; cada afirmación de código cita archivo:línea sobre main e8c98de.
+
+**Humo**: N/A (análisis de evidencia — docs-only). La evidencia es el zip 200613 (informe.json/txt + 9 fichas) + los 3 bundles con sha256 idéntico (GH Pages / Vercel PROD / preview de la corrida).
+
+**Gates**: no aplica build por ser docs-only (CI del PR puede salir rojo por herencia si main está rota — no es de este PR; main e8c98de está VIVA).
+
+**Pendiente (del dueño)**: (1) entregar `e14-informe-20261020-162728.zip` → cerrar A/B score-a-score 26/26 + watch OCR por fila; (2) DECISIÓN: aceptar las 2 divergencias documentadas → D63-A2 (lo escribe el arquitecto con la tabla §4 del reporte) u ordenar revert → lo ejecuta el dueño (el agente NUNCA revierte); (3) merge de este PR docs (el agente NUNCA mergea); (4) REVOCAR/ROTAR el `ghp_` expuesto en el chat (deuda persistente); (5) `rastreador-sesion-e14-v1.js` sigue sin estar en la máquina — necesario para firmas pre-vuelo en futuras corridas.
+### [2026-10-20 21:3x (Bogotá)] — F1 rev.2 del reporte — CORRECCIÓN 1 (§6) + CORRECCIÓN 2 (§5 D1) + CIERRE §10.1 del arquitecto + DECISIÓN del dueño (aceptar divergencias documentadas, avanzar a D63-A2) — Z.ai Code
+
+**Hecho**
+- CORRECCIÓN 1 (§6, obligatoria, aplicada): la línea `null: borde-no-blanco 8 · sin-bitmap 2` NO era la ORIGEN del 162728 — es el ejemplo LITERAL del kit D63-D rev.2 y su fixture de humo (worklog rev.2, sección Humo). El build 162728 es PRE-rev.2 (su informe no trae señales — por eso existe la rev.2). Evidencia directa del baseline (zip del arquitecto): las 2 WhatsApp decodificaron BIEN en 162728 (decodeMs=2ms, detectMs=65ms) — no eran sin-bitmap; su null casi seguro borde-no-blanco como en F1. Reescrito: la mejora real del D66 es decode nativo + señal VISIBLE, no una transición sin-bitmap→borde-no-blanco.
+- CORRECCIÓN 2 (§5 D1, obligatoria, aplicada): el tipo de cabecera clasificado es TRANSMISION (kitFuente PIE, kit 399) — el «SENADO DE LA REPÚBLICA» es el tipo del acta/display de la ficha, no el clasificado. Causa raíz CERRADA con las confianzas de la ficha: puesto 0.75 < 0.82 (umbral §3.4 «código o ≥0.82», clasificador.ts:917) → puestoResuelto false → SUGERIDA; el ruido OCR «EI Calro-Consulado» deprimió la confianza del puesto (dep 0.9 · mun 1.0 · tipo 1.0, avisos []). La hipótesis del ruido estocástico queda como contexto, la causa como dato.
+- CIERRE §10.1 (datos del arquitecto, aplicado): A/B ocrMs por fila ya computado — sin regresión sistemática (deltas −13.9s a +19.3s en ambas direcciones; el baseline también tenía outliers: 495-010-P1 25.5s→11.6s). Contención en 4 núcleos, no código. Nota: 3 filas F1 son reusos con ocrMs copiado de su gemela.
+- DECISIÓN registrada en el reporte (encabezado + §4 CIERRE del A/B + §10): las 2 divergencias ACEPTADAS documentadas — NO revert — avanzar a D63-A2 (kit del arquitecto; cuando llegue, se ejecuta). El NO-GO por la letra queda levantado por decisión del dueño.
+
+**Base**: origin/main @ e8c98de (misma rama `docs/reporte-f1-corrida-mixta-v1` del PR #62 — commit adicional).
+
+**Archivos**: `docs/REPORTE-e14-f1-corrida-mixta-evidencia.md` (4 secciones corregidas + decisión) · `docs/worklog.md` (esta entrada).
+
+**Cómo probar**: `git diff main...HEAD` sobre el reporte → §6 con el ejemplo literal citado como tal; §5 D1 con causa cerrada (0.75 < 0.82) y tipo TRANSMISION; §8 con cierre del A/B por fila; §10 con la decisión.
+
+**Humo**: N/A (docs-only; los datos nuevos vienen de la ficha del zip 200613 y del zip 162728 del arquitecto — ambos citados en el reporte).
+
+**Gates**: no aplica build por ser docs-only.
+
+**Pendiente (del dueño)**: (1) merge del PR #62 (docs — el agente NUNCA mergea); (2) REVOCAR/ROTAR el `ghp_` (deuda persistente); (3) entrega del kit D63-A2 cuando el arquitecto lo escriba. Del agente: nada en vuelo — a la espera del kit D63-A2.
