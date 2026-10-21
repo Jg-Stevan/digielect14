@@ -1909,3 +1909,23 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 **Archivos**: `scanner-core-bridge.ts` (F0.1/F0.2/F2.1/F2.3/F3.4) · `masiva/origen.ts` (F1) · `marco-escaneo.ts` (F3.1) · `types.ts` + `informe.ts` (F3.2 aditivo) · REPORTE + DECISIONS + ROADMAP + AGENTS + worklog.
 
 **Pendiente del dueño**: correr la cola real (zip 20261021-091545) sobre el PR desplegado → P1 sin `recortada` · P2 deja de ser RECHAZADA · chips SIM intactos · trazas nuevas en el informe. Post-corrida: análisis A/B del agente.
+---
+
+## 2026-10-21 · e63e — KIT merge-cola-prs-v1: #61+#64 mergeados · #65 NO-GO (ANEXO A caso 4 por inspección de código) + hotfix e63d-rev2 en la rama
+
+**Autorización**: el kit `INSTRUCCIONES-e63e-merge-cola-prs-v1.md` del dueño ES la autorización de merge de los 3 PRs («que mergue los pr pendientes para que no existan conflictos») — con la salvedad de su RED LINE 7: ANEXO A caso 4 cancela el merge de #65.
+
+**Hecho**
+- **#61 (DEPLOY-D67) MERGEADO** = `ed78ffb` (merge commit de 2 padres): conflicto real `docs/worklog.md` (dos appends) resuelto en la rama (`6d3f90b`) — contenido de main intacto + entrada DEPLOY-D67 appendeada ÍNTEGRA al final (precedente `f5aad33`; `grep DEPLOY-D67` = 1; el archivo termina en su bloque «Pendiente del dueño»). CI `6d3f90b`: checks ✅ · parity ❌×2 heredada D57 (0 fallos nuevos). Gate main viva ✅ (install sin cambios · tsc 0 · lint 0 · build OK).
+- **#64 (DEPLOY-D63A2) MERGEADO** = `9151f9a` (2 padres): conflicto trivial resuelto en la rama (`795b32e`) — DEPLOY-D63A2 queda DESPUÉS de DEPLOY-D67 (cronología correcta), ambas entradas intactas. CI `795b32e`: checks ✅ · parity ❌×2 heredada (0 nuevos). Gate main viva ✅.
+- **#65 (e63d) NO MERGEADO — RED LINE 7**: durante la deuda 1 del kit (QA headless §4.2) la tabla §3-A chocó con el código: el gate F0.2 de `d671c29` tenía la **polaridad del perdón INVERTIDA** (`completa = cortado ? !(FUERTE && !faltaSeccion) : true` — por De Morgan condenaba exactamente el caso P2 que debía perdonar y dejaba pasar MEDIA/DEBIL/SIN). Condición exacta del ANEXO A caso 4 confirmada por inspección (sin ficha: 6/6 divergencias de la tabla con la semántica rev.1) — el token ` Marco=perdonado` que el ANEXO A usa como firma jamás existió en `src/`. **main/producción NUNCA afectados** (e63d vive solo en esta rama).
+- **Hotfix `e63d-rev2` EN LA RAMA (NO mergeado — requiere re-autorización del dueño)**: `b5f847d` helper `marcoPerdonadoPorLectura` EXPORTADO con la tabla §3-A literal (patrón D-5) + call site sin negar · `e7c571f` QA headless `scripts/qa-escaneo-ya-recortado.ts` (4 bloques, fixtures sintéticos: tabla 8/8 · marco 4/4 · origen 9/9 · control negativo 3/3 = **24/24 OK**, exit 1) · `a852d7f` REPORTE §8 (3 desviaciones de proceso cerradas) + §9 (hallazgo + hotfix + evidencia).
+- Detalle de la resolución del rebase de esta rama: conflicto trivial `docs/worklog.md` (`7392672`) — entrada e63d appendeada tras DEPLOY-D63A2.
+
+**Base**: rama `feat/e63d-escaneo-ya-recortado-v1` sobre main @ `9151f9a` (post #61+#64).
+
+**Cómo probar**: `bun scripts/qa-escaneo-ya-recortado.ts` → `24/24 OK` · `git show b5f847d -- src/lib/e14/scanner-core-bridge.ts` (2 hunks) · REPORTE §9 con la tabla de evidencia.
+
+**Gates**: tsc 0 · lint 0 · build OK · QA 24/24 · CI de la rama: checks ✅ + parity ❌×2 heredada (perfil documentado). Merges #61/#64: 2 padres, cero squash, cero force-push.
+
+**Pendiente del dueño**: (1) revisar `b5f847d` y re-autorizar el merge de #65 (la validación de campo rev.1 queda refutada por §9 — si la 1 acta rechazada del preview era P2, fue el bug); (2) REVOCAR los tokens `ghp_`/`vcp_` expuestos en chat (deuda persistente de hoy); (3) deploy Vercel canónico del main nuevo (`ed78ffb`→`9151f9a`, docs-only — receta `docs/DEPLOY-vercel.md` §2) si quiere alinear canales; (4) Ctrl+Shift+R tras deploy; (5) kit futuro opcional: token de traza ` Marco=perdonado` junto a `lazo=` (el ANEXO A lo asume); (6) Fase E del agente tras su Fase D con zip real.
