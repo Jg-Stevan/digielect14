@@ -78,6 +78,61 @@ let corriendoFlag = false;
 let stopFlag = false;
 let ultimoProgresoEn = 0;
 
+// ─── % ÚNICO DEL PROCESO COMPLETO POR ACTA (cambio pedido por el dueño) ───
+// Antes: el chip de la fila saltaba por tramos fijos por FASE (25→50→OCR
+// 50-95→98) y, con el OCR ESCALONADO (1.ª pasada 1280 → re-OCR 1920), el
+// número RETROCEDÍA (la 2.ª pasada re-emite su fracción 0→1: 95→50→95).
+// Ahora cada señal del bridge mapea a un TRAMO del total del proceso y el
+// valor es MONOTÓNICO (Math.max por señal — jamás baja dentro de la misma
+// acta). Pesos según la duración REAL del pipeline (~21 s: OCR ~13 s domina
+// → ~60% del arco; decode+detección ~2 s; recorte/realce ~2 s; calidad <1 s;
+// el 5% final = clasificación/gate/guardado → LISTA pinta 100%).
+const FRAC_DECODE_HASTA = 0.15; // DETECTANDO 0→1 (decode + detección de quad)
+const FRAC_RECORTE_HASTA = 0.3; // RECORTANDO/REALZANDO (emite 0.2→1)
+const FRAC_CALIDAD_HASTA = 0.35; // CALIDAD 0→1
+const FRAC_OCR_P1_HASTA = 0.68; // OCR 1.ª pasada (fracción REAL por lotes)
+const FRAC_OCR_TOPE = 0.95; // 2.ª pasada (1920) y banda dirigida: tope
+
+/** Estado del % global de la fila EN CURSO (se resetea al empezar cada
+ *  acta — el runner es secuencial, sin carrera). `ocrPasada` detecta una
+ *  NUEVA pasada del escalonado por caída fuerte de la fracción OCR (dentro
+ *  de una pasada la fracción solo sube — es real, por lotes de rec). */
+const vidaGlobal = { frac: 0, ocrPasada: 1, ocrFracPrev: 0 };
+
+/** Tramo del TOTAL (0..1) que representa una señal del bridge — la suma de
+ *  todas las fases = el proceso COMPLETO del acta. Etapa desconocida →
+ *  conserva el máximo alcanzado (jamás inventa). */
+function fracGlobalDe(p: ProgresoAnalisis): number {
+  const f = Math.min(1, Math.max(0, p.progreso));
+  switch (p.etapa) {
+    case "DETECTANDO":
+      return f * FRAC_DECODE_HASTA;
+    case "RECORTANDO":
+    case "REALZANDO": {
+      // el bridge compone este tramo como 0.2→1 (recorte + realce)
+      const t = Math.min(1, Math.max(0, (f - 0.2) / 0.8));
+      return FRAC_DECODE_HASTA + t * (FRAC_RECORTE_HASTA - FRAC_DECODE_HASTA);
+    }
+    case "CALIDAD":
+      return FRAC_RECORTE_HASTA + f * (FRAC_CALIDAD_HASTA - FRAC_RECORTE_HASTA);
+    case "OCR": {
+      // ¿2.ª pasada del escalonado? caída fuerte de la fracción REAL
+      if (f < vidaGlobal.ocrFracPrev - 0.15) vidaGlobal.ocrPasada += 1;
+      vidaGlobal.ocrFracPrev = f;
+      if (vidaGlobal.ocrPasada <= 1) {
+        return FRAC_CALIDAD_HASTA + f * (FRAC_OCR_P1_HASTA - FRAC_CALIDAD_HASTA);
+      }
+      // 2.ª pasada (re-OCR 1920) y siguientes (banda dirigida): tope 0.95
+      return Math.min(
+        FRAC_OCR_TOPE,
+        FRAC_OCR_P1_HASTA + f * (FRAC_OCR_TOPE - FRAC_OCR_P1_HASTA),
+      );
+    }
+    default:
+      return vidaGlobal.frac;
+  }
+}
+
 /** Patch INMUTABLE de UNA fila (la bandeja pinta filas livianas). */
 function marcarFila(id: string, patch: Partial<FilaMasiva>): void {
   const filas = useMasivaStore.getState().filas;
@@ -112,12 +167,19 @@ function bucketDeVida(
   }
 }
 
-/** D65 (T3.1) — emisión de vida vía el action NUEVO del store (throttle). */
+/** D65 (T3.1) — emisión de vida vía el action NUEVO del store (throttle).
+ *  El % global se computa ANTES del throttle: la detección de pasada OCR
+ *  necesita ver TODAS las señales (con 250 ms de muestreo la caída de la
+ *  fracción sigue siendo evidente — de ~1.0 a ~0.0). */
 function marcarVida(id: string, p: ProgresoAnalisis): void {
+  const bruto = fracGlobalDe(p);
+  if (bruto > vidaGlobal.frac) vidaGlobal.frac = bruto; // MONOTÓNICO
   const ahora = Date.now();
   if (ahora - ultimoProgresoEn < PROGRESO_MS) return;
   ultimoProgresoEn = ahora;
-  useMasivaStore.getState().marcarProgreso(id, bucketDeVida(p));
+  useMasivaStore
+    .getState()
+    .marcarProgreso(id, { ...bucketDeVida(p), fracGlobal: vidaGlobal.frac });
 }
 
 /** D65 (T1.4) — etapaAlMorir: vocabulario del kit para la TRAZA (aquí la
@@ -369,6 +431,11 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
  *  decode = 0 s) o recién horneado con `maestroDeImagen`; sin master →
  *  fallback HONESTO a la ruta de siempre (identidad AC-P3 intacta). */
 async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
+  // % global: cada acta NACE en 0 — su propio 0→100 del proceso COMPLETO
+  // (reset aquí cubre TAMBIÉN el fallback de la rama DUPLICADA de abajo).
+  vidaGlobal.frac = 0;
+  vidaGlobal.ocrPasada = 1;
+  vidaGlobal.ocrFracPrev = 0;
   // KIT e14-masiva-tiempos-v1 (PR-1): rama DEDUP — copia del resultado de la
   // original (<1 s). Si la original no sirve, la fila cae al pipeline
   // completo AQUÍ MISMO (fallback honesto — el dueño nunca pierde la foto).
@@ -407,8 +474,11 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
   }
   marcarFila(fila.id, { estado: "PROCESANDO", error: null, precalentada: false });
   // D65 (T3): señal de vida INICIAL — "preparando" (origen/pre-proceso van
-  // primero; el bridge emite la suya apenas arranca).
-  useMasivaStore.getState().marcarProgreso(fila.id, { etapa: "preparando" });
+  // primero; el bridge emite la suya apenas arranca). fracGlobal = 0: el
+  // proceso del acta acaba de nacer (UN % para TODO el proceso).
+  useMasivaStore
+    .getState()
+    .marcarProgreso(fila.id, { etapa: "preparando", fracGlobal: vidaGlobal.frac });
   let registro: RegistroMasiva | null = null;
   // D65 (T1.4) — trazas del watchdog (visibles también en el catch).
   let watchdogUsados = 0;
@@ -457,7 +527,12 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     for (let intento = 1; intento <= WATCHDOG_INTENTOS; intento += 1) {
       const tIntento = Date.now();
       senal = null; // la etapa al morir es la del INTENTO que muere
-      useMasivaStore.getState().marcarProgreso(fila.id, { etapa: "preparando" });
+      // Reintento del watchdog: MISMA acta → el % global CONSERVA el máximo
+      // alcanzado (monotónico — no vuelve a 0; la etiqueta de fase sí vuelve
+      // a PREPARANDO para contar la historia del reintento).
+      useMasivaStore
+        .getState()
+        .marcarProgreso(fila.id, { etapa: "preparando", fracGlobal: vidaGlobal.frac });
       try {
         // ── D63-A — KIT e63a-origen-escaneo-v1 (punto ÚNICO del kit, T1/T2):
         // origen del archivo — detector heurístico conservador (origen.ts),
