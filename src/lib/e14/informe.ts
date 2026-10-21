@@ -109,6 +109,21 @@ export interface FilaInforme {
    *  "cortado" | "no-encontrado". null = no evaluado (fotos, SIM, registros
    *  previos a D63-C) — jamás inventar. */
   gateMarco: "completo" | "cortado" | "no-encontrado" | null;
+  // ─── D65 — KIT e14-progreso-watchdog-dedup-v1: trazas aditivas (T1.4/T2.3) ───
+  /** (T1) intentos consumidos por el watchdog (0/1/2). null = registro
+   *  pre-D65 o fila que no corrió pipeline (gemela copiada) — jamás inventar. */
+  watchdog: number | null;
+  /** (T1) etapa del pipeline al morir el ÚLTIMO intento vencido
+   *  ("decodificando" | "deteccion" | "ocr" | "verificacion"). */
+  etapaAlMorir: string | null;
+  /** (T1) duración (ms) del intento que murió (hoy era null y escondía los
+   *  ~175 s — kit §0). null = sin dato. */
+  elapsedMs: number | null;
+  /** (T2) traza del dedup v2 POR CONTENIDO: "v2" = gemela matcheada;
+   *  "sin-match" = hasheada sin gemela. null = pre-D65 o hash falló. */
+  dedup: "v2" | "sin-match" | null;
+  /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
+  dedupDistancia: number | null;
   // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
   /** D66 (T4): ms SOLO del decodificado a MASTER (0 = precalentada — el
    *  decode vivió en el precalor; null = sin master: fallback/ERROR/
@@ -259,6 +274,14 @@ function filaLiviana(reg: RegistroMasiva): FilaInforme {
     origenDecode: reg.origenDecode ?? null,
     precalentada: reg.precalentada === true,
     precalorMs: reg.precalorMs ?? null,
+    // D65 — trazas del watchdog y del dedup v2 (viven EN el registro, no en
+    // el diagnóstico — kit T1.4/T2.3). null si el registro no las trae
+    // (pre-D65, gemela copiada, hash falló — jamás inventar).
+    watchdog: reg.watchdog ?? null,
+    etapaAlMorir: reg.etapaAlMorir ?? null,
+    elapsedMs: reg.elapsedMs ?? null,
+    dedup: reg.dedup ?? null,
+    dedupDistancia: reg.dedupDistancia ?? null,
     tieneDiagnostico: !!diag,
     conCarpeta,
     pesoImagenes,
@@ -475,6 +498,16 @@ export function actaLivianaJson(fila: FilaInforme) {
     ...(fila.origenDecode != null ? { origenDecode: fila.origenDecode } : {}),
     ...(fila.precalentada ? { precalentada: true } : {}),
     ...(fila.precalorMs != null ? { precalorMs: fila.precalorMs } : {}),
+    // D65 (T1.4/T2.3): trazas del watchdog y del dedup v2 — campo AUSENTE si
+    // el registro no lo trae (pre-D65/gemela copiada — misma receta del
+    // spread condicional de arriba; informes previos no cambian de forma).
+    ...(fila.watchdog != null ? { watchdog: fila.watchdog } : {}),
+    ...(fila.etapaAlMorir != null ? { etapaAlMorir: fila.etapaAlMorir } : {}),
+    ...(fila.elapsedMs != null ? { elapsedMs: fila.elapsedMs } : {}),
+    ...(fila.dedup != null ? { dedup: fila.dedup } : {}),
+    ...(fila.dedupDistancia != null
+      ? { dedupDistancia: fila.dedupDistancia }
+      : {}),
   };
 }
 

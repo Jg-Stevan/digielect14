@@ -395,7 +395,9 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     );
   }
   marcarFila(fila.id, { estado: "PROCESANDO", error: null, precalentada: false });
-  useMasivaStore.setState({ progreso: { id: fila.id, etapa: "DETECTANDO", fraccion: 0 } });
+  // D65 (T3): señal de vida INICIAL — "preparando" (origen/pre-proceso van
+  // primero; el bridge emite la suya apenas arranca).
+  useMasivaStore.getState().marcarProgreso(fila.id, { etapa: "preparando" });
   let registro: RegistroMasiva | null = null;
   // D65 (T1.4) — trazas del watchdog (visibles también en el catch).
   let watchdogUsados = 0;
@@ -414,70 +416,6 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     // márgenes viven ahí; el master es un re-encode sin EXIF).
     const archivoPipeline = archivo;
 
-    // D63-A — KIT e63a-origen-escaneo-v1 (punto ÚNICO del kit, T1/T2):
-    // origen del archivo — detector heurístico conservador (origen.ts),
-    // calculado UNA vez por fila AL INICIO del pipeline. SOLO visibilidad:
-    // no alimenta score/gate (calibra D63-B/D63-C). Falla → null (el
-    // detector jamás tumba el pipeline). Traza aditiva propia (contrato
-    // D51: solo-AÑADIR) + campos en el diagnóstico (parche D57 de abajo).
-    const veredictoOrigen = await clasificarOrigenDeArchivo(archivoPipeline);
-    console.info(
-      `[e14] origen=${veredictoOrigen.origen ?? "null"} senales=${veredictoOrigen.senales ?? "null"}`,
-    );
-
-    // D63-B — KIT e63b-deskew-escaneo-v1 (bloque de PRE-PROCESO, T2/T3):
-    // SOLO escaneos (origen del detector D63-A) — detección de ángulo sobre
-    // la banda del encabezado + deskew selectivo (|θ| ≥ 0.3° y ≤ 10°) con
-    // resample de alta calidad + limpieza suave del punto blanco. Fotos y
-    // escaneos rectos+limpios pasan el archivo ORIGINAL byte-idéntico (memo
-    // de decode del bridge intacta — cero cambios). El pipeline consume el
-    // master corregido (T2.2); el original duerme en IDB sin cambios.
-    const preProceso = await preProcesoEscaneo(archivoPipeline, veredictoOrigen.origen);
-    if (veredictoOrigen.origen === "escaneo") {
-      console.info(
-        `[e14] preproceso skewGrados=${preProceso.skewGrados ?? "null"} deskewMs=${preProceso.deskewMs ?? "null"} limpiezaMs=${preProceso.limpiezaMs ?? "null"} limpieza=${preProceso.limpieza} aplicado=${preProceso.aplicado} decodeMs=${preProceso.decodeMs ?? "null"}`,
-      );
-    }
-    const archivoCorregido = preProceso.archivo;
-
-    // D66 — KIT e14-decode-unico-precalor-v1 (T1.2/T1.5): MASTER de la fila —
-    // el precalentado (T3.3) o uno recién horneado con el MISMO helper del
-    // precalor (un solo decodificado a la escala de trabajo — 4032, R4 sin
-    // cambio). Sin master (decode imposible/cancelado) → fallback HONESTO:
-    // el pipeline recibe el ORIGINAL exactamente como hoy (AC-P3).
-    const tMaestro = Date.now();
-    const maestro: MaestroImagen | null =
-      entradaPrecalor?.maestro ??
-      (await maestroDeImagen(archivoPipeline, { nombre: fila.nombre }));
-    const decodeMasterMs = maestro
-      ? entradaPrecalor
-        ? 0 // T3.3/T4: precalentada → el decode ya pasó en la espera (≈0)
-        : Math.max(1, Math.round(Date.now() - tMaestro))
-      : null;
-    if (maestro) {
-      console.info(
-        `[e14] decode-maestro fila=${fila.id} ms=${decodeMasterMs} origen=${maestro.origenDecode} precalentada=${!!entradaPrecalor} ${maestro.ancho}x${maestro.alto}`,
-      );
-    }
-    // D66 (T1.3): el pipeline consume el MASTER — thumb/quad/OCR se derivan
-    // de él vía el pipeline normal (una sola decodificación en el bridge).
-    const archivoParaBridge = maestro?.archivo ?? archivoPipeline;
-
-    // T4: variable tipada con la intersección (sin excess-check de literal —
-    // el parámetro de la interfaz E14Bridge sigue siendo OpcionesEscaneo).
-    const opcionesMasiva: OpcionesEscaneoConTimeout = {
-      objetivo: null, // A4 — la clasificación REAL manda (viene del OCR)
-      intento: 1, // A6 — semántica de PRIMERA captura
-      maxIntentos: 4, // fallos → RECHAZADA repetible / rescate por recorte manual
-      fuente: "ARCHIVO", // A5 — MASIVA SIEMPRE archivo
-      archivo: archivoParaBridge, // D66 — el master (fallback: original)
-      // D63-C — KIT e63c-quad-gate-escaneo-v1: origen del detector D63-A
-      // alimenta T1 (quad página-completa) y T2 (gate del marco impreso).
-      // SIM y el flujo individual JAMÁS lo traen (nada de escaneos les aplica).
-      origenActa: veredictoOrigen.origen,
-      onProgreso: (p) => progresoThrottled(fila.id, p),
-      timeoutMs: TIMEOUT_MASIVA_MS, // T4 — ver constante (individual: 15 s intacto)
-    };
     // D57 — KIT e14-instrumentos-espera-v1 (T1): espera en cola → inicio del
     // pipeline. tInicio capturado antes del PRIMER intento (kit §4-T1):
     // esperaMs = tInicio − fila.agregadaEn (≥ 0 defensivo — jamás inventar).
@@ -491,13 +429,19 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     let actaBruta: Acta | null = null;
     let senal: { etapa: EtapaAnalisis; fraccion: number } | null = null;
     let errorIntento: { error: unknown } | null = null;
-    // Archivo del intento: el 1.º usa el prefetch (KIT e14-masiva-tiempos-v1,
-    // PR-2 — la MISMA instancia que la memo ya decodificó, HIT ~0 ms, AC-P1;
-    // sin prefetch → el archivo de SIEMPRE, identidad AC-P3). Los REINTENTOS
-    // re-leen el registro: instancia FRESCA del File — la decodeMemo del
-    // bridge es POR INSTANCIA y el intento muerto pudo envenenar la suya con
-    // un decode colgado (el fallback honesto de v1 se conserva si IDB falla).
-    let archivoIntento: File = archivoPredecode ?? archivo;
+    // D66 — trazas del master del DESENLACE (el del intento que produjo
+    // actaBruta; los reintentos re-hornean — la traza describe el master que
+    // SÍ sirvió; jamás inventar).
+    let maestroDesenlace: MaestroImagen | null = null;
+    let decodeMasterMs: number | null = null;
+    let intentoDesenlace = 0;
+    // Archivo del intento: el 1.º usa el archivo re-leído de IDB (el prefetch
+    // del original ya no existe — D66 re-apuntó ese trabajo al precalor:
+    // dispararPrefetch→asegurarMaestro). Los REINTENTOS re-leen el registro:
+    // instancia FRESCA del File — la decodeMemo del bridge es POR INSTANCIA y
+    // el intento muerto pudo envenenar la suya con un decode colgado (el
+    // fallback honesto de v1 se conserva si IDB falla).
+    let archivoIntento: File = archivo;
 
     for (let intento = 1; intento <= WATCHDOG_INTENTOS; intento += 1) {
       const tIntento = Date.now();
@@ -532,6 +476,31 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           );
         }
 
+        // ── D66 — KIT e14-decode-unico-precalor-v1 (T1.2/T1.5): MASTER del
+        // intento. Intento 1 consume el master PRECALENTADO (T3.3 — el decode
+        // ya vivió en la espera; entradaPrecalor se consumió ANTES de marcar
+        // PROCESANDO). Reintentos (intento ≥ 2): horneado FRESCO del
+        // archivoIntento — el File fue re-leído de IDB (D65) y el intento
+        // muerto pudo envenenar la decodeMemo por-instancia del master
+        // anterior. Sin master (decode imposible) → fallback HONESTO: el
+        // bridge recibe archivoIntento tal cual (AC-P3).
+        const tMaestro = Date.now();
+        const maestro: MaestroImagen | null =
+          intento === 1
+            ? (entradaPrecalor?.maestro ??
+              (await maestroDeImagen(archivoIntento, { nombre: fila.nombre })))
+            : await maestroDeImagen(archivoIntento, { nombre: fila.nombre });
+        const decodeMsIntento = maestro
+          ? intento === 1 && entradaPrecalor
+            ? 0 // T3.3/T4: precalentada → el decode ya pasó en la espera
+            : Math.max(1, Math.round(Date.now() - tMaestro))
+          : null;
+        if (maestro) {
+          console.info(
+            `[e14] decode-maestro fila=${fila.id} intento=${intento} ms=${decodeMsIntento} origen=${maestro.origenDecode} precalentada=${intento === 1 && !!entradaPrecalor} ${maestro.ancho}x${maestro.alto}`,
+          );
+        }
+
         // T4: variable tipada con la intersección (sin excess-check de literal —
         // el parámetro de la interfaz E14Bridge sigue siendo OpcionesEscaneo).
         // D65 (T1): presupuesto del INTENTO — lo RESTANTE de WATCHDOG_MS (el
@@ -542,7 +511,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           intento: 1, // A6 — semántica de PRIMERA captura (el watchdog NO es re-captura)
           maxIntentos: 4, // fallos → RECHAZADA repetible / rescate por recorte manual
           fuente: "ARCHIVO", // A5 — MASIVA SIEMPRE archivo
-          archivo: archivoIntento,
+          archivo: maestro?.archivo ?? archivoIntento, // D66 — el master (fallback: original)
           // D63-C — KIT e63c-quad-gate-escaneo-v1: origen del detector D63-A
           // alimenta T1 (quad página-completa) y T2 (gate del marco impreso).
           // SIM y el flujo individual JAMÁS lo traen (nada de escaneos les aplica).
@@ -559,6 +528,10 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         );
         if (resultado.tipo === "acta") {
           actaBruta = resultado.acta;
+          // D66: el desenlace nació de ESTE master — fija sus trazas.
+          maestroDesenlace = maestro;
+          decodeMasterMs = decodeMsIntento;
+          intentoDesenlace = intento;
           if (!esVeredictoTimeout(resultado.acta)) break; // desenlace REAL
           // veredicto-timeout del bridge → el intento MURIÓ (cae al final del
           // loop: traza + kill de workers + reintento si queda cupo).
@@ -683,14 +656,17 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       // del desenlace REAL (persiste — desviación aditiva de thumb).
       infoTitulo: tituloDeActa(actaFinal),
       // D66 — KIT e14-decode-unico-precalor-v1 (T4): trazas de decodificación
-      // ADITIVAS (solo con master — sin él los campos VIAJAN AUSENTES:
-      // registros previos/ERROR/fallback quedan como hoy — jamás inventar).
-      ...(maestro
+      // ADITIVAS del master del DESENLACE (solo con master — sin él los
+      // campos VIAJAN AUSENTES: registros previos/ERROR/fallback quedan como
+      // hoy — jamás inventar). decodeMs top-level ≠ tiempos.decodeMs (D61 —
+      // decode del archivo por el bridge; semánticas distintas, ambas honestas).
+      ...(maestroDesenlace
         ? {
             decodeMs: decodeMasterMs ?? 0,
-            origenDecode: maestro.origenDecode,
-            precalentada: !!entradaPrecalor,
-            precalorMs: entradaPrecalor?.precalorMs ?? null,
+            origenDecode: maestroDesenlace.origenDecode,
+            precalentada: intentoDesenlace === 1 && !!entradaPrecalor,
+            precalorMs:
+              intentoDesenlace === 1 ? (entradaPrecalor?.precalorMs ?? null) : null,
           }
         : {}),
     };
