@@ -36,6 +36,9 @@ import {
   parecePdfMasiva,
 } from "./archivos";
 import { dhashDeArchivo, hamming64, DEDUP_HAMMING_MAX } from "./dedup";
+// e63k — KIT e63k-capa2-identidad-v1: la cinta CIERTA del dedup visual (≤ 2).
+// La banda 3..6 NO marca: la decide la capa 2 post-OCR (identidad.ts).
+import { DEDUP_CINTA_CIERTA } from "./identidad";
 import {
   paginaDeActa,
   tituloDeActa,
@@ -174,6 +177,11 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
     // D63-A2 (T1): viaPdf sobrevive la recarga (el override de origen del
     // runner sigue funcionando a mitad de corrida). Ausente = no-PDF.
     ...(r.viaPdf ? { viaPdf: true } : {}),
+    // e63k (F1): la serie impresa (mapa de identidad de la capa 2) y el
+    // override del dueño sobreviven la recarga. Aditivos al final del
+    // objeto retornado (contrato D57). Ausentes = registros previos.
+    serie: r.serie ?? null,
+    ...(r.forzarDedupOff ? { forzarDedupOff: true } : {}),
   };
 }
 
@@ -226,15 +234,39 @@ async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void>
           hamming = d;
         }
       }
-      // D65 (T2.3): traza del dedup v2 — "v2" = match (con la distancia REAL
-      // del match); "sin-match" = hasheada sin gemela. Sin hash (decode
-      // falló) la fila NO trae traza (ausente = instrumento no corrió).
-      const trazaDedup: Pick<RegistroMasiva, "dedup" | "dedupDistancia"> = original
-        ? { dedup: "v2", dedupDistancia: hamming }
-        : { dedup: "sin-match" };
+      // D65 (T2.3): traza del dedup v2 — "v2" = match CIERTO en la cinta baja
+      // (con la distancia REAL del match); "sin-match" = hasheada sin gemela.
+      // e63k (F1.3): el match en la BANDA 3..6 NO marca — traza
+      // "visual-aplazada" + dedupVisualDe (oro para el post-mortem); la
+      // identidad post-OCR decide (runner — punto único del kit). Sin hash
+      // (decode falló) la fila NO trae traza (ausente = instrumento no corrió).
+      const trazaDedup: Pick<
+        RegistroMasiva,
+        "dedup" | "dedupDistancia" | "dedupVisualDe"
+      > =
+        original && hamming <= DEDUP_CINTA_CIERTA
+          ? { dedup: "v2", dedupDistancia: hamming }
+          : original
+            ? {
+                dedup: "visual-aplazada",
+                dedupDistancia: hamming,
+                dedupVisualDe: original.id,
+              }
+            : { dedup: "sin-match" };
       await guardarRegistro({ ...registro, hashDedup: hash, ...trazaDedup });
       patchFila(entrada.id, { hashDedup: hash });
+      // e63k (F1.3): SOLO la cinta CIERTA (hamming ≤ DEDUP_CINTA_CIERTA)
+      // marca DUPLICADA pre-OCR — comportamiento de HOY byte a byte. La
+      // banda 3..6 NO marca y NO escribe DUPLICADA: la fila sigue PENDIENTE
+      // → corre el pipeline completo y la capa 2 (runner) decide con la
+      // serie impresa (kit §1.3 — corrección por la CINTA, no por el umbral).
       if (!original) continue;
+      if (hamming > DEDUP_CINTA_CIERTA) {
+        console.info(
+          `[e14] dedup fila=${entrada.id} visual hamming=${hamming} dupOf=${original.id} APLAZADA cinta=3-6 — identidad post-OCR decide (e63k)`,
+        );
+        continue;
+      }
       // Solo marca filas aún PENDIENTES (el dueño pudo procesar/quitar mientras el hash corría).
       const filaViva = useMasivaStore.getState().filas.find((f) => f.id === entrada.id);
       if (!filaViva || filaViva.estado !== "PENDIENTE") continue;
@@ -489,11 +521,21 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
   // gemela sospechosa). Si el runner está corriendo la toma en su siguiente
   // pasada (siguientePendiente ya incluye PENDIENTE).
   procesarIgual: async (id) => {
-    patchFila(id, { estado: "PENDIENTE", dupOf: null });
+    // e63k (F1.3): el dueño mandó — se estampa forzarDedupOff (persistente)
+    // para que las capas 1 (visual) y 2 (identidad) lo respeten SIEMPRE:
+    // el runner ya no pasa por reutilizarResultado (dupOf null) y la capa 2
+    // tampoco la marcará (kit §1.3 — el reproceso completo es irrevertible
+    // hasta que el dueño decida otra cosa).
+    patchFila(id, { estado: "PENDIENTE", dupOf: null, forzarDedupOff: true });
     console.info(`[e14] dedup fila=${id} procesar-igual`);
     try {
       const registro = await leerRegistro(id);
-      await guardarRegistro({ ...registro, estado: "PENDIENTE", dupOf: undefined });
+      await guardarRegistro({
+        ...registro,
+        estado: "PENDIENTE",
+        dupOf: undefined,
+        forzarDedupOff: true,
+      });
     } catch {
       /* IDB caído — la fila ya está PENDIENTE en memoria (honesto) */
     }
