@@ -139,6 +139,12 @@ export interface FilaInforme {
   /** D66 (T4): ms totales del precalor para esta fila (solo precalentadas;
    *  null = no precalentada). */
   precalorMs: number | null;
+  // ---------- D63-A2 — KIT e14-d63a2-deskew-pipeline-v1 (T2) ----------
+  /** ¿El pre-proceso (deskew D63-B) aplicó sobre esta fila? SOLO escaneos
+   *  (presente si origen "escaneo"; ausente para fotos/WhatsApp/SIM/
+   *  registros previos — jamás inventar). Fuente: diagnostico.maestroFuente
+   *  (T0 — "corregido" | "original"). */
+  preprocesoAplicado?: boolean;
   /** ¿El acta trae diagnóstico completo? (base de detección/tiempos). */
   tieneDiagnostico: boolean;
   /** ¿Esta fila lleva carpeta en actas/ (T1.3)? */
@@ -218,8 +224,12 @@ function extensionDe(reg: RegistroMasiva): string {
   return porMime[reg.archivo?.type ?? ""] ?? "bin";
 }
 
-/** Mapa liviano de un registro (lectura del listado — CERO dataURLs aquí). */
-function filaLiviana(reg: RegistroMasiva): FilaInforme {
+/** Mapa liviano de un registro (lectura del listado — CERO dataURLs aquí).
+ *  D63-A2 rev.2: exportada PURO para el humo de integración REAL
+ *  (RegistroMasiva → filaLiviana → actaLivianaJson — el humo rev.1 validó
+ *  el spread con una FilaInforme fabricada y se saltó exactamente este
+ *  constructor, donde estaba el hueco). */
+export function filaLiviana(reg: RegistroMasiva): FilaInforme {
   const acta = reg.acta;
   const diag = acta?.diagnostico;
   const conCarpeta =
@@ -266,6 +276,13 @@ function filaLiviana(reg: RegistroMasiva): FilaInforme {
     skewGrados: diag?.skewGrados ?? null,
     deskewMs: diag?.deskewMs ?? null,
     gateMarco: diag?.gate?.gateMarco ?? null,
+    // D63-A2 (T2): presente SOLO si origen escaneo + provenance del master
+    // (fotos/WhatsApp/SIM/registros previos → ausente; jamás inventar).
+    // false ES dato (escaneo recto — maestroFuente "original").
+    preprocesoAplicado:
+      diag?.origen === "escaneo" && diag.maestroFuente != null
+        ? diag.maestroFuente === "corregido"
+        : undefined,
     // D66 — trazas de decodificación del REGISTRO (null/ausente = sin master
     // — fallback a la ruta de siempre, ERROR, registros previos; jamás
     // inventar). decodeMs top-level ≠ tiempos.decodeMs (D61, decode del
@@ -507,6 +524,13 @@ export function actaLivianaJson(fila: FilaInforme) {
     ...(fila.dedup != null ? { dedup: fila.dedup } : {}),
     ...(fila.dedupDistancia != null
       ? { dedupDistancia: fila.dedupDistancia }
+      : {}),
+    // D63-A2 (T2): ¿el pre-proceso (deskew) aplicó? — campo AUSENTE salvo
+    // escaneos post-D63-A2 (misma receta del spread condicional; informes
+    // previos no cambian de forma). preprocesoAplicado false ES dato
+    // (escaneo recto — el deskew no rotó).
+    ...(fila.preprocesoAplicado != null
+      ? { preprocesoAplicado: fila.preprocesoAplicado }
       : {}),
   };
 }

@@ -316,3 +316,12 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] Gates: tsc 0 · lint 0 · build OK · humo navegador completo (precalor en espera 229/143/37 ms · consumo decode=0 precalentada=true · decode del bridge 342/130/36 ms · cancelación QUITAR/DUPLICADA · SIM 8.2 intacto · chip 360 px · informe byte a byte).
 - [ ] Desviación de base documentada: D65 no existe aún (0 commits/ramas/PRs) — kit autocontenido sobre `2483c42`; convivencia con el futuro watchdog D65 por append-only.
 - [ ] Del dueño: A/B 16/16 veredictos (lote 20261019, corrida 162728, ±0.3 — divergencia = NO-GO y revertir) · tiempos reales JPG/HEIC (registrar qué máquinas dan decode nativo) · 26 actas de memoria · merge (el agente NUNCA mergea).
+
+## D63-A2 — e14-d63a2-deskew-pipeline-v1 (deskew→pipeline + calibración pdf-render) — rama `feat/e14-d63a2-deskew-pipeline-v1`
+
+- [x] T0 — `fuenteMaestro` (corregido cuando aplicado) + forma del maestro del kit + disciplina de memoria (descarte del precalentado) + trazas `fuente=corregido`/`maestroFuente` — el bridge consume el master del CORREGIDO (master único D66 verdadero).
+- [x] T1 — `viaPdf` (FilaMasiva+RegistroMasiva, primer write vía cola.ts) + override `pdf-render → escaneo` con señales píxel preservadas — fotos/WhatsApp/SIM jamás lo tocan.
+- [x] T2 — informe aditivo `preprocesoAplicado` + línea ORIGEN del lote formal verificada por humo puro (`escaneo 8 - foto 16 - null 2`).
+- [x] Gates: tsc 0 · lint 0 · build OK · humo puro 5/5 · humo navegador (SIM 8.2 intacto · PDF recto: override + deskew corre + precalor + pagina-completa · PDF torcido: skew 1.6° deskew 92ms aplicado + descarte de precalor + `fuente=corregido` en el bridge).
+- [ ] Fase D del dueño: revocar/rotar `ghp_` + token one-off · rastreador en la página · revisión diff por diff del arquitecto · merge · deploy canónico con firma de build · lote 20261019 COMPLETO (26) en un pase + informe zip sin editar.
+- [ ] Fase E del agente: A/B vs 200613 — invariancia 18 no-PDF (carve-out 171446.jpg) · escaneos 8/8 `pdf-render+` con atribución mecanística · RED LINES (PDF→ENVIADA AUTO sin cabecera = STOP; RECHAZADA→ENVIADA = triple verificación + vista del dueño; watchdog muerto en PDFs = FAIL) · tabla dedup con pares de nombres.

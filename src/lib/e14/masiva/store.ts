@@ -160,6 +160,9 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
     // recarga (la fila sigue DUPLICADA y el runner puede copiar igual).
     hashDedup: r.hashDedup ?? null,
     dupOf: r.estado === "DUPLICADA" ? (r.dupOf ?? null) : null,
+    // D63-A2 (T1): viaPdf sobrevive la recarga (el override de origen del
+    // runner sigue funcionando a mitad de corrida). Ausente = no-PDF.
+    ...(r.viaPdf ? { viaPdf: true } : {}),
   };
 }
 
@@ -308,6 +311,11 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     const lista = Array.from(files);
     if (!lista.length) return;
     const imagenes: File[] = [];
+    // D63-A2 (T1): páginas nacidas de un PDF — nacen CON viaPdf (calibración
+    // por CONSTRUCCIÓN: el pipeline SABE qué filas vienen de PDF sin adivinar
+    // por píxeles). Solo la rama PDF llena este Set (fotos/WhatsApp/ZIP
+    // jamás lo tocan — prueba de lectura en el REPORTE del kit).
+    const paginasPdf = new Set<File>();
     const errores: { nombre: string; motivo: string }[] = [];
     for (const f of lista) {
       if (pareceImagenMasiva(f)) {
@@ -328,8 +336,13 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
       } else if (parecePdfMasiva(f)) {
         // D60 — PDF: render página a página → CADA página cae en `imagenes`
         // (mismo manejo exacto que zip/rar: hereda pipeline/gate/dedup/IDB).
+        // D63-A2 (T1): las páginas resultantes entran al Set `paginasPdf` —
+        // sus filas nacen con viaPdf=true (memoria + IDB) y el runner las
+        // clasifica ESCANEO por construcción (las señales de píxel del
+        // detector D63-A quedan PRESERVADAS como prefijo `pdf-render+…`).
         try {
           const resultado = await extraerPdf(f);
+          resultado.archivos.forEach((a) => paginasPdf.add(a));
           imagenes.push(...resultado.archivos);
           errores.push(...resultado.errores);
         } catch (err) {
@@ -353,6 +366,8 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
       nombre: file.name || `FOTO_${i + 1}`,
       agregadaEn: base + i,
       estado: "PENDIENTE" as EstadoEntrada,
+      // D63-A2 (T1): solo páginas-PDF traen el flag (ausente = no-PDF).
+      ...(paginasPdf.has(file) ? { viaPdf: true } : {}),
     }));
     // Filas ERROR (T2): motivo corto ≤48 — persisten en IDB (la bandeja
     // sobrevive la recarga; no hay datos que procesar).
@@ -369,7 +384,7 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     });
     try {
       if (imagenes.length) {
-        const ids = await agregarLote(imagenes);
+        const ids = await agregarLote(imagenes, paginasPdf); // D63-A2 (T1): viaPdf nace en el PRIMER write
         // FIX M13 (auditoría 2-c): el swap respeta la decisión del dueño TOMADA
         // DURANTE la copia (QUITAR de una fila temp, VACIAR, o recarga de la
         // vista que re-monta cargarFilas): las temps que YA NO están en filas

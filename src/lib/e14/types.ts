@@ -166,6 +166,12 @@ export interface DiagnosticoActa {
    *  histograma no llegaba a blanco puro). "no" = sin limpieza; null = no
    *  evaluado (no escaneo / registro previo a D63-B). */
   limpieza?: "blanco" | "no" | null;
+  /** D63-A2 — KIT e14-d63a2-deskew-pipeline-v1 (T0): provenance del master
+   *  que el bridge CONSUMIÓ — "corregido" (deskew del pre-proceso aplicado)
+   *  | "original". Aditivo al final del contrato; null = sin pre-proceso
+   *  (no debería en MASIVA post-D63-A2 — jamás inventar). El informe lo
+   *  consume como `preprocesoAplicado` (bool, presente si origen escaneo). */
+  maestroFuente?: "corregido" | "original" | null;
 }
 
 export interface Acta {
