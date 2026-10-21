@@ -18,7 +18,12 @@ import {
   recuperarCola,
   vaciar as vaciarCola,
 } from "./cola";
-import { hacerThumb, iniciarRunner, pausarRunner } from "./runner";
+import {
+  hacerThumb,
+  iniciarRunner,
+  pausarRunner,
+  rearrancarTrasEncolar,
+} from "./runner";
 // D66 — KIT e14-decode-unico-precalor-v1: cableado del PRECALOR (T3) — la
 // suscripción al mini-store vive aquí (zona del kit: «flag transitorio
 // precalentada + cola de precalor») DESPUÉS de crear el store: precalor.ts
@@ -446,6 +451,13 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
           colaDisponible: true,
           avisoCola: null, // un lote que SÍ entró despeja el aviso de quota
         });
+        // e63g — PLAN e63g-e63h-ruta-unica (E1/FASE 1): el swap acaba de
+        // crear filas PENDIENTE con id real — si el bucle murió mientras la
+        // copia a IDB estaba en vuelo (siguientePendiente solo veía temps y
+        // rompió), las nuevas quedaban PENDIENTE para siempre. Re-arranque
+        // con guard IDEMPOTENTE en el runner: no-op si la cola corre, está
+        // pausada o jamás se inició (D45 intacto — sesión fría no procesa).
+        rearrancarTrasEncolar();
         // FIX M13 (auditoría 2-a): los huérfanos salen de IDB antes de
         // arrancar nada — jamás resucitan.
         for (const id of huerfanos) {
