@@ -1998,25 +1998,25 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 - **Cómo probar:** En la barra de navegación inferior, pulsar en **MASIVA**. Arrastrar una o más imágenes o PDFs desde el explorador del sistema hacia cualquier parte de la ventana: se activará la capa visual con borde esmeralda punteado «SUELTA LOS ARCHIVOS AQUÍ». Al soltar, los archivos se agregan de inmediato a la cola. Al hacer scroll hacia abajo para revisar las actas, el botón «PROCESAR COLA» y «PAUSAR» permanecerán anclados y listos para pulsar en la parte superior.
 - **Pendiente/Bloqueado:** Ningún bloqueo. Servidor dev activo en puerto 3000, `compile_applet` y `lint_applet` con 0 errores.
 
-1800: ### [2026-10-21 17:15] — e14-masiva-pct-proceso-v1 (D71) — AI Studio Agent
-1801: - **Hecho:** Enfoque en el elemento métrico de fila (`div:nth-of-type(3) > span:nth-of-type(1)`) en la bandeja de carga masiva (`MasivaView.tsx`) para proyectar el porcentaje del proceso del acta:
-1802:   - Función `porcentajeProcesoActa()` que calcula con exactitud la etapa: `0%` en cola, `25%` preparando/decodificando, `50%` detección de bordes y recorte, progresión de `50%–95%` durante la inferencia OCR de RapidOCR, `98%` en verificación/calidad y `100%` al completar (`LISTA`).
-1803:   - El elemento seleccionado (`span:nth-of-type(1)`) ahora renderiza una píldora con el porcentaje en tiempo real (`% del proceso del acta`), con punto pulsante esmeralda en la fila activa, manteniendo el score de calidad, la página y el nivel de clasificación adyacentes.
-1804:   - Sincronización de la barra de vida inferior para reflejar el mismo porcentaje de proceso con transición suave de ancho CSS.
-1805: - **Archivos:** `src/components/e14/screens/MasivaView.tsx`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/worklog.md`
-1806: - **Commits:** N/A (sesión interactiva AI Studio)
-1807: - **Cómo probar:** En **MASIVA**, soltar una o varias actas y pulsar **PROCESAR COLA**. Observar cómo en la columna de la derecha de cada acta la píldora muestra el avance porcentual del proceso (`25%` → `50%` → `75%` → `98%` → `100%`) en sintonía con la barra de progreso inferior.
-1808: - **Pendiente/Bloqueado:** Cero errores de compilación (`compile_applet`) y linter (`lint_applet`).
-1809: 
-1810: ### [2026-10-21 17:35] — e14-masiva-compacto-ancho-v1 (D72) — AI Studio Agent
-1811: - **Hecho:** Ajustes finales solicitados para Carga Masiva (`MasivaView.tsx` y `tipos.ts`):
-1812:   - **Título compacto del acta**: Actualizado `tituloDeActa()` para mostrar exclusivamente el código del departamento, país/municipio, lugar/puesto, tipo, mesa y página, resolviendo problemas de espacio en filas.
-1813:   - **Ancho ampliado**: Encabezado y contenedor principal ampliados a `max-w-6xl` para ocupar el ancho completo de la ventana.
-1814:   - **Eliminación de barra de estado en filas**: Se removió la barra de vida/estado inferior de cada fila, dejando únicamente la píldora de porcentaje (`%`) limpia y clara.
-1815: - **Archivos:** `src/lib/e14/masiva/tipos.ts`, `src/lib/e14/masiva/store.ts`, `src/components/e14/screens/MasivaView.tsx`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/worklog.md`
-1816: - **Commits:** N/A (sesión interactiva AI Studio)
-1817: - **Cómo probar:** Abrir la aplicación, navegar a **MASIVA**, soltar archivos en cualquier parte y observar el título compacto de las filas, el ancho completo de la ventana, la barra de acciones fija superior y el porcentaje limpio sin barra de estado inferior.
-1818: - **Pendiente/Bloqueado:** Compilación y linter verificados con éxito (0 errores).
+### [2026-10-21 17:15] — e14-masiva-pct-proceso-v1 (D71) — AI Studio Agent
+- **Hecho:** Enfoque en el elemento métrico de fila (`div:nth-of-type(3) > span:nth-of-type(1)`) en la bandeja de carga masiva (`MasivaView.tsx`) para proyectar el porcentaje del proceso del acta:
+  - Función `porcentajeProcesoActa()` que calcula con exactitud la etapa: `0%` en cola, `25%` preparando/decodificando, `50%` detección de bordes y recorte, progresión de `50%–95%` durante la inferencia OCR de RapidOCR, `98%` en verificación/calidad y `100%` al completar (`LISTA`).
+  - El elemento seleccionado (`span:nth-of-type(1)`) ahora renderiza una píldora con el porcentaje en tiempo real (`% del proceso del acta`), con punto pulsante esmeralda en la fila activa, manteniendo el score de calidad, la página y el nivel de clasificación adyacentes.
+  - Sincronización de la barra de vida inferior para reflejar el mismo porcentaje de proceso con transición suave de ancho CSS.
+- **Archivos:** `src/components/e14/screens/MasivaView.tsx`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/worklog.md`
+- **Commits:** N/A (sesión interactiva AI Studio)
+- **Cómo probar:** En **MASIVA**, soltar una o varias actas y pulsar **PROCESAR COLA**. Observar cómo en la columna de la derecha de cada acta la píldora muestra el avance porcentual del proceso (`25%` → `50%` → `75%` → `98%` → `100%`) en sintonía con la barra de progreso inferior.
+- **Pendiente/Bloqueado:** Cero errores de compilación (`compile_applet`) y linter (`lint_applet`).
+
+### [2026-10-21 17:35] — e14-masiva-compacto-ancho-v1 (D72) — AI Studio Agent
+- **Hecho:** Ajustes finales solicitados para Carga Masiva (`MasivaView.tsx` y `tipos.ts`):
+  - **Título compacto del acta**: Actualizado `tituloDeActa()` para mostrar exclusivamente el código del departamento, país/municipio, lugar/puesto, tipo, mesa y página, resolviendo problemas de espacio en filas.
+  - **Ancho ampliado**: Encabezado y contenedor principal ampliados a `max-w-6xl` para ocupar el ancho completo de la ventana.
+  - **Eliminación de barra de estado en filas**: Se removió la barra de vida/estado inferior de cada fila, dejando únicamente la píldora de porcentaje (`%`) limpia y clara.
+- **Archivos:** `src/lib/e14/masiva/tipos.ts`, `src/lib/e14/masiva/store.ts`, `src/components/e14/screens/MasivaView.tsx`, `docs/DECISIONS.md`, `docs/ROADMAP.md`, `docs/worklog.md`
+- **Commits:** N/A (sesión interactiva AI Studio)
+- **Cómo probar:** Abrir la aplicación, navegar a **MASIVA**, soltar archivos en cualquier parte y observar el título compacto de las filas, el ancho completo de la ventana, la barra de acciones fija superior y el porcentaje limpio sin barra de estado inferior.
+- **Pendiente/Bloqueado:** Compilación y linter verificados con éxito (0 errores).
 
 ---
 
