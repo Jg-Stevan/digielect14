@@ -121,8 +121,11 @@ export interface FilaInforme {
    *  ~175 s — kit §0). null = sin dato. */
   elapsedMs: number | null;
   /** (T2) traza del dedup v2 POR CONTENIDO: "v2" = gemela matcheada;
-   *  "sin-match" = hasheada sin gemela. null = pre-D65 o hash falló. */
-  dedup: "v2" | "sin-match" | null;
+   *  "sin-match" = hasheada sin gemela. null = pre-D65 o hash falló.
+   *  e63k — valores NUEVOS AL FINAL (contrato D57): "visual-aplazada" =
+   *  banda 3..6 sin marca pre-OCR (la capa 2 decide); "identidad" = capa 2
+   *  marcó DUPLICADA por serie impresa repetida. */
+  dedup: "v2" | "sin-match" | "identidad" | "visual-aplazada" | null;
   /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
   dedupDistancia: number | null;
   // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
@@ -160,6 +163,12 @@ export interface FilaInforme {
    *  jamás inventar (fuente: clasificacion.clasifDebil; clasificaciones
    *  pre-e63f no traen el campo → null). */
   clasifDebil: string | null;
+  // ---------- e63k — KIT e63k-capa2-identidad-v1 (F1.5) ----------
+  /** Serie impresa 15 dígitos (consenso del código 1D — clasificacion.
+   *  codigoUnico.crudo; el runner la persiste en el write LISTA — regla
+   *  general e63k). null = sin lectura consensuada (jamás inventar —
+   *  RED LINE 2). Base de la capa 2 de dedup por identidad. */
+  serie: string | null;
 }
 
 /** Resumen para la UI (T2) — espejo de lo importante del informe.json. */
@@ -313,6 +322,9 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
     // e63f (F0): balde fino del no-AUTO (null si AUTO/sin motivo — la
     // clasificación vieja no trae el campo → null, jamás inventar).
     clasifDebil: acta?.clasificacion?.clasifDebil ?? null,
+    // e63k (F1.5): serie impresa del registro (el runner la persiste en el
+    // write LISTA — null/ausente = sin consenso, jamás inventar).
+    serie: reg.serie ?? null,
   };
 }
 
@@ -379,12 +391,16 @@ export function resumenColgadas(filas: FilaInforme[]): {
  *  del dedup (el instrumento corrió en esta cola). matches = filas marcadas
  *  gemela por contenido — incluye las que el dueño luego reprocesó con
  *  PROCESAR IGUAL (el match SÍ ocurrió); distancia media SOLO sobre matches
- *  con distancia (sin datos → null — jamás inventar). */
+ *  con distancia (sin datos → null — jamás inventar). e63k (F1.5):
+ *  "identidad" cuenta la capa 2 (serie impresa repetida) y NO como match
+ *  v2; "visual-aplazada" NO es match (resolución pendiente — activo true
+ *  igualmente porque dedup != null). */
 export function resumenDedup(filas: FilaInforme[]): {
   activo: boolean;
   matches: number;
   distanciaMedia: number | null;
   sinMatch: number;
+  identidad: number;
 } {
   const matches = filas.filter((f) => f.dedup === "v2");
   const distancias = matches
@@ -397,6 +413,7 @@ export function resumenDedup(filas: FilaInforme[]): {
       ? Math.round(distancias.reduce((a, b) => a + b, 0) / distancias.length)
       : null,
     sinMatch: filas.filter((f) => f.dedup === "sin-match").length,
+    identidad: filas.filter((f) => f.dedup === "identidad").length,
   };
 }
 
@@ -542,6 +559,9 @@ export function actaLivianaJson(fila: FilaInforme) {
     ...(fila.preprocesoAplicado != null
       ? { preprocesoAplicado: fila.preprocesoAplicado }
       : {}),
+    // e63k (F1.5): serie impresa — campo AUSENTE si no hay consenso
+    // (misma receta del spread condicional; informes previos intactos).
+    ...(fila.serie != null ? { serie: fila.serie } : {}),
   };
 }
 
@@ -781,6 +801,9 @@ export function renderTxt(
       f.elapsedMs != null ? `elapsedMs ${f.elapsedMs}` : null,
       f.dedup != null ? `dedup ${f.dedup}` : null,
       f.dedupDistancia != null ? `dedupDistancia ${f.dedupDistancia}` : null,
+      // e63k (F1.5) — serie impresa AL FINAL de la línea (aditivo — jamás
+      // reordenar, contrato D57). Sin dato NO se imprime nada (honesto).
+      f.serie != null ? `serie ${f.serie}` : null,
     ].filter((t): t is string => t != null);
     linea(`${i + 1}. ${trozos.join(" - ")}`);
   });
@@ -882,6 +905,7 @@ export async function generarInformeZip(
         matches: r.matches,
         sinMatch: r.sinMatch,
         distanciaMedia: r.distanciaMedia,
+        identidad: r.identidad, // e63k — capa 2 por identidad (aditivo al final)
       };
     })(),
     actas: filas.map(actaLivianaJson),
