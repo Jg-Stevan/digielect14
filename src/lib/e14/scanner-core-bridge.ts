@@ -90,13 +90,14 @@ import { verificarCompletitud, type ResultadoCompletitud } from "./completitud";
 import { medirZonaVotos } from "./marcadores";
 // D63-C — KIT e63c-quad-gate-escaneo-v1: detector del MARCO IMPRESO del E-14
 // para el gate de escaneos (T2) — fotos y SIM jamás lo invocan (guards).
-import { evaluarMarcoImpreso, type MarcoEscaneo } from "./marco-escaneo";
+import { evaluarMarcoImpreso, type MarcoEscaneo, type MarcoImpreso } from "./marco-escaneo";
 // KIT e14-score-lectura-v1: señal de LECTURA del score v2 (módulo puro — §4-A).
 import {
   PISO_LECTURA_FUERTE,
   TECHO_LECTURA_DEBIL,
   lazoPerdonadoPorLectura,
   senalDeLectura,
+  type NivelLectura,
 } from "./senal-lectura";
 // §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
 // import estático: Next resuelve el basePath /web-scanner del deploy estático.
@@ -967,6 +968,29 @@ function conRampa<T>(
   );
 }
 
+/** KIT e63d-escaneo-ya-recortado-v1 (F0.2) · hotfix e63d-rev2 (kit e63e ANEXO A
+ *  caso 4): la LECTURA perdona al marco «cortado» de un ESCANEO — mismo patrón
+ *  que lazoPerdonadoPorLectura (tabla §3-A del kit). El perdón exige el trío
+ *  COMPLETO: veredicto cortado + lectura FUERTE + secciones presentes
+ *  (faltaSeccionInferior false). Cualquier otro caso → false: la mutilación
+ *  real (falta una sección) y la lectura débil/media jamás se perdonan —
+ *  «la lectura perdona al marco, NO al contenido faltante». completo/ceñido/
+ *  no-encontrado nunca bloquean por construcción (el perdón no aplica).
+ *
+ *  REV.2 — el gate F0.2 rev.1 (d671c29) tenía la polaridad INVERTIDA: el
+ *  ternario del bridge negaba el trío (`!(FUERTE && !faltaSeccion)`), con lo
+ *  cual el caso P2 (cortado+FUERTE+secciones) quedaba RECHAZADA INCOMPLETA y
+ *  los MEDIA/DEBIL/SIN pasaban el gate del marco — exacto al revés de la
+ *  doctrina (comentario del sitio, REPORTE-e63d §F0.2 y tabla §3-A).
+ *  Exportado (patrón D-5) para el QA headless del kit e63e §4.2. */
+export function marcoPerdonadoPorLectura(
+  veredicto: MarcoImpreso,
+  nivelLectura: NivelLectura,
+  faltaSeccion: boolean,
+): boolean {
+  return veredicto === "cortado" && nivelLectura === "FUERTE" && !faltaSeccion;
+}
+
 export class RealCoreBridge implements E14Bridge {
   private contador = 0;
 
@@ -1484,9 +1508,11 @@ export class RealCoreBridge implements E14Bridge {
     // están calculadas aquí — costo cero.
     let completa = opciones.simular ? true : (verificacionResuelta?.completa ?? true);
     if (marcoEscaneo) {
+      // e63d F0.2 · rev.2: el perdón (tabla §3-A) decide si el marco cortado
+      // condena — rev.1 negaba el trío (bug ANEXO A caso 4, ver helper).
       completa =
         marcoEscaneo.veredicto === "cortado"
-          ? !(senal.nivel === "FUERTE" && !faltaSeccion)
+          ? marcoPerdonadoPorLectura(marcoEscaneo.veredicto, senal.nivel, faltaSeccion)
           : true;
     }
     // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) — marcador OBLIGATORIO de
