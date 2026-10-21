@@ -101,16 +101,23 @@ import {
 } from "./senal-lectura";
 // §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
 // import estático: Next resuelve el basePath /web-scanner del deploy estático.
+// REFRESCO 2026-10-21 (lote JPG.rar del dueño): el contenido del asset es
+// AHORA la mejor foto del lote nuevo (1152×2048, nítida/flat — elegida por
+// VLM + métricas Laplaciano: lap-var 3203, la más alta del lote).
 import actaSimUrl from "@/assets/acta-e14-real.jpg";
 // §G-1 (SPEC-camara-funcional): las 3 actas del dueño para la SIMULACIÓN de
-// scores — [0] óptima (acta-e14-real, 2287×1715, pipeline COMPLETO con
-// detect+warp+bw) · [1] intermedia (la b/n del dueño 980×2112, §D6 Rev. 3:
-// acta El Cairo completa en el encuadre, cortada abajo por el borde de la
-// FOTO, as-is) · [2] baja (la borrosa del dueño 1902×1426, §D7 Rev. 3:
-// as-is, sin filtro ni recorte automático). Los flags viajan en la tabla
-// ACTAS_SIM de abajo (§D8).
+// scores — [0] óptima (pipeline COMPLETO con detect+warp+bw) · [1] intermedia
+// (as-is, §D6 Rev. 3) · [2] baja (as-is, §D7 Rev. 3). Los flags viajan en la
+// tabla ACTAS_SIM de abajo (§D8).
+// REFRESCO 2026-10-21 (lote JPG.rar): contenidos nuevos del dueño — [0] la
+// nítida/plana del lote (lap-var 3203, WhatsApp 1152×2048) · [1] la media
+// (1800×2400, lap-var 632, leve perspectiva) · [2] la borrosa (1800×2400,
+// lap-var 281, arrugas + firmas cargadas). Extras [3]/[4] para el ciclo
+// rotativo (§G): la de arrugas pronunciadas y la de sombra lateral.
 import actaSimIntermediaUrl from "@/assets/acta-sim-intermedia.jpg";
 import actaSimBajaUrl from "@/assets/acta-sim-baja.jpg";
+import actaSimExtra1Url from "@/assets/acta-sim-extra-1.jpg";
+import actaSimExtra2Url from "@/assets/acta-sim-extra-2.jpg";
 import type { Acta, ActaFirma, ActaStatus, DiagnosticoActa, ProgresoAnalisis } from "./types";
 import type { E14Bridge, OpcionesEscaneo } from "./bridge";
 // KIT e14-motor-rapidocr-v1 (PROD-2 §3): adaptador del motor de producción.
@@ -293,6 +300,8 @@ const ACTAS_SIM: readonly ActaSim[] = [
   { src: actaSimUrl, nombre: "acta-e14-real.jpg", sinRecorte: false },
   { src: actaSimIntermediaUrl, nombre: "acta-sim-intermedia.jpg", sinRecorte: true },
   { src: actaSimBajaUrl, nombre: "acta-sim-baja.jpg", sinRecorte: true },
+  { src: actaSimExtra1Url, nombre: "acta-sim-extra-1.jpg", sinRecorte: true },
+  { src: actaSimExtra2Url, nombre: "acta-sim-extra-2.jpg", sinRecorte: true },
 ];
 let actaSimIdx = 0;
 interface EntradaSim {

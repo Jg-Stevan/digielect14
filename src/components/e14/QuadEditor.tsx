@@ -412,8 +412,9 @@ export function QuadEditor({
       aria-label="Ajuste de bordes del acta"
       className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col animate-editor-enter"
     >
-      {/* Header propio del modo CROP (lab L1666–1691, re-vestido) */}
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-brand-border px-3 pt-safe pb-2">
+      {/* Header propio del modo CROP (lab L1666–1691, re-vestido). Task 2-b:
+          respiro horizontal en lg. */}
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-brand-border px-3 lg:px-5 pt-safe pb-2">
         <button
           type="button"
           aria-label="Cancelar el ajuste de bordes"
@@ -441,7 +442,7 @@ export function QuadEditor({
       </header>
 
       {/* ── CROP: editor de perspectiva (lab L1933–2121, re-vestido) ── */}
-      <section aria-label="Ajuste de bordes de la página" className="relative min-h-0 flex-1 px-4 py-3">
+      <section aria-label="Ajuste de bordes de la página" className="relative min-h-0 flex-1 px-4 lg:px-6 py-3">
         <div
           ref={containerRef}
           onPointerMove={onContainerPointerMove}
@@ -606,8 +607,12 @@ export function QuadEditor({
 
       {/* Footer de confirmación — F4 (§F4.6): fila FIJA de ROTAR 90° +
           DETECCIÓN AUTOMÁTICA sobre el hint, mismo estilo del footer
-          (border-brand-borderdim, font-mono, alto táctil 44px). */}
-      <footer className="shrink-0 border-t border-brand-borderdim bg-[#0a0e0c]/90 backdrop-blur-md px-4 pt-2.5 pb-safe flex flex-col gap-1.5">
+          (border-brand-borderdim, font-mono, alto táctil 44px). Task 2-b:
+          el contenido se acota a max-w-2xl centrado en lg (el CTA a 1000 px
+          de ancho no se lee) y los botones ganan alto táctil en lg; los
+          handles del quad ya son pads 44×44 (h-11 w-11) — VERIFICADO. */}
+      <footer className="shrink-0 border-t border-brand-borderdim bg-[#0a0e0c]/90 backdrop-blur-md px-4 lg:px-6 pt-2.5 pb-safe">
+        <div className="w-full max-w-2xl mx-auto flex flex-col gap-1.5">
         <div className="flex gap-2">
           {/* F4 (§F4.2): rotación LOCAL — el quad NO se remapea (vive en
               fracciones de la imagen sin rotar; overlay rota solidario). */}
@@ -616,7 +621,7 @@ export function QuadEditor({
             aria-label="Rotar la imagen 90 grados"
             onClick={aplicando ? undefined : () => setRotLocal((r) => (r + 90) % 360)}
             disabled={aplicando}
-            className="flex-1 min-w-0 h-11 rounded-xl bg-brand-surface hover:bg-brand-surfacelight border border-brand-border font-mono text-[10px] font-bold tracking-widest uppercase text-gray-300 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40"
+            className="flex-1 min-w-0 h-11 lg:h-12 rounded-xl bg-brand-surface hover:bg-brand-surfacelight border border-brand-border font-mono text-[10px] font-bold tracking-widest uppercase text-gray-300 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40"
           >
             <RotateIcon className="w-4 h-4 text-gray-300 shrink-0" />
             <span className="truncate">ROTAR 90°</span>
@@ -629,7 +634,7 @@ export function QuadEditor({
             aria-label="Detectar automáticamente los bordes del acta"
             onClick={aplicando || detectando ? undefined : () => void detectar()}
             disabled={aplicando || detectando}
-            className="flex-1 min-w-0 h-11 rounded-xl bg-brand-green hover:bg-emerald-400 text-black font-mono text-[10px] font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 shadow-[0_4px_20px_rgba(0,230,118,0.35)]"
+            className="flex-1 min-w-0 h-11 lg:h-12 rounded-xl bg-brand-green hover:bg-emerald-400 text-black font-mono text-[10px] font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 shadow-[0_4px_20px_rgba(0,230,118,0.35)]"
           >
             {detectando ? (
               <span className="h-4 w-4 shrink-0 rounded-full border-2 border-black/30 border-t-black animate-spin" />
@@ -647,7 +652,7 @@ export function QuadEditor({
           aria-label="Aplicar el recorte"
           onClick={aplicando ? undefined : () => onAplicar(displayRef.current, rotLocal)}
           disabled={aplicando}
-          className="w-full h-12 py-3 px-5 bg-brand-green hover:bg-emerald-400 text-black font-extrabold text-sm uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2.5 shadow-[0_4px_20px_rgba(0,230,118,0.35)] transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"
+          className="w-full h-12 lg:h-14 py-3 px-5 bg-brand-green hover:bg-emerald-400 text-black font-extrabold text-sm uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2.5 shadow-[0_4px_20px_rgba(0,230,118,0.35)] transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"
         >
           {aplicando ? (
             <>
@@ -658,6 +663,7 @@ export function QuadEditor({
             <span>APLICAR RECORTE</span>
           )}
         </button>
+        </div>
       </footer>
     </div>
   );

@@ -4,6 +4,8 @@
  * RESUMEN (§7.7 / C2) — "RESUMEN DE TRABAJO": progreso del puesto (barra
  * segmentada de 12), tarjetas de estadística (cola offline / rescaneos) e
  * historial de envíos con barra de acento por estado. Reactivo en vivo.
+ * Responsive 360→1280 (max-w-2xl en lg). La sección "ANÁLISIS DE LA
+ * JORNADA" (donut + barras recharts) fue ELIMINADA a pedido del dueño.
  */
 import { useEffect, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
@@ -40,7 +42,6 @@ function badgeEstado(estado: HistorialRow["estado"]) {
 export function ResumenView() {
   const mesas = useE14Store((s) => s.mesas);
   const historial = useE14Store((s) => s.historial);
-  const motivosNoEnvio = useE14Store((s) => s.motivosNoEnvio);
   const puestoReal = useE14Store((s) => s.puestoActual);
   const modoSimulacion = useE14Store((s) => s.modoSimulacion);
   const puestoMostrado = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
@@ -125,25 +126,29 @@ export function ResumenView() {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-[#090d12] flex flex-col">
-      <header className="sticky top-0 z-40 w-full bg-[#090d12]/92 backdrop-blur-xl border-b border-slate-800/80 flex items-center justify-between px-4 h-14 shrink-0 shadow-xs">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#10b981]" />
-          <h1 className="font-mono text-sm font-bold tracking-widest text-[#10b981] uppercase">
-            RESUMEN DE TRABAJO
-          </h1>
+      <header className="sticky top-0 z-40 w-full bg-[#090d12]/92 backdrop-blur-xl border-b border-slate-800/80 px-4 h-14 shrink-0 shadow-xs">
+        {/* Task 3: el contenido de la barra se alinea al ancho del contenedor
+            de la vista (en lg+ ya no queda pegado al borde del viewport). */}
+        <div className="max-w-md lg:max-w-2xl mx-auto w-full h-full flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#10b981]" />
+            <h1 className="font-mono text-sm font-bold tracking-widest text-[#10b981] uppercase">
+              RESUMEN DE TRABAJO
+            </h1>
+          </div>
+          <span className="font-mono text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/60">
+            {pct}% TRANSMITIDO
+          </span>
         </div>
-        <span className="font-mono text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/60">
-          {pct}% TRANSMITIDO
-        </span>
       </header>
 
-      <div className="flex-grow flex flex-col gap-5 px-4 pt-4 pb-8 max-w-md mx-auto w-full">
+      <div className="flex-grow flex flex-col gap-5 px-4 pt-4 pb-8 max-w-md lg:max-w-2xl mx-auto w-full">
         {/* Puesto actual */}
-        <section className="bg-[#10161f] border border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col gap-2">
+        <section className="bg-[#10161f] border border-slate-800 rounded-2xl p-4 lg:p-5 shadow-sm flex flex-col gap-2">
           <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
             PUESTO DE VOTACIÓN ASIGNADO
           </span>
-          <h2 className="text-lg font-bold text-white uppercase truncate">
+          <h2 className="text-lg lg:text-xl font-bold text-white uppercase truncate">
             {puestoMostrado?.titulo ?? "SIN PUESTO REGISTRADO"}
           </h2>
           {puestoMostrado && (
@@ -155,7 +160,7 @@ export function ResumenView() {
         </section>
 
         {/* Progreso del puesto */}
-        <div className="bg-[#10161f] border border-slate-800 p-4 flex flex-col gap-3 rounded-2xl shadow-sm">
+        <div className="bg-[#10161f] border border-slate-800 p-4 lg:p-5 flex flex-col gap-3 rounded-2xl shadow-sm">
           <div className="flex justify-between items-center">
             <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">
               PROGRESO DE TRANSMISIÓN
@@ -170,52 +175,33 @@ export function ResumenView() {
           </span>
         </div>
 
-        {/* 3 Tarjetas de estadística KPI */}
-        <div className="grid grid-cols-3 gap-2">
-          <div className="bg-[#10161f] border border-slate-800 p-3 flex flex-col gap-1 rounded-2xl shadow-xs">
-            <span className="font-mono text-2xl font-extrabold tabular-nums text-[#10b981]">
+        {/* 3 Tarjetas de estadística KPI — Task 3: en lg+ más respiro */}
+        <div className="grid grid-cols-3 gap-2 lg:gap-4">
+          <div className="bg-[#10161f] border border-slate-800 p-3 lg:p-5 flex flex-col gap-1 rounded-2xl shadow-xs">
+            <span className="font-mono text-2xl lg:text-3xl font-extrabold tabular-nums text-[#10b981]">
               {String(paginasOk).padStart(2, "0")}
             </span>
-            <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400 leading-tight">
+            <span className="font-mono text-[9px] lg:text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-tight">
               PÁGINAS TRANSMITIDAS
             </span>
           </div>
-          <div className="bg-[#10161f] border border-slate-800 p-3 flex flex-col gap-1 rounded-2xl shadow-xs">
-            <span className="font-mono text-2xl font-extrabold tabular-nums text-amber-400">
+          <div className="bg-[#10161f] border border-slate-800 p-3 lg:p-5 flex flex-col gap-1 rounded-2xl shadow-xs">
+            <span className="font-mono text-2xl lg:text-3xl font-extrabold tabular-nums text-amber-400">
               {String(pendientes).padStart(2, "0")}
             </span>
-            <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400 leading-tight">
+            <span className="font-mono text-[9px] lg:text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-tight">
               PÁGINAS PENDIENTES
             </span>
           </div>
-          <div className="bg-[#10161f] border border-slate-800 p-3 flex flex-col gap-1 rounded-2xl shadow-xs">
-            <span className="font-mono text-2xl font-extrabold tabular-nums text-[#ef4444]">
+          <div className="bg-[#10161f] border border-slate-800 p-3 lg:p-5 flex flex-col gap-1 rounded-2xl shadow-xs">
+            <span className="font-mono text-2xl lg:text-3xl font-extrabold tabular-nums text-[#ef4444]">
               {String(paginasRescaneo).padStart(2, "0")}
             </span>
-            <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400 leading-tight">
+            <span className="font-mono text-[9px] lg:text-[10px] font-bold uppercase tracking-wider text-slate-400 leading-tight">
               EN RESCANEO
             </span>
           </div>
         </div>
-
-        {/* Motivos de no envío */}
-        {Object.keys(motivosNoEnvio).length > 0 && (
-          <div className="bg-[#10161f] border border-slate-800 p-3.5 flex flex-col gap-2 rounded-2xl shadow-xs">
-            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              AUDITORÍA DE DESENLACES — SESIÓN
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(motivosNoEnvio).map(([clave, n]) => (
-                <span
-                  key={clave}
-                  className="px-2.5 py-1 bg-[#090d12] border border-slate-800 text-slate-300 font-mono text-[11px] rounded-lg whitespace-nowrap"
-                >
-                  {clave} ×{n}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Acciones de informe y fin de jornada */}
         <section className="flex flex-col items-center gap-2.5 pt-1">
@@ -226,7 +212,7 @@ export function ResumenView() {
             }}
             disabled={colaVacia || generando || listo}
             aria-label="Generar informe de análisis (ZIP)"
-            className="w-full min-h-[44px] px-6 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-xs font-black uppercase tracking-wider shadow-lg shadow-[#10b981]/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
+            className="w-full lg:max-w-sm min-h-[44px] px-6 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-xs font-black uppercase tracking-wider shadow-lg shadow-[#10b981]/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
           >
             <span>↓</span>
             <span>
@@ -272,7 +258,7 @@ export function ResumenView() {
                 ? "Confirmar reiniciar la jornada completa (incluye la cola masiva)"
                 : "Reiniciar la jornada completa"
             }
-            className={`w-full min-h-[40px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
+            className={`w-full lg:max-w-sm min-h-[40px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
               reiniciarArmado
                 ? "border-red-500 text-red-400 bg-red-500/15 shadow-sm shadow-red-500/20"
                 : "border-slate-800 bg-[#10161f] text-slate-400 hover:border-red-500/50 hover:text-red-400"
@@ -300,7 +286,7 @@ export function ResumenView() {
             </span>
           </div>
 
-          <div className="flex flex-col max-h-96 overflow-y-auto thin-scroll rounded-2xl border border-slate-800 bg-[#10161f] divide-y divide-slate-800/80 shadow-sm">
+          <div className="flex flex-col max-h-96 lg:max-h-[28rem] overflow-y-auto thin-scroll rounded-2xl border border-slate-800 bg-[#10161f] divide-y divide-slate-800/80 shadow-sm">
             {filas.length === 0 ? (
               <div className="p-4 text-center text-xs font-mono text-slate-500">
                 NO HAY ENVÍOS REGISTRADOS EN ESTA SESIÓN
@@ -311,7 +297,7 @@ export function ResumenView() {
                 return (
                   <div
                     key={fila.id}
-                    className="min-h-12 flex items-center justify-between gap-3 px-3.5 py-2.5 relative overflow-hidden hover:bg-slate-800/30 transition-colors"
+                    className="min-h-12 flex items-center justify-between gap-3 px-3.5 lg:px-5 py-2.5 lg:py-3 relative overflow-hidden hover:bg-slate-800/30 transition-colors"
                   >
                     <span className={`absolute left-0 top-0 bottom-0 w-1 ${badge.barra}`} aria-hidden />
                     <span className="font-mono text-xs text-white pl-1.5 min-w-0 truncate font-semibold">
