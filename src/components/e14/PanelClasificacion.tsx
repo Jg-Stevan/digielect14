@@ -70,7 +70,7 @@ function Segmento<T extends string | number>({
   deshabilitadas?: T[];
 }) {
   return (
-    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${opciones.length}, minmax(0, 1fr))` }}>
+    <div className="grid gap-1.5 lg:gap-2" style={{ gridTemplateColumns: `repeat(${opciones.length}, minmax(0, 1fr))` }}>
       {opciones.map((o) => {
         const activo = valor === o.valor;
         const off = deshabilitadas.includes(o.valor);
@@ -81,7 +81,7 @@ function Segmento<T extends string | number>({
             disabled={off}
             aria-pressed={activo}
             onClick={() => onCambiar(o.valor)}
-            className={`h-11 min-h-11 rounded-xl border text-xs font-bold uppercase tracking-wide transition-all active:scale-[0.97] ${
+            className={`h-11 min-h-11 lg:h-12 rounded-xl border text-xs font-bold uppercase tracking-wide transition-all active:scale-[0.97] ${
               activo
                 ? "border-[#00E676]/40 bg-[#00E676]/10 text-brand-green"
                 : off
@@ -215,7 +215,7 @@ export function PanelClasificacion() {
   return (
     <section
       aria-label="Corrección de ubicación del acta"
-      className="shrink-0 w-full max-w-md mx-auto bg-brand-surface border border-brand-border rounded-2xl px-4 pt-2.5 pb-2"
+      className="shrink-0 w-full max-w-md lg:max-w-2xl mx-auto bg-brand-surface border border-brand-border rounded-2xl px-4 lg:px-6 pt-2.5 pb-2"
     >
       {/* Cabecera del panel */}
       <div className="flex items-center gap-2 pb-2">
@@ -234,8 +234,9 @@ export function PanelClasificacion() {
         </div>
       </div>
 
-      {/* Campos — §5: max-h con scroll si crece (max-h-96 overflow-y-auto). */}
-      <div className="max-h-96 overflow-y-auto thin-scroll pr-0.5 flex flex-col gap-2.5 pb-2">
+      {/* Campos — §5: max-h con scroll si crece (max-h-96 overflow-y-auto).
+          Task 2-b: gaps mayores en lg — los selects respiran a 672 px. */}
+      <div className="max-h-96 overflow-y-auto thin-scroll pr-0.5 flex flex-col gap-2.5 lg:gap-3.5 pb-2">
         {sinBase ? (
           <>
             <FilaCampo label="Departamento / Consulado">
@@ -258,7 +259,7 @@ export function PanelClasificacion() {
                 aria-label="Código de municipio o país"
               />
             </FilaCampo>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 lg:gap-3">
               <FilaCampo label="Zona">
                 <input
                   value={zon}
@@ -323,7 +324,7 @@ export function PanelClasificacion() {
                 ))}
               </select>
             </FilaCampo>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 lg:gap-3">
               <FilaCampo label="Zona">
                 <select
                   value={zon}

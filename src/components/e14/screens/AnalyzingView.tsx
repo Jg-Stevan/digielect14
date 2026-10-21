@@ -130,7 +130,9 @@ export function AnalyzingView() {
 
   return (
     <div className="flex-1 flex flex-col bg-[#090d12] backdrop-blur pt-safe pb-6 select-none">
-      <div className="flex-1 flex flex-col justify-between items-center w-full max-w-md mx-auto px-4">
+      {/* Task 2-b: lg:max-w-lg — el anillo y el checklist ganan aire en
+          escritorio sin tocar las medidas fijas del anillo (concentrico). */}
+      <div className="flex-1 flex flex-col justify-between items-center w-full max-w-md lg:max-w-lg mx-auto px-4">
         {/* Beacon superior: EN PROCESO + latencia */}
         <div className="w-full flex items-center justify-between pt-4">
           <div className="flex items-center gap-2 bg-[#10161f] border border-slate-800 px-3.5 py-1.5 rounded-full shadow-xs">
@@ -211,8 +213,8 @@ export function AnalyzingView() {
             </p>
           </div>
 
-          {/* 4 barras de paso */}
-          <div className="w-44 flex items-center justify-between gap-1.5 mt-5">
+          {/* 4 barras de paso — lg: más anchas, mismo flex-1 reparto */}
+          <div className="w-44 lg:w-56 flex items-center justify-between gap-1.5 mt-5">
             {Array.from({ length: 4 }, (_, i) => (
               <span
                 key={i}
