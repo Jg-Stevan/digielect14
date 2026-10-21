@@ -58,6 +58,16 @@ export interface FilaMasiva {
    *  — intento de LECTURA, NO de captura). true = corrió (auto | sin-cambio,
    *  el detalle en la traza ` RelecturaInterna=`); ausente = no aplicó. */
   relectura?: boolean;
+  // ---------- e63k — KIT e63k-capa2-identidad-v1 (F1) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** Serie impresa 15 dígitos (consenso del código 1D — clasificacion.
+   *  codigoUnico.crudo, capa 2 identidad.ts). null/ausente = sin lectura
+   *  consensuada (jamás inventar — RED LINE 2). Sirve al mapa de identidad
+   *  de la cola y al informe. */
+  serie?: string | null;
+  /** El dueño pulsó PROCESAR IGUAL: capas 1 (visual) y 2 (identidad) lo
+   *  respetan — jamás marcar esta fila de nuevo. Persistente (IDB).
+   *  Ausente = sin override (comportamiento de siempre). */
+  forzarDedupOff?: boolean;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
@@ -103,8 +113,11 @@ export interface RegistroMasiva {
   elapsedMs?: number | null;
   /** (T2) dedup v2 por CONTENIDO: "v2" = gemela matcheada (Hamming ≤ 6);
    *  "sin-match" = hasheada sin gemela. Ausente = pre-D65 o hash falló
-   *  (decode — la fila procesa normal, conservador). */
-  dedup?: "v2" | "sin-match";
+   *  (decode — la fila procesa normal, conservador). e63k: valores NUEVOS
+   *  AL FINAL de la unión (contrato D57) — "visual-aplazada" = banda 3..6
+   *  sin marca pre-OCR (la decide la capa 2 post-OCR); "identidad" = capa 2
+   *  marcó DUPLICADA por serie impresa repetida. */
+  dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada";
   /** (T2) distancia de Hamming del match v2 (0–64). Solo filas con
    *  dedup === "v2" lo traen; sin match no hay distancia (no se inventa). */
   dedupDistancia?: number | null;
@@ -135,6 +148,19 @@ export interface RegistroMasiva {
    *  origen por CONSTRUCCIÓN (T1 — el detector D63-A por señales nunca
    *  dirá «escaneo» para un E-14 impreso a sangre). */
   viaPdf?: boolean;
+  // ---------- e63k — KIT e63k-capa2-identidad-v1 (F1) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** Serie impresa 15 dígitos (consenso del código 1D — capa 2 identidad.ts,
+   *  regla general de persistencia del runner). null/ausente = sin lectura
+   *  consensuada (jamás inventar). Sirve al mapa de identidad de la cola. */
+  serie?: string | null;
+  /** El dueño pulsó PROCESAR IGUAL — persistente: sobrevive la recarga y
+   *  manda sobre capas 1 y 2 (el runner ya no pasa por reutilizarResultado
+   *  porque dupOf es null, y la capa 2 tampoco la marcará). */
+  forzarDedupOff?: boolean;
+  /** id del candidato VISUAL cuando la banda fue aplazada (hamming 3..6 —
+   *  traza "visual-aplazada"). Sobrevive la resolución final de la capa 2:
+   *  oro para el post-mortem (el FP 3992/3993 queda evidenciado). */
+  dedupVisualDe?: string;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del
