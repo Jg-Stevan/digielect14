@@ -139,6 +139,12 @@ export interface FilaInforme {
   /** D66 (T4): ms totales del precalor para esta fila (solo precalentadas;
    *  null = no precalentada). */
   precalorMs: number | null;
+  // ---------- D63-A2 — KIT e14-d63a2-deskew-pipeline-v1 (T2) ----------
+  /** ¿El pre-proceso (deskew D63-B) aplicó sobre esta fila? SOLO escaneos
+   *  (presente si origen "escaneo"; ausente para fotos/WhatsApp/SIM/
+   *  registros previos — jamás inventar). Fuente: diagnostico.maestroFuente
+   *  (T0 — "corregido" | "original"). */
+  preprocesoAplicado?: boolean;
   /** ¿El acta trae diagnóstico completo? (base de detección/tiempos). */
   tieneDiagnostico: boolean;
   /** ¿Esta fila lleva carpeta en actas/ (T1.3)? */
@@ -507,6 +513,13 @@ export function actaLivianaJson(fila: FilaInforme) {
     ...(fila.dedup != null ? { dedup: fila.dedup } : {}),
     ...(fila.dedupDistancia != null
       ? { dedupDistancia: fila.dedupDistancia }
+      : {}),
+    // D63-A2 (T2): ¿el pre-proceso (deskew) aplicó? — campo AUSENTE salvo
+    // escaneos post-D63-A2 (misma receta del spread condicional; informes
+    // previos no cambian de forma). preprocesoAplicado false ES dato
+    // (escaneo recto — el deskew no rotó).
+    ...(fila.preprocesoAplicado != null
+      ? { preprocesoAplicado: fila.preprocesoAplicado }
       : {}),
   };
 }
