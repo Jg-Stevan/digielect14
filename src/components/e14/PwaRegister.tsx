@@ -15,12 +15,17 @@ import { registerServiceWorker, setupPwaListeners } from "@jg-stevan/scanner-cor
 // incondicional, la versión nueva queda waiting hasta que el usuario acepte
 // recargar desde el banner (self-contained en src/lib/e14).
 import { setupUpdateBanner } from "@/lib/e14/update-banner";
+// e63k — KIT e63k-capa2-identidad-e-instalar-v1 (F2): píldora «Instalar app»
+// — consume el promptInstall del core que NADIE llamaba (kit §0.3: el evento
+// beforeinstallprompt era tragado y el usuario no podía instalar nunca).
+import { setupPwaInstalar } from "@/lib/e14/pwa-instalar";
 
 export function PwaRegister() {
   useEffect(() => {
     setupPwaListeners();
     registerServiceWorker();
     setupUpdateBanner();
+    setupPwaInstalar();
   }, []);
 
   return null;
