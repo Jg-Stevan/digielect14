@@ -1,0 +1,8 @@
+{
+  "name": "Digitalizador E-14",
+  "description": "Digitalizador de actas E-14: escaneo con score de calidad, control de mesas y transmisión verificada.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

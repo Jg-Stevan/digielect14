@@ -167,13 +167,8 @@ async function initReal(): Promise<RapidRuntime> {
       ? Math.min(4, navigator.hardwareConcurrency || 1)
       : 1;
   ort.env.wasm.simd = true;
-  // KIT e14-optimizacion-v1 (T2, hallazgo #2 de AUDITORIA-e14-v1): proxy=true
-  // migra det/cls/rec al worker interno de ORT — la inferencia (9.8-14.3 s)
-  // deja de bloquear el main thread y el progreso de ANALIZANDO deja de
-  // congelarse. MISMO EP wasm (opts de abajo), MISMO wasm, MISMO resultado.
-  // numThreads queda como está: 1 en GH Pages (no hay SAB) — el proxy NO
-  // requiere SAB. Revertible en 1 línea si la verificación falla (kit §3-T2.2).
-  ort.env.wasm.proxy = true;
+  // KIT e14-optimizacion-v1 (T2): proxy=false para evitar error de resolución dynamic import en bundler
+  ort.env.wasm.proxy = false;
 
   const opts = { executionProviders: ["wasm"] };
   const [det, cls, rec, dictResp] = await Promise.all([

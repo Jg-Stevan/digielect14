@@ -86,6 +86,35 @@ function etiquetaVida(p: { etapa: EtapaVidaKit; ocrFraccion?: number }): string 
   }
 }
 
+/** Porcentaje del proceso del acta (0% a 100%) para la fila. */
+function porcentajeProcesoActa(
+  f: FilaMasiva,
+  esActiva: boolean,
+  progreso: { etapa: EtapaVidaKit; ocrFraccion?: number } | null,
+): number {
+  if (f.estado === "LISTA") return 100;
+  if (f.estado === "ERROR") return 0;
+  if (!esActiva && f.estado !== "PROCESANDO") return 0;
+  if (!progreso) return 20;
+  switch (progreso.etapa) {
+    case "preparando":
+      return 25;
+    case "deteccion":
+      return 50;
+    case "ocr": {
+      const frac =
+        progreso.ocrFraccion != null
+          ? Math.min(1, Math.max(0, progreso.ocrFraccion))
+          : 0.5;
+      return Math.min(95, Math.max(50, Math.round(50 + frac * 45)));
+    }
+    case "verificacion":
+      return 98;
+    default:
+      return 35;
+  }
+}
+
 export function MasivaView() {
   const filas = useMasivaStore((s) => s.filas);
   const corriendo = useMasivaStore((s) => s.corriendo);
@@ -111,7 +140,8 @@ export function MasivaView() {
   } = useMasivaStore.getState();
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const [dragActivo, setDragActivo] = useState(false);
+  const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const dragCounterRef = useRef(0);
   const [vaciarArmado, setVaciarArmado] = useState(false);
 
   // Al montar: cargarFilas() (incluye recuperarCola — zombis fuera) +
@@ -134,6 +164,56 @@ export function MasivaView() {
     const t = window.setTimeout(() => setVaciarArmado(false), 3000);
     return () => window.clearTimeout(t);
   }, [vaciarArmado]);
+
+  // Listener global de drag & drop (estilo DeepSeek / Slack):
+  // Permite arrastrar archivos desde el explorador y soltarlos en cualquier
+  // parte de la ventana mientras el módulo MASIVA está activo.
+  useEffect(() => {
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")) {
+        dragCounterRef.current++;
+        setIsDraggingGlobal(true);
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current--;
+      if (dragCounterRef.current <= 0) {
+        dragCounterRef.current = 0;
+        setIsDraggingGlobal(false);
+      }
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = "copy";
+      }
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setIsDraggingGlobal(false);
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        void agregarFiles(Array.from(e.dataTransfer.files));
+      }
+    };
+
+    window.addEventListener("dragenter", handleDragEnter);
+    window.addEventListener("dragleave", handleDragLeave);
+    window.addEventListener("dragover", handleDragOver);
+    window.addEventListener("drop", handleDrop);
+
+    return () => {
+      window.removeEventListener("dragenter", handleDragEnter);
+      window.removeEventListener("dragleave", handleDragLeave);
+      window.removeEventListener("dragover", handleDragOver);
+      window.removeEventListener("drop", handleDrop);
+    };
+  }, [agregarFiles]);
 
   // KIT e14-masiva-ux-v1 (T3.2): reconciliar filas «EN COLA» contra la
   // conexión actual — tanto al montar (el toggle pudo usarse en REVISIÓN o
@@ -234,29 +314,97 @@ export function MasivaView() {
 
   return (
     <section
-      className="flex-1 min-h-0 overflow-y-auto bg-brand-black"
+      className="flex-1 min-h-0 overflow-y-auto bg-[#090d12] relative flex flex-col"
       aria-label="MASIVA — carga masiva de actas"
     >
-      <div className="w-full max-w-md md:max-w-3xl mx-auto px-4 py-4 flex flex-col gap-4">
-        {/* ---------- HEADER ---------- */}
-        <header className="flex flex-wrap items-center gap-3 justify-between">
-          <div className="min-w-0">
-            <h1 className="font-mono text-lg font-extrabold tracking-wider text-white uppercase flex items-center gap-2">
-              <StitchStackIcon className="w-5 h-5 text-brand-green" />
-              MASIVA
-            </h1>
-            <p className="font-mono text-[10px] tracking-wider text-gray-400 uppercase">
-              MISMO PIPELINE — UNA FOTO A LA VEZ
-            </p>
+      {/* ---------- OVERLAY DRAG & DROP GLOBAL (ESTILO DEEPSEEK) ---------- */}
+      {isDraggingGlobal && (
+        <div
+          className="fixed inset-0 z-50 bg-[#090d12]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center border-4 border-dashed border-[#10b981] animate-in fade-in duration-150 pointer-events-auto shadow-2xl"
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounterRef.current--;
+            if (dragCounterRef.current <= 0) {
+              dragCounterRef.current = 0;
+              setIsDraggingGlobal(false);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounterRef.current = 0;
+            setIsDraggingGlobal(false);
+            if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+              void agregarFiles(Array.from(e.dataTransfer.files));
+            }
+          }}
+        >
+          <div className="w-24 h-24 rounded-3xl bg-[#10b981]/15 border-2 border-[#10b981] flex items-center justify-center text-[#10b981] mb-6 shadow-2xl shadow-[#10b981]/30 animate-bounce">
+            <StitchStackIcon className="w-12 h-12" />
           </div>
-          <div className="flex items-center gap-2">
+          <h2 className="font-mono text-2xl md:text-3xl font-black text-white uppercase tracking-wider mb-3">
+            SUELTA LOS ARCHIVOS AQUÍ
+          </h2>
+          <p className="font-mono text-xs md:text-sm text-slate-300 max-w-md uppercase tracking-wider mb-5">
+            Se agregarán directamente a la cola de digitalización E-14
+          </p>
+          <div className="flex flex-wrap gap-2 justify-center font-mono text-[11px] text-slate-300 uppercase tracking-widest bg-slate-900/80 px-5 py-2.5 rounded-full border border-slate-700/80 shadow-md">
+            <span>FOTOS (JPG/PNG)</span> • <span>PDF</span> • <span>ZIP</span> • <span>RAR</span> • <span>HEIC</span>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- HEADER FIJO / STICKY SUPERIOR CON BOTÓN PROCESAR COLA ---------- */}
+      <header className="sticky top-0 z-30 w-full bg-[#090d12]/92 backdrop-blur-xl border-b border-slate-800/80 px-4 py-3 shadow-lg shadow-black/40">
+        <div className="w-full max-w-6xl mx-auto flex items-center justify-between gap-3">
+          {/* Título + estado visual */}
+          <div className="min-w-0 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#10b981]/15 border border-[#10b981]/40 flex items-center justify-center text-[#10b981] shrink-0">
+              <StitchStackIcon className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="font-mono text-sm md:text-base font-black tracking-wider text-white uppercase truncate">
+                  CARGA MASIVA
+                </h1>
+                {hayCola && (
+                  <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full border border-slate-800 bg-[#10161f] font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                    {terminadas}/{filas.length}
+                  </span>
+                )}
+              </div>
+              <p className="font-mono text-[9px] md:text-[10px] tracking-wider text-slate-400 uppercase truncate">
+                {corriendo ? (
+                  <span className="text-[#10b981] font-bold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-ping" />
+                    PROCESANDO EN COLA…
+                  </span>
+                ) : pendientes > 0 ? (
+                  `${pendientes} PENDIENTES DE ENVÍO`
+                ) : hayCola ? (
+                  "COLA COMPLETADA"
+                ) : (
+                  "ARRASTRA ARCHIVOS O SELECCIONA"
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Acciones principales fijas: PROCESAR / PAUSAR + VACIAR */}
+          <div className="flex items-center gap-2 shrink-0">
             {corriendo ? (
               <button
                 type="button"
                 onClick={pausar}
                 aria-label="Pausar la cola"
-                className="min-h-[44px] px-4 rounded-xl border border-brand-border bg-brand-surface text-gray-200 font-mono text-[11px] font-bold uppercase tracking-wider hover:border-gray-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
+                className="min-h-[42px] px-4 rounded-xl border border-amber-500/50 bg-amber-500/15 text-amber-300 font-mono text-[11px] font-bold uppercase tracking-wider hover:bg-amber-500/25 transition cursor-pointer flex items-center gap-1.5 shadow-sm"
               >
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                 PAUSAR
               </button>
             ) : (
@@ -265,11 +413,18 @@ export function MasivaView() {
                 onClick={iniciar}
                 disabled={!colaDisponible || (pendientes === 0 && duplicadas === 0)}
                 aria-label="Procesar la cola"
-                className="min-h-[44px] px-4 rounded-xl bg-brand-green text-black font-mono text-[11px] font-extrabold uppercase tracking-wider shadow-[0_0_10px_rgba(0,230,118,0.2)] hover:brightness-110 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
+                className="min-h-[42px] px-4 md:px-5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-[11px] md:text-xs font-black uppercase tracking-wider shadow-md shadow-[#10b981]/25 hover:shadow-[#10b981]/40 active:scale-[0.98] transition cursor-pointer disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed flex items-center gap-1.5"
               >
-                PROCESAR
+                <span className="w-2 h-2 rounded-full bg-[#090d12]" />
+                PROCESAR COLA
+                {pendientes + duplicadas > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded-md bg-[#090d12]/20 font-extrabold text-[10px]">
+                    {pendientes + duplicadas}
+                  </span>
+                )}
               </button>
             )}
+
             <button
               type="button"
               onClick={() => {
@@ -284,18 +439,21 @@ export function MasivaView() {
               aria-label={
                 vaciarArmado ? "Confirmar vaciar toda la cola" : "Vaciar toda la cola"
               }
-              className={`min-h-[44px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60 ${
+              className={`min-h-[42px] px-3 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold uppercase tracking-wider transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                 vaciarArmado
-                  ? "border-red-500 text-red-400 bg-red-500/10"
-                  : "border-brand-border bg-brand-surface text-gray-300 hover:border-gray-500"
+                  ? "border-red-500 text-red-400 bg-red-500/20 animate-pulse"
+                  : "border-slate-800 bg-[#10161f] text-slate-400 hover:border-slate-700 hover:text-white"
               }`}
             >
-              {vaciarArmado ? "¿SEGURO? VACIAR" : "VACIAR"}
+              {vaciarArmado ? "¿SEGURO?" : "VACIAR"}
             </button>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {/* ---------- FALLBACK IDB (kit §3/§6) ---------- */}
+      {/* ---------- CUERPO DE LA VISTA (SCROLL PRINCIPAL) ---------- */}
+      <div className="w-full max-w-6xl mx-auto px-4 py-5 flex flex-col gap-4 pb-24">
+        {/* ---------- FALLBACK IDB ---------- */}
         {!colaDisponible && (
           <p
             role="alert"
@@ -304,8 +462,6 @@ export function MasivaView() {
             TU NAVEGADOR NO SOPORTA LA COLA — IMPORTA DE A UNA EN ESCANEAR
           </p>
         )}
-        {/* FIX M9 (auditoría 2-c): quota ≠ sin soporte — aviso honesto y la
-            cola SIGUE viva (PROCESAR vale para lo que ya hay dentro). */}
         {colaDisponible && avisoCola && (
           <p
             role="alert"
@@ -315,56 +471,41 @@ export function MasivaView() {
           </p>
         )}
 
-        {/* ---------- ZONA DE CARGA (input + drag & drop) ---------- */}
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragActivo(true);
-          }}
-          onDragLeave={() => setDragActivo(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragActivo(false);
-            void agregarFiles(Array.from(e.dataTransfer.files));
-          }}
-          className={`rounded-2xl border-2 border-dashed px-4 py-6 text-center transition-colors ${
-            dragActivo
-              ? "border-brand-green bg-brand-green/10"
-              : "border-brand-border bg-brand-surface/60"
-          }`}
-        >
+        {/* ---------- ZONA DE CARGA (input + botón manual + hint) ---------- */}
+        <div className="rounded-2xl border-2 border-dashed border-slate-800 bg-[#10161f] hover:border-slate-700 px-4 py-6 text-center transition-all">
           <input
             ref={inputRef}
             id="masiva-archivos"
             type="file"
             multiple
-            // KIT e14-masiva-ux-v1 (T2.5) + D60: imágenes + HEIC/HEIF +
-            // comprimidos + PDF. El filtro REAL vive en el store
-            // (pareceImagenMasiva + extraerArchivo + parecePdfMasiva).
             accept="image/*,.heic,.heif,.zip,.rar,.pdf"
             className="sr-only"
             onChange={(e) => {
               void agregarFiles(Array.from(e.target.files ?? []));
-              e.target.value = ""; // re-soltar el MISMO archivo funciona
+              e.target.value = "";
             }}
           />
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            aria-label="Elegir fotos de actas para la cola"
-            className="min-h-[44px] inline-flex items-center gap-2 px-4 rounded-xl bg-brand-greendark/60 border border-brand-green/60 font-mono text-[11px] font-bold uppercase tracking-wider text-brand-green hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
-          >
-            <StitchStackIcon className="w-4 h-4" />
-            ELEGIR FOTOS
-          </button>
-          <p className="mt-2 font-mono text-[10px] tracking-wider text-gray-500 uppercase">
-            {filas.length === 0
-              ? "SUELTA FOTOS, PDF O ZIP/RAR AQUÍ"
-              : "SUELTA MÁS ARCHIVOS AQUÍ — SE SUMAN A LA COLA"}
-          </p>
+          <div className="flex flex-col items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              aria-label="Elegir fotos de actas para la cola"
+              className="min-h-[44px] inline-flex items-center gap-2 px-6 rounded-xl bg-[#10b981]/15 border border-[#10b981]/50 font-mono text-xs font-bold uppercase tracking-wider text-[#10b981] hover:bg-[#10b981]/25 transition cursor-pointer shadow-sm active:scale-[0.98]"
+            >
+              <StitchStackIcon className="w-4 h-4" />
+              ELEGIR FOTOS O ARCHIVOS
+            </button>
+            <p className="font-mono text-[11px] tracking-wider text-slate-400 uppercase mt-1">
+              SUELTA ARCHIVOS EN CUALQUIER PARTE DE ESTA PANTALLA
+            </p>
+            <span className="font-mono text-[9px] text-slate-500 uppercase tracking-widest">
+              SOPORTA MÚLTIPLES FOTOS, PDF, ZIP O RAR
+            </span>
+          </div>
+
           {guardando > 0 && (
             <p
-              className="mt-2 inline-block rounded-full border border-brand-borderdim px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-gray-300"
+              className="mt-3 inline-block rounded-full border border-slate-700 bg-slate-800 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-slate-300"
               role="status"
               aria-live="polite"
             >
@@ -375,30 +516,28 @@ export function MasivaView() {
 
         {/* ---------- BARRA DE PROGRESO DEL LOTE ---------- */}
         {hayCola && (
-          <div className="flex items-center justify-between gap-3 rounded-xl bg-brand-surfacelight border border-brand-border px-3 py-2">
-            <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-gray-300 truncate">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-[#10161f] border border-slate-800 px-3.5 py-2.5 shadow-xs">
+            <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-slate-300 truncate">
               PROCESANDO {terminadas}/{filas.length}
               {filaActiva && progreso && (
-                <span className="text-gray-500 font-medium">
+                <span className="text-slate-400 font-medium">
                   {" "}
                   — {filaActiva.nombre} · {etiquetaVida(progreso)}
                 </span>
               )}
             </p>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-gray-500 shrink-0">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500 shrink-0">
               {corriendo ? "COLA ACTIVA" : pendientes > 0 ? `${pendientes} EN COLA` : "COLA QUIETA"}
             </p>
           </div>
         )}
 
-        {/* KIT e14-masiva-ux-v1 (T2.4): mismo aviso que ScanView (F-HEIC) —
-            solo cuando la fila en curso sea HEIC/HEIF (el decode corre dentro
-            del pipeline, fileToCaptureDataUrl del core). Sin toasts (D2). */}
+        {/* Aviso HEIC */}
         {filaActiva && /\.(heic|heif)$/i.test(filaActiva.nombre) && (
           <p
             role="status"
             aria-live="polite"
-            className="rounded-xl border border-amber-400/60 bg-amber-400/10 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wider text-amber-400"
+            className="rounded-xl border border-amber-400/60 bg-amber-400/10 px-3.5 py-2 font-mono text-[10px] font-bold uppercase tracking-wider text-amber-400"
           >
             CONVIRTIENDO HEIC… LA CONVERSIÓN PUEDE TARDAR UNOS SEGUNDOS
           </p>
@@ -413,19 +552,17 @@ export function MasivaView() {
                 type="button"
                 onClick={() => setFiltro(valor)}
                 aria-pressed={filtro === valor}
-                className={`min-h-[32px] px-2.5 py-1 rounded-full border font-mono text-[10px] font-bold uppercase tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60 ${
+                className={`min-h-[32px] px-3 py-1 rounded-full border font-mono text-[10px] font-bold uppercase tracking-wider transition ${
                   filtro === valor
-                    ? "border-brand-green text-brand-green bg-brand-green/10"
-                    : "border-brand-border text-gray-400 hover:text-gray-200"
+                    ? "border-[#10b981] text-[#10b981] bg-[#10b981]/15"
+                    : "border-slate-800 text-slate-400 hover:text-white hover:border-slate-700"
                 }`}
               >
                 {label}
               </button>
             ))}
-            {/* KIT e14-masiva-ux-v1 (T3.4): conteos del lote — mismo estilo
-                que los filtros (texto pequeño mono uppercase). */}
             <span
-              className="font-mono text-[10px] uppercase tracking-wider text-gray-500"
+              className="font-mono text-[10px] uppercase tracking-wider text-slate-500"
               aria-label={`Conteos: ${enviadas} enviadas, ${enCola} en cola, ${pendientes} pendientes, ${duplicadas} duplicadas, ${errores} errores`}
             >
               ENVIADAS {enviadas} · EN COLA {enCola} · PENDIENTES {pendientes}
@@ -434,12 +571,10 @@ export function MasivaView() {
             {(advertenciasPend > 0 || enviandoLote) && !corriendo && (
               <button
                 type="button"
-                // FIX C5: disabled con enviandoLote — sin guard visual un doble
-                // tap disparaba dos lotes sobre el mismo snapshot de filas.
                 disabled={enviandoLote}
                 onClick={() => void enviarLote("ADVERTENCIA")}
                 aria-label={`Enviar ${advertenciasPend} actas con advertencia`}
-                className="ml-auto min-h-[36px] px-3 rounded-full border border-amber-400/60 text-amber-400 bg-amber-400/10 font-mono text-[10px] font-bold uppercase tracking-wider hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/60"
+                className="ml-auto min-h-[34px] px-3.5 rounded-full border border-amber-400/60 text-amber-400 bg-amber-400/10 font-mono text-[10px] font-bold uppercase tracking-wider hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 {enviandoLote ? "ENVIANDO…" : `ENVIAR ADVERTENCIAS (${advertenciasPend})`}
               </button>
@@ -447,25 +582,21 @@ export function MasivaView() {
           </div>
         )}
 
-        {/* ---------- BANDEJA: FILAS ---------- */}
+        {/* ---------- BANDEJA: FILAS (SIN RESTRICCIÓN RÍGIDA DE ALTURA PARA SCROLL FLUIDO) ---------- */}
         {hayCola && (
-          <ul className="flex flex-col gap-2 max-h-96 overflow-y-auto pr-1" aria-label="Bandeja de resultados">
+          <ul className="flex flex-col gap-2 pr-1" aria-label="Bandeja de resultados">
             {visibles.map((f) => {
               const pildora = pildoraDe(f);
               const esActiva = progreso?.id === f.id && f.estado === "PROCESANDO";
               // D65 (T3.3) — señal de vida de la fila (barra h-1 discreta):
               const enColaVida = f.estado === "PENDIENTE" || f.estado === "DUPLICADA";
               const posCola = enColaVida ? colaVida.indexOf(f.id) + 1 : 0;
-              // % SOLO si es dato REAL (OCR del reconocedor) — kit T3 honestidad.
-              const ocrPct =
-                esActiva && progreso?.etapa === "ocr" && progreso.ocrFraccion != null
-                  ? Math.min(100, Math.max(0, Math.round(progreso.ocrFraccion * 100)))
-                  : null;
+              const pctProceso = porcentajeProcesoActa(f, Boolean(esActiva), progreso);
               return (
                 <li
                   key={f.id}
-                  className={`rounded-xl border px-3 py-2.5 bg-brand-surface ${
-                    esActiva ? "border-brand-green/60 ring-1 ring-brand-green/60" : "border-brand-border"
+                  className={`rounded-2xl border px-3.5 py-3 bg-[#10161f] transition-all ${
+                    esActiva ? "border-[#10b981]/60 ring-1 ring-[#10b981]/60 shadow-md shadow-[#10b981]/10" : "border-slate-800 hover:border-slate-700"
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -474,14 +605,14 @@ export function MasivaView() {
                     <img
                       src={f.thumb}
                       alt={`Miniatura de ${f.nombre}`}
-                      className="w-10 h-10 rounded-lg object-cover bg-black/40 border border-brand-borderdim shrink-0"
+                      className="w-11 h-11 rounded-xl object-cover bg-[#090d12] border border-slate-700 shrink-0"
                     />
                   ) : (
                     <div
                       aria-hidden
-                      className="w-10 h-10 rounded-lg bg-black/40 border border-brand-borderdim flex items-center justify-center text-gray-600 shrink-0"
+                      className="w-11 h-11 rounded-xl bg-[#090d12] border border-slate-800 flex items-center justify-center text-slate-500 shrink-0"
                     >
-                      <StitchStackIcon className="w-4 h-4" />
+                      <StitchStackIcon className="w-5 h-5" />
                     </div>
                   )}
 
@@ -547,15 +678,34 @@ export function MasivaView() {
                     </div>
                   </div>
 
-                  {/* Score · página · nivel (desktop) */}
-                  <div className="hidden sm:flex items-center gap-3 shrink-0 font-mono text-[10px] uppercase tracking-wider text-gray-400">
+                  {/* % del proceso · score · página · nivel (div:nth-of-type(3)) */}
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0 font-mono text-[10px] uppercase tracking-wider text-gray-400">
+                    <span
+                      className={`font-mono text-[10px] sm:text-[11px] font-black tracking-wider px-2 py-0.5 rounded-md border flex items-center gap-1.5 transition-all ${
+                        esActiva || f.estado === "PROCESANDO"
+                          ? "border-[#10b981]/60 bg-[#10b981]/15 text-[#10b981] shadow-xs"
+                          : f.estado === "LISTA"
+                            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                            : f.estado === "ERROR"
+                              ? "border-red-500/40 bg-red-500/10 text-red-400"
+                              : "border-slate-800 bg-[#090d12] text-slate-400"
+                      }`}
+                      title={`Progreso del proceso del acta: ${pctProceso}%`}
+                    >
+                      {(esActiva || f.estado === "PROCESANDO") && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-ping shrink-0" />
+                      )}
+                      {pctProceso}%
+                    </span>
                     {typeof f.score === "number" && (
-                      <span className="text-gray-200 font-bold">{f.score.toFixed(1)}</span>
+                      <span className="text-gray-200 font-bold hidden md:inline" title="Score de calidad">
+                        {f.score.toFixed(1)}
+                      </span>
                     )}
-                    <span>{f.pagina ?? "-/-"}</span>
+                    <span className="hidden sm:inline">{f.pagina ?? "-/-"}</span>
                     {f.nivel && (
                       <span
-                        className={`px-1.5 py-0.5 rounded border ${
+                        className={`hidden sm:inline px-1.5 py-0.5 rounded border ${
                           f.nivel === "AUTO"
                             ? "border-brand-green/50 text-brand-green"
                             : "border-brand-borderdim text-gray-500"
@@ -621,51 +771,9 @@ export function MasivaView() {
                   </div>
                   </div>
 
-                  {/* D65 (T3.3) — BARRA DE VIDA (h-1, tipografía discreta — no
-                      compite con los chips): EN COLA → vacía + «#N de M»;
-                      PROCESANDO preparando/detección/verificación → animada
-                      SIN número; OCR con fracción REAL → determinada + %;
-                      LISTA → 100% verde un instante (transitorio); ERROR →
-                      roja. aria-live SOLO en el texto de etapa (los cambios
-                      de % van en un hermano sin aria-live — kit T3.5). */}
-                  {(enColaVida || esActiva || f.estado === "ERROR" || (f.estado === "LISTA" && recienListas.has(f.id))) && (
-                    <div className="mt-2">
-                      {esActiva && ocrPct != null ? (
-                        <div
-                          role="progressbar"
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={ocrPct}
-                          aria-label={`OCR ${ocrPct}%`}
-                          className="h-1 rounded-full bg-white/10 overflow-hidden"
-                        >
-                          <div className="h-full bg-brand-green" style={{ width: `${ocrPct}%` }} />
-                        </div>
-                      ) : esActiva ? (
-                        <div className="h-1 rounded-full bg-brand-green/40 animate-pulse" aria-hidden />
-                      ) : f.estado === "ERROR" ? (
-                        <div className="h-1 rounded-full bg-red-500/40" aria-hidden />
-                      ) : f.estado === "LISTA" ? (
-                        <div className="h-1 rounded-full bg-brand-green" aria-hidden />
-                      ) : (
-                        <div className="h-1 rounded-full bg-white/5" aria-hidden />
-                      )}
-                      {(enColaVida || (esActiva && progreso)) && (
-                        <p className="mt-1 font-mono text-[11px] tabular-nums tracking-wider text-gray-500 uppercase truncate">
-                          <span aria-live="polite">
-                            {enColaVida
-                              ? `EN COLA #${posCola} DE ${colaVida.length}`
-                              : progreso
-                                ? etiquetaVida({ etapa: progreso.etapa })
-                                : ""}
-                          </span>
-                          {ocrPct != null && <span> {ocrPct}%</span>}
-                        </p>
-                      )}
-                    </div>
-                  )}
                 </li>
               );
+
             })}
             {visibles.length === 0 && (
               <li className="rounded-xl border border-brand-borderdim bg-brand-surface/40 px-3 py-4 text-center font-mono text-[10px] uppercase tracking-wider text-gray-500">
