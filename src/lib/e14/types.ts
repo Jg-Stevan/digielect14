@@ -94,8 +94,12 @@ export interface DiagnosticoActa {
     /** D63-C — KIT e63c-quad-gate-escaneo-v1 (T2.3): veredicto del MARCO
      *  IMPRESO del formulario en escaneos ("completo" | "cortado" |
      *  "no-encontrado"). null = no se evaluó (fotos, SIM, registros
-     *  previos a D63-C — jamás inventar). Aditivo al final del contrato. */
-    gateMarco?: "completo" | "cortado" | "no-encontrado" | null;
+     *  previos a D63-C — jamás inventar). Aditivo al final del contrato.
+     *  KIT e63d (F3.2): nuevo valor "ceñido" — marco EN el filo (escáner
+     *  atravesó el marco: corte geométrico, sin pérdida de contenido) —
+     *  NUNCA bloquea. Valor ADITIVO: los instrumentos previos siguen
+     *  parseando los tres valores viejos (contrato D51). */
+    gateMarco?: "completo" | "ceñido" | "cortado" | "no-encontrado" | null;
     fondo: boolean;
     recortada: boolean;
     ladoEsquina: string | null;
