@@ -1934,3 +1934,20 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 - El dueño respondió al pendiente (1) con la re-corrida pedida en REPORTE §9(2): **ANEXO C** — corrida real sobre el preview del PR (26 actas · **25 ENVIADA · 0 RECHAZADAS · 1 EN_REVISION_HUMANA** [divergencia F1 conocida, caso 5 de la matriz ANEXO A, no bloquea] · dedup 4 matches sin rechazos) con **veredicto explícito: «el caso 4 NO ocurre → GO para el merge de #65 (y #61/#64). El e63d queda validado en campo por la corrida del dueño.»** Transcripción íntegra en REPORTE §10 (A/B 10.1 · la no-ENVIADA 10.2 · invariancias 10.3 · reconciliación 10.4).
 - Reconciliación (REPORTE §10.4): el perdón observado en `transmision el cairo-P1.jpg` (gateMarco `cortado` + FUERTE + secciones presentes → ENVIADA) solo es posible con la polaridad rev.2 — la corrida valida la rama CON el hotfix incluido; caso 4 con 0 ocurrencias en campo. **La Fase E del kit e63d queda CERRADA.**
 - Merge de #65 **RE-AUTORIZADO** por el ANEXO C y ejecutado sobre esta rama (con los commits de transcripción de esta actualización) — SHA del merge de 2 padres registrado en la entrada de cierre e63e de main (FASE 4.6 del kit).
+
+---
+
+## 2026-10-21 · e63e (cierre) — merge-cola-prs-v1 COMPLETO: #61 + #64 + #65 mergeados, main viva
+
+**Autorización**: kit `INSTRUCCIONES-e63e-merge-cola-prs-v1` del dueño («esta instrucción ES la autorización de merge de los 3 PRs») + **ANEXO C** de la versión re-enviada con el veredicto de campo del dueño para #65 («el caso 4 NO ocurre → GO para el merge de #65»), respuesta a la re-corrida que pedía REPORTE-e63d §9(2).
+
+**Los 3 merges de 2 padres, en orden (cero squash · cero rebase-merge · cero force-push)**:
+1. **#61 (DEPLOY-D67)** = `ed78ffb` — conflicto real `docs/worklog.md` (dos appends) resuelto en la rama (`6d3f90b`): contenido de main intacto + entrada DEPLOY-D67 appendeada ÍNTEGRA al final (precedente `f5aad33`).
+2. **#64 (DEPLOY-D63A2)** = `9151f9a` — conflicto trivial resuelto en la rama (`795b32e`): DEPLOY-D63A2 queda DESPUÉS de DEPLOY-D67, ambas entradas intactas.
+3. **#65 (e63d escaneo-ya-recortado + hotfix e63d-rev2)** = `0ccdf16` — rebase trivial (`7392672`) + hotfix de la polaridad del perdón F0.2 (ANEXO A caso 4 por inspección de código, `b5f847d`) + QA headless `scripts/qa-escaneo-ya-recortado.ts` 24/24 (`e7c571f`) + REPORTE §8/§9/§10 con la transcripción del ANEXO C (`a852d7f`/`d1e48aa`) + worklog (`1f92af7`/`56a575c`). **Merge re-autorizado por el ANEXO C**: la corrida real del dueño (26 actas · 25 ENVIADA · 0 RECHAZADAS · 1 EN_REVISION_HUMANA [divergencia F1 conocida, caso 5 de la matriz, no bloquea]) valida la rama con rev.2 incluida — el perdón observado en `transmision el cairo-P1.jpg` (cortado+FUERTE+secciones) solo es posible con la polaridad corregida. **Fase E del kit e63d CERRADA (REPORTE §10).**
+
+**Gates (cada merge dejó main viva)**: `bun install --frozen-lockfile` sin cambios · tsc 0 · lint 0 · build OK · QA 24/24 sobre el main final. CI del SHA final `0ccdf16`: checks ✅ · build ✅ · Deploy to GitHub Pages ✅ · parity ❌×2 heredada D57 (0 fallos nuevos, perfil documentado).
+
+**Ramas**: las 3 de los PRs borradas en remoto (`chore/deploy-d67-worklog-v1`, `chore/deploy-d63a2-worklog-v1`, `feat/e63d-escaneo-ya-recortado-v1`) — GitHub conserva los PRs y sus diffs; el resto de ramas (lab/, bench/, etc.) intocadas.
+
+**Pendiente del dueño**: (1) REVOCAR los tokens `ghp_`/`vcp_` expuestos en chat (deuda persistente); (2) deploy Vercel canónico del main nuevo `0ccdf16` (receta `docs/DEPLOY-vercel.md` §2 — GH Pages ya se auto-desplegó ✅); (3) Ctrl+Shift+R en sus navegadores tras el deploy (no toca IndexedDB); (4) kit siguiente en cola del agente: `INSTRUCCIONES-e63f-autoenvio-v1.md`.
