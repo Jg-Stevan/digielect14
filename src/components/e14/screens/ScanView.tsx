@@ -103,6 +103,8 @@ import {
   StitchShutterDocIcon,
   GaugeIcon,
 } from "../icons";
+// Task 4: botón «?» del HUD — abre la guía de uso (AyudaOverlay).
+import { abrirAyuda } from "../AyudaOverlay";
 
 /* ── Chips de calidad = BOTONES DE SIMULACIÓN (SPEC-e14-simulacion-scores
  *  §D2/§D3) ────
@@ -1924,10 +1926,13 @@ export function ScanView() {
           )}
 
           {/* Header con segmented selector [ CÁMARA | SIMULACIÓN | IMPORTAR ] + controles */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col gap-2 p-3">
-            <div className="flex items-center justify-between w-full">
+          {/* Task 2-b: en lg+ el HUD gana respiro (padding/píldoras mayores) y
+              la fila se acota a max-w-2xl centrada — segment control
+              profesional, no dos islas a los bordes del visor. */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col gap-2 p-3 lg:gap-3 lg:px-5 lg:pt-4">
+            <div className="flex items-center justify-between w-full lg:max-w-2xl lg:mx-auto">
               {/* Píldora IA: AUTO + Grid */}
-              <div className="pointer-events-auto flex items-center gap-1.5 bg-[#10161f]/90 border border-slate-800 rounded-full px-2.5 py-1 backdrop-blur-md shadow-md">
+              <div className="pointer-events-auto flex items-center gap-1.5 bg-[#10161f]/90 border border-slate-800 rounded-full px-2.5 py-1 lg:px-3.5 lg:py-1.5 backdrop-blur-md shadow-md">
                 <span className="inline-flex items-center justify-center bg-white text-slate-900 text-[10px] font-black rounded px-1.5 py-0.5 leading-none select-none">
                   IA
                 </span>
@@ -1936,11 +1941,16 @@ export function ScanView() {
                   aria-label="Alternar cuadrícula"
                   aria-pressed={gridOn}
                   onClick={() => setGridOn((v) => !v)}
-                  className={`p-1 rounded-full transition flex items-center justify-center ${
+                  className={`p-1 lg:p-1.5 rounded-full transition flex items-center justify-center gap-1.5 ${
                     gridOn ? "text-[#10b981] bg-[#10b981]/15" : "text-slate-400 hover:text-white"
                   }`}
                 >
                   <StitchGridIcon className="w-4 h-4" />
+                  {/* Task 2-b (crítica VLM): etiqueta visible en lg+ — el icono
+                      solo deja de ser adivinanza; en móvil queda el aria-label. */}
+                  <span className="hidden lg:inline text-[10px] font-bold tracking-wide">
+                    CUADRÍCULA
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -1952,7 +1962,7 @@ export function ScanView() {
                       : "Captura automática (disponible en modo cámara)"
                   }
                   onClick={alternarAutoHUD}
-                  className={`inline-flex items-center gap-1.5 text-[11px] font-bold tracking-wide px-2 py-0.5 rounded-full select-none transition ${
+                  className={`inline-flex items-center gap-1.5 text-[11px] lg:text-xs font-bold tracking-wide px-2 lg:px-3 py-0.5 lg:py-1 rounded-full select-none transition ${
                     autoArmado && modoCamara ? "bg-[#10b981]/15 text-[#10b981]" : "text-slate-300 hover:text-white"
                   }`}
                 >
@@ -1964,17 +1974,36 @@ export function ScanView() {
                   />
                   AUTO
                 </button>
+                {/* Task 4: «?» — guía de uso a un toque (crítica VLM: nada
+                    que adivinar). Siempre visible; etiqueta AYUDA solo en lg. */}
+                <button
+                  type="button"
+                  onClick={abrirAyuda}
+                  aria-label="Cómo funciona — abrir la guía de uso"
+                  title="Cómo funciona (tecla ?)"
+                  className="ml-0.5 p-1 lg:p-1.5 rounded-full text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition flex items-center justify-center gap-1.5"
+                >
+                  <span
+                    aria-hidden
+                    className="font-mono font-extrabold text-[13px] leading-none"
+                  >
+                    ?
+                  </span>
+                  <span className="hidden lg:inline text-[10px] font-bold tracking-wide">
+                    AYUDA
+                  </span>
+                </button>
               </div>
 
               {/* Selector de modo rápido segmented */}
-              <div className="pointer-events-auto flex items-center p-0.5 bg-[#10161f]/90 border border-slate-800 rounded-full backdrop-blur-md shadow-md">
+              <div className="pointer-events-auto flex items-center p-0.5 lg:p-1 bg-[#10161f]/90 border border-slate-800 rounded-full backdrop-blur-md shadow-md">
                 <button
                   type="button"
                   onClick={() => {
                     setFuente("CAMARA");
                     setModoMenuAbierto(false);
                   }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
                     fuente === "CAMARA"
                       ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
                       : "text-slate-400 hover:text-white"
@@ -1989,7 +2018,7 @@ export function ScanView() {
                     setFuente("SIMULACION");
                     setModoMenuAbierto(false);
                   }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
                     fuente === "SIMULACION"
                       ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
                       : "text-slate-400 hover:text-white"
@@ -2004,7 +2033,7 @@ export function ScanView() {
                     inputRef.current?.click();
                     setModoMenuAbierto(false);
                   }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                  className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
                     fuente === "ARCHIVO"
                       ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
                       : "text-slate-400 hover:text-white"
@@ -2040,20 +2069,34 @@ export function ScanView() {
                 </div>
               )}
 
-              {/* Aviso de cámara con opciones claras y botón destacado para simulación */}
+              {/* Aviso de cámara con opciones claras y botón destacado para simulación.
+                  Task 2-b (crítica VLM #1): copy humano y accionable — título en
+                  primera persona + pasos numerados; en sm+ se centra como
+                  tarjeta y en lg gana ancho/aire (no pegado al borde). */}
               {avisoCamara && camEstado !== "viva" && (
-                <div className="absolute inset-x-4 top-[72px] z-40 rounded-2xl border border-amber-500/40 bg-[#10161f]/95 backdrop-blur-xl p-5 shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+                <div className="absolute inset-x-4 top-[72px] z-40 rounded-2xl border border-amber-500/40 bg-[#10161f]/95 backdrop-blur-xl p-5 sm:mx-auto sm:max-w-md lg:top-20 lg:max-w-lg shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
                     <p className="text-xs font-bold text-amber-400 font-mono uppercase tracking-wider">
-                      {avisoCamara === "denied" ? "ACCESO A CÁMARA NO DISPONIBLE" : "SEÑAL DE CÁMARA INTERRUMPIDA"}
+                      {avisoCamara === "denied" ? "No podemos acceder a tu cámara" : "Se perdió la señal de la cámara"}
                     </p>
                   </div>
-                  <p className="text-xs leading-relaxed text-slate-300 font-sans">
-                    {avisoCamara === "denied"
-                      ? "El navegador o el entorno iframe bloquea el acceso directo a la cámara. Puede usar el modo Simulación para probar todas las funciones o importar una foto desde su disco."
-                      : "La cámara se desconectó o fue requerida por otra aplicación."}
-                  </p>
+                  {avisoCamara === "denied" ? (
+                    <ol className="list-decimal pl-4 text-xs leading-relaxed text-slate-300 font-sans marker:text-amber-400/80 marker:font-mono">
+                      <li>
+                        Revisa el permiso de la cámara en el navegador (icono de
+                        candado o de cámara junto a la barra de direcciones) y
+                        permite el acceso.
+                      </li>
+                      <li>O activa la simulación para probar el flujo completo sin cámara.</li>
+                      <li>O sube una foto del acta desde tu galería o tu disco.</li>
+                    </ol>
+                  ) : (
+                    <p className="text-xs leading-relaxed text-slate-300 font-sans">
+                      La cámara se detuvo u otra aplicación se quedó con ella.
+                      Ciérrala y presiona «Reintentar», o sube una foto del acta.
+                    </p>
+                  )}
                   <div className="mt-4 flex flex-col sm:flex-row gap-2">
                     <button
                       type="button"
@@ -2064,7 +2107,7 @@ export function ScanView() {
                       className="h-10 rounded-xl px-4 text-xs font-bold text-[#090d12] bg-[#10b981] hover:bg-[#059669] transition shadow-md shadow-[#10b981]/20 flex items-center justify-center gap-1.5"
                     >
                       <SparklesIcon className="w-4 h-4" />
-                      ACTIVAR SIMULACIÓN
+                      PROBAR CON SIMULACIÓN
                     </button>
                     <button
                       type="button"
@@ -2086,7 +2129,7 @@ export function ScanView() {
                       className="h-10 rounded-xl px-3 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 transition flex items-center justify-center gap-1"
                     >
                       <FolderImportIcon className="w-3.5 h-3.5" />
-                      Subir archivo
+                      Subir foto del acta
                     </button>
                   </div>
                 </div>
@@ -2237,9 +2280,11 @@ export function ScanView() {
               )}
             </>
           ) : (
-            /* SIMULACIÓN/ARCHIVO: Visor con marco táctico E-14 */
+            /* SIMULACIÓN/ARCHIVO: Visor con marco táctico E-14. Task 2-b: en
+               lg+ el marco gana tamaño (max-w/max-h mayores) — los brackets
+               tácticos son spans posicionados al contenedor y escalan solos. */
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center select-none">
-              <div className="relative w-full max-w-[280px] h-[64vh] max-h-[440px] rounded-2xl border-2 border-dashed border-[#10b981]/30 bg-[#10b981]/[0.03] flex flex-col items-center justify-between p-5 backdrop-blur-[2px] shadow-[0_0_40px_rgba(16,185,129,0.05)]">
+              <div className="relative w-full max-w-[280px] sm:max-w-[320px] lg:max-w-[360px] h-[64vh] max-h-[440px] lg:max-h-[540px] rounded-2xl border-2 border-dashed border-[#10b981]/30 bg-[#10b981]/[0.03] flex flex-col items-center justify-between p-5 backdrop-blur-[2px] shadow-[0_0_40px_rgba(16,185,129,0.05)]">
                 {/* Esquinas tácticas */}
                 <span className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-[#10b981]" />
                 <span className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-[#10b981]" />
@@ -2262,7 +2307,7 @@ export function ScanView() {
                   <h3 className="text-sm font-bold text-white tracking-wide uppercase">
                     {fuente === "SIMULACION" ? "SIMULADOR ELECTORAL" : "IMPORTAR ARCHIVO"}
                   </h3>
-                  <p className="text-[11px] font-mono text-slate-400 leading-relaxed max-w-[220px]">
+                  <p className="text-[11px] font-mono text-slate-400 leading-relaxed max-w-[220px] lg:max-w-[280px]">
                     {fuente === "SIMULACION"
                       ? "Presione el obturador abajo o elija un nivel de score (Óptima, Medio, Baja) para probar la validación."
                       : "Seleccione un archivo de imagen o fotografía de acta electoral E-14."}
@@ -2287,10 +2332,11 @@ export function ScanView() {
             </div>
           )}
 
-          {/* §3.1.4 FRANJA DE AVISOS del visor */}
+          {/* §3.1.4 FRANJA DE AVISOS del visor. Task 2-b: en lg se aleja del
+              borde y baja un poco (el HUD es más alto en lg). */}
           {avisoVisor && !procesando && (
             <div
-              className={`absolute inset-x-4 top-[72px] z-40 rounded-xl bg-[#10161f]/95 border px-3.5 py-2.5 font-mono text-xs shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md ${
+              className={`absolute inset-x-4 top-[72px] z-40 rounded-xl bg-[#10161f]/95 border px-3.5 py-2.5 font-mono text-xs shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md lg:inset-x-6 lg:top-20 ${
                 avisoVisor.tono === "crit"
                   ? "border-red-500/40 text-red-400"
                   : "border-amber-500/40 text-amber-400"
@@ -2305,9 +2351,9 @@ export function ScanView() {
       </div>
 
       {/* Dock inferior con botones de simulación y obturador */}
-      <footer className="relative z-20 bg-[#090d12]/92 border-t border-slate-800/80 backdrop-blur-2xl px-4 pt-3 pb-4 flex flex-col items-center shrink-0">
-        {/* Fila de contexto */}
-        <div className="w-full max-w-sm mx-auto mb-1.5 px-1 flex items-center justify-between text-[10px] font-mono font-medium tracking-widest uppercase text-slate-400 select-none">
+      <footer className="relative z-20 bg-[#090d12]/92 border-t border-slate-800/80 backdrop-blur-2xl px-4 lg:px-6 pt-3 lg:pt-4 pb-4 flex flex-col items-center shrink-0">
+        {/* Fila de contexto — Task 2-b: lg:max-w-md (acompaña la botonera). */}
+        <div className="w-full max-w-sm lg:max-w-md mx-auto mb-1.5 px-1 flex items-center justify-between text-[10px] font-mono font-medium tracking-widest uppercase text-slate-400 select-none">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" aria-hidden />
             {labelModo}
@@ -2315,9 +2361,10 @@ export function ScanView() {
           <span className="text-[9px] text-slate-500">TEST SCORES</span>
         </div>
 
-        {/* Barra de SIMULACIÓN */}
+        {/* Barra de SIMULACIÓN — Task 2-b: lg:max-w-md + chips con más aire en
+            lg. Mismos ids/aria/handlers (los tests E2E dependen de ellos). */}
         <div
-          className="w-full max-w-sm mx-auto mb-3 px-1 flex items-center justify-between gap-2 bg-[#10161f]/90 border border-slate-800 rounded-xl p-1.5 backdrop-blur-md shadow-md z-30"
+          className="w-full max-w-sm lg:max-w-md mx-auto mb-3 px-1 flex items-center justify-between gap-2 bg-[#10161f]/90 border border-slate-800 rounded-xl p-1.5 lg:p-2 backdrop-blur-md shadow-md z-30"
           data-purpose="score-simulation-bar"
         >
           {NIVELES_CALIDAD.map(({ id, label, score, chip, dot, aria }) => (
@@ -2328,13 +2375,13 @@ export function ScanView() {
               title={`Simular score ${label.toLowerCase()}`}
               disabled={procesando}
               onClick={() => simularScore(id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg border transition-all cursor-pointer active:scale-95 disabled:cursor-default disabled:opacity-50 ${chip}`}
+              className={`flex-1 min-h-11 flex items-center justify-center gap-1.5 lg:gap-2 py-1.5 lg:py-2 px-2 lg:px-3 rounded-lg border transition-all cursor-pointer active:scale-95 disabled:cursor-default disabled:opacity-50 ${chip}`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden />
-              <span className="text-[10px] font-bold tracking-wider uppercase font-mono">
+              <span className="text-[10px] lg:text-[11px] font-bold tracking-wider uppercase font-mono">
                 {label}
               </span>
-              <span className="text-[9px] opacity-80 font-mono">({score})</span>
+              <span className="text-[9px] lg:text-[10px] opacity-80 font-mono">({score})</span>
             </button>
           ))}
         </div>
@@ -2343,7 +2390,7 @@ export function ScanView() {
             EXACTAMENTE la fila de Rev. 4 (Auto fuera; la linterna real, el
             disparo por plataforma y la vía IMPORTAR intactos). */}
         {modoCamara ? (
-          <div className="w-full flex items-center justify-between max-w-sm px-2 mb-1" data-purpose="shutter-action-dock">
+          <div className="w-full flex items-center justify-between max-w-sm lg:max-w-md px-2 mb-1" data-purpose="shutter-action-dock">
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
@@ -2392,7 +2439,7 @@ export function ScanView() {
             </button>
           </div>
         ) : (
-          <div className="w-full flex items-center justify-between max-w-sm px-2 mb-1" data-purpose="shutter-action-dock">
+          <div className="w-full flex items-center justify-between max-w-sm lg:max-w-md px-2 mb-1" data-purpose="shutter-action-dock">
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
