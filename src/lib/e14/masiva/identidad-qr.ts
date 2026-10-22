@@ -389,6 +389,53 @@ export function nitidezQrDePixeles(pix: PixelesQr): PixelesQr {
   return { data: out, width: w, height: h };
 }
 
+// ─── e64-qr T-1.2 · BINARIZADA (umbral local adaptativo) ───────────────────
+/** Blanco-negro puro con umbral LOCAL (ventana integral — patrón EXACTO del
+ *  que ya usa marcasEsquina en src/lib/e14/integridad.ts:74-100, con luma
+ *  8 bits + Float64 en vez de 6 bits + Uint32: aquí SÍ se necesita el rango
+ *  completo para el delta): fotos con sombra o iluminación dura donde el
+ *  binarizado interno de jsQR falla. Salida RGBA 0/255 — jsQR la consume
+ *  igual (attemptBoth la invierte si hace falta). Pura, sin DOM, sin throw. */
+export const BINARIZADA_VENTANA = 0.025; // fracción del lado menor (mín 24 px)
+export const BINARIZADA_DELTA = 12;      // holgura sobre la media local
+
+export function binarizadaQrDePixeles(pix: PixelesQr): PixelesQr {
+  const { data, width: w, height: h } = pix;
+  // luma 8 bits (redondeo una vez)
+  const luma = new Uint8Array(w * h);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++)
+    luma[p] = Math.round(0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!);
+  // imagen integral (W+1)×(H+1) Float64 — luma 8 bits no desborda
+  const iw = w + 1;
+  const integral = new Float64Array(iw * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let fila = 0;
+    for (let x = 0; x < w; x++) {
+      fila += luma[y * w + x]!;
+      integral[(y + 1) * iw + x + 1] = integral[y * iw + x + 1]! + fila;
+    }
+  }
+  const lado = Math.max(24, Math.round(Math.min(w, h) * BINARIZADA_VENTANA));
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - lado);
+    const y1 = Math.min(h - 1, y + lado);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - lado);
+      const x1 = Math.min(w - 1, x + lado);
+      const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+      const suma =
+        integral[(y1 + 1) * iw + x1 + 1]! - integral[y0 * iw + x1 + 1]! -
+        integral[(y1 + 1) * iw + x0]! + integral[y0 * iw + x0]!;
+      const media = suma / area;
+      const v = luma[y * w + x]! < media - BINARIZADA_DELTA ? 0 : 255;
+      const i = (y * w + x) * 4;
+      out[i] = v; out[i + 1] = v; out[i + 2] = v; out[i + 3] = 255;
+    }
+  }
+  return { data: out, width: w, height: h };
+}
+
 // ─── e63n (T-PRE) — tier ZXING (zxing-wasm 3.1.6, wasm LOCAL) ──────────────
 /** Módulo zxing-wasm/reader cacheado — undefined = aún no intentado ·
  *  null = la carga falló (degrada a solo-jsQR) · módulo = listo. */
@@ -530,11 +577,11 @@ function trazaQr(tier: string, payload: string, t0: number): void {
 /**
  * CADENA COMPLETA de decode sobre píxeles (doc hermano §1 + e64 Fase 1 —
  * el orden REAL): ladderBase → barrido jsQR → barrido NITIDEZ (T-1.1) →
- * barrido zxing → tier rotación, early-exit al primer payload, `null` si
- * nada decodifica. Async SOLO por el tier zxing (wasm). La traza `tier=`
- * sale por cada desenlace (también null — T-0.3 del e64 la usa para
- * verificar la versión desplegada). JAMÁS throw (todas las sub-llamadas
- * ya son a prueba de throw).
+ * barrido BINARIZADA (T-1.2) → barrido zxing → tier rotación, early-exit
+ * al primer payload, `null` si nada decodifica. Async SOLO por el tier
+ * zxing (wasm). La traza `tier=` sale por cada desenlace (también null —
+ * T-0.3 del e64 la usa para verificar la versión desplegada). JAMÁS throw
+ * (todas las sub-llamadas ya son a prueba de throw).
  */
 export async function decodificarQrDePixeles(
   pix: PixelesQr,
@@ -557,6 +604,14 @@ export async function decodificarQrDePixeles(
   if (nitido != null) {
     trazaQr("barrido-nitido", nitido, t0);
     return nitido;
+  }
+  // e64-qr T-1.2 — tier BINARIZADA: barrido sobre el blanco-negro con
+  // umbral LOCAL (doc hermano R-2 — sombra/iluminación dura donde el
+  // binarizado interno de jsQR falla; imagen integral O(1) por píxel).
+  const binarizada = barridoQrDePixeles(binarizadaQrDePixeles(pix));
+  if (binarizada != null) {
+    trazaQr("barrido-binarizado", binarizada, t0);
+    return binarizada;
   }
   const zxing = await barridoQrZxingDePixeles(pix);
   if (zxing != null) {
