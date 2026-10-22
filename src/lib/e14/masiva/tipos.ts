@@ -68,6 +68,12 @@ export interface FilaMasiva {
    *  respetan — jamás marcar esta fila de nuevo. Persistente (IDB).
    *  Ausente = sin override (comportamiento de siempre). */
   forzarDedupOff?: boolean;
+  // ---------- e64-qr-v1 — KIT PLAN-e64-qr (T-0.2) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** KIT e64-qr-v1 (T-0.2): estado de la CAPA 0 QR — SOLO-VISUAL (la decisión
+   *  de dedup sigue siendo la igualdad EXACTA del payload, red line 10).
+   *  "n/d" = aún sin intentar (fila en cola) · "leido" = payload EXACTO obtenido
+   *  · "sin-payload" = la cadena terminó en null. */
+  qrEstado?: "n/d" | "leido" | "sin-payload";
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
@@ -170,6 +176,14 @@ export interface RegistroMasiva {
    *  decodificó o la fila reutilizó antes de la capa 0 — jamás inventar).
    *  Viaja al informe (export-only). */
   qrPayload?: string;
+  // ---------- e64-qr-v1 — KIT PLAN-e64-qr (T-0.2) — campo ADITIVO AL FINAL (contrato D57) ----------
+  /** KIT e64-qr-v1 (T-0.2): estado de la CAPA 0 QR — persiste junto al
+   *  registro para que el chip de la bandeja sobreviva la recarga (misma
+   *  desviación aditiva documentada de thumb/infoTitulo). Solo se estampa
+   *  cuando la capa 0 CORRIÓ (jamás inventar): "leido" con payload, "sin-
+   *  payload" cuando la cadena terminó en null. Ausente = la capa 0 no
+   *  llegó a correr (registros previos a la e64 / filas ERROR pre-capa 0). */
+  qrEstado?: "leido" | "sin-payload";
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del
