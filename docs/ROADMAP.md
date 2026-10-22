@@ -410,3 +410,11 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] P3 — informe: resumenDedup multi-capa (matches=v2+identidad+qr+ya-enviada; desgloses v2/yaEnviada) + porStatusActa/escPorStatus con DUPLICADA + esperaMs propio de la gemela + DEDUP-CAPAS (capa1=v2, +capa3-ya-enviada). yaEnviadas e65 preservada (M-e66-3).
 - [x] P4 — origenSenales al bridge (SOLO MASIVA) → probe de rotaciones OMITIDO para exif-camara (traza omitida=exif-camara; orientacionProbeMs null honesto; 4-10 s/acta ahorrados). SIM/individual/video/recorte-manual intactos.
 - [x] QA — adendas honestas M-e66-1/2 (historico-enviadas 49/49 · identidad-acta 32/32 · qr-identidad 68/68) · regresión TOTAL 7/7 suites (42 · 33 · 24 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
+
+## WATCHDOG INDIVIDUAL: TIMEOUT 120 s + RESCATE POST-TIMEOUT — e67-watchdog-rescate-v1 (2026-10-22): el acta válida de 53.5 s ya no muere a los 15 s
+
+- [x] M-e67-0 — recon: el watchdog REAL es el timeout interno de `escanearActa` (scanner-core-bridge, `TIMEOUT_MS=15_000` desde el split — el plan asumía 30_000); MASIVA tiene el suyo (D65 runner, 75 s — intacto); el rechazo tardío se DESCARTABA en `if (vencido) return`.
+- [x] Cambio A — `TIMEOUT_MS` 15_000 → 120_000 (colchón frente al peor caso real observado 53.5 s; MASIVA pasa su propio presupuesto por llamada — byte a byte).
+- [x] Cambio B — `OpcionesEscaneoConTimeout.onRescateTardio` (opcional): el desenlace tardío del pipeline viaja al caller con `tiempoRealMs` REAL; idempotente (solo tras vencimiento); MASIVA no lo pasa → no-op.
+- [x] Store individual `rescatarActaPostTimeout`: guarda por referencia (jamás pisa captura nueva), solo rescatan OPTIMA/ADVERTENCIA (el gate ya decidió), deshace el RESCANEO_REQUERIDO estampado, desenlace POR LA MISMA RUTA (analisisCompletado — D4 auto-envío). SIM jamás rescata. `Acta` += `scoreRescatadoPor`/`tiempoRealMs` (ADITIVOS AL FINAL, D57).
+- [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
