@@ -914,6 +914,22 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
         (await hacerThumb(actaNueva.fotoProcesada ?? actaNueva.fotoOriginal)) ??
         registro.thumb;
       await guardarRegistro({ ...registro, acta: actaNueva, thumb });
+      // e65b (T-3c): envío MANUAL desde REVISIÓN — si el dueño envió a mano
+      // el acta de esta fila masiva, el desenlace ENVIADO también alimenta
+      // el ledger (RL-e65b-2 — micro-decisión: la vía existe y vive aquí,
+      // con la identidad registro.acta?.id === acta.id ya verificada arriba;
+      // el envío genérico del flujo normal queda INTACTO fuera de la
+      // whitelist). Fire-and-forget — jamás tumba la sincronización (RL-e65b-3).
+      if (actaNueva.status === "ENVIADA") {
+        void registrarEnviadaHistorico({
+          id: origenAbierto,
+          ts: Date.now(),
+          hashBytes: registro.hashBytes,
+          hashDedup: registro.hashDedup,
+          payloadQr: registro.qrPayload,
+          serie: registro.serie ?? undefined,
+        }).catch(() => {});
+      }
       patchFila(origenAbierto, {
         estado: "LISTA",
         statusActa: actaNueva.status,
@@ -991,6 +1007,19 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
           ...(onlineAlEnviar ? {} : { hashSha256: "EN COLA" }),
         };
         await guardarRegistro({ ...registro, acta: actaEnviada });
+        // e65b (T-3c): envío MANUAL del LOTE (ADVERTENCIA → ENVIADA) — el
+        // desenlace ENVIADO también alimenta el ledger (RL-e65b-2 —
+        // micro-decisión: misma vía del helper único). Si quedó «EN COLA»
+        // (offline) el status YA es ENVIADA — el MISMO criterio del índice
+        // (acta?.status === "ENVIADA"). Fire-and-forget (RL-e65b-3).
+        void registrarEnviadaHistorico({
+          id: fila.id,
+          ts: Date.now(),
+          hashBytes: registro.hashBytes,
+          hashDedup: registro.hashDedup,
+          payloadQr: registro.qrPayload,
+          serie: registro.serie ?? undefined,
+        }).catch(() => {});
         patchFila(fila.id, {
           statusActa: "ENVIADA",
           score: actaEnviada.score,
