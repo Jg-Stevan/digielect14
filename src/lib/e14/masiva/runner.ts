@@ -28,7 +28,11 @@ import { maestroDeImagen, type MaestroImagen } from "./archivos";
 import { asegurarMaestro, consumirMaestro, descartarMaestro } from "./precalor";
 import { useE14Store } from "../store";
 import { guardarRegistro, leerRegistro } from "./cola";
-import { useMasivaStore } from "./store";
+import {
+  originalQrDePayload,
+  registrarQrPayload,
+  useMasivaStore,
+} from "./store";
 import { clasificarOrigenDeArchivo, type OrigenVeredicto } from "./origen"; // D63-A — detector de origen (kit e63a-origen-escaneo-v1)
 import { preProcesoEscaneo, type PreProcesoEscaneo } from "./deskew"; // D63-B — pre-proceso de escaneos (kit e63b-deskew-escaneo-v1)
 // D65 (T1.3): semilla para el acta de timeout del watchdog — la MISMA que el
@@ -51,6 +55,17 @@ import { identidadDeActa } from "./identidad";
 // tríada {vencido} | {valor} | {error}, jamás throw (tope.ts es lógica
 // pura; aquí solo la orquestación del bloque relectura).
 import { conTope } from "./tope";
+// e63m — KIT e63m-capa0-qr-identidad-v1 (F2): CAPA 0 IDENTIDAD QR PRE-OCR
+// (identidad-qr.ts es núcleo puro + wrapper DOM; aquí solo la orquestación
+// pre-OCR — punto ÚNICO del kit, ANTES de despachar OCR). El capture sale
+// de la vía del pipeline (fileToCaptureDataUrl — la MISMA que midió el
+// banco #72; jsQR 1.4.0 vendido byte-idéntico en vendor/jsQR.js).
+import { fileToCaptureDataUrl } from "@jg-stevan/scanner-core/image-processor";
+import {
+  decodificarQrDeCapture,
+  esperarDesenlaceQr,
+  qrCorto,
+} from "./identidad-qr";
 
 // ─── D65 — KIT e14-progreso-watchdog-dedup-v1 (T1): WATCHDOG HUMANO ───
 // Antes (e14-masiva-ux-v1 T4): presupuesto ÚNICO de 120 s — un colgado moría
@@ -509,6 +524,11 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     .getState()
     .marcarProgreso(fila.id, { etapa: "preparando", fracGlobal: vidaGlobal.frac });
   let registro: RegistroMasiva | null = null;
+  // e63m — payload QR de la CAPA 0 (identidad-qr.ts): llave OPACA — solo se
+  // guarda en el registro y viaja al informe (export-only); JAMÁS se parsea,
+  // se invierte o se compara por prefijos (RED LINE 10). null = sin-payload
+  // (el QR no decodificó — pipeline normal intacto, sin campo en IDB).
+  let qrPayload: string | null = null;
   // D65 (T1.4) — trazas del watchdog (visibles también en el catch).
   let watchdogUsados = 0;
   let etapaAlMorir: string | null = null;
@@ -552,6 +572,109 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     // el intento muerto pudo envenenar la suya con un decode colgado (el
     // fallback honesto de v1 se conserva si IDB falla).
     let archivoIntento: File = archivo;
+
+    // ─── e63m — KIT e63m-capa0-qr-identidad-v1 (F2): CAPA 0 IDENTIDAD QR
+    // PRE-OCR (punto ÚNICO del kit — ANTES de despachar OCR: det/cls/rec y
+    // la cadena dhash visual quedan río abajo) ─── El QR es DATO LEÍDO
+    // (banco #72: GO 88.2% decode, 0 colisiones, gemelas agrupan por payload
+    // EXACTO). Llave = IGUALDAD EXACTA de payload (sin umbrales, sin fuzzy —
+    // RED LINES 5/10). Decisión por el estado del original:
+    // · payload null → pipeline normal INTACTO (dhash + OCR + capa 2 e63k).
+    // · payload NUEVO → se registra (mapa del lote en store) y SIGUE normal
+    //   (el ORIGINAL paga el OCR, como hoy).
+    // · payload VISTO + original con desenlace final → reutilizarResultado
+    //   (maquinaria EXACTA — desenlace clonado, sin doble envío, comparten
+    //   hash) con token aditivo `dedup=qr`; OCR JAMÁS se paga.
+    // · payload VISTO + original EN VUELO (PROCESANDO) → APLAZADA `capa0=qr`:
+    //   espera acotada SOLO-LECTURA (QR_ESPERA_INTERVALO_MS ×
+    //   QR_ESPERA_INTENTOS — sin timers globales); techo vencido →
+    //   reproceso completo honesto.
+    // · Fallback sagrado: reutilizarResultado→false → pipeline completo.
+    //   Dedup JAMÁS inventa: falso-positivo = NO-GO. La capa 0 JAMÁS throw
+    //   (cualquier falla → sin-payload → normal).
+    try {
+      const captureQr = await fileToCaptureDataUrl(archivo);
+      const qrQr = await decodificarQrDeCapture(captureQr);
+      qrPayload = qrQr?.payload ?? null;
+    } catch {
+      qrPayload = null; // la capa 0 jamás tumba el pipeline (fallback limpio)
+    }
+    if (!qrPayload) {
+      console.info(`[e14] capa0-qr sin-payload fila=${fila.id} nombre=${fila.nombre}`);
+    } else {
+      const payloadQrCorto = qrCorto(qrPayload);
+      const qrPayloadSeguro: string = qrPayload; // acotado (la closure no hereda narrowing)
+      const idOriginalQr = originalQrDePayload(qrPayload);
+      const originalQr =
+        idOriginalQr && idOriginalQr !== fila.id
+          ? (useMasivaStore.getState().filas.find((f) => f.id === idOriginalQr) ?? null)
+          : null;
+      // Reutilización vía la maquinaria EXACTA de reutilizarResultado (la
+      // fila viaja como DUPLICADA con dupOf del original). El token
+      // `dedup=qr` + qrPayload se estampan DESPUÉS (post-write honesto: si
+      // el fallback salta, la traza nunca mintió — reutilizarResultado ya
+      // re-leyó el registro y clonó el desenlace; OCR JAMÁS se pagó).
+      const reutilizarViaQr = async (o: FilaMasiva): Promise<boolean> => {
+        const tQr = Date.now();
+        const filaGemela: FilaMasiva = { ...fila, estado: "DUPLICADA", dupOf: o.id };
+        if (!(await reutilizarResultado(filaGemela, tQr))) return false;
+        try {
+          const regQr = await leerRegistro(fila.id);
+          await guardarRegistro({ ...regQr, dedup: "qr", qrPayload: qrPayloadSeguro });
+        } catch {
+          /* IDB caído — la fila ya está LISTA con el desenlace (honesto) */
+        }
+        console.info(
+          `[e14] capa0-qr reutiliza ${payloadQrCorto} fila=${fila.id} original=${o.id}`,
+        );
+        return true;
+      };
+      if (!originalQr) {
+        // ORIGINAL — payload nuevo en el lote (o auto-registrado: la fila ya
+        // carryaba el payload de una pasada previa / entrada muerta re-apuntada).
+        registrarQrPayload(qrPayload, fila.id);
+        console.info(`[e14] capa0-qr original ${payloadQrCorto} fila=${fila.id}`);
+      } else if (fila.forzarDedupOff) {
+        // El dueño pulsó PROCESAR IGUAL — las capas 0/1/2 lo respetan SIEMPRE
+        // (misma doctrina e63k): reproceso completo, nada se reutiliza.
+        console.info(
+          `[e14] capa0-qr reprocesa-completo ${payloadQrCorto} fila=${fila.id} forzarDedupOff`,
+        );
+      } else if (originalQr.estado === "LISTA" || originalQr.estado === "DUPLICADA") {
+        // Original con desenlace FINAL → reutiliza (el OCR jamás se paga).
+        if (await reutilizarViaQr(originalQr)) return;
+        console.info(
+          `[e14] capa0-qr fallback fila=${fila.id} reprocesa-completo reutilizarResultado=false`,
+        );
+      } else if (originalQr.estado === "PROCESANDO") {
+        // Original EN VUELO → APLAZADA `capa0=qr` (maquinaria aplazada de
+        // e63k con motivo NUEVO): espera acotada SOLO-LECTURA del estado.
+        console.info(
+          `[e14] capa0-qr aplazada ${payloadQrCorto} fila=${fila.id} original=${originalQr.id}`,
+        );
+        const desenlaceQr = await esperarDesenlaceQr(() =>
+          useMasivaStore.getState().filas.find((f) => f.id === originalQr.id)?.estado ?? "AUSENTE",
+        );
+        if (desenlaceQr === "reutiliza") {
+          if (await reutilizarViaQr(originalQr)) return;
+          console.info(
+            `[e14] capa0-qr fallback fila=${fila.id} reprocesa-completo reutilizarResultado=false`,
+          );
+        } else {
+          // Techo vencido (o el original salió del vuelo por otra puerta):
+          // reproceso completo HONESTO — como si no hubiera gemela.
+          console.info(
+            `[e14] capa0-qr techo-vencido reprocesa-completo fila=${fila.id} original=${originalQr.id}`,
+          );
+        }
+      } else {
+        // Original sin desenlace final ni en vuelo (PENDIENTE/ERROR) →
+        // reproceso completo honesto (la gemela paga SU OCR, como hoy).
+        console.info(
+          `[e14] capa0-qr reprocesa-completo ${payloadQrCorto} fila=${fila.id} original=${originalQr.id} estado=${originalQr.estado}`,
+        );
+      }
+    }
 
     for (let intento = 1; intento <= WATCHDOG_INTENTOS; intento += 1) {
       const tIntento = Date.now();
@@ -869,6 +992,8 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           serie: identidad.serie,
           dedup: "identidad",
           infoTitulo: tituloDeActa(actaDesenlace),
+          // e63m: el payload QR de esta fila viaja con SU desenlace (post-mortem).
+          ...(qrPayload ? { qrPayload } : {}),
         });
         marcarFila(fila.id, {
           estado: "DUPLICADA",
@@ -991,6 +1116,9 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
               intentoDesenlace === 1 ? (entradaPrecalor?.precalorMs ?? null) : null,
           }
         : {}),
+      // e63m — payload QR de la CAPA 0 (llave opaca): campo ADITIVO AL FINAL
+      // (contrato D57) — absent = sin-payload (jamás inventar). Export-only.
+      ...(qrPayload ? { qrPayload } : {}),
     };
     // FIX M14 (auditoría 2-c): persistencia fallida TRAS el envío — la fila
     // NO pasa a ERROR (el acta SÍ se transmitió; una fila ERROR invita a
@@ -1082,6 +1210,9 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         await guardarRegistro({
           ...registro,
           estado: "ERROR",
+          // e63m: si el QR decodificó antes de que el pipeline fallara, el
+          // payload viaja también en la fila ERROR (post-mortem honesto).
+          ...(qrPayload ? { qrPayload } : {}),
           // D65 (T1.4): si un intento murió por watchdog antes del error real,
           // la traza sobrevive también en la fila ERROR (honesto).
           ...(watchdogUsados > 0

@@ -197,6 +197,27 @@ function patchFila(id: string, patch: Partial<FilaMasiva>): void {
   });
 }
 
+// ─── e63m — KIT e63m-capa0-qr-identidad-v1 (F2): MAPA DE IDENTIDAD QR ───
+// CAPA 0 pre-OCR — payload EXACTO → id de la fila original del lote (el
+// runner lo registra al decodificar, ANTES de despachar OCR). Memoria de la
+// SESIÓN del lote (kit §5 — decisión deliberada: NO se persiste en IDB ni
+// se reconstruye al recargar; el lote es la unidad de dedup hoy). Llave
+// OPACA: la única comparación es la IGUALDAD EXACTA del payload completo
+// (jamás prefijos — RED LINE 10); sin umbrales, sin fuzzy (RED LINE 5).
+const mapaQrPayload = new Map<string, string>();
+
+/** Registra el payload de UNA fila como original del lote. Solo se llama
+ *  cuando el payload es NUEVO en el mapa o su entrada apuntaba a una fila
+ *  ya muerta (re-apuntado honesto — el carrier vivo del payload manda). */
+export function registrarQrPayload(payload: string, id: string): void {
+  mapaQrPayload.set(payload, id);
+}
+
+/** id de la fila ORIGINAL de este payload (null = payload nuevo en el lote). */
+export function originalQrDePayload(payload: string): string | null {
+  return mapaQrPayload.get(payload) ?? null;
+}
+
 /** KIT e14-masiva-tiempos-v1 (PR-1): cadena de hashing DEDUP en background —
  *  por cada archivo del lote EN ORDEN FIFO: dhash (misma vía del pipeline,
  *  dedup.ts) → persiste hashDedup → compara contra TODAS las filas con hash
