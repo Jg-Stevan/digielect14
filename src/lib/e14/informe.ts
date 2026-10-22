@@ -827,7 +827,11 @@ export function renderTxt(
   const resumenCapas = resumenDedup(filas);
   if (resumenCapas.activo) {
     linea(
-      `DEDUP-CAPAS: capa0-qr ${resumenCapas.qr} - capa1-dhash-marcada ${resumenCapas.matches} - capa2-identidad ${resumenCapas.identidad}`,
+      // e66 (P3): capa1-dhash-marcada ahora lee `v2` (matches pasó a ser
+      // MULTI-CAPA: v2+identidad+qr+ya-enviada — M-e66-2); los tokens previos
+      // no cambian de forma y `capa3-ya-enviada` se AÑADE AL FINAL (contrato
+      // D51: solo añadir — los parsers del dueño por prefijo intactos).
+      `DEDUP-CAPAS: capa0-qr ${resumenCapas.qr} - capa1-dhash-marcada ${resumenCapas.v2} - capa2-identidad ${resumenCapas.identidad} - capa3-ya-enviada ${resumenCapas.yaEnviada}`,
     );
   }
   linea();
