@@ -348,9 +348,16 @@ export async function marcarYaEnviada(
   hashBytes?: string,
   hamming?: number,
   qrPayload?: string,
+  aceptarProcesando?: boolean, // e65b (M-e65b-3): SOLO la capa 0 payload (runner T-4) lo declara
 ): Promise<boolean> {
   const filaViva = useMasivaStore.getState().filas.find((f) => f.id === id);
-  if (!filaViva || filaViva.estado !== "PENDIENTE") return false;
+  // e65b (M-e65b-3): la capa 0 payload llega con la fila YA en PROCESANDO
+  // (marcada al entrar al pipeline — runner) → el caller T-4 declara
+  // aceptarProcesando y este guard la admite. Los callers e65 de la
+  // cadenaDedup (sin flag) siguen exigiendo PENDIENTE byte a byte.
+  if (!(aceptarProcesando === true && filaViva?.estado === "PROCESANDO")) {
+    if (!filaViva || filaViva.estado !== "PENDIENTE") return false;
+  }
   let registro: RegistroMasiva;
   try {
     registro = await leerRegistro(id);
