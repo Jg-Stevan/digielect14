@@ -173,10 +173,15 @@ const r1 = resumenDedup([
   ficha("sin-match"),
 ]);
 ok(r1.identidad === 1, "dedup \"identidad\" cuenta en identidad (capa 2)");
+// ADENDA e66 (M-e66-2 — revoca el criterio e63k F1.5 por mandato del plan
+// P3): matches ahora cuenta TODAS las capas (v2 + identidad + qr +
+// ya-enviada); el desglose v2 preserva la cuenta que matches era antes.
+// "visual-aplazada" sigue NO siendo match (resolución pendiente).
 ok(
-  r1.matches === 2,
-  "dedup \"identidad\" y \"visual-aplazada\" NO cuentan como match v2 (solo \"v2\" = 2)",
+  r1.matches === 3,
+  "e66/M-e66-2: matches = TODAS las capas (2 v2 + 1 identidad = 3); \"visual-aplazada\" y \"sin-match\" NO cuentan",
 );
+ok(r1.v2 === 2, "e66: desglose aditivo v2 preserva la cuenta que matches era antes (2)");
 ok(r1.sinMatch === 1, "\"sin-match\" cuenta aparte (1)");
 ok(
   r1.activo === true,
@@ -184,6 +189,12 @@ ok(
 );
 const r2 = resumenDedup([ficha("visual-aplazada")]);
 ok(r2.activo === true && r2.matches === 0 && r2.identidad === 0, "\"visual-aplazada\" NO es match y NO es identidad — solo activa el instrumento");
+// e66 (M-e66-2): la capa ya-enviada (e65) cuenta como match con desglose propio.
+const r3 = resumenDedup([ficha("ya-enviada"), ficha("qr")]);
+ok(
+  r3.matches === 2 && r3.yaEnviada === 1 && r3.qr === 1 && r3.v2 === 0,
+  "e66: \"ya-enviada\" y \"qr\" cuentan como match con desglose aditivo (matches=2, yaEnviada=1, qr=1, v2=0)",
+);
 ok(
   resumenDedup([]).activo === false,
   "sin trazas → activo=false (el instrumento no corrió)",
