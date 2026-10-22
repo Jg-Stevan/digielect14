@@ -116,8 +116,9 @@ export interface RegistroMasiva {
    *  (decode — la fila procesa normal, conservador). e63k: valores NUEVOS
    *  AL FINAL de la unión (contrato D57) — "visual-aplazada" = banda 3..6
    *  sin marca pre-OCR (la decide la capa 2 post-OCR); "identidad" = capa 2
-   *  marcó DUPLICADA por serie impresa repetida. */
-  dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada";
+   *  marcó DUPLICADA por serie impresa repetida. e63m: "qr" = CAPA 0
+   *  (identidad-QR pre-OCR — payload EXACTO repetido, OCR jamás se paga). */
+  dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr";
   /** (T2) distancia de Hamming del match v2 (0–64). Solo filas con
    *  dedup === "v2" lo traen; sin match no hay distancia (no se inventa). */
   dedupDistancia?: number | null;
@@ -161,6 +162,14 @@ export interface RegistroMasiva {
    *  traza "visual-aplazada"). Sobrevive la resolución final de la capa 2:
    *  oro para el post-mortem (el FP 3992/3993 queda evidenciado). */
   dedupVisualDe?: string;
+  // ---------- e63m — KIT e63m-capa0-qr-identidad-v1 (F2) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** Payload QR EXACTO decodificado de la CAPA 0 pre-OCR (identidad-qr.ts —
+   *  base64 de 32 bytes, llave OPACA: NO se parsea, NO se invierte, NO se
+   *  compara por prefijos — RED LINE 10; la decisión vive en la igualdad
+   *  EXACTA del mapa del lote en store.ts). Ausente = sin-payload (el QR no
+   *  decodificó o la fila reutilizó antes de la capa 0 — jamás inventar).
+   *  Viaja al informe (export-only). */
+  qrPayload?: string;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del
