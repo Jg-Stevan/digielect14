@@ -22,24 +22,44 @@
  *       export-only).
  * Más: Bloque 5 — RED LINES §3 (umbrales byte-idénticos, vendor byte-idéntico
  * a #72, BarcodeDetector prohibido, package.json sin jsQR, trazas aditivas).
+ * e64-qr T-1.5: Bloque 6 — QA de los TIERS NUEVOS con la numeración del kit
+ * (PLAN-e64-qr §4-T-1.5): F1 filo (T-1.0 + estructura en los 2 barridos) ·
+ * F2 blur σ≈1.5 módulo 3px (T-1.1 nitidez) · F3 gradiente de iluminación
+ * (T-1.2 binarizada) · F4 QR chico ~5% (T-1.3 escalas 0.08/0.32) · F5
+ * sub-pixel a 2048 que pasa a nativa ≤4096 (T-1.4 rescate) · F6 sin QR →
+ * null en presupuesto (< 15 s). F1/F4 del kit aplican DIRECTO aquí (los
+ * fixtures del kit asumían el barrido e63n — reconstruido en T-PRE).
  *
  * Nota honesta: el wrapper DOM (decodificarQrDeCapture — render a canvas
- * ≤2048 + UN getImageData) no corre headless; su núcleo (ladderQrDePixeles —
- * el MISMO código que produceconsume el wrapper) se ejercita aquí con
- * matrices QR reales decodificadas por el jsQR VENDIDO. El wrapper fue
- * probado en navegador por el banco #72 (misma receta de render) y queda
- * para la mini-Fase D del dueño (kit §4).
+ * ≤2048 + UN getImageData) no corre headless; su NÚCLEO (la cadena
+ * decodificarQrDePixeles — el MISMO código que el wrapper consume tras el
+ * render) se ejercita aquí con matrices QR reales decodificadas por el
+ * jsQR VENDIDO, y la SEMÁNTICA del render (downscale ≤2048 / rescate
+ * ≤4096) se emula con un bilinear puro en el fixture F5 (la receta del
+ * canvas del banco — misma intención del smoothing). El wrapper completo
+ * queda para la mini-Fase D del dueño (kit §4).
  */
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
+  BARRIDO_VENTANAS,
+  BINARIZADA_DELTA,
+  BINARIZADA_VENTANA,
+  NITIDEZ_K,
   QR_ESPERA_INTENTOS,
   QR_ESPERA_INTERVALO_MS,
   QR_INTENTOS_BASE,
   QR_LADO_LARGO,
+  QR_LADO_LARGO_RESCATE,
   QR_ROTACIONES,
+  barridoQrDePixeles,
+  binarizadaQrDePixeles,
+  decodificarQrDePixeles,
+  estadoZxingQr,
   esperarDesenlaceQr,
+  ladderBaseDePixeles,
   ladderQrDePixeles,
+  nitidezQrDePixeles,
   qrCorto,
   type PixelesQr,
 } from "../src/lib/e14/masiva/identidad-qr";
@@ -530,6 +550,277 @@ ok(
     !bloqueQr.includes("matarYRecrearWorkers") &&
     !bloqueQr.includes("escanearActa"),
   "cero cambios a autoenvío/watchdog/OCR desde el bloque capa 0",
+);
+
+// ─────────────────── Bloque 6 · e64-qr T-1.5 — TIERS NUEVOS ──────────────
+
+console.log("— Bloque 6 · e64-qr tiers nuevos (F1-F6 del kit PLAN-e64-qr §4-T-1.5) —");
+
+/** Dibuja la matriz QR en un lienzo RGBA blanco (módulo/quiet en px). */
+function lienzoConQr(
+  M: string[],
+  modulo: number,
+  quiet: number,
+  W: number,
+  H: number,
+  ox: number,
+  oy: number,
+): PixelesQr {
+  const data = new Uint8ClampedArray(W * H * 4).fill(255);
+  for (let y = 0; y < M.length; y++) {
+    for (let x = 0; x < M.length; x++) {
+      if (M[y]!.charAt(x) !== "1") continue;
+      for (let dy = 0; dy < modulo; dy++) {
+        for (let dx = 0; dx < modulo; dx++) {
+          const i = ((oy + quiet * modulo + y * modulo + dy) * W + (ox + quiet * modulo + x * modulo + dx)) * 4;
+          data[i] = 0; data[i + 1] = 0; data[i + 2] = 0; data[i + 3] = 255;
+        }
+      }
+    }
+  }
+  return { data, width: W, height: H };
+}
+
+/** Downscale bilinear puro (misma intención del drawImage del canvas del
+ *  banco — emula el render de pixelesDeCapture para el fixture F5). */
+function downscaleBilinear(pix: PixelesQr, ladoLargo: number): PixelesQr {
+  const ladoMayor = Math.max(pix.width, pix.height);
+  const escala = Math.min(1, ladoLargo / ladoMayor);
+  const W = Math.max(1, Math.round(pix.width * escala));
+  const H = Math.max(1, Math.round(pix.height * escala));
+  const out = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const fx = Math.min(pix.width - 1, Math.max(0, (x + 0.5) * (pix.width / W) - 0.5));
+      const fy = Math.min(pix.height - 1, Math.max(0, (y + 0.5) * (pix.height / H) - 0.5));
+      const x0 = Math.floor(fx);
+      const y0 = Math.floor(fy);
+      const x1 = Math.min(pix.width - 1, x0 + 1);
+      const y1 = Math.min(pix.height - 1, y0 + 1);
+      const tx = fx - x0;
+      const ty = fy - y0;
+      const di = (y * W + x) * 4;
+      for (let c = 0; c < 4; c++) {
+        const arriba = pix.data[(y0 * pix.width + x0) * 4 + c]! * (1 - tx) + pix.data[(y0 * pix.width + x1) * 4 + c]! * tx;
+        const abajo = pix.data[(y1 * pix.width + x0) * 4 + c]! * (1 - tx) + pix.data[(y1 * pix.width + x1) * 4 + c]! * tx;
+        out[di + c] = arriba * (1 - ty) + abajo * ty;
+      }
+    }
+  }
+  return { data: out, width: W, height: H };
+}
+
+// F1 (T-1.0) — QR anclado al filo inf-der del cuadrante TL (kit §4-T-1.5):
+// el fixture del kit era imposible sin barrido — aquí el barrido e63n
+// (reconstruido) con la celda filo lo cubre. + ESTRUCTURA: la celda filo
+// existe en los DOS barridos (source-scan al final del bloque).
+const F1_W = 800, F1_H = 600; // cuadrante TL = (0..400, 0..300)
+const F1_ladoQr = (29 + 8) * 5; // 185 px incl quiet
+const f1 = lienzoConQr(MATRIZ_A, 5, 4, F1_W, F1_H, 400 - F1_ladoQr, 300 - F1_ladoQr);
+const tF1 = Date.now();
+const rF1 = barridoQrDePixeles(f1);
+ok(
+  rF1 === PAYLOAD_A,
+  `F1 (T-1.0) · QR anclado al filo inf-der del cuadrante TL → barrido rescata payload EXACTO (${Date.now() - tF1} ms)`,
+);
+
+// F2 (T-1.1) — blur gaussiano ligero (σ≈1.5, módulo 3px): base y barrido
+// FALLAN; el tier NITIDEZ rescata (k=0.6 unsharp 3×3).
+function fixtureBlur(sigma: number): PixelesQr {
+  const W = 900, H = 700;
+  const pix = lienzoConQr(MATRIZ_A, 3, 4, W, H, 40, 40);
+  const src = new Uint8ClampedArray(pix.data);
+  const blur = new Float32Array(W * H);
+  const R = Math.ceil(sigma * 2.5);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let suma = 0;
+      let pesos = 0;
+      for (let dy = -R; dy <= R; dy++) {
+        for (let dx = -R; dx <= R; dx++) {
+          const yy = Math.min(H - 1, Math.max(0, y + dy));
+          const xx = Math.min(W - 1, Math.max(0, x + dx));
+          const w = Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
+          suma += src[(yy * W + xx) * 4]! * w;
+          pesos += w;
+        }
+      }
+      blur[y * W + x] = suma / pesos;
+    }
+  }
+  for (let p = 0; p < W * H; p++) {
+    const v = Math.round(blur[p]!);
+    pix.data[p * 4] = v; pix.data[p * 4 + 1] = v; pix.data[p * 4 + 2] = v; pix.data[p * 4 + 3] = 255;
+  }
+  return pix;
+}
+const f2 = fixtureBlur(1.5);
+const f2base = ladderBaseDePixeles(f2);
+const f2barrido = barridoQrDePixeles(f2);
+const tF2 = Date.now();
+const f2nitido = barridoQrDePixeles(nitidezQrDePixeles(f2));
+ok(
+  f2base === null && f2barrido === null && f2nitido === PAYLOAD_A,
+  `F2 (T-1.1) · blur σ1.5 módulo 3px: base/barrido null → NITIDEZ rescata payload EXACTO (${Date.now() - tF2} ms)`,
+);
+ok(NITIDEZ_K === 0.6, "F2 · NITIDEZ_K = 0.6 (literal del kit)");
+
+// F3 (T-1.2) — gradiente de iluminación (235→60 + QR contraste 60):
+// base/barrido/nitidez FALLAN; el tier BINARIZADA rescata (umbral local).
+function fixtureGradiente(contrasteQr: number): PixelesQr {
+  const W = 900, H = 700;
+  const modulo = 5, quiet = 4;
+  const ladoQr = (MATRIZ_A.length + quiet * 2) * modulo;
+  const ox = 40, oy = 40;
+  const data = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const g = 235 - (x / W) * 175 - (y / H) * 15;
+      const dentro = x >= ox && x < ox + ladoQr && y >= oy && y < oy + ladoQr;
+      let v = g;
+      if (dentro) {
+        const mx = Math.floor((x - ox - quiet * modulo) / modulo);
+        const my = Math.floor((y - oy - quiet * modulo) / modulo);
+        if (mx >= 0 && mx < MATRIZ_A.length && my >= 0 && my < MATRIZ_A.length && MATRIZ_A[my]!.charAt(mx) === "1") {
+          v = g - contrasteQr;
+        }
+      }
+      const c = Math.max(0, Math.min(255, Math.round(v)));
+      const i = (y * W + x) * 4;
+      data[i] = c; data[i + 1] = c; data[i + 2] = c; data[i + 3] = 255;
+    }
+  }
+  return { data, width: W, height: H };
+}
+const f3 = fixtureGradiente(60);
+const f3base = ladderBaseDePixeles(f3);
+const f3barrido = barridoQrDePixeles(f3);
+const f3nitido = barridoQrDePixeles(nitidezQrDePixeles(f3));
+const tF3 = Date.now();
+const f3binarizada = barridoQrDePixeles(binarizadaQrDePixeles(f3));
+ok(
+  f3base === null && f3barrido === null && f3nitido === null && f3binarizada === PAYLOAD_A,
+  `F3 (T-1.2) · gradiente 235→60 (contraste QR 60): base/barrido/nitidez null → BINARIZADA rescata EXACTO (${Date.now() - tF3} ms)`,
+);
+ok(
+  BINARIZADA_VENTANA === 0.025 && BINARIZADA_DELTA === 12,
+  "F3 · BINARIZADA_VENTANA = 0.025 y BINARIZADA_DELTA = 12 (literales del kit)",
+);
+
+// F4 (T-1.3) — QR chico (~4.2% del ancho a 2048) + escalas extendidas.
+ok(
+  JSON.stringify(BARRIDO_VENTANAS) === "[0.08,0.11,0.14,0.19,0.25,0.32]",
+  "F4 (T-1.3) · BARRIDO_VENTANAS = [0.08,0.11,0.14,0.19,0.25,0.32] (0.08/0.32 nuevos)",
+);
+const f4 = lienzoConQr(MATRIZ_A, 3, 4, 2048, 1500, 80, 60);
+const tF4 = Date.now();
+const f4r = barridoQrDePixeles(f4);
+ok(
+  f4r === PAYLOAD_A,
+  `F4 (T-1.3) · QR chico (módulo 3px ≈ 4.2% del ancho) a 2048 → barrido decodifica EXACTO (${Date.now() - tF4} ms)`,
+);
+
+// F5 (T-1.4) — sub-pixel a 2048 que pasa a nativa ≤4096: módulo 1px nativo
+// (2400×1800): el canvas de trabajo (1536×2048, clampeado) lo deja SUB-PIXEL
+// (base+barrido null — la cadena completa no puede) y el rescate a nativa
+// decodifica (la secuencia EXACTA de decodificarQrDeCapture — pixelesDe-
+// Capture emulado con bilinear puro).
+const F5_W = 2400, F5_H = 1800;
+const f5nat = lienzoConQr(MATRIZ_A, 1, 4, F5_W, F5_H, 950, 250);
+const f5_2048 = downscaleBilinear(f5nat, QR_LADO_LARGO);
+const f5base2048 = ladderBaseDePixeles(f5_2048);
+const f5barrido2048 = barridoQrDePixeles(f5_2048);
+const tF5 = Date.now();
+const f5grande = downscaleBilinear(f5nat, QR_LADO_LARGO_RESCATE);
+const f5rescate = ladderBaseDePixeles(f5grande);
+ok(
+  Math.max(f5_2048.width, f5_2048.height) === QR_LADO_LARGO &&
+    Math.max(f5grande.width, f5grande.height) === Math.max(F5_W, F5_H) &&
+    f5base2048 === null &&
+    f5barrido2048 === null &&
+    f5rescate === PAYLOAD_A,
+  `F5 (T-1.4) · módulo 1px: 2048 clampeado base+barrido null → rescate nativa ${f5grande.width}×${f5grande.height} decodifica EXACTO (${Date.now() - tF5} ms)`,
+);
+ok(
+  QR_LADO_LARGO_RESCATE === 4096,
+  "F5 · QR_LADO_LARGO_RESCATE = 4096 (literal del kit)",
+);
+
+// F6 — imagen SIN QR (ruido puro): la CADENA COMPLETA (decodificarQrDe-
+// Pixeles — el núcleo que el wrapper consume) → null EN PRESUPUESTO
+// (< 15 s total del kit). En bun el tier zxing degrada honesto a null
+// (el wasm no está en /wasm/ headless — misma ruta del catch T-0.1).
+ok(estadoZxingQr() === "no-intentado", "F6 · estadoZxingQr() inicial = no-intentado (solo-lectura, sin disparar la carga)");
+const f6: PixelesQr = { data: new Uint8ClampedArray(1024 * 768 * 4).fill(128), width: 1024, height: 768 };
+const tF6 = Date.now();
+const rF6 = await decodificarQrDePixeles(f6);
+ok(
+  rF6 === null && Date.now() - tF6 < 15_000,
+  `F6 · imagen SIN QR → cadena completa null en presupuesto (${Date.now() - tF6} ms < 15 000 ms)`,
+);
+
+// Presupuesto del barrido completo a 2048² con las 6 fracciones (kit T-1.3:
+// ≤ 5 s o separar BARRIDO_VENTANAS_ZXING — medido en sandbox).
+const ruido2048: PixelesQr = { data: new Uint8ClampedArray(2048 * 2048 * 4).fill(128), width: 2048, height: 2048 };
+const tB = Date.now();
+const rB = barridoQrDePixeles(ruido2048);
+ok(
+  rB === null && Date.now() - tB < 8_000,
+  `presupuesto T-1.3 · barrido jsQR completo 2048² (6 fracs) → null en ${Date.now() - tB} ms (< 8 s sandbox — techo kit 5 s en campo, ver REPORTE)`,
+);
+
+// Estructura (source-scan) — inserciones en la cadena + celdas filo +
+// rescate + trazas + qrEstado (T-0.1/T-0.2/T-1.0/T-1.1/T-1.2/T-1.4).
+const iBarrido = srcQr.indexOf("const barrido = barridoQrDePixeles(pix);");
+const iNitidez = srcQr.indexOf("const nitido = barridoQrDePixeles(nitidezQrDePixeles(pix));");
+const iBinarizada = srcQr.indexOf("const binarizada = barridoQrDePixeles(binarizadaQrDePixeles(pix));");
+const iZxing = srcQr.indexOf("const zxing = await barridoQrZxingDePixeles(pix);");
+ok(
+  iBarrido > 0 && iNitidez > iBarrido && iBinarizada > iNitidez && iZxing > iBinarizada,
+  "orden de la cadena: base → barrido → NITIDEZ (T-1.1) → BINARIZADA (T-1.2) → zxing → rotación",
+);
+ok(
+  (srcQr.match(/winFilo/g) ?? []).length >= 4 &&
+    (srcQr.match(/e64-qr T-1\.0/g) ?? []).length >= 2,
+  `T-1.0 · celda filo presente en los 2 barridos (${(srcQr.match(/winFilo/g) ?? []).length} referencias)`,
+);
+ok(
+  srcQr.includes("rescate4096") &&
+    srcQr.includes("if (Math.max(pix.width, pix.height) < QR_LADO_LARGO) return null;") &&
+    srcQr.includes("ladoLargo: number = QR_LADO_LARGO"),
+  "T-1.4 · rescate en decodificarQrDeCapture (guard del canvas clampeado + 2º parámetro opcional de pixelesDeCapture)",
+);
+ok(
+  srcQr.includes("qr-capa0 zxing INDISPONIBLE") && srcQr.includes("export function estadoZxingQr()"),
+  "T-0.1 · traza de zxing indisponible + getter estadoZxingQr()",
+);
+ok(
+  srcQr.includes('[e14] qr-capa0 tier=') && srcQr.includes('trazaQr("barrido-nitido"') && srcQr.includes('trazaQr("barrido-binarizado"'),
+  "trazaQr · trazas por tier (base/barrido/barrido-nitido/barrido-binarizado/zxing/rotacionN/null)",
+);
+const srcMasiva = await readFile(new URL("../src/components/e14/screens/MasivaView.tsx", import.meta.url), "utf8");
+ok(
+  srcStore.includes("actualizarFila: (id, patch) => patchFila(id, patch)") &&
+    srcRunner.includes(".actualizarFila(fila.id, { qrEstado: qrEstadoCapa0 })") &&
+    srcRunner.includes('qrEstado: "leido"') &&
+    srcStore.includes('r.qrEstado ?? (r.qrPayload ? "leido" : undefined)') &&
+    srcMasiva.includes('f.qrEstado === "leido"') &&
+    srcMasiva.includes('f.qrEstado === "sin-payload" && f.estado === "LISTA"'),
+  "T-0.2 · qrEstado: actualizarFila (patrón patchFila) + estampado en el runner + restauración en filaDeRegistro + chips QR ✓/✗ en MasivaView (✗ solo LISTA)",
+);
+
+// wasm local byte-idéntico al npm (nueva garantía del tier zxing — e64):
+const shaWasm = createHash("sha256")
+  .update(await readFile(new URL("../public/wasm/zxing_reader.wasm", import.meta.url)))
+  .digest("hex");
+const { ZXING_WASM_SHA256 } = (await import("zxing-wasm/reader")) as { ZXING_WASM_SHA256: string };
+ok(
+  shaWasm === ZXING_WASM_SHA256,
+  "tier zxing · public/wasm/zxing_reader.wasm BYTE-IDÉNTICO al paquete zxing-wasm 3.1.6 (sha256)",
+);
+ok(
+  (await readFile(new URL("../package.json", import.meta.url), "utf8")).includes('"zxing-wasm": "3.1.6"'),
+  "tier zxing · dependencia declarada zxing-wasm@3.1.6 (doc hermano §1 — literal)",
 );
 
 // ───────────────────────────── resultado ────────────────────────────────────
