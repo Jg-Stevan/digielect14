@@ -3,6 +3,7 @@
   "entry": [
     "src/app/**/*.{ts,tsx}",
     "scripts/qa-*.ts",
+    "scripts/gen-divipol.mjs",
     "tools/**/*.{js,ts}"
   ],
   "ignore": [
