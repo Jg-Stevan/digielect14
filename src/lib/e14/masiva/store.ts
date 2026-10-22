@@ -23,6 +23,7 @@ import {
 // histórico se FUSIONA con el ledger: sobrevive vaciar() y recargas
 // (REVERSA de D-e65-8 → D-e65b-1).
 import {
+  borrarHistorico,
   listarHistorico,
   registrarEntradaHistorico,
   type EntradaHistorica,
@@ -235,6 +236,27 @@ function patchFila(id: string, patch: Partial<FilaMasiva>): void {
 // (jamás prefijos — RED LINE 10); sin umbrales, sin fuzzy (RED LINE 5).
 const mapaQrPayload = new Map<string, string>();
 
+// ─── e64p — KIT e64p-modo-pruebas-memoria-v1 (C-1): MODO PRUEBAS ───────────
+// MODO PRUEBAS (pre-elección): la cola NO sobrevive recargas — revertir a
+// true para producción.
+// Pedido literal del dueño: «que las actas no se guarden en memoria por el
+// momento, porque estamos haciendo pruebas y la gracia es que en cada lote
+// pueda identificar el acta antes de procesarla».
+// Con FALSE (modo pruebas):
+//  · C-1 — cargarFilas() arranca la cola VACÍA (no restaura filas ni
+//    reconstruye Maps desde persistencia) y borra la persistencia vieja
+//    (cola IDB + ledger del histórico — higiene).
+//  · C-2 — vaciar() resetea TODO el ciclo de vida de la memoria de dedup:
+//    mapaQrPayload + ledger + índice → limpiar y re-subir el MISMO lote
+//    procesa completo de cero.
+//  · C-3 — el LEDGER de enviadas NO alimenta el índice del histórico (los
+//    Maps de dedup no se alimentan de NADA persistido); la dedup DENTRO del
+//    lote/sesión queda INTACTA (la gracia — gemelas atrapadas en vivo).
+// Con TRUE (producción): byte a byte el comportamiento de siempre —
+// restauración tras recarga/crash + dedup inter-lote + ledger e65b que
+// sobrevive vaciar() (D-e65b-1). Cero código borrado — solo ciclo de vida.
+const COLA_PERSISTENTE = false;
+
 /** Registra el payload de UNA fila como original del lote. Solo se llama
  *  cuando el payload es NUEVO en el mapa o su entrada apuntaba a una fila
  *  ya muerta (re-apuntado honesto — el carrier vivo del payload manda). */
@@ -277,11 +299,16 @@ async function indiceEnviadasDe(): Promise<EntradaHistorica[]> {
   // e65b (M-e65b-2): el ledger NO es fatal — si cae, el índice se construye
   // SOLO con la cola viva (exactamente el comportamiento e65; conservador
   // RL-e65b-3 — jamás tumba la cadena de dedup).
+  // e64p (C-3 — MODO PRUEBAS): con COLA_PERSISTENTE=false el ledger NO
+  // alimenta el índice — cero memoria ENTRE lotes (el histórico de sesiones
+  // anteriores jamás marca YA-ENVIADA); solo la cola viva de ESTA sesión.
   let deLedger: EntradaHistorica[] = [];
-  try {
-    deLedger = await listarHistorico(); // llaves chicas — getAll seguro (L7)
-  } catch {
-    deLedger = [];
+  if (COLA_PERSISTENTE) {
+    try {
+      deLedger = await listarHistorico(); // llaves chicas — getAll seguro (L7)
+    } catch {
+      deLedger = [];
+    }
   }
   const porId = new Map<string, EntradaHistorica>();
   for (const e of deLedger) porId.set(e.id, e);
@@ -631,6 +658,28 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
 
   cargarFilas: async () => {
     try {
+      // e64p (C-1 — MODO PRUEBAS): la cola arranca VACÍA — cero restauración
+      // (sin filas fantasma ni Maps reconstruidos). Higiene: la persistencia
+      // vieja muere AQUÍ (cola IDB + ledger del histórico) para que la pasada
+      // siguiente sea de cero (QA doble pasada del kit). Con
+      // COLA_PERSISTENTE=true este bloque entero no existe y el comportamiento
+      // es el de siempre (restauración completa — reversibilidad).
+      if (!COLA_PERSISTENTE) {
+        try {
+          await vaciarCola();
+        } catch {
+          /* la cola muere igual en la bandeja (IDB caída — kit §3) */
+        }
+        try {
+          await borrarHistorico();
+        } catch {
+          /* conservador — el ledger se re-borra en el próximo vaciar/carga */
+        }
+        mapaQrPayload.clear();
+        indiceEnviadas = null;
+        set({ filas: [], colaDisponible: true, avisoCola: null });
+        return;
+      }
       await recuperarCola(); // PROCESANDO zombi → PENDIENTE (caída a mitad de OCR)
       // FIX C6: mapper DENTRO del cursor — los registros completos (acta con
       // dataURLs) viven un instante; la bandeja solo retiene filas livianas.
@@ -985,6 +1034,20 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     // nace YA-ENVIADA igualmente (la prueba exacta del dueño: vaciar +
     // re-subir los 46). `borrarHistorico()` existe pero JAMÁS se cablea aquí
     // (RL-e65b-5). La cola es el taller; el envío es el hecho.
+    // e64p (C-2 — MODO PRUEBAS): con COLA_PERSISTENTE=false el ciclo de vida
+    // COMPLETO muere aquí (reversa declarada del RL-e65b-5 SOLO en modo
+    // pruebas): mapaQrPayload (capa 0 QR — hoy sobrevivía a vaciar en la
+    // misma sesión) + ledger del histórico + índice → limpiar y re-subir el
+    // MISMO lote procesa completo de cero (QA del kit). En producción
+    // (true) este bloque no existe y D-e65b-1 queda byte a byte.
+    if (!COLA_PERSISTENTE) {
+      mapaQrPayload.clear();
+      try {
+        await borrarHistorico();
+      } catch {
+        /* conservador — el índice ya no lo verá en esta sesión */
+      }
+    }
     indiceEnviadas = null;
     set({ filas: [], progreso: null, origenAbierto: null, avisoCola: null });
   },

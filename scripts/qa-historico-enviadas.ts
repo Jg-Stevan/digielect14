@@ -13,6 +13,9 @@
  *   F2 (sobrevive VACIAR — la prueba EXACTA del dueño: 46 re-subidos) →
  *       Bloque 5 (vaciar NO toca el ledger: cola.clear() solo «archivos»,
  *       store sin borrarHistorico; el índice reconstruye fusionando ledger).
+ *       ADENDA e64p (kit C-2): con COLA_PERSISTENTE=false (MODO PRUEBAS) el
+ *       ledger SÍ muere con vaciar()/carga — reversa declarada; el scan
+ *       verifica el cableo CONDICIONAL (producción intacta).
  *   F3 (sobrevive RECARGA) → Bloque 2/5 (indiceEnviadasDe fusiona
  *       listarHistorico + cola; DB separada e14-masiva-historico-v1).
  *   F4 (re-foto sin OCR: bytes distintos, MISMO payload QR) → Bloque 4 (capa
@@ -29,8 +32,8 @@
  *       e63m manda primero; reutilizarViaQr intacto).
  *   F8 (invariantes) → Bloque 6 (YA-ENVIADA sobrevive recarga · píldora
  *       esmeralda · informe yaEnviadas · llaves AUSENTES del informe de
- *       contenido y del envío · package.json sin dependencias nuevas ·
- *       vaciar() NO llama borrarHistorico · DB separada — cero migración).
+ *       contenido y del envío · vaciar() llama borrarHistorico SOLO bajo
+ *       !COLA_PERSISTENTE (e64p) · DB separada — cero migración).
  *
  * Nota honesta: el ledger vive en IndexedDB (browser-only) y NO corre
  * headless — su SEMÁNTICA se verifica aquí por source-scan por SÍMBOLO
@@ -126,10 +129,10 @@ ok(
 ok(
   historico.includes("export async function borrarHistorico") &&
     historico.includes("store.clear();") &&
-    !/import\s*\{[^}]*borrarHistorico/.test(store) &&
+    /import\s*\{[^}]*borrarHistorico/.test(store) && // e64p (C-1/C-2): importado — cableado SOLO bajo !COLA_PERSISTENTE
     !/import\s*\{[^}]*borrarHistorico/.test(runner) &&
     !/from "\.\/historico"/.test(cola),
-  "RL-e65b-5: borrarHistorico existe SIN cablear — cola.ts ni lo conoce; store/runner no lo importan",
+  "RL-e65b-5 + e64p C-2: borrarHistorico importado SOLO por store (cableo condicional modo pruebas); runner/cola jamás lo conocen",
 );
 
 // ---------- Bloque 2 — T-2: índice fusionado + helpers (store.ts) ----------
@@ -137,8 +140,8 @@ ok(
 console.log("\n── Bloque 2 · T-2 store — índice fusionado ledger+cola ──");
 
 ok(
-  store.includes('import {\n  listarHistorico,\n  registrarEntradaHistorico,\n  type EntradaHistorica,\n} from "./historico";'),
-  "T-2a: EntradaHistorica UNIFICADA — importada del módulo (tipo local {id,hashBytes,hashDedup} retirado)",
+  store.includes('import {\n  borrarHistorico,\n  listarHistorico,\n  registrarEntradaHistorico,\n  type EntradaHistorica,\n} from "./historico";'),
+  "T-2a + e64p: EntradaHistorica UNIFICADA — importada del módulo (bloque ampliado con borrarHistorico por el kit e64p)",
 );
 
 ok(
@@ -162,9 +165,9 @@ ok(
 );
 
 ok(
-  store.includes("try {\n    deLedger = await listarHistorico();") &&
-    store.includes("} catch {\n    deLedger = [];\n  }"),
-  "M-e65b-2: ledger NO fatal — si cae, el índice se construye SOLO con la cola viva (conservador, RL-e65b-3)",
+  store.includes("if (COLA_PERSISTENTE) {\n    try {\n      deLedger = await listarHistorico();") &&
+    store.includes("} catch {\n      deLedger = [];\n    }\n  }"),
+  "M-e65b-2 + e64p C-3: ledger NO fatal (try/catch → cola viva) — lectura bajo COLA_PERSISTENTE; modo pruebas NO lo lee (cero memoria entre lotes)",
 );
 
 ok(
@@ -308,9 +311,12 @@ ok(
   "T-5/F2: vaciar() invalida SOLO el cache de sesión — la REVERSA D-e65b-1 está declarada en el código",
 );
 
+const cuerpoVaciar = store.slice(store.indexOf("vaciar: async () => {"));
+
 ok(
-  !store.includes("borrarHistorico()") || !/await\s+borrarHistorico/.test(store),
-  "RL-e65b-5: vaciar() JAMÁS llama borrarHistorico (source-scan del cuerpo de vaciar + imports)",
+  /if \(!COLA_PERSISTENTE\) \{[\s\S]*?await borrarHistorico\(\)/.test(cuerpoVaciar) &&
+    store.includes("indiceEnviadas = null;"),
+  "RL-e65b-5 + e64p C-2: vaciar() llama borrarHistorico SOLO bajo !COLA_PERSISTENTE (reversa declarada en modo pruebas; producción D-e65b-1 intacta)",
 );
 
 ok(
@@ -389,8 +395,8 @@ ok(
 );
 
 ok(
-  historico.includes("JAMÁS cablear a vaciar()") && historico.includes("RL-e65b-5"),
-  "RL-e65b-5: la docstring del módulo declara la prohibición (reversa documentada D-e65b-1)",
+  historico.includes("SOLO bajo !COLA_PERSISTENTE") && historico.includes("RL-e65b-5"),
+  "RL-e65b-5 + e64p: la docstring del módulo declara el cableo CONDICIONAL (producción sin cablear · modo pruebas resetea — adenda honesta)",
 );
 
 // ---------- Resumen ----------
