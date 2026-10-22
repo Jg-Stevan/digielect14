@@ -330,10 +330,10 @@ function ladoDeVentana(pix: PixelesQr, fraccion: number): number {
  * cuadrante [TL→TR→BL→BR] × BARRIDO_VENTANAS × paso 0.5 (solape de media
  * ventana — micro-decisión declarada), jsQR attemptBoth por ventana,
  * early-exit al primer payload. Puro, sin reló (acotado por nº de
- * ventanas — el reló de 4 s es del tier zxing). PENDING CONOCIDO de e63n
- * que T-1.0 del e64 corrige: la condición `+ lado <=` deja una franja
- * descubierta de hasta `paso` px en el filo derecho/inferior de CADA
- * cuadrante (doc hermano H-5).
+ * ventanas — el reló de 4 s es del tier zxing). T-1.0 del e64 añadió la
+ * celda final anclada al filo inferior-derecho de cada cuadrante (doc
+ * hermano H-5 — la franja de hasta `paso` px que la condición `+ lado <=`
+ * dejaba descubierta).
  */
 export function barridoQrDePixeles(pix: PixelesQr): string | null {
   for (const q of CUADRANTES) {
@@ -349,6 +349,13 @@ export function barridoQrDePixeles(pix: PixelesQr): string | null {
           if (payload != null) return payload;
         }
       }
+      // e64-qr T-1.0 — celda final del cuadrante: la condición `+ lado <=`
+      // deja una franja descubierta de hasta `paso` px en el filo
+      // derecho/inferior (doc hermano H-5); este anclaje la cubre (el clamp
+      // de ventanaDePixeles ya existe — jamás inventa píxeles).
+      const winFilo = ventanaDePixeles(pix, lim.x1 - lado, lim.y1 - lado, lado);
+      const payloadFilo = winFilo ? jsQrDeVentana(winFilo) : null;
+      if (payloadFilo != null) return payloadFilo;
     }
   }
   return null;
@@ -465,6 +472,17 @@ export async function barridoQrZxingDePixeles(
             const payload = await zxingDeVentana(win, binarizador);
             if (payload != null) return payload;
           }
+        }
+      }
+      // e64-qr T-1.0 — celda final del cuadrante (hueco del filo, doc
+      // hermano H-5): anclada al filo inferior-derecho, MISMA grilla, los
+      // DOS binarizadores y el chequeo de presupuesto intacto.
+      if (performance.now() > limite) return null; // presupuesto vencido
+      const winFilo = ventanaDePixeles(pix, lim.x1 - lado, lim.y1 - lado, lado);
+      if (winFilo) {
+        for (const binarizador of ZXING_BINARIZADORES) {
+          const payloadFilo = await zxingDeVentana(winFilo, binarizador);
+          if (payloadFilo != null) return payloadFilo;
         }
       }
     }
