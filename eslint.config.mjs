@@ -53,7 +53,11 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   // "lab/**/*.bundle.js": bundle ESM del core 0.4.0 para el panel «origen» del
   // harness quad-repro (kit e14-quad-sobel-v1 §4-D) — ARTEFACTO de build del
   // PR de Fase A (web-scanner #14), no código fuente: mismo criterio vendor.
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "lab/**/*.bundle.js"]
+  // "tools/bench-qr-identidad/jsQR.js": jsQR@1.4.0 VENDIDO byte-exacto del
+  // npm tarball (UMD webpack — kit banco-qr-identidad-v1 §1) — MISMO criterio
+  // vendor: JS de terceros, no código fuente del repo (el UMD asigna `module`
+  // y trae expresiones sueltas del bundle: fallaría lint sin este ignore).
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "lab/**/*.bundle.js", "tools/bench-qr-identidad/jsQR.js"]
 }];
 
 export default eslintConfig;
