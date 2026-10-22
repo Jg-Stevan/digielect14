@@ -433,6 +433,24 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
     if (!actaOrigen) return false; // original sin desenlace (ERROR/en vuelo)
     if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) return false;
     const actaCopia = { ...actaOrigen, id: fila.id };
+    // e66 (P2) — la gemela ya NO hereda el desenlace de envío de la original:
+    // · status DUPLICADA (valor NUEVO al FINAL de ActaStatus): su desenlace es
+    //   una COPIA — cero pipeline propio, cero envío propio (el envío real
+    //   vive SOLO en la original). Antes heredaba ENVIADA/OPTIMA y corrompía
+    //   porStatusActa, los conteos de envío y el historial.
+    // · diagnostico.status DUPLICADA + enviadoAutomaticamente null (plan P2
+    //   literal) — el informe nunca la contará como envío exitoso.
+    actaCopia.status = "DUPLICADA";
+    if (actaCopia.diagnostico) {
+      actaCopia.diagnostico.status = "DUPLICADA";
+      // e66 (P3.4) — esperaMs PROPIO de la fila duplicada (t0 − agregadaEn),
+      // NO el heredado de la original: la media de espera del informe ya no
+      // cuenta la espera de la original DOS veces. ≥ 0 defensivo (D57 T1).
+      if (actaCopia.diagnostico.tiempos) {
+        actaCopia.diagnostico.tiempos.esperaMs = Math.max(0, t0 - fila.agregadaEn);
+      }
+    }
+    actaCopia.enviadoAutomaticamente = null;
     // e63k (F1.4): derivar la serie del acta COPIADA (la gemela ES el mismo
     // papel — misma identidad). El mapa de identidad de futuras filas
     // también cubre gemelas copiadas.
@@ -450,36 +468,29 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
       serie: serieCopia, // e63k — identidad de la copia (null = sin consenso, honesto)
     };
     await guardarRegistro(registroListo);
-    // e65b (T-3b): la GEMELA reutilizada con desenlace ENVIADO también
-    // alimenta el LEDGER — sus BYTES son otros y deben quedar (el re-encolado
-    // de SU archivo → YA-ENVIADA por bytes). Guard RL-e65b-2: SOLO cuando el
-    // desenlace copiado es ENVIADA (jamás alimentar con no-enviados). Llaves
-    // del REGISTRO DE LA GEMELA (leído arriba), no las de la original.
-    // Fire-and-forget (RL-e65b-3): jamás bloquea la reutilización.
-    if (actaCopia.status === "ENVIADA") {
-      void registrarEnviadaHistorico({
-        id: fila.id,
-        ts: Date.now(),
-        hashBytes: registro.hashBytes,
-        hashDedup: registro.hashDedup,
-        payloadQr: registro.qrPayload,
-        serie: serieCopia ?? undefined,
-      }).catch(() => {});
-    }
+    // e66 (D-e66-2) — REVERSA de e65b T-3b (mandato del plan P2): la gemela
+    // REUTILIZADA ya NO alimenta el LEDGER histórico (el historial registra
+    // SOLO envíos reales). Re-encolado de la gemela sigue protegido: su
+    // payload-QR es el MISMO de la original (igualdad EXACTA, capa 0) y su
+    // dhash cae dentro de la cinta cierta de la ENTRADA ya registrada de la
+    // original (≤ 6) → YA-ENVIADA igual, cero re-OCR.
     const ms = Date.now() - t0;
     console.info(
-      `[e14] dedup fila=${fila.id} dupOf=${fila.dupOf} reutiliza score=${actaCopia.score ?? "-"} ms=${ms}`,
+      `[e14] dedup fila=${fila.id} dupOf=${fila.dupOf} reutiliza status=${actaCopia.status} score=${actaCopia.score ?? "-"} ms=${ms}`,
     );
     marcarFila(fila.id, {
       estado: "LISTA",
-      statusActa: actaCopia.status,
+      statusActa: actaCopia.status, // e66 — DUPLICADA (ya no ENVIADA heredada)
       score: actaCopia.score,
       nivel: actaCopia.clasificacion?.nivel ?? null,
       pagina: paginaDeActa(actaCopia),
       infoTitulo: tituloDeActa(actaCopia), // D59 — KIT e14-info-acta-filas-v1 (T2)
       motivo: actaCopia.rechazo?.tipo ?? null,
       thumb: original.thumb,
-      enviadaAuto: actaCopia.status === "ENVIADA" && !!actaCopia.enviadoAutomaticamente,
+      // e66 — DUPLICADA jamás es envío propio (plan P2): enviadaAuto=false
+      // explícito — el ÚNICO productor de enviadaAuto=true sigue siendo el
+      // desenlace real del pipeline (actaDesenlace, línea de abajo).
+      enviadaAuto: false,
       envioEnCola: actaCopia.hashSha256 === "EN COLA",
       serie: serieCopia, // e63k — el mapa de identidad cubre gemelas copiadas
       error: null,
@@ -861,6 +872,10 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           // alimenta T1 (quad página-completa) y T2 (gate del marco impreso).
           // SIM y el flujo individual JAMÁS lo traen (nada de escaneos les aplica).
           origenActa: veredictoOrigen.origen,
+          // e66 (P4): la señal auditable viaja al bridge — "exif-camara"
+          // omite el probe de rotaciones (orientación ya horneada por el
+          // EXIF del core; aplicado=0 SIEMPRE — evidencia del dueño).
+          origenSenales: veredictoOrigen.senales,
           onProgreso: (p) => {
             senal = { etapa: p.etapa, fraccion: p.progreso }; // etapa al morir (T1.4)
             marcarVida(fila.id, p); // señal de vida (T3 — throttle 250 ms)
