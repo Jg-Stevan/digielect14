@@ -396,7 +396,10 @@ function motivoCorto(err: unknown): string {
  *  uno-a-uno). Las filas temporales (copia a IDB aún en vuelo — «GUARDANDO
  *  N…») se saltan: su id real llega al resolver agregarLote y el loop las
  *  toma en la siguiente pasada. KIT e14-masiva-tiempos-v1 (PR-1): las
- *  DUPLICADAS ENTRAN al loop — su procesamiento es la copia rápida (<1 s). */
+ *  DUPLICADAS ENTRAN al loop — su procesamiento es la copia rápida (<1 s).
+ *  e65-dedup-enviadas-v1 (T-5, D-e65-7): YA-ENVIADA JAMÁS entra — es
+ *  SOLO-VISUAL (sin acta propia, sin envío): el filtro de abajo solo toma
+ *  PENDIENTE/DUPLICADA, verificación del kit (cero código de runner). */
 function siguientePendiente(): FilaMasiva | null {
   const pendientes = useMasivaStore
     .getState()

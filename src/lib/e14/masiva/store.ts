@@ -40,7 +40,12 @@ import {
   pareceImagenMasiva,
   parecePdfMasiva,
 } from "./archivos";
-import { dhashDeArchivo, hamming64, DEDUP_HAMMING_MAX } from "./dedup";
+import {
+  dhashDeArchivo,
+  DEDUP_HAMMING_MAX,
+  hamming64,
+  hashBytesDeArchivo, // e65-dedup-enviadas-v1 — capa bytes (SHA-256 exacto, D-e65-1)
+} from "./dedup";
 // e63k — KIT e63k-capa2-identidad-v1: la cinta CIERTA del dedup visual (≤ 2).
 // La banda 3..6 NO marca: la decide la capa 2 post-OCR (identidad.ts).
 import { DEDUP_CINTA_CIERTA } from "./identidad";
@@ -228,10 +233,78 @@ export function originalQrDePayload(payload: string): string | null {
   return mapaQrPayload.get(payload) ?? null;
 }
 
+// ─── e65-dedup-enviadas-v1 — ÍNDICE DEL HISTÓRICO DE ENVIADAS (D-e65-3) ────
+// Carga LIVIANA una vez por sesión de encolado: listarMapeados con mapper
+// que NO retiene Blob ni acta (lección L7 / fix C6) — solo las llaves del
+// dedup ({id, hashBytes?, hashDedup?}). Registros SIN llave quedan FUERA
+// (jamás inventar). Memoria de sesión: se invalida con vaciar() (el
+// histórico muere con la cola — D-e65-8). Lo que se ENVÍA después de la
+// carga queda cubierto por las filas VIVAS de la cola (mismas capas, con
+// verificación de registro viva antes de marcar).
+type EntradaHistorica = { id: string; hashBytes?: string; hashDedup?: string };
+let indiceEnviadas: EntradaHistorica[] | null = null;
+
+async function indiceEnviadasDe(): Promise<EntradaHistorica[]> {
+  if (indiceEnviadas) return indiceEnviadas;
+  indiceEnviadas = await listarMapeados<EntradaHistorica>((r) => {
+    // Solo ENVIADAS (acta propia) o YA-ENVIADA (filas marcadas por el kit).
+    if (r.acta?.status !== "ENVIADA" && r.estado !== "YA-ENVIADA") return null;
+    if (!r.hashBytes && !r.hashDedup) return null; // sin llave → jamás inventar
+    return { id: r.id, hashBytes: r.hashBytes, hashDedup: r.hashDedup };
+  });
+  return indiceEnviadas;
+}
+
+/** e65 (T-4): marca YA-ENVIADA con el MISMO patrón anti-zombi de la marca
+ *  DUPLICADA (fila viva + PENDIENTE + registro leíble + write IDB OK).
+ *  SOLO-VISUAL (D-e65-2): NO copia acta, NO trae statusActa, NO dispara
+ *  envío, NO toca contadores. false = guard falló → la fila sigue su curso
+ *  normal (conservador — RL-e65-3). */
+async function marcarYaEnviada(
+  id: string,
+  enviadaDeId: string,
+  via: "bytes" | "dhash",
+  hashBytes?: string,
+  hamming?: number,
+): Promise<boolean> {
+  const filaViva = useMasivaStore.getState().filas.find((f) => f.id === id);
+  if (!filaViva || filaViva.estado !== "PENDIENTE") return false;
+  let registro: RegistroMasiva;
+  try {
+    registro = await leerRegistro(id);
+  } catch {
+    return false; // fuera de la cola (IDB/vaciar) — nada que marcar
+  }
+  try {
+    await guardarRegistro({
+      ...registro,
+      estado: "YA-ENVIADA",
+      hashBytes: hashBytes ?? registro.hashBytes,
+      enviadaDe: enviadaDeId,
+      dedup: "ya-enviada",
+    });
+  } catch {
+    return false; // IDB caído → la fila procesa normal (conservador)
+  }
+  patchFila(id, {
+    estado: "YA-ENVIADA",
+    ...(hashBytes ? { hashBytes } : {}),
+    enviadaDe: enviadaDeId,
+  });
+  console.info(
+    `[e14] dedup fila=${id} YA-ENVIADA ${via}${hamming != null ? ` hamming=${hamming}` : ""} dupOf=${enviadaDeId}`,
+  );
+  return true;
+}
+
 /** KIT e14-masiva-tiempos-v1 (PR-1): cadena de hashing DEDUP en background —
- *  por cada archivo del lote EN ORDEN FIFO: dhash (misma vía del pipeline,
- *  dedup.ts) → persiste hashDedup → compara contra TODAS las filas con hash
- *  (Hamming ≤ 6) → marca DUPLICADA (persistente) apuntando a la ORIGINAL.
+ *  por cada archivo del lote EN ORDEN FIFO: e65 CAPA BYTES primero (SHA-256
+ *  EXACTO contra el índice histórico de enviadas + cola viva enviada — sin
+ *  decode, YA-ENVIADA al instante) → dhash (misma vía del pipeline,
+ *  dedup.ts) → persiste hashDedup + hashBytes → compara contra TODAS las
+ *  filas con hash (Hamming ≤ 6) + el ÍNDICE HISTÓRICO (D-e65-6) → marca
+ *  DUPLICADA (persistente) apuntando a la ORIGINAL — o YA-ENVIADA si la
+ *  original ya fue ENVIADA (D-e65-5).
  *  NUNCA bloquea la UI ni lanza: fallo de decode/hash → hash null → la fila
  *  procesa normal (conservador). Los guards de existencia hacen el vaciar/
  *  quitar del dueño MANDAR (0 zombis — mismo patrón del runner).
@@ -241,6 +314,44 @@ export function originalQrDePayload(payload: string): string | null {
 async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void> {
   for (const entrada of lote) {
     try {
+      // e65 — CAPA BYTES primero (D-e65-5): barata (~50-200 ms, SIN decode).
+      // Match EXACTO por SHA-256 contra (a) el índice histórico de enviadas
+      // y (b) las filas vivas de la cola cuyo registro ya fue ENVIADO (se
+      // verifica leyendo el registro — la fila sola no basta). null →
+      // conservador: cae a la capa dhash de siempre.
+      const bytes = await hashBytesDeArchivo(entrada.archivo);
+      if (bytes) {
+        const hitHistorico = (await indiceEnviadasDe()).find(
+          (h) => h.hashBytes === bytes,
+        );
+        if (hitHistorico) {
+          // El índice SOLO contiene enviadas → YA-ENVIADA por construcción.
+          if (await marcarYaEnviada(entrada.id, hitHistorico.id, "bytes", bytes)) continue;
+        } else {
+          const viva = useMasivaStore
+            .getState()
+            .filas.find(
+              (f) => f.id !== entrada.id && f.hashBytes === bytes,
+            );
+          if (viva) {
+            // El match contra cola viva SOLO cuenta como YA-ENVIADA si ESE
+            // registro tiene acta ENVIADA (verificar con leerRegistro antes
+            // de marcar — kit T-4). Lectura que falla → conservador: la capa
+            // dhash decide como hoy.
+            try {
+              const regViva = await leerRegistro(viva.id);
+              if (
+                regViva.acta?.status === "ENVIADA" ||
+                regViva.estado === "YA-ENVIADA"
+              ) {
+                if (await marcarYaEnviada(entrada.id, viva.id, "bytes", bytes)) continue;
+              }
+            } catch {
+              /* conservador — sigue a la capa dhash (comportamiento de hoy) */
+            }
+          }
+        }
+      }
       const hash = await dhashDeArchivo(entrada.archivo);
       if (!hash) continue; // decode/hash falló → sin dedup para esta fila
       // Guard anti-zombi: la fila pudo ser quitada/vaciada mientras el decode corría.
@@ -261,13 +372,27 @@ async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void>
       const candidatas = filas.filter(
         (f) => f.id !== entrada.id && f.hashDedup && f.estado !== "ERROR",
       );
-      let original: FilaMasiva | null = null;
+      let original: Pick<FilaMasiva, "id" | "agregadaEn"> | null = null;
       let hamming = DEDUP_HAMMING_MAX + 1;
       for (const c of candidatas) {
         const d = hamming64(hash, c.hashDedup as string);
         if (d <= DEDUP_HAMMING_MAX && (original === null || d < hamming || c.agregadaEn < original.agregadaEn)) {
           original = c;
           hamming = d;
+        }
+      }
+      // e65 (D-e65-6): ampliar candidatas con el ÍNDICE HISTÓRICO de enviadas
+      // (hashDedup, misma cinta — RL-e65-4). El histórico SOLO contiene
+      // enviadas → si GANA (estrictamente más cerca), el desenlace es
+      // YA-ENVIADA. Empate → la viva manda (FIFO — comportamiento de hoy).
+      let originalDelIndice = false;
+      for (const h of await indiceEnviadasDe()) {
+        if (!h.hashDedup || h.id === entrada.id) continue;
+        const d = hamming64(hash, h.hashDedup);
+        if (d <= DEDUP_HAMMING_MAX && (original === null || d < hamming)) {
+          original = { id: h.id, agregadaEn: 0 };
+          hamming = d;
+          originalDelIndice = true;
         }
       }
       // D65 (T2.3): traza del dedup v2 — "v2" = match CIERTO en la cinta baja
@@ -289,8 +414,8 @@ async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void>
                 dedupVisualDe: original.id,
               }
             : { dedup: "sin-match" };
-      await guardarRegistro({ ...registro, hashDedup: hash, ...trazaDedup });
-      patchFila(entrada.id, { hashDedup: hash });
+      await guardarRegistro({ ...registro, hashDedup: hash, hashBytes: bytes ?? registro.hashBytes, ...trazaDedup });
+      patchFila(entrada.id, { hashDedup: hash, ...(bytes ? { hashBytes: bytes } : {}) });
       // e63k (F1.3): SOLO la cinta CIERTA (hamming ≤ DEDUP_CINTA_CIERTA)
       // marca DUPLICADA pre-OCR — comportamiento de HOY byte a byte. La
       // banda 3..6 NO marca y NO escribe DUPLICADA: la fila sigue PENDIENTE
@@ -302,6 +427,42 @@ async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void>
           `[e14] dedup fila=${entrada.id} visual hamming=${hamming} dupOf=${original.id} APLAZADA cinta=3-6 — identidad post-OCR decide (e63k)`,
         );
         continue;
+      }
+      // e65 (D-e65-5): cinta cierta — ¿la original matcheada ya fue ENVIADA?
+      //  · Original del ÍNDICE histórico → es ENVIADA/YA-ENVIADA por
+      //    construcción del índice (D-e65-3).
+      //  · Original viva → verificar con leerRegistro (acta ENVIADA o estado
+      //    YA-ENVIADA). Lectura que falla → DUPLICADA (conservador, hoy).
+      let enviadaDeId: string | null = null;
+      if (originalDelIndice) {
+        enviadaDeId = original.id;
+      } else {
+        try {
+          const regOriginal = await leerRegistro(original.id);
+          if (
+            regOriginal.acta?.status === "ENVIADA" ||
+            regOriginal.estado === "YA-ENVIADA"
+          ) {
+            enviadaDeId = original.id;
+          }
+        } catch {
+          enviadaDeId = null; // conservador → DUPLICADA como hoy
+        }
+      }
+      if (enviadaDeId) {
+        if (
+          await marcarYaEnviada(
+            entrada.id,
+            enviadaDeId,
+            "dhash",
+            bytes ?? undefined,
+            hamming,
+          )
+        ) {
+          continue;
+        }
+        // guard falló (ya no es PENDIENTE / registro ilegible) → cae al
+        // comportamiento de siempre (el conservador manda — RL-e65-3).
       }
       // Solo marca filas aún PENDIENTES (el dueño pudo procesar/quitar mientras el hash corría).
       const filaViva = useMasivaStore.getState().filas.find((f) => f.id === entrada.id);

@@ -153,3 +153,24 @@ export async function dhashDeArchivo(file: File): Promise<string | null> {
     return null;
   }
 }
+
+// ─── e65-dedup-enviadas-v1 — CAPA BYTES (SHA-256 exacto) ───────────────────
+/** e65 (D-e65-1) — SHA-256 hex (64) de los BYTES del File: dedup EXACTO de
+ *  contenido (mismo archivo → mismo hash). crypto.subtle NATIVO: cero
+ *  dependencias nuevas (§0.3 kit cola — package.json/bun.lock intactos),
+ *  ~50-200 ms para 8-18 MB. Fallo (subtle ausente / file raro / arrayBuffer
+ *  lanzando) → null — CONSERVADOR: la fila procesa normal, jamás tumba el
+ *  encolado. RED LINE RL-e65-1: hashBytes es SOLO llave de dedup — JAMÁS
+ *  identidad del acta, JAMÁS viaja al envío, JAMÁS al informe de contenido
+ *  (igualdad EXACTA del hex completo — RL-e65-5, sin prefijos). */
+export async function hashBytesDeArchivo(file: File): Promise<string | null> {
+  try {
+    if (typeof crypto?.subtle?.digest !== "function") return null;
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  } catch {
+    return null;
+  }
+}
