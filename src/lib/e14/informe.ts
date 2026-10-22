@@ -272,7 +272,13 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
           (((acta?.fotoOriginal?.length ?? 0) +
             (acta?.fotoProcesada?.length ?? 0)) *
             3) /
-            4,
+            4 +
+            // e68-blob-idb-v1: las fotos del acta duermen como Blobs en el
+            // registro (migración base64 → Blob) — sus bytes REALES suman a
+            // la estimación (registros previos a e68 traen dataURLs → rama
+            // ×3/4; ambos mundos conviven sin doble conteo).
+            (reg.fotoOriginalBlob?.size ?? 0) +
+            (reg.fotoProcesadaBlob?.size ?? 0),
         );
   return {
     id: reg.id,
@@ -901,6 +907,24 @@ export function renderTxt(
  * downloadBlob (core) — aquí SOLO se construye. Lanza COLA_VACIA si la cola
  * no tiene registros (la UI la trata con el botón deshabilitado).
  */
+/** e68-blob-idb-v1 (Paso 4): uso REAL de IndexedDB reportado por el
+ *  navegador (navigator.storage.estimate) en MB con 1 decimal. null cuando
+ *  el navegador no lo expone (Safari viejo, contexto no seguro) — jamás
+ *  inventar. Best-effort: cualquier fallo → null. */
+async function almacenamientoIdbMb(): Promise<number | null> {
+  try {
+    const estimacion = await navigator.storage?.estimate?.();
+    // usageDetails NO está en el lib.dom de este TS — acceso tipado local
+    // (Record<string, number>; la llave indexedDB es la de Chrome/Edge).
+    const detalles = (estimacion as { usageDetails?: Record<string, number> })
+      ?.usageDetails;
+    const idb = detalles?.indexedDB;
+    return typeof idb === "number" ? Math.round(idb / 1e5) / 10 : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function generarInformeZip(
   onProgreso?: (p: ProgresoInforme) => void,
 ): Promise<InformeZip> {
@@ -956,6 +980,11 @@ export async function generarInformeZip(
       // fue enviada y matchea el ledger). El conteo de ENVIADAS de ESTA cola
       // vive en porStatusActa.ENVIADA — que P2 limpió de gemelas heredadas.
       yaEnviadas: filas.filter((f) => f.estado === "YA-ENVIADA").length,
+      // e68-blob-idb-v1 (Paso 4 — observabilidad, ADITIVO AL FINAL): uso
+      // REAL de IndexedDB en MB (navegador — estimate). null = no expuesto
+      // (jamás inventar). Base de comparación del criterio «IDB ~40 % menos»
+      // del kit (antes/después con el MISMO lote).
+      almacenamientoMB: await almacenamientoIdbMb(),
     },
     rechazos: {
       porTipo: conteo(
