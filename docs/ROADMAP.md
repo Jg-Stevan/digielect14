@@ -365,3 +365,20 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] T3 — Barra de vida inferior sincronizada con la progresión porcentual mediante transición fluida en CSS.
 - [x] T4 — Verificación: `compile_applet` y `lint_applet` limpios con cero errores.
 
+
+## CAPA 0 QR — OBSERVABILIDAD + RESCATE DE DECODE — e64-qr-v1 (2026-10-22): consola y chip QR dicen dónde muere el decode; barrido/zxing/nitidez/binarizada/rescate-4096 lo rescatan
+
+- [x] T-PRE — RECONSTRUCCIÓN DECLARADA de la superficie e63n (`9e45dc9` NUNCA pusheado — API verificada: ni ramas ni PRs; fuente: doc hermano §1): `barridoQrDePixeles` (grilla TL→TR→BL→BR × [0.11,0.14,0.19,0.25] × paso 0.5, jsQR attemptBoth) · `barridoQrZxingDePixeles` (zxing-wasm 3.1.6, GlobalHistogram→LocalAverage, presupuesto 4 s, wasm local `public/wasm/zxing_reader.wasm` sha `5003fb4b…`) · `decodificarQrDePixeles` (base→barrido→zxing→rotación) · `trazaQr [e14] qr-capa0 tier=…` · `ladderBaseDePixeles` refactor (ladderQrDePixeles e63m byte-equivalente, QA 48/48).
+- [x] T-0.1 — Traza de zxing indisponible (catch de `moduloZxingDe` — doc hermano H-3/F-0.2) + getter `estadoZxingQr()` solo-lectura.
+- [x] T-0.2 — `qrEstado` SOLO-VISUAL en fila/registro (aditivo D57) + acción `actualizarFila` (patrón patchFila) + estampado en la fila viva y los 4 writes del runner + chip `QR ✓`/`QR ✗` en MasivaView (✗ solo en LISTA).
+- [x] T-0.3 — Checklist de versión desplegada (sin código; ver docs/worklog.md): traza `tier=` SOLO desde esta rama (e63n no pusheado) · `zxing_reader.wasm` debe cargar 200 (Network, basePath).
+- [x] T-0.4 — Bench con fotos REALES del dueño: BLOQUEADO en sandbox (las fotos están en su máquina). DECISIÓN DE FASE por evidencia existente: banco #77 (REPORTE-e63n, citado por el doc hermano H-4/H-6) midió 8.3% decode del ladder pre-e63n en el corpus real y banco #72 midió 88.2% en el corpus gemelas — ambos < 90% → FASE 1 COMPLETA JUSTIFICADA.
+- [ ] T-1.0 — Celda final del cuadrante (hueco del filo H-5) en los 2 barridos.
+- [ ] T-1.1 — Tier NITIDEZ (unsharp 3×3, k=0.6).
+- [ ] T-1.2 — Tier BINARIZADA (umbral local por imagen integral, técnica integridad.ts).
+- [ ] T-1.3 — Escalas de ventana [0.08, 0.32] adicionales.
+- [ ] T-1.4 — Última línea: rescate a resolución nativa ≤4096.
+- [ ] T-1.5 — QA headless de los tiers nuevos (fixtures blur/gradiente/4096/ruido).
+- [ ] T-2.1 — QR post-captura en el flujo de cámara (bridge, señal aditiva).
+- [ ] T-2.2 — Chip QR en ReviewView.
+- [ ] T-3.0 — Verificación final + REPORTE + PR.
