@@ -18,6 +18,15 @@ import {
   recuperarCola,
   vaciar as vaciarCola,
 } from "./cola";
+// e65b — KIT e65b-historico-enviadas-v1 (T-2): LEDGER PERSISTENTE de
+// enviadas (DB separada — historico.ts, solo llaves/L7). El índice del
+// histórico se FUSIONA con el ledger: sobrevive vaciar() y recargas
+// (REVERSA de D-e65-8 → D-e65b-1).
+import {
+  listarHistorico,
+  registrarEntradaHistorico,
+  type EntradaHistorica,
+} from "./historico";
 import {
   hacerThumb,
   iniciarRunner,
@@ -241,45 +250,121 @@ export function originalQrDePayload(payload: string): string | null {
 // ─── e65-dedup-enviadas-v1 — ÍNDICE DEL HISTÓRICO DE ENVIADAS (D-e65-3) ────
 // Carga LIVIANA una vez por sesión de encolado: listarMapeados con mapper
 // que NO retiene Blob ni acta (lección L7 / fix C6) — solo las llaves del
-// dedup ({id, hashBytes?, hashDedup?}). Registros SIN llave quedan FUERA
-// (jamás inventar). Memoria de sesión: se invalida con vaciar() (el
-// histórico muere con la cola — D-e65-8). Lo que se ENVÍA después de la
-// carga queda cubierto por las filas VIVAS de la cola (mismas capas, con
-// verificación de registro viva antes de marcar).
-type EntradaHistorica = { id: string; hashBytes?: string; hashDedup?: string };
+// dedup ({id, hashBytes?, hashDedup?, payloadQr?}). Registros SIN llave
+// quedan FUERA (jamás inventar).
+// e65b (T-2b, D-e65b-1): el índice se FUSIONA con el LEDGER persistente
+// (historico.ts — DB separada): sobrevive vaciar() y recargas. Lo que se
+// ENVÍA después de la carga queda cubierto por (a) las filas VIVAS de la
+// cola (mismas capas, con verificación de registro viva antes de marcar)
+// y (b) registrarEnviadaHistorico — que actualiza el cache EN MEMORIA al
+// instante (mismo gesto de la sesión).
 let indiceEnviadas: EntradaHistorica[] | null = null;
 
 async function indiceEnviadasDe(): Promise<EntradaHistorica[]> {
   if (indiceEnviadas) return indiceEnviadas;
-  indiceEnviadas = await listarMapeados<EntradaHistorica>((r) => {
+  const deCola = await listarMapeados<EntradaHistorica>((r) => {
     // Solo ENVIADAS (acta propia) o YA-ENVIADA (filas marcadas por el kit).
     if (r.acta?.status !== "ENVIADA" && r.estado !== "YA-ENVIADA") return null;
-    if (!r.hashBytes && !r.hashDedup) return null; // sin llave → jamás inventar
-    return { id: r.id, hashBytes: r.hashBytes, hashDedup: r.hashDedup };
+    if (!r.hashBytes && !r.hashDedup && !r.qrPayload) return null; // sin llave → jamás inventar
+    return {
+      id: r.id,
+      ts: r.agregadaEn,
+      hashBytes: r.hashBytes,
+      hashDedup: r.hashDedup,
+      payloadQr: r.qrPayload,
+    };
   });
+  // e65b (M-e65b-2): el ledger NO es fatal — si cae, el índice se construye
+  // SOLO con la cola viva (exactamente el comportamiento e65; conservador
+  // RL-e65b-3 — jamás tumba la cadena de dedup).
+  let deLedger: EntradaHistorica[] = [];
+  try {
+    deLedger = await listarHistorico(); // llaves chicas — getAll seguro (L7)
+  } catch {
+    deLedger = [];
+  }
+  const porId = new Map<string, EntradaHistorica>();
+  for (const e of deLedger) porId.set(e.id, e);
+  for (const e of deCola) porId.set(e.id, e); // la cola viva manda (más fresca)
+  indiceEnviadas = [...porId.values()];
   return indiceEnviadas;
+}
+
+/** e65b (T-2c): el ÚNICO punto donde el ledger crece — alimenta el histórico
+ *  con TODO desenlace ENVIADO (envío propio del runner T-3a, gemela
+ *  reutilizada T-3b, envíos manuales T-3c, marca YA-ENVIADA T-2d) —
+ *  fire-and-forget desde el runner (RL-e65b-2/3). Si el cache del índice ya
+ *  está construido, se actualiza EN MEMORIA al instante (mismo gesto — la
+ *  re-subida de ESTA sesión ya matchea sin recargar). */
+export async function registrarEnviadaHistorico(e: EntradaHistorica): Promise<void> {
+  try {
+    await registrarEntradaHistorico(e);
+  } catch {
+    return; // IDB caída — conservador, jamás tumba el envío (RL-e65b-3)
+  }
+  if (indiceEnviadas) {
+    const entrada: EntradaHistorica = {
+      id: e.id,
+      ts: e.ts,
+      hashBytes: e.hashBytes,
+      hashDedup: e.hashDedup,
+      payloadQr: e.payloadQr,
+    };
+    const i = indiceEnviadas.findIndex((x) => x.id === e.id);
+    if (i >= 0) indiceEnviadas[i] = entrada;
+    else indiceEnviadas.push(entrada);
+  }
+}
+
+/** e65b (T-2e): lookup O(n) sobre el índice cacheado (n = enviadas; miles OK).
+ *  El índice SOLO contiene enviadas por construcción → hit = YA-ENVIADA.
+ *  Igualdad EXACTA del payload (llave opaca — jamás prefijos, RL-e65b-8).
+ *  Fallo del índice → null conservador: la fila sigue su curso (RL-e65b-3). */
+export async function enviadaPorPayload(payload: string): Promise<EntradaHistorica | null> {
+  if (!payload) return null;
+  try {
+    return (await indiceEnviadasDe()).find((h) => h.payloadQr === payload) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** e65 (T-4): marca YA-ENVIADA con el MISMO patrón anti-zombi de la marca
  *  DUPLICADA (fila viva + PENDIENTE + registro leíble + write IDB OK).
  *  SOLO-VISUAL (D-e65-2): NO copia acta, NO trae statusActa, NO dispara
  *  envío, NO toca contadores. false = guard falló → la fila sigue su curso
- *  normal (conservador — RL-e65-3). */
-async function marcarYaEnviada(
+ *  normal (conservador — RL-e65-3).
+ *  e65b (T-2d): exportada (el runner la llama desde la capa 0 payload —
+ *  T-4) · `via` ampliado con "payload" (valor NUEVO AL FINAL — D57) ·
+ *  parámetro opcional `qrPayload` estampado en el registro YA-ENVIADA
+ *  (aditivo) · al final del éxito ALIMENTA EL LEDGER (registrarEnviada-
+ *  Historico — cierra el gap de marcas contra filas enviadas pre-kit). */
+export type ViaYaEnviada = "bytes" | "dhash" | "payload"; // valor NUEVO AL FINAL (contrato D57)
+
+export async function marcarYaEnviada(
   id: string,
   enviadaDeId: string,
-  via: "bytes" | "dhash",
+  via: ViaYaEnviada,
   hashBytes?: string,
   hamming?: number,
+  qrPayload?: string,
+  aceptarProcesando?: boolean, // e65b (M-e65b-3): SOLO la capa 0 payload (runner T-4) lo declara
 ): Promise<boolean> {
   const filaViva = useMasivaStore.getState().filas.find((f) => f.id === id);
-  if (!filaViva || filaViva.estado !== "PENDIENTE") return false;
+  // e65b (M-e65b-3): la capa 0 payload llega con la fila YA en PROCESANDO
+  // (marcada al entrar al pipeline — runner) → el caller T-4 declara
+  // aceptarProcesando y este guard la admite. Los callers e65 de la
+  // cadenaDedup (sin flag) siguen exigiendo PENDIENTE byte a byte.
+  if (!(aceptarProcesando === true && filaViva?.estado === "PROCESANDO")) {
+    if (!filaViva || filaViva.estado !== "PENDIENTE") return false;
+  }
   let registro: RegistroMasiva;
   try {
     registro = await leerRegistro(id);
   } catch {
     return false; // fuera de la cola (IDB/vaciar) — nada que marcar
   }
+  // Write e65 byte a byte (la QA previa escanea estas líneas — regresión cero).
   try {
     await guardarRegistro({
       ...registro,
@@ -287,18 +372,32 @@ async function marcarYaEnviada(
       hashBytes: hashBytes ?? registro.hashBytes,
       enviadaDe: enviadaDeId,
       dedup: "ya-enviada",
+      ...(qrPayload ? { qrPayload } : {}), // e65b (T-2d) — aditivo (D57)
     });
   } catch {
     return false; // IDB caído → la fila procesa normal (conservador)
   }
   patchFila(id, {
     estado: "YA-ENVIADA",
-    ...(hashBytes ? { hashBytes } : {}),
+    ...(hashBytes ?? registro.hashBytes
+      ? { hashBytes: hashBytes ?? registro.hashBytes }
+      : {}),
     enviadaDe: enviadaDeId,
   });
   console.info(
     `[e14] dedup fila=${id} YA-ENVIADA ${via}${hamming != null ? ` hamming=${hamming}` : ""} dupOf=${enviadaDeId}`,
   );
+  // e65b (T-2d): la marca TAMBIÉN alimenta el histórico (ledger) — la
+  // YA-ENVIADA es un desenlace ENVIADO por construcción (RL-e65b-2).
+  // Fire-and-forget: jamás bloquea ni tumba la marca (RL-e65b-3).
+  void registrarEnviadaHistorico({
+    id,
+    ts: Date.now(),
+    hashBytes: hashBytes ?? registro.hashBytes,
+    hashDedup: registro.hashDedup,
+    payloadQr: qrPayload,
+    serie: registro.serie ?? undefined,
+  });
   return true;
 }
 
@@ -824,6 +923,22 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
         (await hacerThumb(actaNueva.fotoProcesada ?? actaNueva.fotoOriginal)) ??
         registro.thumb;
       await guardarRegistro({ ...registro, acta: actaNueva, thumb });
+      // e65b (T-3c): envío MANUAL desde REVISIÓN — si el dueño envió a mano
+      // el acta de esta fila masiva, el desenlace ENVIADO también alimenta
+      // el ledger (RL-e65b-2 — micro-decisión: la vía existe y vive aquí,
+      // con la identidad registro.acta?.id === acta.id ya verificada arriba;
+      // el envío genérico del flujo normal queda INTACTO fuera de la
+      // whitelist). Fire-and-forget — jamás tumba la sincronización (RL-e65b-3).
+      if (actaNueva.status === "ENVIADA") {
+        void registrarEnviadaHistorico({
+          id: origenAbierto,
+          ts: Date.now(),
+          hashBytes: registro.hashBytes,
+          hashDedup: registro.hashDedup,
+          payloadQr: registro.qrPayload,
+          serie: registro.serie ?? undefined,
+        }).catch(() => {});
+      }
       patchFila(origenAbierto, {
         estado: "LISTA",
         statusActa: actaNueva.status,
@@ -863,8 +978,13 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     } catch {
       /* las filas mueren igual en la bandeja */
     }
-    // e65 (T-6/D-e65-8): el histórico muere con la cola — índice fuera
-    // (sin zombis: la próxima carga lo reconstruye desde IDB vacía).
+    // e65b (T-5, REVERSA de D-e65-8 → D-e65b-1): lo que muere aquí es el
+    // CACHE de sesión — NO el histórico. El ledger persistente (historico.ts,
+    // DB separada) sobrevive: la próxima consulta reconstruye el índice
+    // fusionando cola + ledger (T-2b) → tras VACIAR, re-subir lo ya enviado
+    // nace YA-ENVIADA igualmente (la prueba exacta del dueño: vaciar +
+    // re-subir los 46). `borrarHistorico()` existe pero JAMÁS se cablea aquí
+    // (RL-e65b-5). La cola es el taller; el envío es el hecho.
     indiceEnviadas = null;
     set({ filas: [], progreso: null, origenAbierto: null, avisoCola: null });
   },
@@ -901,6 +1021,19 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
           ...(onlineAlEnviar ? {} : { hashSha256: "EN COLA" }),
         };
         await guardarRegistro({ ...registro, acta: actaEnviada });
+        // e65b (T-3c): envío MANUAL del LOTE (ADVERTENCIA → ENVIADA) — el
+        // desenlace ENVIADO también alimenta el ledger (RL-e65b-2 —
+        // micro-decisión: misma vía del helper único). Si quedó «EN COLA»
+        // (offline) el status YA es ENVIADA — el MISMO criterio del índice
+        // (acta?.status === "ENVIADA"). Fire-and-forget (RL-e65b-3).
+        void registrarEnviadaHistorico({
+          id: fila.id,
+          ts: Date.now(),
+          hashBytes: registro.hashBytes,
+          hashDedup: registro.hashDedup,
+          payloadQr: registro.qrPayload,
+          serie: registro.serie ?? undefined,
+        }).catch(() => {});
         patchFila(fila.id, {
           statusActa: "ENVIADA",
           score: actaEnviada.score,
