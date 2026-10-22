@@ -418,3 +418,11 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] Cambio B — `OpcionesEscaneoConTimeout.onRescateTardio` (opcional): el desenlace tardío del pipeline viaja al caller con `tiempoRealMs` REAL; idempotente (solo tras vencimiento); MASIVA no lo pasa → no-op.
 - [x] Store individual `rescatarActaPostTimeout`: guarda por referencia (jamás pisa captura nueva), solo rescatan OPTIMA/ADVERTENCIA (el gate ya decidió), deshace el RESCANEO_REQUERIDO estampado, desenlace POR LA MISMA RUTA (analisisCompletado — D4 auto-envío). SIM jamás rescata. `Acta` += `scoreRescatadoPor`/`tiempoRealMs` (ADITIVOS AL FINAL, D57).
 - [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
+
+## FOTOS COMO BLOB EN IDB — e68-blob-idb-v1 (2026-10-22): la memoria que P4 perdió vuelve — base64 +33% fuera de la persistencia masiva
+
+- [x] M-e68-0 — recon: el archivo original YA era Blob (registro.archivo); la inflación vivía en acta.fotoOriginal/fotoProcesada (dataURLs del acta persistida). Transformación en la FRONTERA IDB (cola.ts) — contrato Acta en RAM intacto (~20 consumidores).
+- [x] §2 — compactarRegistro en TODO guardarRegistro (dataUrlABlob; fallo → string se queda) + materializarFotos en TODO leerRegistro (blobADataUrl/FileReader determinista; registros viejos pasan tal cual — compat §2.1, compactación en el próximo write).
+- [x] §3 — cleanup post-envío: ENVIADA/DUPLICADA → fotoOriginalBlob fuera (2.4–16.9 MB/acta); fotoProcesadaBlob y thumb SE CONSERVAN (plan literal). Cero impacto en ZIP (ESTADOS_CARPETA jamás los exportó) y cero riesgo P2 (solo la foto cambia de forma).
+- [x] §4 — observabilidad: log [e14] memoria fila (bytes reales) + totales.almacenamientoMB (navigator.storage.estimate, null honesto).
+- [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
