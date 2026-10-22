@@ -631,10 +631,16 @@ export async function decodificarQrDePixeles(
 }
 
 // ─── Wrapper DOM (vía del banco — producción) ───────────────────────────────
-/** dataURL del capture → píxeles del canvas de trabajo (lado largo ≤ 2048 —
- *  MISMA receta del canvasDeTrabajo del banco, byte-idéntico en semántica).
- *  null/jamás-throw: un fallo de render es sin-payload (fallback limpio). */
-async function pixelesDeCapture(dataUrl: string): Promise<PixelesQr | null> {
+/** dataURL del capture → píxeles del canvas de trabajo (lado largo ≤
+ *  `ladoLargo` — default QR_LADO_LARGO=2048, MISMA receta del
+ *  canvasDeTrabajo del banco, byte-idéntico en semántica; e64-qr T-1.4 le
+ *  añade el segundo parámetro OPCIONAL para el rescate — la firma existente
+ *  no cambia para los callers actuales). null/jamás-throw: un fallo de
+ *  render es sin-payload (fallback limpio). */
+async function pixelesDeCapture(
+  dataUrl: string,
+  ladoLargo: number = QR_LADO_LARGO,
+): Promise<PixelesQr | null> {
   const img = new Image();
   await new Promise<void>((resolve, reject) => {
     img.onload = () => resolve();
@@ -642,7 +648,7 @@ async function pixelesDeCapture(dataUrl: string): Promise<PixelesQr | null> {
     img.src = dataUrl;
   });
   const ladoMayor = Math.max(img.naturalWidth, img.naturalHeight) || 1;
-  const escala = Math.min(1, QR_LADO_LARGO / ladoMayor);
+  const escala = Math.min(1, ladoLargo / ladoMayor);
   const cv = document.createElement("canvas");
   cv.width = Math.max(1, Math.round(img.naturalWidth * escala));
   cv.height = Math.max(1, Math.round(img.naturalHeight * escala));
@@ -653,10 +659,18 @@ async function pixelesDeCapture(dataUrl: string): Promise<PixelesQr | null> {
   return { data: imgData.data, width: cv.width, height: cv.height };
 }
 
+/** e64-qr T-1.4 — lado largo del RESCATE (SOLO si la cadena a 2048 falla):
+ *  fotos ≥12 MP — el downscale a 2048 es la pérdida dominante y el QR
+ *  nativo puede tener el doble de px por módulo. 4096²×4 = 64 MB puntual
+ *  (aceptable UNA vez, jamás camino por defecto). */
+export const QR_LADO_LARGO_RESCATE = 4096;
+
 /**
  * API del kit §1.1 — decodificar el QR de UN capture (dataURL de la vía
- * fileToCaptureDataUrl): canvas de trabajo ≤2048 → CADENA COMPLETA e63n
- * (decodificarQrDePixeles). Devuelve {payload} o null si nada decodifica.
+ * fileToCaptureDataUrl): canvas de trabajo ≤2048 → CADENA COMPLETA e63n+e64
+ * (decodificarQrDePixeles) → si falla TODO y el original EXCEDE 2048, UN
+ * rescate a resolución nativa ≤4096 (T-1.4: ladder base + barrido jsQR —
+ * SIN zxing: presupuesto de reló y memoria). Devuelve {payload} o null.
  * JAMÁS throw hacia el runner (kit §1.1 — cualquier falla = sin-payload =
  * pipeline normal intacto).
  */
@@ -667,7 +681,29 @@ export async function decodificarQrDeCapture(
     const pix = await pixelesDeCapture(dataUrl);
     if (!pix) return null;
     const payload = await decodificarQrDePixeles(pix);
-    return payload != null ? { payload } : null;
+    if (payload != null) return { payload };
+    // e64-qr T-1.4 — RESCATE a resolución mayor (ADAPTACIÓN DECLARADA: el
+    // snippet del kit usa `>=` con comentario «ya era ≥4096», internamente
+    // inconsistente — pix YA viene clampeado a 2048, así que `>= QR_LADO_
+    // LARGO` es precisamente el caso donde el rescate SÍ aporta píxeles
+    // REALES; se implementa el INTENT de R-4: rescate SOLO si el canvas de
+    // trabajo quedó clampeado (original > 2048) — sobre un original ≤2048
+    // el 4096 sería upscale inútil, jamás inventa detalle).
+    if (Math.max(pix.width, pix.height) < QR_LADO_LARGO) return null;
+    const tRescate = Date.now();
+    const pixGrande = await pixelesDeCapture(dataUrl, QR_LADO_LARGO_RESCATE);
+    if (!pixGrande) return null;
+    const base = ladderBaseDePixeles(pixGrande);
+    if (base != null) {
+      trazaQr("rescate4096", base, tRescate);
+      return { payload: base };
+    }
+    const barrido = barridoQrDePixeles(pixGrande);
+    if (barrido != null) {
+      trazaQr("rescate4096-barrido", barrido, tRescate);
+      return { payload: barrido };
+    }
+    return null;
   } catch {
     return null; // fallback limpio — la capa 0 jamás tumba el pipeline
   }
