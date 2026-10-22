@@ -872,6 +872,10 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           // alimenta T1 (quad página-completa) y T2 (gate del marco impreso).
           // SIM y el flujo individual JAMÁS lo traen (nada de escaneos les aplica).
           origenActa: veredictoOrigen.origen,
+          // e66 (P4): la señal auditable viaja al bridge — "exif-camara"
+          // omite el probe de rotaciones (orientación ya horneada por el
+          // EXIF del core; aplicado=0 SIEMPRE — evidencia del dueño).
+          origenSenales: veredictoOrigen.senales,
           onProgreso: (p) => {
             senal = { etapa: p.etapa, fraccion: p.progreso }; // etapa al morir (T1.4)
             marcarVida(fila.id, p); // señal de vida (T3 — throttle 250 ms)
