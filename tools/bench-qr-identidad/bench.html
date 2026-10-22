@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIT banco-qr-identidad-v1 — banco de medición QR (SOLO banco, cero producción)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: #0c0c0d; color: #e4e4e7;
+    font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 22px 0 8px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .06em; }
+  .sub { color: #a1a1aa; margin: 0 0 18px; font-size: 12.5px; }
+  .caja { border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; background: #131316; margin-bottom: 14px; }
+  .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; padding: 10px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #3f3f46; background: #1f1f23; color: #e4e4e7; min-height: 44px;
+  }
+  button:hover:not(:disabled) { background: #2d2d33; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #btn-json { border-color: #3f6212; background: #1a2e05; color: #bef264; }
+  #btn-md { border-color: #713f12; background: #2e2305; color: #fbbf24; }
+  .estado { margin: 10px 0 0; white-space: pre-wrap; }
+  .ok { color: #a3e635; } .mal { color: #f87171; } .info { color: #d4d4d8; } .warn { color: #fbbf24; }
+  label.toggle { display: inline-flex; gap: 8px; align-items: center; color: #d4d4d8; cursor: pointer; min-height: 44px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { border: 1px solid #27272a; padding: 6px 10px; text-align: left; font-size: 13px; }
+  th { background: #18181b; color: #a1a1aa; font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  pre#log {
+    max-height: 240px; overflow-y: auto; font-size: 12px; color: #a1a1aa;
+    background: #0f0f11; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin: 8px 0 0;
+  }
+  pre#log::-webkit-scrollbar { width: 8px; }
+  pre#log::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  .detalle-tabla { max-height: 480px; overflow-y: auto; }
+  .detalle-tabla::-webkit-scrollbar { width: 8px; }
+  .detalle-tabla::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  code { color: #bef264; word-break: break-all; }
+  .grupo { border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin-top: 8px; background: #0f0f11; }
+  .colision { color: #f87171; font-weight: 700; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "heic2any": "./heic2any-esm.js"
+  }
+}
+</script>
+<!-- Shim SOLO-BANCO: detector-client.js del core lee process.env.NEXT_PUBLIC_BASE_PATH
+     (el bundler de la app lo inyecta; el ESM crudo del navegador no — "" = sin
+     base path). Copia del patrón del bench-dedup-tolerancia (D58). Fuera de los
+     bancos esto no existe — 0 diff en src/ (red line 3 del kit). -->
+<script>window.process = { env: { NEXT_PUBLIC_BASE_PATH: "" } };</script>
+</head>
+<body>
+<h1>KIT banco-qr-identidad-v1 · banco de medición QR (jsQR 1.4.0 vendido — SOLO EVIDENCIA, CERO PRODUCCIÓN)</h1>
+<p class="sub">Patrón D58 (bench-dedup-tolerancia). <strong>Este banco SOLO MIDE</strong> — la decisión de
+implementar la identidad pre-OCR por QR (kit e63m) se toma con estos números (kit §0). Vía de entrada
+<strong>EXACTAMENTE la de producción</strong>: <code>fileToCaptureDataUrl</code> del core
+(<code>node_modules/@jg-stevan/scanner-core</code> — EXIF/12MP/HEIC). Canvas de trabajo con lado largo
+<strong>≤ 2048 px</strong> (el thumb de 320 del dhash es DEMASIADO PEQUEÑO para el QR — ver README).
+Intentos de decode (jsQR <code>{ inversionAttempts: "attemptBoth" }</code>): <strong>A</strong> imagen completa ·
+<strong>B</strong> banda top-left 0-45% × 0-25% · <strong>C</strong> banda ajustada 8-38% × 5-20% (posición
+observada en el fixture real: x≈12-32%, y≈8-17%) · reintento de C a escala 1.5×. Agrupación por
+<strong>igualdad EXACTA de payload</strong> (string) — sin umbrales de ningún tipo. El QR es DATO LEÍDO
+(Reed-Solomon): decodifica exacto o falla — la tesis del kit §0.2.</p>
+
+<div class="caja">
+  <div class="fila">
+    <input type="file" id="input-fotos" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" style="display:none">
+    <button id="btn-fotos" type="button">📎 CARGAR FOTOS REALES (corpus del dueño — locales, nunca se commitean)</button>
+    <button id="btn-procesar" type="button" disabled>▶ PROCESAR (decode QR + grupos)</button>
+    <label class="toggle"><input type="checkbox" id="chk-rotaciones"> probar rotaciones (90/180/270 — primeros 6 archivos)</label>
+  </div>
+  <div class="fila" style="margin-top:10px">
+    <button id="btn-json" type="button" disabled>⬇ DESCARGAR JSON</button>
+    <button id="btn-md" type="button" disabled>⬇ DESCARGAR MD</button>
+    <span id="meta" class="info"></span>
+  </div>
+  <p id="estado" class="estado info">Listo. Corpus sugerido (kit §4, FASE 0 del dueño): 12 re-fotos
+  <code>20261021_16*.jpg</code> · <code>durazno1-8.heic</code> + <code>imagen1-10.jpg</code> · escaneos
+  <code>171500/171506/171512/171518/171446/171454</code> (+ gemelas) · fixture
+  <code>src/assets/acta-e14-real.jpg</code>. Las fotos NUNCA se commitean — solo los resultados JSON/MD.</p>
+</div>
+
+<h2>Resultados por archivo</h2>
+<div class="caja detalle-tabla" id="caja-filas"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Grupos por payload EXACTO (el output del dinero)</h2>
+<div class="caja" id="caja-grupos"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Resumen</h2>
+<div class="caja" id="caja-resumen"><p class="info">Sin corrida aún.</p></div>
+
+<h2>Log</h2>
+<pre id="log"></pre>
+
+<script type="module">
+// ─── MISMA VÍA DEL PIPELINE: el decode del core es el de producción (kit §1.1) ──
+import { fileToCaptureDataUrl } from "../../node_modules/@jg-stevan/scanner-core/dist/image-processor.js";
+// jsQR 1.4.0 VENDIDO (npm tarball dist/jsQR.js — UMD webpack: en ESM crudo se
+// cuelga de self.jsQR; el decode vive en .default). BarcodeDetector NATIVO
+// PROHIBIDO por el kit §5 (determinismo entre máquinas).
+import "./jsQR.js";
+const jsQR = (self.jsQR && self.jsQR.default) ? self.jsQR.default : self.jsQR;
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls = "info") => {
+  const linea = document.createElement("div");
+  if (cls) linea.className = cls;
+  linea.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $("log").appendChild(linea);
+  $("log").scrollTop = $("log").scrollHeight;
+  console.info(`[e14-banco-qr] ${msg}`);
+};
+const setEstado = (msg, cls = "info") => { $("estado").textContent = msg; $("estado").className = `estado ${cls}`; };
+
+// ─── Estado del banco ────────────────────────────────────────────────────────
+const archivosCargados = []; // File[] — el corpus del dueño (NUNCA se commitea)
+let filas = [];              // resultado por archivo
+let ultimoJson = null;
+let corriendo = false;
+
+// LADO LARGO MÁXIMO del canvas de trabajo (kit §1.2). El thumb de 320 del dhash
+// es DEMASIADO PEQUEÑO para el QR (el módulo del QR queda por debajo del píxel):
+// 2048 ≈ lado largo de foto re-escalada y mantiene el QR del fixture decodificable
+// (medido Tasks 16-18: foto real 41 ms a resolución completa).
+const LADO_LARGO_TRABAJO = 2048;
+
+// Bandas de los intentos (kit §1.3) — fracciones del canvas de trabajo.
+// C es la posición observada del QR en el fixture real (x≈12-32%, y≈8-17%).
+const INTENTOS = [
+  { id: "A", x0: 0.00, y0: 0.00, x1: 1.00, y1: 1.00, escala: 1 },    // imagen completa
+  { id: "B", x0: 0.00, y0: 0.00, x1: 0.45, y1: 0.25, escala: 1 },    // banda top-left
+  { id: "C", x0: 0.08, y0: 0.05, x1: 0.38, y1: 0.20, escala: 1 },    // banda ajustada
+  { id: "C1.5", x0: 0.08, y0: 0.05, x1: 0.38, y1: 0.20, escala: 1.5 }, // reintento de C up-escalado
+];
+
+const ROTACIONES = [90, 180, 270]; // kit §1.4 — VERIFICA la invariancia, no la asume
+const ROTACION_MAX_ARCHIVOS = 6;   // «en los primeros N≤6 archivos»
+
+function stemNumerico(nombre) {
+  const m = nombre.match(/(\d{4,})/);
+  return m ? m[1] : nombre.replace(/\.[^.]+$/, "");
+}
+
+// Heurística SOLO-INFORMATIVA de fuente (para el % del resumen — no afecta
+// grupos ni veredictos): escaneos de archivo del dueño llevan stem 171XXX;
+// el resto (re-fotos de cámara, re-encodes) es foto. Documentada en README.
+function fuenteDe(nombre) {
+  return /(^|\D)17\d{4}(\D|$)/.test(nombre) ? "escaneo" : "foto";
+}
+
+// ─── Canvas de trabajo: dataURL → canvas con lado largo ≤ 2048 (kit §1.2) ───
+async function canvasDeTrabajo(dataUrl) {
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("QR_NO_DECODE_IMAGEN"));
+    img.src = dataUrl;
+  });
+  const ladoMayor = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+  const escala = Math.min(1, LADO_LARGO_TRABAJO / ladoMayor);
+  const cv = document.createElement("canvas");
+  cv.width = Math.max(1, Math.round(img.naturalWidth * escala));
+  cv.height = Math.max(1, Math.round(img.naturalHeight * escala));
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("QR_SIN_CTX");
+  ctx.drawImage(img, 0, 0, cv.width, cv.height);
+  return cv;
+}
+
+/** Rotaciones 90/180/270 del canvas de trabajo (kit §1.4). */
+function canvasRotado(cv, grados) {
+  const rad = (grados * Math.PI) / 180;
+  const rot = document.createElement("canvas");
+  rot.width = grados % 180 === 0 ? cv.width : cv.height;
+  rot.height = grados % 180 === 0 ? cv.height : cv.width;
+  const ctx = rot.getContext("2d", { willReadFrequently: true });
+  ctx.translate(rot.width / 2, rot.height / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(cv, -cv.width / 2, -cv.height / 2);
+  return rot;
+}
+
+/** UN intento de decode sobre UNA banda de UN canvas (kit §1.3).
+ *  Registra {ok, payload, ms, anchoAlto} — el payload EXACTO tal cual sale. */
+function intentoDecode(cv, esp) {
+  const t0 = performance.now();
+  const sw = Math.max(1, Math.round(cv.width * (esp.x1 - esp.x0)));
+  const sh = Math.max(1, Math.round(cv.height * (esp.y1 - esp.y0)));
+  const dw = Math.max(1, Math.round(sw * esp.escala));
+  const dh = Math.max(1, Math.round(sh * esp.escala));
+  const banda = document.createElement("canvas");
+  banda.width = dw;
+  banda.height = dh;
+  const ctx = banda.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = esp.escala > 1; // up-escalado del reintento C
+  ctx.drawImage(cv, cv.width * esp.x0, cv.height * esp.y0, sw, sh, 0, 0, dw, dh);
+  const img = ctx.getImageData(0, 0, dw, dh);
+  const res = jsQR(img.data, dw, dh, { inversionAttempts: "attemptBoth" });
+  return {
+    intento: esp.id,
+    ok: !!res,
+    payload: res ? res.data : null,
+    ms: +(performance.now() - t0).toFixed(1),
+    anchoAlto: `${dw}×${dh}`,
+  };
+}
+
+/** Todos los intentos (A/B/C/C1.5) sobre un canvas — orden del kit. */
+function decodificar(cv) {
+  return INTENTOS.map((esp) => intentoDecode(cv, esp));
+}
+
+// ─── Pipeline por archivo (kit §1.1-1.4) ─────────────────────────────────────
+async function procesarArchivo(file, idx, conRotaciones) {
+  const t0 = performance.now();
+  const fila = {
+    nombre: file.name,
+    stem: stemNumerico(file.name),
+    fuente: fuenteDe(file.name),
+    tipo: file.type || "—",
+    bytes: file.size,
+    payload: null,
+    ganador: null,
+    intentos: [],
+    rotaciones: [],
+    msCore: null,
+    msTotal: null,
+    trabajoAnchoAlto: null,
+    error: null,
+  };
+  try {
+    // 1) VÍA DE PRODUCCIÓN: fileToCaptureDataUrl (EXIF/12MP/HEIC)
+    const tCore = performance.now();
+    const dataUrl = await fileToCaptureDataUrl(file);
+    fila.msCore = +(performance.now() - tCore).toFixed(1);
+
+    // 2) Canvas de trabajo ≤2048 (el thumb 320 del dhash NO sirve para QR)
+    const cv = await canvasDeTrabajo(dataUrl);
+    fila.trabajoAnchoAlto = `${cv.width}×${cv.height}`;
+
+    // 3) Intentos A/B/C/C1.5 — registrar TODOS
+    fila.intentos = decodificar(cv);
+    const ganador = fila.intentos.find((i) => i.ok) ?? null;
+    if (ganador) {
+      fila.payload = ganador.payload;
+      fila.ganador = ganador.intento;
+    }
+
+    // 4) Rotaciones (toggle, primeros N≤6 archivos — LITERAL del kit §1.4:
+    //    «repetir el MEJOR intento con el canvas rotado 90/180/270»).
+    //    «Mejor intento» = el GANADOR del base (si A ganó, se repite A sobre
+    //    el rotado — el QR CAMBIA de esquina al rotar: una banda fija top-left
+    //    dejaría de contenerlo y la verificación sería falsa). Si NINGUNO
+    //    ganó, se repite C1.5 (la más fina) con floor A (imagen completa —
+    //    jsQR maneja orientación nativa: esto lo VERIFICA, no lo asume).
+    if (conRotaciones && idx < ROTACION_MAX_ARCHIVOS) {
+      const espGanadora = ganador ? INTENTOS.find((e) => e.id === ganador.intento) : null;
+      const espMejor = espGanadora ?? INTENTOS[INTENTOS.length - 1];
+      for (const grados of ROTACIONES) {
+        const rot = canvasRotado(cv, grados);
+        let r = intentoDecode(rot, espMejor);
+        if (!r.ok && espMejor.id !== "A") {
+          r = intentoDecode(rot, INTENTOS[0]); // floor: imagen completa rotada
+        }
+        fila.rotaciones.push({
+          grados,
+          ...r,
+          payloadIgualBase: r.payload != null && fila.payload != null ? r.payload === fila.payload : null,
+        });
+        if (r.ok && !fila.payload) {
+          fila.payload = r.payload;
+          fila.ganador = `${r.intento}@${grados}°`;
+        }
+      }
+    }
+  } catch (e) {
+    fila.error = e && e.message ? e.message : String(e); // diagnóstico si falla (jsQR no da error tipado → «no decode»)
+  }
+  fila.msTotal = +(performance.now() - t0).toFixed(1);
+  const nIntentos = fila.intentos.map((i) => `${i.intento}=${i.ok ? "✓" : "✗"}${i.ok ? `(${i.ms}ms)` : ""}`).join(" ");
+  log(
+    `archivo ${idx + 1} ${fila.nombre}: ${fila.payload ? `payload OK vía ${fila.ganador}` : "NO decode"} · ${nIntentos || "sin intentos"} · core ${fila.msCore ?? "—"} ms · total ${fila.msTotal} ms`,
+    fila.payload ? "ok" : "warn",
+  );
+  return fila;
+}
+
+// ─── Grupos por payload EXACTO (kit §1.6 — el output del dinero) ─────────────
+// Sin umbrales de ningún tipo: agrupación = igualdad exacta de string.
+function agruparPorPayload(filasRes) {
+  const grupos = new Map(); // payload → fila[]
+  const sinPayload = [];
+  for (const f of filasRes) {
+    if (f.payload) {
+      if (!grupos.has(f.payload)) grupos.set(f.payload, []);
+      grupos.get(f.payload).push(f);
+    } else {
+      sinPayload.push(f);
+    }
+  }
+  // orden estable por tamaño desc (G1 = el grupo más grande)
+  return {
+    grupos: [...grupos.entries()].sort((a, b) => b[1].length - a[1].length),
+    sinPayload,
+  };
+}
+
+/** Detector de colisión (kit §1.7): 2+ archivos con STEM de escaneo DISTINTO
+ *  compartiendo payload = actas «claramente distintas» con el mismo QR →
+ *  NO-GO automático. Heurística honesta y documentada: para re-encodes con
+ *  nombres distintos (durazno/imagen) compartir payload es la TESIS GANANDO,
+ *  no colisión — el juicio final lo emite el dueño con el corpus de verdad. */
+function detectarColisiones(grupos) {
+  const colisiones = [];
+  for (const [payload, fs] of grupos) {
+    const stemsEscaneo = [...new Set(fs.filter((f) => f.fuente === "escaneo").map((f) => f.stem))];
+    if (stemsEscaneo.length >= 2) {
+      colisiones.push({ payload, stems: stemsEscaneo, archivos: fs.map((f) => f.nombre) });
+    }
+  }
+  return colisiones;
+}
+
+// ─── Render ──────────────────────────────────────────────────────────────────
+const trunc = (s, n = 22) => (s.length > n ? `${s.slice(0, n)}…` : s);
+
+function pintarFilas(filasRes) {
+  $("caja-filas").innerHTML = `
+    <table>
+      <tr><th>#</th><th>archivo</th><th>fuente</th><th>payload (exacto — tooltip completo)</th><th>ganador</th><th>intentos</th><th>core ms</th><th>total ms</th><th>trabajo</th><th>diagnóstico</th></tr>
+      ${filasRes.map((f, i) => `
+        <tr>
+          <td class="num">${i + 1}</td>
+          <td>${f.nombre}<br><span class="info">${f.tipo} · ${f.bytes} B</span></td>
+          <td>${f.fuente}</td>
+          <td>${f.payload ? `<code title="${f.payload.replace(/"/g, "&quot;")}">${trunc(f.payload)}</code>` : '<span class="mal">—</span>'}</td>
+          <td>${f.ganador ?? '<span class="mal">—</span>'}</td>
+          <td class="info">${f.intentos.map((it) => `${it.intento} ${it.ok ? "✓" : "✗"}`).join(" · ")}${f.rotaciones.length ? "<br>" + f.rotaciones.map((r) => `↻${r.grados}° ${r.ok ? "✓" : "✗"}`).join(" · ") : ""}</td>
+          <td class="num">${f.msCore ?? "—"}</td>
+          <td class="num">${f.msTotal ?? "—"}</td>
+          <td class="info">${f.trabajoAnchoAlto ?? "—"}</td>
+          <td>${f.error ? `<span class="mal">${f.error}</span>` : f.payload ? '<span class="ok">decode</span>' : '<span class="warn">no decode</span>'}</td>
+        </tr>`).join("")}
+    </table>`;
+}
+
+function pintarGrupos(grupos, sinPayload, colisiones) {
+  if (!grupos.length && !sinPayload.length) {
+    $("caja-grupos").innerHTML = '<p class="info">Sin corrida aún.</p>';
+    return;
+  }
+  const htmlGrupos = grupos.map(([payload, fs], i) => {
+    const colision = colisiones.find((c) => c.payload === payload);
+    return `
+      <div class="grupo">
+        <strong class="${colision ? "colision" : "ok"}">G${i + 1}${colision ? " — ⚠ COLISIÓN: stems de escaneo DISTINTOS con el MISMO payload → NO-GO automático" : ""}</strong>
+        ← ${fs.map((f) => f.nombre).join(", ")}
+        <br><code title="${payload.replace(/"/g, "&quot;")}">payload: ${trunc(payload, 48)}</code>
+      </div>`;
+  }).join("");
+  const htmlSin = sinPayload.length
+    ? `<div class="grupo"><strong class="warn">SIN PAYLOAD (${sinPayload.length})</strong> — caen al pipeline normal (aditivo, riesgo cero): ${sinPayload.map((f) => f.nombre).join(", ")}</div>`
+    : "";
+  $("caja-grupos").innerHTML = htmlGrupos + htmlSin;
+}
+
+function pintarResumen(filasRes, grupos, sinPayload, colisiones) {
+  const conPayload = filasRes.length - sinPayload.length;
+  const tasa = filasRes.length ? ((conPayload / filasRes.length) * 100).toFixed(0) : "0";
+  const porFuente = {};
+  for (const fuente of ["foto", "escaneo"]) {
+    const fs = filasRes.filter((f) => f.fuente === fuente);
+    if (!fs.length) continue;
+    const ok = fs.filter((f) => f.payload).length;
+    porFuente[fuente] = `${ok}/${fs.length} (${((ok / fs.length) * 100).toFixed(0)}%)`;
+  }
+  const colisionHtml = colisiones.length
+    ? `<p class="colision">⚠ COLISIONES DETECTADAS: ${colisiones.length} — NO-GO automático (kit §4). Revisar grupos en rojo.</p>`
+    : '<p class="ok">Sin colisiones: ningún payload compartido por stems de escaneo distintos.</p>';
+  $("caja-resumen").innerHTML = `
+    <p>Tasa de decode global: <strong>${conPayload}/${filasRes.length} (${tasa}%)</strong> — kit §4: ≥ ~70-80% es suficiente (los fallos caen al pipeline normal, aditivo riesgo cero).</p>
+    <p>Por fuente (heurística 171XXX=escaneo — informativa): ${Object.entries(porFuente).map(([k, v]) => `${k}: <strong>${v}</strong>`).join(" · ") || "—"}</p>
+    <p>Grupos formados: <strong>${grupos.length}</strong> (igualdad EXACTA de payload — sin umbrales) · archivos sin payload: ${sinPayload.length}</p>
+    ${colisionHtml}`;
+}
+
+// ─── Corrida completa ────────────────────────────────────────────────────────
+async function procesar() {
+  if (corriendo || !archivosCargados.length) return;
+  corriendo = true;
+  $("btn-procesar").disabled = true;
+  $("btn-json").disabled = true;
+  $("btn-md").disabled = true;
+  filas = [];
+  $("caja-filas").innerHTML = '<p class="info">Corriendo…</p>';
+  $("caja-grupos").innerHTML = '<p class="info">Corriendo…</p>';
+  $("caja-resumen").innerHTML = '<p class="info">Corriendo…</p>';
+  const conRotaciones = $("chk-rotaciones").checked;
+  log(`Corrida: ${archivosCargados.length} archivos · canvas trabajo lado largo ≤ ${LADO_LARGO_TRABAJO} · rotaciones ${conRotaciones ? "ON (primeros " + ROTACION_MAX_ARCHIVOS + ")" : "OFF"} · jsQR ${self.jsQR?.VERSION ?? "1.4.0"} vendido`);
+  try {
+    for (let i = 0; i < archivosCargados.length; i++) {
+      setEstado(`Procesando ${i + 1}/${archivosCargados.length}: ${archivosCargados[i].name}…`);
+      filas.push(await procesarArchivo(archivosCargados[i], i, conRotaciones));
+      pintarFilas(filas);
+    }
+    const { grupos, sinPayload } = agruparPorPayload(filas);
+    const colisiones = detectarColisiones(grupos);
+    pintarGrupos(grupos, sinPayload, colisiones);
+    pintarResumen(filas, grupos, sinPayload, colisiones);
+
+    ultimoJson = {
+      kit: "banco-qr-identidad-v1 — SOLO EVIDENCIA, CERO PRODUCCIÓN (decisión e63m con estos números)",
+      fecha: new Date().toISOString(),
+      hardware: {
+        userAgent: navigator.userAgent,
+        hardwareConcurrency: navigator.hardwareConcurrency ?? null,
+        deviceMemory: navigator.deviceMemory ?? null,
+      },
+      config: {
+        ladoLargoTrabajo: LADO_LARGO_TRABAJO,
+        intentos: INTENTOS.map((e) => e.id),
+        inversionAttempts: "attemptBoth",
+        rotaciones: conRotaciones ? ROTACIONES : [],
+        rotacionMaxArchivos: ROTACION_MAX_ARCHIVOS,
+        jsQR: "1.4.0 vendido (npm tarball dist/jsQR.js)",
+      },
+      filas,
+      grupos: grupos.map(([payload, fs], i) => ({
+        grupo: `G${i + 1}`,
+        payload,
+        archivos: fs.map((f) => f.nombre),
+        colision: colisiones.some((c) => c.payload === payload),
+      })),
+      sinPayload: sinPayload.map((f) => f.nombre),
+      resumen: {
+        archivos: filas.length,
+        conPayload: filas.length - sinPayload.length,
+        tasaDecode: filas.length ? +( ((filas.length - sinPayload.length) / filas.length) * 100 ).toFixed(1) : 0,
+        nGrupos: grupos.length,
+        colisiones,
+        notaColision: "Colisión = 2+ stems de escaneo (171XXX) DISTINTOS con el MISMO payload → NO-GO automático. Re-encodes con nombres distintos compartiendo payload es la tesis GANANDO, no colisión.",
+      },
+    };
+    window.__bancoQrJson = ultimoJson;
+    $("btn-json").disabled = false;
+    $("btn-md").disabled = false;
+    const tasaTxt = ultimoJson.resumen.tasaDecode;
+    setEstado(
+      `Listo: ${filas.length - sinPayload.length}/${filas.length} decodificaron (${tasaTxt}%) · ${grupos.length} grupos por payload exacto · colisiones: ${colisiones.length ? `⚠ ${colisiones.length} — NO-GO` : "0"}`,
+      colisiones.length ? "mal" : "ok",
+    );
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    setEstado(`ERROR: ${msg}`, "mal");
+    log(`ERROR: ${msg}`, "mal");
+    console.error(e);
+  } finally {
+    corriendo = false;
+    $("btn-procesar").disabled = false;
+  }
+}
+
+// ─── Carga de archivos (misma handler para input y hook de QA) ───────────────
+function cargarArchivos(fileList) {
+  for (const f of fileList) {
+    if (!archivosCargados.some((a) => a.name === f.name && a.size === f.size)) {
+      archivosCargados.push(f);
+    }
+  }
+  $("meta").textContent = `${archivosCargados.length} archivos cargados`;
+  $("btn-procesar").disabled = archivosCargados.length === 0;
+  log(`${archivosCargados.length} archivos en corpus (dedup por nombre+tamaño)`);
+}
+
+$("btn-fotos").addEventListener("click", () => $("input-fotos").click());
+$("input-fotos").addEventListener("change", (ev) => cargarArchivos([...ev.target.files]));
+$("btn-procesar").addEventListener("click", () => void procesar());
+
+/** Hook de QA/dev (SOLO banco): inyecta File[] por consola/automatización —
+ *  MISMA vía que el input (cargarArchivos → procesar). 0 uso en producción. */
+window.__bancoQrCargarArchivos = (files) => { cargarArchivos(files); };
+/** Hook de QA/dev (SOLO banco): genera el MISMO string MD que descarga el
+ *  botón (generarMd sobre el último resultado) — verificación del export. */
+window.__bancoQrGenerarMd = () => (ultimoJson ? generarMd(ultimoJson) : null);
+
+// ─── Export JSON + MD (kit §1.8 — patrón bench-dedup-tolerancia) ─────────────
+function generarMd(j) {
+  const filasMd = j.filas.map((f, i) =>
+    `| ${i + 1} | ${f.nombre} | ${f.fuente} | ${f.payload ? `\`${trunc(f.payload, 32)}\`` : "—"} | ${f.ganador ?? "—"} | ${f.msCore ?? "—"} | ${f.msTotal ?? "—"} | ${f.error ?? (f.payload ? "decode" : "no decode")} |`).join("\n");
+  const gruposMd = j.grupos.map((g) =>
+    `| ${g.grupo}${g.colision ? " ⚠ COLISIÓN" : ""} | ${g.archivos.join(", ")} | \`${trunc(g.payload, 48)}\` |`).join("\n");
+  return `# Banco QR identidad — KIT banco-qr-identidad-v1 (SOLO EVIDENCIA, CERO PRODUCCIÓN)
+
+- Fecha: ${j.fecha}
+- Hardware: ${j.hardware.userAgent} · cores ${j.hardware.hardwareConcurrency} · mem ${j.hardware.deviceMemory ?? "?"} GB
+- Config: canvas trabajo ≤ ${j.config.ladoLargoTrabajo}px · intentos ${j.config.intentos.join("/")} · inversionAttempts=${j.config.inversionAttempts} · rotaciones ${j.config.rotaciones.length ? j.config.rotaciones.join("/") + "°" : "OFF"} · jsQR ${j.config.jsQR}
+
+## Resumen
+
+- Tasa de decode global: ${j.resumen.conPayload}/${j.resumen.archivos} (${j.resumen.tasaDecode}%)
+- Grupos por payload exacto: ${j.resumen.nGrupos} · sin payload: ${j.filas.length - j.resumen.conPayload}
+- Colisiones (stems de escaneo distintos con mismo payload): ${j.resumen.colisiones.length ? "⚠ SÍ — NO-GO automático" : "0"}
+
+## Grupos (el output del dinero)
+
+| grupo | archivos | payload |
+|---|---|---|
+${gruposMd}
+
+## Filas
+
+| # | archivo | fuente | payload | ganador | core ms | total ms | diagnóstico |
+|---|---|---|---|---|---|---|---|
+${filasMd}
+
+Criterios de GO del kit e63m (kit §4): re-encodes que al dhash dieron 8-33 agrupan con sus gemelas ✅ · tasa ≥ ~70-80% ✅ · colisión ❌ NO-GO · escaneos ~100% ✅ bonus.
+`;
+}
+
+$("btn-json").addEventListener("click", () => {
+  if (!ultimoJson) return;
+  const blob = new Blob([JSON.stringify(ultimoJson, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bench-qr-identidad-resultado.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("btn-md").addEventListener("click", () => {
+  if (!ultimoJson) return;
+  const blob = new Blob([generarMd(ultimoJson)], { type: "text/markdown" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bench-qr-identidad-resultado.md";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+</script>
+</body>
+</html>
