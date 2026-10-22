@@ -97,7 +97,6 @@ import {
   FolderImportIcon,
   SparklesIcon,
   StitchBoltIcon,
-  StitchFrameIcon,
   StitchGridIcon,
   StitchImportIcon,
   StitchShutterDocIcon,
