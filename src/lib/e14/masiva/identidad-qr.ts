@@ -14,7 +14,36 @@
  * invariante / §2.2 re-chequeo) queda SUSTITUIDA por e63m. El dhash NO se
  * toca (HAMMING_MAX=6 byte-idéntico — dedup.ts intacto).
  *
- * RED LINES (kit §3):
+ * ─── KIT e64-qr-v1 · T-PRE — RECONSTRUCCIÓN DECLARADA ───────────────────
+ * El kit e64 y su doc hermano (INSTRUCCIONES-qr-diagnostico-y-rescate-v1,
+ * §1 «Mapa del sistema QR — arquitectura REAL verificada línea a línea»)
+ * presuponen el estado e63n (`9e45dc9`) que NUNCA llegó al remoto (main
+ * real f8ec6a9 = e63m; el commit no existe ni en ramas ni en PRs — API
+ * verificada). Esta superficie de e63n se reconstruye aquí con la ÚNICA
+ * fuente disponible (doc hermano §1) y queda declarada en
+ * docs/REPORTE-e64-qr-v1.md §desviaciones:
+ *   2. ladderBaseDePixeles     — A (100%) → B (top-left 45%×25%) →
+ *                                C (8-38%×5-20%) → C1.5 (C up-escalado ×1.5)
+ *   3. barridoQrDePixeles      — grilla de ventanas cuadradas por cuadrante
+ *                                [TL→TR→BL→BR] × BARRIDO_VENTANAS
+ *                                [0.11,0.14,0.19,0.25] × paso 0.5 — jsQR
+ *                                attemptBoth por ventana
+ *   4. barridoQrZxingDePixeles — misma grilla, zxing-wasm 3.1.6,
+ *                                binarizadores GlobalHistogram→LocalAverage,
+ *                                presupuesto 4 000 ms
+ *                                (ZXING_BARRIDO_PRESUPUESTO_MS), wasm
+ *                                servido LOCAL desde public/wasm/
+ *                                zxing_reader.wasm vía
+ *                                setZXingModuleOverrides({ locateFile })
+ *                                con base `${NEXT_PUBLIC_BASE_PATH}/wasm/`
+ *   5. tier ROTACIÓN           — A rotada 90°→180°→270° (última)
+ *   → early-exit al primer payload · JAMÁS throw · trazaQr
+ *     `[e14] qr-capa0 tier=base|barrido|zxing|rotacion90|…|null ms=…`
+ * Los contratos e63m quedan equivalentes: ladderQrDePixeles (base +
+ * rotación — el QA headless 48/48 lo ejercita), espera APLAZADA acotada,
+ * qrCorto, vendor jsQR byte-idéntico.
+ *
+ * RED LINES (kit e63m §3 + e64 §7):
  * · 5 — Dedup jamás inventa: la llave es la IGUALDAD EXACTA de payload
  *   (sin umbrales, sin fuzzy, sin prefijos). Fallback sagrado:
  *   reutilizarResultado→false→pipeline completo. PROCESAR IGUAL manda.
@@ -23,16 +52,16 @@
  *   estructural del banco, jamás lógica de decisión).
  * · 9 — jsQR 1.4.0 VENDIDO byte-idéntico al de #72 (vendor/jsQR.js);
  *   BarcodeDetector nativo PROHIBIDO (determinismo entre máquinas).
- *
- * Núcleo PURO (ladderQrDePixeles / rotación / espera — testeable headless
- * por scripts/qa-qr-identidad.ts, mismo patrón que tope.ts/identidad.ts) +
- * wrapper DOM (decodificarQrDeCapture — la vía del banco: render a canvas
- * de trabajo lado largo ≤ 2048 y UN getImageData).
+ * · e64 §7-4 — La CAPA 0 jamás throw hacia el runner/pipeline: cualquier
+ *   falla = null = flujo normal.
+ * · e64 §7-6 — Sin timers globales: promesas acotadas + parámetros
+ *   inyectables (el presupuesto del barrido zxing es reló local).
  */
 import jsQR from "./vendor/jsQR.js";
+import type { Binarizer, ReaderOptions } from "zxing-wasm/reader";
 import type { EstadoEntrada } from "./tipos";
 
-// ─── Constantes NUEVAS del kit §1.1 (separadas de las existentes) ───────────
+// ─── Constantes NUEVAS del kit e63m §1.1 (separadas de las existentes) ──────
 /** Lado largo MÁXIMO del canvas de trabajo (kit §1.1 — igual que el banco:
  *  el thumb 320 del dhash es DEMASIADO PEQUEÑO para el QR). */
 export const QR_LADO_LARGO = 2048;
@@ -66,6 +95,26 @@ export const QR_ROTACIONES: readonly number[] = [90, 180, 270];
  *  del original; sin timers globales. */
 export const QR_ESPERA_INTERVALO_MS = 1_500;
 export const QR_ESPERA_INTENTOS = 10;
+
+// ─── e63n (T-PRE) — constantes del BARRIDO y del tier ZXING ────────────────
+/** Fracciones de ventana del barrido ceñido (doc hermano §1: grilla por
+ *  cuadrante × fracciones [0.11,0.14,0.19,0.25] — el QR de campo mide
+ *  ~5-8% del ancho y la ventana ganadora lo llena al 38-55%; T-1.3 del e64
+ *  extiende esta lista). Cada fracción es del ANCHO del canvas de trabajo. */
+export const BARRIDO_VENTANAS: readonly number[] = [0.11, 0.14, 0.19, 0.25];
+/** Presupuesto de reló del barrido zxing (doc hermano §1: 4 000 ms — el
+ *  barrido jsQR NO tiene reló: es puro y acotado por nº de ventanas). */
+export const ZXING_BARRIDO_PRESUPUESTO_MS = 4_000;
+/** Binarizadores del barrido zxing en orden (doc hermano §1:
+ *  GlobalHistogram→LocalAverage — el banco #77 midió GlobalHistogram ganando
+ *  en blur y LocalAverage en nítidas). */
+export const ZXING_BINARIZADORES: readonly Binarizer[] = [
+  "GlobalHistogram",
+  "LocalAverage",
+];
+/** El E-14 usa QR — restringir el simbolismo acelera cada ventana del
+ *  barrido (micro-decisión declarada: el formato es dato del dominio). */
+export const ZXING_FORMATO = "QRCode" as const;
 
 /** Fuente de píxeles RGBA — la MISMA forma que devuelve getImageData
  *  (canal a canal, 4 bytes por píxel, fila por fila). */
@@ -167,20 +216,287 @@ function rotarPixeles(src: PixelesQr, grados: number): PixelesQr {
 }
 
 /**
- * Ladder COMPLETO sobre píxeles (kit §1.1): base A→B→C→C1.5 con early-exit
- * al primer payload; tier de rotación SOLO si el base falla (A@90→A@180→
- * A@270, early-exit ídem). null si nada decodifica (fallback limpio).
- * Puro — el QA lo ejercita con matrices QR reales headless.
+ * Ladder BASE sobre píxeles (T-PRE — refactor del bucle del kit §1.1):
+ * A imagen completa → B banda top-left → C banda ajustada → C1.5
+ * up-escalado, early-exit al primer payload. El tier de ROTACIÓN NO está
+ * aquí (quedó en ladderQrDePixeles — e63m/QA intacto — y en la cadena
+ * completa decodificarQrDePixeles como ÚLTIMO tier, doc hermano §1).
+ * Puro — testeable headless.
  */
-export function ladderQrDePixeles(pix: PixelesQr): string | null {
+export function ladderBaseDePixeles(pix: PixelesQr): string | null {
   for (const esp of BANDAS_BASE) {
     const payload = intentoSobrePixeles(pix, esp);
     if (payload != null) return payload; // early-exit al primer payload
   }
+  return null;
+}
+
+/**
+ * Ladder COMPLETO e63m sobre píxeles (kit §1.1): base A→B→C→C1.5 con
+ * early-exit al primer payload; tier de rotación SOLO si el base falla
+ * (A@90→A@180→A@270, early-exit ídem). null si nada decodifica. Puro —
+ * el QA headless lo ejercita con matrices QR reales (contrato e63m
+ * byte-equivalente: mismo conjunto de intentos en el mismo orden).
+ */
+export function ladderQrDePixeles(pix: PixelesQr): string | null {
+  const base = ladderBaseDePixeles(pix);
+  if (base != null) return base;
   for (const grados of QR_ROTACIONES) {
     const payload = intentoSobrePixeles(rotarPixeles(pix, grados), BANDA_A);
     if (payload != null) return payload;
   }
+  return null;
+}
+
+// ─── e63n (T-PRE) — BARRIDO CEÑIDO (grilla de ventanas por cuadrante) ──────
+/** Cuadrantes del barrido EN ORDEN (doc hermano §1: TL→TR→BL→BR). La
+ *  frontera cae en floor(lado/2) — las ventanas NUNCA cruzan cuadrantes. */
+interface Cuadrante {
+  id: string;
+  x0: number; // fracción del ancho donde empieza
+  y0: number; // fracción del alto donde empieza
+  x1: number; // fracción del ancho donde termina
+  y1: number; // fracción del alto donde termina
+}
+const CUADRANTES: Cuadrante[] = [
+  { id: "TL", x0: 0, y0: 0, x1: 0.5, y1: 0.5 },
+  { id: "TR", x0: 0.5, y0: 0, x1: 1, y1: 0.5 },
+  { id: "BL", x0: 0, y0: 0.5, x1: 0.5, y1: 1 },
+  { id: "BR", x0: 0.5, y0: 0.5, x1: 1, y1: 1 },
+];
+
+/** Límites EN PÍXELES de un cuadrante (frontera en floor — micro-decisión
+ *  declarada: sin solapes entre cuadrantes, coberturas exactas). */
+function limitesDeCuadrante(
+  pix: PixelesQr,
+  q: Cuadrante,
+): { x0: number; y0: number; x1: number; y1: number } {
+  return {
+    x0: Math.round(pix.width * q.x0),
+    y0: Math.round(pix.height * q.y0),
+    x1: Math.round(pix.width * q.x1),
+    y1: Math.round(pix.height * q.y1),
+  };
+}
+
+/** Ventana cuadrada CLAMPADA a la imagen (T-PRE — la usa el barrido y el
+ *  filo del cuadrante de T-1.0): clampea origen y lado, JAMÁS inventa
+ *  píxeles (copia fila a fila del buffer fuente). null si el lado pedido
+ *  excede la imagen (nada que decodificar ahí). */
+export function ventanaDePixeles(
+  pix: PixelesQr,
+  x: number,
+  y: number,
+  lado: number,
+): PixelesQr | null {
+  const ladoX = Math.min(lado, pix.width);
+  const ladoY = Math.min(lado, pix.height);
+  if (ladoX < 1 || ladoY < 1) return null;
+  const x0 = Math.min(Math.max(0, Math.round(x)), pix.width - ladoX);
+  const y0 = Math.min(Math.max(0, Math.round(y)), pix.height - ladoY);
+  const data = new Uint8ClampedArray(ladoX * ladoY * 4);
+  for (let yy = 0; yy < ladoY; yy++) {
+    const si = ((y0 + yy) * pix.width + x0) * 4;
+    data.set(
+      pix.data.subarray(si, si + ladoX * 4),
+      yy * ladoX * 4,
+    );
+  }
+  return { data, width: ladoX, height: ladoY };
+}
+
+/** UN intento jsQR sobre UNA ventana (attemptBoth — la inversión la cubre
+ *  aquí, no en el tier zxing). Jamás throw (red line e64 §7-4). */
+export function jsQrDeVentana(win: PixelesQr): string | null {
+  try {
+    const res = jsQR(win.data, win.width, win.height, {
+      inversionAttempts: "attemptBoth",
+    });
+    return res ? res.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Lado EN PÍXELES de la ventana de UNA fracción (micro-decisión declarada:
+ *  fracción del ANCHO — el doc hermano H-6 mide el QR «~5-8% del ancho» y
+ *  calibra las fracciones contra esa magnitud). */
+function ladoDeVentana(pix: PixelesQr, fraccion: number): number {
+  return Math.max(16, Math.round(pix.width * fraccion));
+}
+
+/**
+ * BARRIDO CEÑIDO jsQR (doc hermano §1.3): grilla de ventanas cuadradas por
+ * cuadrante [TL→TR→BL→BR] × BARRIDO_VENTANAS × paso 0.5 (solape de media
+ * ventana — micro-decisión declarada), jsQR attemptBoth por ventana,
+ * early-exit al primer payload. Puro, sin reló (acotado por nº de
+ * ventanas — el reló de 4 s es del tier zxing). PENDING CONOCIDO de e63n
+ * que T-1.0 del e64 corrige: la condición `+ lado <=` deja una franja
+ * descubierta de hasta `paso` px en el filo derecho/inferior de CADA
+ * cuadrante (doc hermano H-5).
+ */
+export function barridoQrDePixeles(pix: PixelesQr): string | null {
+  for (const q of CUADRANTES) {
+    const lim = limitesDeCuadrante(pix, q);
+    for (const fraccion of BARRIDO_VENTANAS) {
+      const lado = ladoDeVentana(pix, fraccion);
+      const paso = Math.max(1, Math.round(lado * 0.5));
+      for (let y = lim.y0; y + lado <= lim.y1; y += paso) {
+        for (let x = lim.x0; x + lado <= lim.x1; x += paso) {
+          const win = ventanaDePixeles(pix, x, y, lado);
+          if (!win) continue;
+          const payload = jsQrDeVentana(win);
+          if (payload != null) return payload;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ─── e63n (T-PRE) — tier ZXING (zxing-wasm 3.1.6, wasm LOCAL) ──────────────
+/** Módulo zxing-wasm/reader cacheado — undefined = aún no intentado ·
+ *  null = la carga falló (degrada a solo-jsQR) · módulo = listo. */
+type ModZxing = typeof import("zxing-wasm/reader");
+let modZxing: ModZxing | null | undefined;
+
+/**
+ * Carga DIFERIDA del módulo zxing (doc hermano §1: `import("zxing-wasm/
+ * reader")` + wasm servido LOCAL desde public/wasm/ vía
+ * setZXingModuleOverrides({ locateFile }) con base
+ * `${NEXT_PUBLIC_BASE_PATH ?? ""}/wasm/`). Una sola tentativa por sesión
+ * (caché); falla → null SIN traza en T-PRE (la traza de indisponibilidad
+ * es el T-0.1 del e64). Jamás throw.
+ */
+async function moduloZxingDe(): Promise<ModZxing | null> {
+  if (modZxing !== undefined) return modZxing;
+  try {
+    const mod = await import("zxing-wasm/reader");
+    mod.setZXingModuleOverrides({
+      locateFile: (archivo: string) =>
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/wasm/${archivo}`,
+    });
+    modZxing = mod;
+  } catch {
+    modZxing = null; // (T-0.1 añade aquí la traza de indisponibilidad)
+  }
+  return modZxing;
+}
+
+/** Opciones del barrido por ventana (micro-decisión declarada: el barrido
+ *  lanza ~700-2300 ventanas — cada una debe ser BARATA; la rotación y la
+ *  inversión ya las cubren el tier rotación y jsQR attemptBoth). */
+const OPCIONES_ZXING_VENTANA = (
+  binarizador: Binarizer,
+): ReaderOptions => ({
+  formats: [ZXING_FORMATO],
+  binarizer: binarizador,
+  tryHarder: false,
+  tryRotate: false,
+  tryInvert: false,
+  tryDownscale: false,
+});
+
+/** UN intento zxing sobre UNA ventana con UN binarizador. null si el
+ *  módulo no está, si no hay ImageData (entorno headless — degrada
+ *  honesto) o si nada lee. Jamás throw. */
+async function zxingDeVentana(
+  win: PixelesQr,
+  binarizador: Binarizer,
+): Promise<string | null> {
+  try {
+    const mod = await moduloZxingDe();
+    if (!mod || typeof ImageData === "undefined") return null;
+    const img = new ImageData(win.width, win.height);
+    img.data.set(win.data); // copia por ventana — despreciable vs el decode
+    const resultados = await mod.readBarcodesFromImageData(
+      img,
+      OPCIONES_ZXING_VENTANA(binarizador),
+    );
+    return resultados[0]?.text ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * BARRIDO CEÑIDO zxing (doc hermano §1.4): la MISMA grilla del barrido
+ * jsQR con los binarizadores GlobalHistogram→LocalAverage por ventana y
+ * presupuesto de reló 4 000 ms (ZXING_BARRIDO_PRESUPUESTO_MS — chequeo
+ * `performance.now() > limite` por ventana; al vencer devuelve null SIN
+ * exhaustar). Módulo indisponible → null inmediato (solo-jsQR).
+ */
+export async function barridoQrZxingDePixeles(
+  pix: PixelesQr,
+): Promise<string | null> {
+  const mod = await moduloZxingDe();
+  if (!mod || typeof ImageData === "undefined") return null;
+  const limite = performance.now() + ZXING_BARRIDO_PRESUPUESTO_MS;
+  for (const q of CUADRANTES) {
+    const lim = limitesDeCuadrante(pix, q);
+    for (const fraccion of BARRIDO_VENTANAS) {
+      const lado = ladoDeVentana(pix, fraccion);
+      const paso = Math.max(1, Math.round(lado * 0.5));
+      for (let y = lim.y0; y + lado <= lim.y1; y += paso) {
+        for (let x = lim.x0; x + lado <= lim.x1; x += paso) {
+          if (performance.now() > limite) return null; // presupuesto vencido
+          const win = ventanaDePixeles(pix, x, y, lado);
+          if (!win) continue;
+          for (const binarizador of ZXING_BINARIZADORES) {
+            const payload = await zxingDeVentana(win, binarizador);
+            if (payload != null) return payload;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ─── Trazas (doc hermano §1 — «Trazas existentes») ──────────────────────────
+/** Traza EXACTA del formato e63n: `[e14] qr-capa0 tier=<tier> ms=<ms>
+ *  payload=<8 chars…>`. Solo-observabilidad: jamás decide nada. */
+function trazaQr(tier: string, payload: string, t0: number): void {
+  console.info(
+    `[e14] qr-capa0 tier=${tier} ms=${Date.now() - t0} payload=${qrCorto(payload)}`,
+  );
+}
+
+/**
+ * CADENA COMPLETA de decode sobre píxeles (doc hermano §1 — el orden REAL
+ * de e63n): ladderBase → barrido jsQR → barrido zxing → tier rotación,
+ * early-exit al primer payload, `null` si nada decodifica. Async SOLO por
+ * el tier zxing (wasm). La traza `tier=` sale por cada desenlace (también
+ * null — T-0.3 del e64 la usa para verificar la versión desplegada).
+ * JAMÁS throw (todas las sub-llamadas ya son a prueba de throw).
+ */
+export async function decodificarQrDePixeles(
+  pix: PixelesQr,
+): Promise<string | null> {
+  const t0 = Date.now();
+  const base = ladderBaseDePixeles(pix);
+  if (base != null) {
+    trazaQr("base", base, t0);
+    return base;
+  }
+  const barrido = barridoQrDePixeles(pix);
+  if (barrido != null) {
+    trazaQr("barrido", barrido, t0);
+    return barrido;
+  }
+  const zxing = await barridoQrZxingDePixeles(pix);
+  if (zxing != null) {
+    trazaQr("zxing", zxing, t0);
+    return zxing;
+  }
+  for (const grados of QR_ROTACIONES) {
+    const payload = intentoSobrePixeles(rotarPixeles(pix, grados), BANDA_A);
+    if (payload != null) {
+      trazaQr(`rotacion${grados}`, payload, t0);
+      return payload;
+    }
+  }
+  console.info(`[e14] qr-capa0 tier=null ms=${Date.now() - t0}`);
   return null;
 }
 
@@ -209,8 +525,8 @@ async function pixelesDeCapture(dataUrl: string): Promise<PixelesQr | null> {
 
 /**
  * API del kit §1.1 — decodificar el QR de UN capture (dataURL de la vía
- * fileToCaptureDataUrl): canvas de trabajo ≤2048 → ladder A/B/C/C1.5 →
- * tier rotación A@90/180/270. Devuelve {payload} o null si nada decodifica.
+ * fileToCaptureDataUrl): canvas de trabajo ≤2048 → CADENA COMPLETA e63n
+ * (decodificarQrDePixeles). Devuelve {payload} o null si nada decodifica.
  * JAMÁS throw hacia el runner (kit §1.1 — cualquier falla = sin-payload =
  * pipeline normal intacto).
  */
@@ -220,14 +536,14 @@ export async function decodificarQrDeCapture(
   try {
     const pix = await pixelesDeCapture(dataUrl);
     if (!pix) return null;
-    const payload = ladderQrDePixeles(pix);
+    const payload = await decodificarQrDePixeles(pix);
     return payload != null ? { payload } : null;
   } catch {
     return null; // fallback limpio — la capa 0 jamás tumba el pipeline
   }
 }
 
-// ─── Espera acotada del caso «original en vuelo» (kit §1.2.4) ───────────────
+// ─── Espera acotada del caso «original en vuelo» (kit e63m §1.2.4) ──────────
 /**
  * Espera APLAZADA: re-chequeo SOLO-LECTURA del estado del original cada
  * QR_ESPERA_INTERVALO_MS hasta QR_ESPERA_INTENTOS (techo efectivo 15 s —
