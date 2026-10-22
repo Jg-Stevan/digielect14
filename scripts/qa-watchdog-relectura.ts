@@ -66,9 +66,11 @@ ok(
   "rechaza a tiempo → {vencido:false, error} con el error EXACTO (dato, no excepción)",
 );
 
-// 1c — vencido (trabajo lento, tope corto)
-const r3 = await conTope(espera(80).then(() => "tarde"), 15);
-ok(r3.vencido === true, "trabajo lento + tope corto → {vencido:true}");
+// 1c — vencido (kit §5.1 LITERAL: promesa que NUNCA resuelve — jamás se
+// asienta; el tope corto gana la carrera y el trabajo abandonado queda
+// pendiente para siempre SIN retener el proceso: promesa sin handles)
+const r3 = await conTope(new Promise<string>(() => {}), 15);
+ok(r3.vencido === true, "promesa que NUNCA resuelve + tope corto → {vencido:true}");
 
 // 1d — conTope en sí jamás rechaza (await directo sobre promesa que rechaza)
 let lanzo = false;
