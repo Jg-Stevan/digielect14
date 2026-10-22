@@ -2124,3 +2124,11 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 - **Compat §2.1:** registros viejos (base64) pasan tal cual al leer y se compactan en su próximo write — sin migración en caliente. ZIP: ESTADOS_CARPETA jamás exportó ENVIADA/DUPLICADA — cero impacto. P2/P3: cero toques en estado/dedup (solo la foto cambia de forma).
 - **Gates:** tsc 0 · lint 0 · 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · package.json/bun.lock INTACTOS.
 - **Estado final e68:** 2 commits en feat/e68-blob-idb-v1 → PR → main. Detalle: docs/REPORTE-e68-blob-idb.md. Pendiente del dueño: medición antes/después del MISMO lote de 7 (precalorMs ≤3 s · decodeMs ≤1.5 s · totalMs monótonamente mejor que 37.5 s · almacenamientoMB ~40 % menos) + regresión visual de duplicadas.
+
+## e69-blob-jornada-v1 (P5B) — 2026-10-22
+
+- Base main @ c957faf (e68, PR #84) — EXACTA contra el remoto.
+- Recon (M-e69-0): `src/lib/e14/jornada.ts` ARCHIVO único — guardarActaEnRevision/leerActaEnRevision (slot «en-revision»); el write lo dispara el suscriptor zustand (store L1446-1455, identidad de referencia, guards SIMULACIÓN/masivaOrigen); ningún qa-*.ts escanea jornada.ts.
+- Implementación: envoltorio SlotActa {acta sin dataURLs, fotoOriginalBlob?, fotoProcesadaBlob?} — compactarActa en TODO put (dataUrlABlob, fallo → string se queda; cleanup ENVIADA/DUPLICADA → fotoOriginal fuera blob Y string M-e69-1) + materializarActa en TODO get (FileReader determinista; contrato Acta en RAM intacto); esSlotActa detecta el formato pre-e69 (Acta crudo con Strings) → passthrough + compactación en su próximo write (auto-migración al restaurar el arranque). Log [e14] memoria acta (bytes reales + originalLiberada). cola.ts BYTE A BYTE (helpers duplicados M-e69-2); P4/P6/watchdog intactos; null del slot byte a byte.
+- Gates: tsc 0 · lint 0 · 7/7 suites SIN adendas (49·42·68·33·24·32·34) · package.json/bun.lock INTACTOS.
+- Pendiente del dueño: verificar en IDB que fotoOriginal es Blob tras 1 importación individual; log [e14] memoria acta con bytes reales; almacenamientoMB antes/después (~40 % esperado); restauración de REVISIÓN tras recarga con acta a mitad.
