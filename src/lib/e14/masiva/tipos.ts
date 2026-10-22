@@ -205,6 +205,20 @@ export interface RegistroMasiva {
   /** e65-dedup-enviadas-v1: id del registro enviado matcheado (SOLO-VISUAL).
    *  Ausente = la fila no nació YA-ENVIADA (o PROCESAR IGUAL la limpió). */
   enviadaDe?: string;
+  // ---------- e68-blob-idb-v1 — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** e68 — MIGRACIÓN base64 → Blob: la foto ORIGINAL del acta (master
+   *  decodificado a escala de trabajo) duerme aquí como Blob NATIVO — el
+   *  structured clone la serializa SIN la inflación del 33 % del base64 y
+   *  la deserialización es transparente. El acta persistida viaja SIN las
+   *  dataURLs (leerRegistro las MATERIALIZA al vuelo para REVISIÓN/
+   *  recorte — mismo contrato Acta en RAM). Ausente = registro previo a
+   *  e68 con base64 dentro del acta (compatibilidad: el próximo write la
+   *  comparte) o fotoOriginal liberada post-envío (cleanup e68). */
+  fotoOriginalBlob?: Blob;
+  /** e68 — ídem: la foto PROCESADA (warp+realce) como Blob. Se CONSERVA
+   *  tras el envío (la REVISIÓN y el recorte manual la usan — kit e68 §3:
+   *  «No borrar fotoProcesada»). */
+  fotoProcesadaBlob?: Blob;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del
