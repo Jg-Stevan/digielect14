@@ -570,7 +570,6 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     // KIT e14-masiva-tiempos-v1 (PR-2): la instancia del File de SIEMPRE —
     // base de origen/pre-proceso (D63-A/B corren sobre el ORIGINAL: EXIF y
     // márgenes viven ahí; el master es un re-encode sin EXIF).
-    const archivoPipeline = archivo;
 
     // D57 — KIT e14-instrumentos-espera-v1 (T1): espera en cola → inicio del
     // pipeline. tInicio capturado antes del PRIMER intento (kit §4-T1):
