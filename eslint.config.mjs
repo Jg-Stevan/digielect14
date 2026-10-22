@@ -32,7 +32,7 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "@next/next/no-html-link-for-pages": "off",
 
     // General JavaScript rules
-    "prefer-const": "off",
+    "prefer-const": "warn",
     "no-unused-vars": "off",
     "no-console": "off",
     "no-debugger": "error",
