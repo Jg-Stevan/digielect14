@@ -40,9 +40,11 @@
 
 ### 2.1 Tanda 2 — `@typescript-eslint/no-unused-vars` (11 → 3 deliberados, Fase 3A.1)
 
-Aplicada 2026-10-23 con la revisión del dueño: bucket A eliminado (`2c011a2`),
-bucket C silenciado con marcador ejecutable (`4bd897e`), bucket B y `posCola`
-quedan VISIBLES a propósito — son el recordatorio vivo de §2.2, no ruido.
+Aplicada 2026-10-23 con la revisión del dueño: bucket A eliminado (`2c011a2`;
+1 de las 5 — `archivoPipeline` — RESTAURADA en `3da7b21` al descubrir que era
+ancla del QA e63m, ver fila 7), bucket C silenciado con marcador ejecutable
+(`4bd897e`), bucket B y `posCola` quedan VISIBLES a propósito — son el
+recordatorio vivo de §2.2, no ruido.
 
 | # | Archivo:Línea | Símbolo sin usar | Desenlace |
 |---|---|---|---|
@@ -52,7 +54,7 @@ quedan VISIBLES a propósito — son el recordatorio vivo de §2.2, no ruido.
 | 4 | `src/components/e14/screens/MasivaView.tsx:633` | `posCola` | 🟡 VISIBLE — Escenario B D65 (§2.2-B2) |
 | 5 | `src/components/e14/screens/ScanView.tsx:100` | `StitchFrameIcon` (import) | ✅ ELIMINADO (bucket A) |
 | 6 | `src/components/e14/screens/ScanView.tsx:719` | `modoMenuMontado` | 🟡 VISIBLE — sospecha Fase 4 (§2.2-B1; hoy en L718 tras quitar el import) |
-| 7 | `src/lib/e14/masiva/runner.ts:573` | `archivoPipeline` | ✅ ELIMINADO (bucket A) |
+| 7 | `src/lib/e14/masiva/runner.ts:573` | `archivoPipeline` | 🔄 RESTAURADO (`3da7b21`) — NO era muerto: **ancla del QA e63m** (`qa-qr-identidad.ts:353` grepea la línea exacta para «bloque capa 0 ANCLA»; QA dio 1 FAIL sin ella). Hoy con directiva documentando el consumidor |
 | 8 | `src/lib/e14/ocr/rapidocr.ts:844` | `t0` | ✅ ELIMINADO (bucket A) |
 | 9-11 | `src/lib/e14/scanner-core-bridge.ts:723-725` | `ultimoOcrConf/Det/Rec` | 🔇 SILENCIADO con `TODO(fase-4)` (bucket C — traza §4.2 PROD-2; directivas hoy en L723/725/727) |
 
@@ -124,6 +126,7 @@ quedan VISIBLES a propósito — son el recordatorio vivo de §2.2, no ruido.
 
 - `knip ≥5.45` crashea en este entorno (`oxc-parser` → `RangeError: ArrayBuffer allocation failed`); se instaló **`knip@5.44.1`** fijado, que usa el parser TypeScript clásico y funciona. Recomendación: mantener el pin hasta que el issue de oxc-parser lo permita.
 - `react-hooks/exhaustive-deps` se ejecutó **vía CLI** (`bunx eslint src --rule '...'`) sin modificar `eslint.config.mjs` — 3 warnings reales. → Actualización 3A: la regla quedó activa **scoped a `ScanView.tsx`** (bloque `files:` en `eslint.config.mjs`, `acb839b`) con las 3 directivas justificadas en uso; sustituye el `reportUnusedDisableDirectives: off` temporal (`7de9fd7`) para conservar la higiene de directivas. Activación global: Fase 4.
+- **Lección 3A.1 (nueva)**: los QA de `scripts/qa-*.ts` validan por **grep de fuente con anclas por símbolo** — p. ej. `qa-qr-identidad.ts:353` hace `indexOf("const archivoPipeline = archivo;")` y `qa-dedup-enviadas.ts:257` grepea el filtro de `colaVida` dentro del fuente de MasivaView. Un símbolo sin usos TS puede tener consumidores en los harness: antes de borrar «muertos» en `runner/`/`masiva`, grep en `scripts/` y **correr los QA** (`bun scripts/qa-<x>.ts`) — tsc/lint/build NO detectan estas rupturas (el FAIL saltó en la corrida del QA, no en los 3 gates).
 - Imports circulares detectados con `bunx madge --circular --extensions ts,tsx` (61 archivos, 5 ciclos reportados; 2 son benignos: 1 type-only, 1 dynamic-import).
 - Durante la revisión se sospechó de un posible error de sintaxis en `ScanView.tsx:718-719` (destructuring incompleto); **descartado con hexdump (`od -c`)**: las líneas están correctas — era artefacto de renderizado de la terminal del auditor, no del repo.
 - Ningún archivo de `src/` fue modificado. Los únicos cambios en el working tree son `package.json` + `bun.lock` (knip devDependency, autorizado) y este `AUDIT.md`.
