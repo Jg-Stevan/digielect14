@@ -434,3 +434,11 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] §3 — cleanup de desenlace: ENVIADA/DUPLICADA → fotoOriginal FUERA (blob Y string — M-e69-1); fotoProcesada SE CONSERVA (REVISIÓN muestra la enviada). cola.ts byte a byte (helpers duplicados — M-e69-2).
 - [x] §4 — log `[e14] memoria acta` (bytes reales Blob.size + originalLiberada); `almacenamientoMB` del informe e68 ya es origin-wide — intacto.
 - [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
+
+## P4.1 — ORIENTACIÓN CONDICIONAL — e70-orientacion-condicional-v1 (2026-10-22): el EXIF ya no omite el sondeo por sí solo
+
+- [x] M-e70-0 — recon: no hay pasada de OCR previa al probe → la «primera pasada de OCR rápido» del criterio ES el baseline 0° del propio probe (anclas0/conf0 — los valores del dueño «anclas: 0, conf: 0.3»); quadOrigen disponible sin costo (misma función, L1262).
+- [x] Fix — MODO CONFIRMACIÓN (opciones.confirmar): skip SOLO si quadOrigen === "worker" Y anclas0 >= 3 Y conf0 >= 0.7 (cortes=confirmada); cualquier fallo → sondeo completo 0/90/180/270 con el 0° ya pagado (MARGEN decide). T1 sana deshabilitado en el modo (chars>=150 perdonaba basura de actas de lado — M-e70-2); T1 intacto para el resto de flujos.
+- [x] Traza aditiva: cortes=confirmada + exif=0|1 (AL FINAL — D51); probeMsOrientacion real para exif (antes null forzado); línea «omitida=exif-camara» retirada (ningún QA la escaneaba).
+- [x] Intactos: SIM (jamás sondea), recorte manual (sin opciones — T1 vigente), individual/video (sin señal), masiva/cola, jornada e69, P6.
+- [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
