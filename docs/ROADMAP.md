@@ -403,3 +403,10 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] T-5 — `vaciar()` NO toca el histórico (REVERSA de D-e65-8 → **D-e65b-1**: la cola es el taller, el envío es el hecho); `cola.ts vaciar` y `borrarHistorico` INTACTOS (cero código nuevo — comentario + declaración).
 - [x] T-6 — docs: REPORTE-e65b + ROADMAP + worklog; adenda honesta del QA e65 (scan del índice LIVIANO — la llave se amplió con `qrPayload` por el propio kit T-2b).
 - [x] QA — `scripts/qa-historico-enviadas.ts` **49/49** (source-scan F1-F8 + red lines RL-e65b-1..8 + D57 + M-e65b-*) · regresión TOTAL 7 suites: dedup-enviadas 42/42 · qr-identidad 68/68 · autoenvío 33/33 · escaneo-ya-recortado 24/24 · identidad-acta 30/30 · watchdog-relectura 34/34 · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
+
+## DUPLICADAS CON DESENLACE PROPIO + INFORME MULTI-CAPA + PROBE EXIF OMITIDO — e66-duplicadas-informe-orientacion-v1 (2026-10-23): las 27 gemelas del informe 094214 ya no corrompen métricas
+
+- [x] P2 — gemela reutilizada: desenlace DUPLICADA (ActaStatus AL FINAL) — status/diagnostico.status/enviadoAutomaticamente=null/enviadaAuto=false en el PUNTO ÚNICO reutilizarResultado; píldora MasivaView + caso TopBar; D-e66-2 REVERSA e65b T-3b (gemela fuera del ledger; re-encolado protegido por la entrada de la original).
+- [x] P3 — informe: resumenDedup multi-capa (matches=v2+identidad+qr+ya-enviada; desgloses v2/yaEnviada) + porStatusActa/escPorStatus con DUPLICADA + esperaMs propio de la gemela + DEDUP-CAPAS (capa1=v2, +capa3-ya-enviada). yaEnviadas e65 preservada (M-e66-3).
+- [x] P4 — origenSenales al bridge (SOLO MASIVA) → probe de rotaciones OMITIDO para exif-camara (traza omitida=exif-camara; orientacionProbeMs null honesto; 4-10 s/acta ahorrados). SIM/individual/video/recorte-manual intactos.
+- [x] QA — adendas honestas M-e66-1/2 (historico-enviadas 49/49 · identidad-acta 32/32 · qr-identidad 68/68) · regresión TOTAL 7/7 suites (42 · 33 · 24 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.

@@ -57,6 +57,17 @@ function estiloTopBar(status: ActaStatus, score: number) {
         ping: false,
         score: "text-amber-400",
       };
+    case "DUPLICADA":
+      // e66 — gemela reutilizada: desenlace COPIADO (cero pipeline propio,
+      // cero envío propio). Píldora gris — no es veredicto del gate ni del
+      // score; el envío real vive en la original.
+      return {
+        palabra: "DUPLICADA",
+        pill: "bg-brand-surface border border-gray-500/40 shadow-sm",
+        dot: "bg-gray-500",
+        ping: false,
+        score: "text-gray-300",
+      };
   }
 }
 

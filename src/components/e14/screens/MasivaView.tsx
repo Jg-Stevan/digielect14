@@ -58,6 +58,11 @@ function pildoraDe(f: FilaMasiva): { label: string; clases: string } {
         return { label: "RECHAZADA", clases: "border-red-500/60 text-red-400 bg-red-500/10" };
       if (s === "EN_REVISION_HUMANA")
         return { label: "REVISIÓN HUMANA", clases: "border-amber-400/60 text-amber-400" };
+      // e66 (P2): la gemela confirmada ya NO hereda ENVIADA/OPTIMA — su
+      // desenlace es DUPLICADA (el envío real vive SOLO en la original).
+      // El fondo azul de la FILA lo pinta esDuplicada (kit e64v, intacto).
+      if (s === "DUPLICADA")
+        return { label: "DUPLICADA", clases: "border-blue-400/60 text-blue-300 bg-blue-950/40" };
       return { label: "LISTA", clases: "border-brand-borderdim text-gray-400" };
     }
   }

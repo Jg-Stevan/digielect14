@@ -1346,7 +1346,18 @@ export class RealCoreBridge implements E14Bridge {
     // en el diagnóstico (aditivo — la traza de consola D51 ya existe; esto la
     // vuelve permanente en la ficha). null si el probe no corrió (SIM o error).
     let probeMsOrientacion: number | null = null;
-    if (!opciones.simular) {
+    // e66 (P4): EXIF de cámara → orientación FIABLE (el core la aplicó al
+    // decodificar; EVIDENCIA del dueño: aplicado=0 SIEMPRE en exif-camara,
+    // 4-10 s por acta de desperdicio puro). OMITIR el sondeo completo —
+    // traza honesta en línea propia (prefijo parseable) y el instrumento
+    // D57 queda null («no corrió» — jamás inventar ms=0). Solo entran-
+    // das MASIVA traen la señal (mismo guard D63-C de origenActa); los
+    // flujos individual/video/recorte-manual corren el probe de siempre.
+    if (opciones.origenSenales === "exif-camara") {
+      console.info(
+        "[e14] orientacion omitida=exif-camara (EXIF de cámara — orientación ya horneada por el core; sondeo de rotaciones innecesario)",
+      );
+    } else if (!opciones.simular) {
       const probe = await probeOrientacion(fotoOcr);
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
       if (probe?.aplicado) {

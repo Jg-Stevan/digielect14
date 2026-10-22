@@ -464,9 +464,12 @@ const filasCapas = [
   filaLiviana(regFabricado({ id: "masiva-qa-4", dedup: "sin-match" })),
 ];
 const capas = resumenDedup(filasCapas);
+// ADENDA e66 (M-e66-2): matches pasó a ser MULTI-CAPA (v2+identidad+qr+
+// ya-enviada — plan P3) — aquí 3 (qr+v2+identidad); el desglose aditivo v2
+// preserva la cuenta que matches era antes (1).
 ok(
-  capas.qr === 1 && capas.matches === 1 && capas.identidad === 1 && capas.activo,
-  "post-mortem §1.3 · resumenDedup cuenta las 3 capas (qr / v2-marcada / identidad)",
+  capas.qr === 1 && capas.matches === 3 && capas.v2 === 1 && capas.identidad === 1 && capas.activo,
+  "post-mortem §1.3 · resumenDedup cuenta las 3 capas — e66: matches multi-capa=3 (qr/v2/identidad) con desglose aditivo v2=1",
 );
 
 const txt = renderTxt(

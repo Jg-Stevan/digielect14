@@ -24,7 +24,8 @@ export type ActaStatus =
   | "ADVERTENCIA" // ámbar   6.5–7.9 → confirmar o repetir
   | "RECHAZADA" // rojo    < 6.5  → repetir obligatorio (4 intentos; contingencia automática al agotar)
   | "ENVIADA" // verde   tras envío (auto o manual)
-  | "EN_REVISION_HUMANA"; // ámbar   contingencia al AGOTAR intentos (C4 automática) o SUGERIDA/MANUAL «repetir-primero»
+  | "EN_REVISION_HUMANA" // ámbar   contingencia al AGOTAR intentos (C4 automática) o SUGERIDA/MANUAL «repetir-primero»
+  | "DUPLICADA"; // e66 — SOLO lo estampa reutilizarResultado (gemela: desenlace COPIADO, cero pipeline propio, cero envío propio — el envío real vive en la original). JAMÁS lo produce el gate/score (statusDeScore intacto); antes la gemela heredaba ENVIADA/OPTIMA de la original y corrompía porStatusActa y el historial (plan P2).
 
 export interface ActaUbicacion {
   departamento: string;
@@ -208,7 +209,7 @@ export interface Acta {
     | { tipo: "SIN_VOTOS"; detalle: string };
   intento: number;
   maxIntentos: number; // "INTENTO 1 DE 4"
-  enviadoAutomaticamente?: string; // "16:42:00"
+  enviadoAutomaticamente?: string | null; // "16:42:00" · e66: null EXPLÍCITO en la gemela DUPLICADA (el envío no es suyo — plan P2); undefined = sin envío aún
   hashSha256?: string; // "EN COLA" | hash
 
   // ----- FASE LÓGICA (§3.1, opcionales — compatibles con seed/mocks) -----
