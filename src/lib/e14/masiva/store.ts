@@ -147,6 +147,11 @@ interface MasivaStore {
     progreso: { etapa: EtapaVidaKit; ocrFraccion?: number; fracGlobal?: number },
   ) => void;
   setFiltro: (filtro: FiltroMasiva) => void;
+  /** e64-qr-v1 (T-0.2): estampar campos SOLO-VISUALES sobre UNA fila viva
+   *  (el chip qrEstado de la CAPA 0 QR se pinta a mitad de proceso, cuando
+   *  el runner acaba de decodificar). Patch INMUTABLE — el MISMO patrón del
+   *  patchFila interno (el kit llama a este mutador desde el runner). */
+  actualizarFila: (id: string, patch: Partial<FilaMasiva>) => void;
 }
 
 /** Registro IDB → fila LIVIANA (sin Blob, sin acta — la foto duerme). */
@@ -187,6 +192,11 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
     // objeto retornado (contrato D57). Ausentes = registros previos.
     serie: r.serie ?? null,
     ...(r.forzarDedupOff ? { forzarDedupOff: true } : {}),
+    // e64-qr-v1 (T-0.2): el estado de la CAPA 0 QR sobrevive la recarga.
+    // Derivación honesta para registros e63m (traen qrPayload pero nacieron
+    // antes de qrEstado): el payload EXISTE ⇒ fue leído. undefined → la fila
+    // pinta sin chip ("n/d" — la capa 0 no corrió o el registro es previo).
+    qrEstado: r.qrEstado ?? (r.qrPayload ? "leido" : undefined),
   };
 }
 
@@ -734,6 +744,10 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
   marcarProgreso: (id, progreso) => set({ progreso: { id, ...progreso } }),
 
   setFiltro: (filtro) => set({ filtro }),
+
+  // e64-qr-v1 (T-0.2): patch INMUTABLE de UNA fila viva — el MISMO patrón
+  // del patchFila interno; expuesto como action para el runner (chip QR).
+  actualizarFila: (id, patch) => patchFila(id, patch),
 }));
 
 // D66 — KIT e14-decode-unico-precalor-v1 (T3): el precalor queda cableado
