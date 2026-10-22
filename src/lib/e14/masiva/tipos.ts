@@ -7,7 +7,8 @@ import type { Acta } from "../types";
  *  (dhash Hamming ≤ 6, dedup.ts) — estado SOLO visual: al procesar REUTILIZA
  *  el resultado de la original (runner) sin correr el pipeline. «PROCESAR
  *  IGUAL» la devuelve a PENDIENTE (reproceso completo — kit §2). */
-export type EstadoEntrada = "PENDIENTE" | "PROCESANDO" | "LISTA" | "ERROR" | "DUPLICADA";
+export type EstadoEntrada = "PENDIENTE" | "PROCESANDO" | "LISTA" | "ERROR" | "DUPLICADA"
+  | "YA-ENVIADA"; // e65-dedup-enviadas-v1 — SOLO-VISUAL (D-e65-2): sin acta propia, sin envío, sin runner (valor NUEVO AL FINAL — contrato D57)
 
 /** Fila LIVIANA en memoria (lo que pinta la bandeja) — NUNCA trae la foto:
  *  RAM acotada (lección L7). El acta completa duerme en IndexedDB. */
@@ -74,6 +75,16 @@ export interface FilaMasiva {
    *  "n/d" = aún sin intentar (fila en cola) · "leido" = payload EXACTO obtenido
    *  · "sin-payload" = la cadena terminó en null. */
   qrEstado?: "n/d" | "leido" | "sin-payload";
+  // ---------- e65-dedup-enviadas-v1 — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** e65-dedup-enviadas-v1: SHA-256 de los bytes del archivo (dedup.ts,
+   *  hashBytesDeArchivo) — estampado en cadenaDedup. null = falló el hash
+   *  (conservador). Sobrevive la recarga vía RegistroMasiva. SOLO llave de
+   *  dedup — jamás identidad del acta ni viaja al envío (RL-e65-1). */
+  hashBytes?: string | null;
+  /** e65-dedup-enviadas-v1: id del registro YA ENVIADO cuyo contenido matcheó
+   *  esta fila (bytes exactos o dhash cinta cierta). SOLO-VISUAL (chip).
+   *  Ausente/null = match contra fila viva NO enviada → DUPLICADA de siempre. */
+  enviadaDe?: string | null;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
@@ -124,7 +135,8 @@ export interface RegistroMasiva {
    *  sin marca pre-OCR (la decide la capa 2 post-OCR); "identidad" = capa 2
    *  marcó DUPLICADA por serie impresa repetida. e63m: "qr" = CAPA 0
    *  (identidad-QR pre-OCR — payload EXACTO repetido, OCR jamás se paga). */
-  dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr";
+  dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr"
+    | "ya-enviada"; // e65-dedup-enviadas-v1 — match contra registro ENVIADO del histórico/cola (bytes/dhash cinta cierta) — valor NUEVO AL FINAL (contrato D57)
   /** (T2) distancia de Hamming del match v2 (0–64). Solo filas con
    *  dedup === "v2" lo traen; sin match no hay distancia (no se inventa). */
   dedupDistancia?: number | null;
@@ -184,6 +196,15 @@ export interface RegistroMasiva {
    *  payload" cuando la cadena terminó en null. Ausente = la capa 0 no
    *  llegó a correr (registros previos a la e64 / filas ERROR pre-capa 0). */
   qrEstado?: "leido" | "sin-payload";
+  // ---------- e65-dedup-enviadas-v1 — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** e65-dedup-enviadas-v1: SHA-256 de los bytes del archivo original.
+   *  Ausente = registro previo al kit o hash falló (jamás inventar).
+   *  SOLO llave de dedup — jamás identidad del acta ni viaja al envío
+   *  ni al informe de contenido (RL-e65-1). */
+  hashBytes?: string;
+  /** e65-dedup-enviadas-v1: id del registro enviado matcheado (SOLO-VISUAL).
+   *  Ausente = la fila no nació YA-ENVIADA (o PROCESAR IGUAL la limpió). */
+  enviadaDe?: string;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del
