@@ -134,9 +134,13 @@ ok(
 );
 
 ok(
-  store.includes("if (!r.hashBytes && !r.hashDedup) return null;") &&
+  // e65b (ADENDA — kit e65b-historico-enviadas T-2b): la llave del índice se
+  // amplió con `!r.qrPayload` (payload QR como tercera llave de dedup —
+  // ADITIVO al final, D57). El intent del check es INTACTO: solo enviadas
+  // CON llave entran; sin llave → fuera (jamás inventar).
+  store.includes("if (!r.hashBytes && !r.hashDedup && !r.qrPayload) return null;") &&
     store.includes("r.acta?.status !== \"ENVIADA\" && r.estado !== \"YA-ENVIADA\""),
-  "F3/D-e65-3: índice LIVIANO — solo enviadas CON llave; sin llave → fuera (jamás inventar)",
+  "F3/D-e65-3: índice LIVIANO — solo enviadas CON llave; sin llave → fuera (jamás inventar) [e65b: llave ampliada con qrPayload]",
 );
 
 ok(
