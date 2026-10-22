@@ -1000,6 +1000,17 @@ export function marcoPerdonadoPorLectura(
   return veredicto === "cortado" && nivelLectura === "FUERTE" && !faltaSeccion;
 }
 
+/** e64-qr T-2.1 — acumulador del pipeline: lo conocido al vencer el timeout
+ *  + la señal de la CAPA 0 QR de cámara (ADITIVA — el QR jamás afecta
+ *  score/status/gate/OCR; llave OPACA, red line 10). qrCam:
+ *  undefined = el decodificador no terminó (timeout — los campos viajan
+ *  AUSENTES, jamás inventar) · null = corrió y terminó en null
+ *  ("sin-payload") · {payload} = leído ("leido"). */
+interface ParcialPipeline {
+  fotoOriginal?: string;
+  qrCam?: { payload: string } | null;
+}
+
 export class RealCoreBridge implements E14Bridge {
   private contador = 0;
 
@@ -1040,7 +1051,7 @@ export class RealCoreBridge implements E14Bridge {
 
     // Acumulador de lo que ya se tiene (el acta de timeout rellena lo que
     // alcance a conocer — p. ej. fotoOriginal si el decode alcanzó a correr).
-    const parcial: { fotoOriginal?: string } = {};
+    const parcial: ParcialPipeline = {};
     let vencido = false; // tras el timeout no se emite más progreso (§5)
     const emitir = (p: ProgresoAnalisis) => {
       if (!vencido) opciones.onProgreso?.(p);
@@ -1085,7 +1096,7 @@ export class RealCoreBridge implements E14Bridge {
   private async pipeline(
     opciones: OpcionesEscaneo,
     entrada: EntradaPipeline,
-    parcial: { fotoOriginal?: string },
+    parcial: ParcialPipeline,
     emitir: (p: ProgresoAnalisis) => void,
   ): Promise<Acta> {
     const ms = { decode: 0, detect: 0, proceso: 0, calidad: 0, ocr: 0, total: 0 };
@@ -1107,6 +1118,35 @@ export class RealCoreBridge implements E14Bridge {
         : entrada.dataUrl;
     ms.decode = performance.now() - inicio;
     parcial.fotoOriginal = fotoOriginal;
+
+    // e64-qr T-2.1 — CAPA 0 QR también en cámara (kit FASE 2 / hermano C-1):
+    // el MISMO decodificador de masiva (import DINÁMICO — el bundle crítico
+    // del escaneo no engorda), señal ADITIVA — jamás afecta score/gate/OCR
+    // ni consume intento. Se lanza EN PARALELO al pipeline (el tier base
+    // resuelve en ~0.3-0.5 s — mucho antes del OCR) y se ESPETA donde el
+    // acta se construye. tiers "base" — ADAPTACIÓN DECLARADA: la cadena
+    // completa (~15-17 s sin-QR, bloques sync) rompería el timeout 15 s del
+    // flujo individual; el rescate pesado queda en masiva (timeout 120 s).
+    // GUARD (D63-C): `origenActa` viaja SOLO en entradas de MASIVA — allí la
+    // capa 0 del runner (cadena COMPLETA a nivel registro, no acta) manda y
+    // la señal base-only del bridge sería redundante y doble-costo: OMITIDA.
+    // El catch es el fallback silencioso del kit: sin la señal, el flujo de
+    // cámara sigue intacto.
+    const esMasiva = opciones.origenActa != null;
+    const qrCamPromesa: Promise<ParcialPipeline["qrCam"]> = esMasiva
+      ? Promise.resolve(undefined) // la capa 0 del runner manda en masiva
+      : (async () => {
+          try {
+            const { decodificarQrDeCapture } = await import("./masiva/identidad-qr");
+            return await decodificarQrDeCapture(fotoOriginal, { tiers: "base" });
+          } catch {
+            return null; // sin-payload — el flujo de cámara sigue intacto
+          }
+        })();
+    const aterrizarQrCam = async (): Promise<void> => {
+      // idempotente y acotada (el tier base tiene techo propio ~0.5 s)
+      parcial.qrCam = await qrCamPromesa;
+    };
 
     // 2) Detección de bordes (worker OpenCV → fallback Sobel del core).
     //    §D8.3 (SPEC-e14-score-ocr Rev. 3): con sinRecorte la detección NO
@@ -1199,6 +1239,7 @@ export class RealCoreBridge implements E14Bridge {
         // El core SIEMPRE devuelve Quad; una EXCEPCIÓN aquí = imagen no
         // detectable → RECHAZADA ILEGIBLE inmediata (§5 paso 1, spec §7.5).
         // El piso escénico D16 de ANALIZANDO completa la animación solo.
+        await aterrizarQrCam(); // e64-qr T-2.1: la señal QR viaja si terminó
         return this.construirActa(opciones, parcial, {
           score: 0,
           status: "RECHAZADA",
@@ -1761,6 +1802,7 @@ export class RealCoreBridge implements E14Bridge {
 
     // KIT e14-diagnostico-autoenvio-v1 (C1): adjuntar el registro con el id
     // REAL del acta (el id nace en construirActa — parche post-hoc).
+    await aterrizarQrCam(); // e64-qr T-2.1: la señal QR ya aterrizó (corrió en paralelo al OCR)
     const acta = this.construirActa(opciones, parcial, {
       fotoProcesada,
       procesadaVacia,
@@ -2529,7 +2571,7 @@ export class RealCoreBridge implements E14Bridge {
   /** Acta final: seed SOLO cuando la clasificación no está resuelta (§1) + campos reales §3.1. */
   private construirActa(
     opciones: OpcionesEscaneo,
-    parcial: { fotoOriginal?: string },
+    parcial: ParcialPipeline,
     campos: {
       fotoProcesada?: string;
       /** §D4 (SPEC-e14-score-ocr): la procesada salió sin tinta. */
@@ -2630,6 +2672,16 @@ export class RealCoreBridge implements E14Bridge {
       // SPEC-cabecera-clasificacion §6: clasificación de cabecera (AUTO →
       // archivada al envío; SUGERIDA/MANUAL → panel de corrección §5).
       clasificacion: campos.clasificacion ?? undefined,
+      // e64-qr T-2.1 — señal de la CAPA 0 QR de cámara (ADITIVA AL FINAL,
+      // contrato D57): qrCam definido = el decodificador corrió ("leido" con
+      // payload / "sin-payload" con null); undefined (timeout — el
+      // instrumento no terminó) = los campos viajan AUSENTES (jamás
+      // inventar). SOLO presencia — jamás contenido (red line 10).
+      ...(parcial.qrCam
+        ? { qrPayload: parcial.qrCam.payload, qrEstado: "leido" as const }
+        : parcial.qrCam !== undefined
+          ? { qrEstado: "sin-payload" as const }
+          : {}),
     };
   }
 

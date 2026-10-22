@@ -529,6 +529,10 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
   // se invierte o se compara por prefijos (RED LINE 10). null = sin-payload
   // (el QR no decodificó — pipeline normal intacto, sin campo en IDB).
   let qrPayload: string | null = null;
+  // e64-qr T-0.2 — estado SOLO-VISUAL de la CAPA 0 (chip QR ✓/✗ de la
+  // bandeja): null = la capa 0 NO llegó a correr (throw previo — jamás
+  // inventar); "leido"/"sin-payload" = el intento de decode terminó.
+  let qrEstadoCapa0: "leido" | "sin-payload" | null = null;
   // D65 (T1.4) — trazas del watchdog (visibles también en el catch).
   let watchdogUsados = 0;
   let etapaAlMorir: string | null = null;
@@ -599,6 +603,13 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     } catch {
       qrPayload = null; // la capa 0 jamás tumba el pipeline (fallback limpio)
     }
+    // e64-qr T-0.2 — estampar el estado en la fila viva (chip de la
+    // bandeja — kit literal vía actualizarFila; el mutador real del store,
+    // mismo patrón de precalentada/dedup). SOLO presencia, JAMÁS payload.
+    qrEstadoCapa0 = qrPayload ? "leido" : "sin-payload";
+    useMasivaStore
+      .getState()
+      .actualizarFila(fila.id, { qrEstado: qrEstadoCapa0 });
     if (!qrPayload) {
       console.info(`[e14] capa0-qr sin-payload fila=${fila.id} nombre=${fila.nombre}`);
     } else {
@@ -620,7 +631,13 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         if (!(await reutilizarResultado(filaGemela, tQr))) return false;
         try {
           const regQr = await leerRegistro(fila.id);
-          await guardarRegistro({ ...regQr, dedup: "qr", qrPayload: qrPayloadSeguro });
+          await guardarRegistro({
+            ...regQr,
+            dedup: "qr",
+            qrPayload: qrPayloadSeguro,
+            // e64-qr T-0.2: el estado viaja con el write (sobrevive recarga).
+            qrEstado: "leido",
+          });
         } catch {
           /* IDB caído — la fila ya está LISTA con el desenlace (honesto) */
         }
@@ -994,6 +1011,9 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           infoTitulo: tituloDeActa(actaDesenlace),
           // e63m: el payload QR de esta fila viaja con SU desenlace (post-mortem).
           ...(qrPayload ? { qrPayload } : {}),
+          // e64-qr T-0.2: el estado SOLO-VISUAL de la capa 0 también (honesto:
+          // la capa 0 corrió si qrEstadoCapa0 != null).
+          ...(qrEstadoCapa0 ? { qrEstado: qrEstadoCapa0 } : {}),
         });
         marcarFila(fila.id, {
           estado: "DUPLICADA",
@@ -1119,6 +1139,9 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       // e63m — payload QR de la CAPA 0 (llave opaca): campo ADITIVO AL FINAL
       // (contrato D57) — absent = sin-payload (jamás inventar). Export-only.
       ...(qrPayload ? { qrPayload } : {}),
+      // e64-qr T-0.2 — estado SOLO-VISUAL de la capa 0 (chip QR ✓/✗;
+      // sobrevive la recarga vía filaDeRegistro). Aditivo al final (D57).
+      ...(qrEstadoCapa0 ? { qrEstado: qrEstadoCapa0 } : {}),
     };
     // FIX M14 (auditoría 2-c): persistencia fallida TRAS el envío — la fila
     // NO pasa a ERROR (el acta SÍ se transmitió; una fila ERROR invita a
@@ -1213,6 +1236,10 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           // e63m: si el QR decodificó antes de que el pipeline fallara, el
           // payload viaja también en la fila ERROR (post-mortem honesto).
           ...(qrPayload ? { qrPayload } : {}),
+          // e64-qr T-0.2: el estado de la capa 0 ídem — si la capa 0 corrió
+          // antes del fallo, "leido"/"sin-payload" viajan; si el throw fue
+          // ANTES de la capa 0, el campo viaja AUSENTE (jamás inventar).
+          ...(qrEstadoCapa0 ? { qrEstado: qrEstadoCapa0 } : {}),
           // D65 (T1.4): si un intento murió por watchdog antes del error real,
           // la traza sobrevive también en la fila ERROR (honesto).
           ...(watchdogUsados > 0
