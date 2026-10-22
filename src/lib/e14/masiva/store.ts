@@ -202,6 +202,11 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
     // antes de qrEstado): el payload EXISTE ⇒ fue leído. undefined → la fila
     // pinta sin chip ("n/d" — la capa 0 no corrió o el registro es previo).
     qrEstado: r.qrEstado ?? (r.qrPayload ? "leido" : undefined),
+    // e65-dedup-enviadas-v1 (T-6): la YA-ENVIADA y sus llaves sobreviven la
+    // recarga — hashBytes SIEMPRE (llave de dedup viva para la cola viva
+    // tras recargar), enviadaDe SOLO cuando el estado lo es (SOLO-VISUAL).
+    hashBytes: r.hashBytes ?? null,
+    ...(r.estado === "YA-ENVIADA" ? { enviadaDe: r.enviadaDe ?? null } : {}),
   };
 }
 
@@ -729,8 +734,15 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     // para que las capas 1 (visual) y 2 (identidad) lo respeten SIEMPRE:
     // el runner ya no pasa por reutilizarResultado (dupOf null) y la capa 2
     // tampoco la marcará (kit §1.3 — el reproceso completo es irrevertible
-    // hasta que el dueño decida otra cosa).
-    patchFila(id, { estado: "PENDIENTE", dupOf: null, forzarDedupOff: true });
+    // hasta que el dueño decida otra cosa). e65 (T-6): extendido a
+    // YA-ENVIADA — el MISMO escape del dueño: la fila nace PENDIENTE con
+    // forzarDedupOff y enviadaDe FUERA (reproceso completo, RL-e65-7).
+    patchFila(id, {
+      estado: "PENDIENTE",
+      dupOf: null,
+      enviadaDe: null,
+      forzarDedupOff: true,
+    });
     console.info(`[e14] dedup fila=${id} procesar-igual`);
     try {
       const registro = await leerRegistro(id);
@@ -738,6 +750,7 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
         ...registro,
         estado: "PENDIENTE",
         dupOf: undefined,
+        enviadaDe: undefined,
         forzarDedupOff: true,
       });
     } catch {
@@ -850,6 +863,9 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     } catch {
       /* las filas mueren igual en la bandeja */
     }
+    // e65 (T-6/D-e65-8): el histórico muere con la cola — índice fuera
+    // (sin zombis: la próxima carga lo reconstruye desde IDB vacía).
+    indiceEnviadas = null;
     set({ filas: [], progreso: null, origenAbierto: null, avisoCola: null });
   },
 
