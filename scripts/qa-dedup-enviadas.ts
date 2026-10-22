@@ -209,9 +209,9 @@ ok(
 
 ok(
   store.includes("indiceEnviadas = null;") &&
-    store.indexOf("indiceEnviadas = null;") > store.indexOf("vaciar: async () => {") &&
+    store.lastIndexOf("indiceEnviadas = null;") > store.indexOf("vaciar: async () => {") &&
     store.includes("if (indiceEnviadas) return indiceEnviadas;"),
-  "F8/D-e65-8: vaciar() invalida el índice (el histórico muere con la cola; sin zombis; la recarga lo reconstruye desde IDB)",
+  "F8/D-e65-8 + e64p: vaciar() invalida el índice (la ÚLTIMA invalidación vive en vaciar; cargarFilas modo pruebas también la reinicia — la recarga reconstruye)",
 );
 
 ok(

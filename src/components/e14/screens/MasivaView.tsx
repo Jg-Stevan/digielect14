@@ -19,7 +19,7 @@ import {
 } from "@/lib/e14/masiva/store";
 import type { FilaMasiva } from "@/lib/e14/masiva/tipos";
 import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
-import { StitchStackIcon } from "../icons";
+import { CheckIcon, StitchStackIcon } from "../icons";
 
 /** Píldora de estado de una fila — paleta de estado del repo
  *  (ReviewView L222-225: verde/ámbar/rojo, mono uppercase). */
@@ -61,6 +61,28 @@ function pildoraDe(f: FilaMasiva): { label: string; clases: string } {
       return { label: "LISTA", clases: "border-brand-borderdim text-gray-400" };
     }
   }
+}
+
+/** KIT e64v — UNA sola definición de «duplicada» (compartida por el color
+ *  azul y el orden de la bandeja — kit §3): la fila heredó desenlace de
+ *  otra vía la maquinaria reutilizarResultado — referencia al original
+ *  (`dupOf`) PRESENTE y desenlace heredado YA CONFIRMADO (estado final
+ *  LISTA con statusActa). Una dup APLAZADA (estado DUPLICADA, original
+ *  en vuelo) aún no confirmó → JAMÁS azul (kit §1). Tokens sin-match o
+ *  ausentes no llegan aquí: sin dupOf la fila es ORIGINAL por definición
+ *  (el token `dedup` vive solo en RegistroMasiva — no en la fila liviana). */
+function esDuplicada(f: FilaMasiva): boolean {
+  return f.dupOf != null && f.estado === "LISTA" && f.statusActa != null;
+}
+
+/** KIT e64v — etiqueta del chip azul: refleja el DESENLACE HEREDADO (jamás
+ *  inventa — kit §1): ENVIADA real → texto exacto «Ya enviada»; cualquier
+ *  otro desenlace → la etiqueta del estado ACTUAL (misma píldora, misma
+ *  fuente de verdad). EN COLA (ENVIADA con envío offline pendiente) NO es
+ *  «ya enviada» — honestidad del repo (jamás inventar). */
+function etiquetaDupDe(f: FilaMasiva): string {
+  if (f.statusActa === "ENVIADA" && !f.envioEnCola) return "Ya enviada";
+  return pildoraDe(f).label;
 }
 
 const FILTROS: { valor: FiltroMasiva; label: string }[] = [
@@ -259,6 +281,17 @@ export function MasivaView() {
       : filas.filter((f) =>
           filtro === "ERROR" ? f.estado === "ERROR" : f.statusActa === filtro,
         );
+
+  // KIT e64v — Cambio B: duplicadas AL FINAL de la bandeja. SOLO orden de
+  // RENDER (useMemo): el array del store JAMÁS se reordena — es la fuente
+  // de verdad de la cola (e63g watchdog, espera APLAZADA, persistencia,
+  // orden de envío). filter preserva el orden de llegada dentro de cada
+  // grupo; el render usa key=id → React reordena por clave sin re-montar.
+  const visiblesOrdenadas = useMemo(() => {
+    const originales = visibles.filter((f) => !esDuplicada(f));
+    const duplicadas = visibles.filter((f) => esDuplicada(f));
+    return [...originales, ...duplicadas];
+  }, [visibles]);
 
   const activa = progreso ? filas.find((f) => f.id === progreso.id) : null;
   const filaActiva = activa && activa.estado === "PROCESANDO" ? activa : null;
@@ -589,9 +622,12 @@ export function MasivaView() {
         {/* ---------- BANDEJA: FILAS (SIN RESTRICCIÓN RÍGIDA DE ALTURA PARA SCROLL FLUIDO) ---------- */}
         {hayCola && (
           <ul className="flex flex-col gap-2 pr-1" aria-label="Bandeja de resultados">
-            {visibles.map((f) => {
+            {visiblesOrdenadas.map((f) => {
               const pildora = pildoraDe(f);
               const esActiva = progreso?.id === f.id && f.estado === "PROCESANDO";
+              // KIT e64v — Cambio A: gemela CONFIRMADA (desenlace heredado)
+              // → fila azul. La dup aplazada aún no confirma → sin azul.
+              const esDup = esDuplicada(f);
               // D65 (T3.3) — señal de vida de la fila (barra h-1 discreta):
               const enColaVida = f.estado === "PENDIENTE" || f.estado === "DUPLICADA";
               const posCola = enColaVida ? colaVida.indexOf(f.id) + 1 : 0;
@@ -599,8 +635,15 @@ export function MasivaView() {
               return (
                 <li
                   key={f.id}
-                  className={`rounded-2xl border px-3.5 py-3 bg-[#10161f] transition-all ${
-                    esActiva ? "border-[#10b981]/60 ring-1 ring-[#10b981]/60 shadow-md shadow-[#10b981]/10" : "border-slate-800 hover:border-slate-700"
+                  className={`rounded-2xl border px-3.5 py-3 transition-all ${
+                    esDup
+                      ? // KIT e64v — Cambio A: specs dark del kit (bg/borde azul).
+                        // El repo es dark-only (paleta oscura hardcodeada — sin
+                        // variante `dark:`): los tokens dark aplican directos.
+                        "bg-blue-950/60 border-blue-800 hover:border-blue-700"
+                      : `bg-[#10161f] ${
+                          esActiva ? "border-[#10b981]/60 ring-1 ring-[#10b981]/60 shadow-md shadow-[#10b981]/10" : "border-slate-800 hover:border-slate-700"
+                        }`
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -649,6 +692,23 @@ export function MasivaView() {
                       >
                         {pildora.label}
                       </span>
+                      {/* KIT e64v — Cambio A: chip azul de la gemela CONFIRMADA.
+                          Etiqueta SIEMPRE visible (el color jamás es el único
+                          portador de información — accesibilidad/daltonismo);
+                          refleja el desenlace heredado (jamás inventa — kit §1).
+                          Convive con QR chip / ≡ original / YA ENVIADA (flex-wrap
+                          del contenedor — red line 5). Icono: CheckIcon propio
+                          del repo (el icono del kit era opcional y lucide no
+                          existe en el repo — sistema de diseño propio manda). */}
+                      {esDup && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-900 text-blue-300 font-mono text-[9px] font-bold tracking-wider"
+                          aria-label={`Gemela confirmada — ${etiquetaDupDe(f)}`}
+                        >
+                          <CheckIcon className="w-3 h-3" strokeWidth={2.5} />
+                          {etiquetaDupDe(f)}
+                        </span>
+                      )}
                       {/* D66 — KIT e14-decode-unico-precalor-v1 (T3.5): mini-señal
                           PREPARADA — la fila PENDIENTE ya tiene master esperando
                           (el precalor trabajó en la espera; D45 intacto: la fila
