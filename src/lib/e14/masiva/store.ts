@@ -978,8 +978,13 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     } catch {
       /* las filas mueren igual en la bandeja */
     }
-    // e65 (T-6/D-e65-8): el histórico muere con la cola — índice fuera
-    // (sin zombis: la próxima carga lo reconstruye desde IDB vacía).
+    // e65b (T-5, REVERSA de D-e65-8 → D-e65b-1): lo que muere aquí es el
+    // CACHE de sesión — NO el histórico. El ledger persistente (historico.ts,
+    // DB separada) sobrevive: la próxima consulta reconstruye el índice
+    // fusionando cola + ledger (T-2b) → tras VACIAR, re-subir lo ya enviado
+    // nace YA-ENVIADA igualmente (la prueba exacta del dueño: vaciar +
+    // re-subir los 46). `borrarHistorico()` existe pero JAMÁS se cablea aquí
+    // (RL-e65b-5). La cola es el taller; el envío es el hecho.
     indiceEnviadas = null;
     set({ filas: [], progreso: null, origenAbierto: null, avisoCola: null });
   },
