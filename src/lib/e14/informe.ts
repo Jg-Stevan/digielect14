@@ -413,36 +413,55 @@ export function resumenColgadas(filas: FilaInforme[]): {
 }
 
 /** D65 (T4.3) — resumen de DEDUP v2 (PURO — humo bun). activo = hay trazas
- *  del dedup (el instrumento corrió en esta cola). matches = filas marcadas
- *  gemela por contenido — incluye las que el dueño luego reprocesó con
- *  PROCESAR IGUAL (el match SÍ ocurrió); distancia media SOLO sobre matches
- *  con distancia (sin datos → null — jamás inventar). e63k (F1.5):
- *  "identidad" cuenta la capa 2 (serie impresa repetida) y NO como match
- *  v2; "visual-aplazada" NO es match (resolución pendiente — activo true
- *  igualmente porque dedup != null). */
+ *  del dedup (el instrumento corrió en esta cola).
+ *  e66 (P3, revoca el criterio e63k F1.5): matches = TODAS las capas que
+ *  detectaron duplicado — "v2" + "identidad" + "qr" + "ya-enviada" — no solo
+ *  la capa visual v2. "visual-aplazada" NO es match (resolución pendiente —
+ *  activo true igualmente porque dedup != null) y "sin-match" tampoco.
+ *  Desglose aditivo: v2 (la cuenta que matches era antes), qr, identidad,
+ *  yaEnviada. distanciaMedia SOLO sobre filas con distancia presente
+ *  (v2/identidad — sin datos → null, jamás inventar). */
 export function resumenDedup(filas: FilaInforme[]): {
   activo: boolean;
   matches: number;
+  /** e66 (P3) — desglose aditivo: matches de la capa visual v2 (lo que
+   *  matches significaba antes del kit; los parsers viejos lo pierden, los
+   *  nuevos lo tienen explícito). */
+  v2: number;
   distanciaMedia: number | null;
   sinMatch: number;
   identidad: number;
   /** e63m (F3): gemelas atrapadas por la CAPA 0 (dedup "qr" — identidad-QR
    *  pre-OCR, el OCR jamás se pagó). 0 = la capa no atrapó nada (dato real). */
   qr: number;
+  /** e66 (P3): filas nacidas YA-ENVIADA (dedup "ya-enviada" — match contra
+   *  registro enviado del histórico). Aditivo al final. */
+  yaEnviada: number;
 } {
-  const matches = filas.filter((f) => f.dedup === "v2");
-  const distancias = matches
+  const conMatch = filas.filter(
+    (f) =>
+      f.dedup === "v2" ||
+      f.dedup === "identidad" ||
+      f.dedup === "qr" ||
+      f.dedup === "ya-enviada",
+  );
+  // e66 (P3): distancia SOLO de las capas que la traen (v2/identidad) y con
+  // el dato presente (typeof excluye null/undefined — jamás inventar).
+  const distancias = conMatch
+    .filter((f) => f.dedup === "v2" || f.dedup === "identidad")
     .map((f) => f.dedupDistancia)
     .filter((v): v is number => typeof v === "number");
   return {
     activo: filas.some((f) => f.dedup != null),
-    matches: matches.length,
+    matches: conMatch.length,
+    v2: filas.filter((f) => f.dedup === "v2").length,
     distanciaMedia: distancias.length
       ? Math.round(distancias.reduce((a, b) => a + b, 0) / distancias.length)
       : null,
     sinMatch: filas.filter((f) => f.dedup === "sin-match").length,
     identidad: filas.filter((f) => f.dedup === "identidad").length,
     qr: filas.filter((f) => f.dedup === "qr").length,
+    yaEnviada: filas.filter((f) => f.dedup === "ya-enviada").length,
   };
 }
 
@@ -747,7 +766,9 @@ export function renderTxt(
   const escaneos = filas.filter((f) => f.origen === "escaneo");
   const escPorStatus = conteo(
     escaneos.map((f) => f.statusActa),
-    ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA"],
+    // e66 (P2): "DUPLICADA" al final — una gemela de un ESCANEO hereda el
+    // diagnóstico (con origen escaneo) del original y cae en este conteo.
+    ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA", "DUPLICADA"],
   );
   const motivosEscaneos = [
     ...new Set(escaneos.filter((f) => f.rechazo).map((f) => f.rechazo?.tipo)),
@@ -910,7 +931,9 @@ export async function generarInformeZip(
   );
   const porStatusActa = conteo(
     filas.map((f) => f.statusActa),
-    ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA"],
+    // e66 (P2): "DUPLICADA" AL FINAL (JSON estable — claves fijas a 0) — las
+    // gemelas reutilizadas ya no inflan ENVIADA (D-e66-1).
+    ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA", "DUPLICADA"],
   );
   const tiemposMedios = mediosTiempos(filas);
   const informe = {
@@ -924,6 +947,10 @@ export async function generarInformeZip(
       tiemposMediosMs: tiemposMedios,
       // e65-dedup-enviadas-v1 (T-8, opcional del kit): filas que nacieron
       // YA-ENVIADA (match bytes/dhash contra el histórico) — cero pipeline.
+      // e66 (M-e66-3): SEMÁNTICA PRESERVADA — el plan P3 pedía «solo las
+      // realmente enviadas»; YA-ENVIADA por definición lo es (su original
+      // fue enviada y matchea el ledger). El conteo de ENVIADAS de ESTA cola
+      // vive en porStatusActa.ENVIADA — que P2 limpió de gemelas heredadas.
       yaEnviadas: filas.filter((f) => f.estado === "YA-ENVIADA").length,
     },
     rechazos: {
@@ -954,11 +981,13 @@ export async function generarInformeZip(
       return {
         version: "v2" as const,
         activo: r.activo,
-        matches: r.matches,
+        matches: r.matches, // e66 (P3): TODAS las capas (v2+identidad+qr+ya-enviada)
+        v2: r.v2, // e66 — desglose aditivo (lo que matches era antes)
         sinMatch: r.sinMatch,
         distanciaMedia: r.distanciaMedia,
         identidad: r.identidad, // e63k — capa 2 por identidad (aditivo al final)
         qr: r.qr, // e63m — capa 0 identidad-QR pre-OCR (aditivo al final)
+        yaEnviada: r.yaEnviada, // e66 — capa e65 contra el histórico (aditivo al final)
       };
     })(),
     actas: filas.map(actaLivianaJson),
