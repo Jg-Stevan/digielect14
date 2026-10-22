@@ -235,10 +235,17 @@ ok(
   "T-3a: el hook vive DESPUÉS del desenlace ENVIADO (enviadaAuto = true — jamás alimenta con no-enviados)",
 );
 
+// ADENDA e66 (M-e66-1 — reversa documentada): la gemela REUTILIZADA ya NO
+// alimenta el ledger (mandato P2 del plan e66: el historial registra SOLO
+// envíos reales — antes la copia heredaba ENVIADA y entraba por T-3b).
+// La protección de re-encolado de la gemela sobrevive vía la ENTRADA de la
+// ORIGINAL en el ledger (payload-QR exacto + dhash cinta cierta ≤ 6).
 ok(
-  runner.includes('if (actaCopia.status === "ENVIADA") {') &&
-    runner.includes("hashBytes: registro.hashBytes,\n        hashDedup: registro.hashDedup,\n        payloadQr: registro.qrPayload,\n        serie: serieCopia ?? undefined,"),
-  "T-3b: gemela REUTILIZADA con desenlace ENVIADO también alimenta el ledger — llaves del REGISTRO DE LA GEMELA (sus bytes son otros)",
+  !runner.includes('if (actaCopia.status === "ENVIADA") {') &&
+    runner.includes('actaCopia.status = "DUPLICADA";') &&
+    runner.includes("actaCopia.diagnostico.status = \"DUPLICADA\";") &&
+    runner.includes("actaCopia.enviadoAutomaticamente = null;"),
+  "e66/M-e66-1: REVERSA de T-3b — la gemela DUPLICADA ya no alimenta el ledger (historial = SOLO envíos reales); su re-encolado sigue protegido por la entrada de la original",
 );
 
 ok(
@@ -248,10 +255,13 @@ ok(
   "T-3c/M-e65b-4: envíos MANUALES cableados — REVISIÓN (sincronizarAlVolver) y LOTE ADVERTENCIA (enviarLote) — mismos guards ENVIADA",
 );
 
+// ADENDA e66: el conteo baja de ≥2 a ≥1 — el hook T-3b de la gemela fue
+// REVERSADO (M-e66-1); queda el hook de envío propio (T-3a), único punto
+// fire-and-forget que queda en el runner.
 ok(
-  (runner.match(/\.catch\(\(\) => \{\}\)/g)?.length ?? 0) >= 2 &&
+  (runner.match(/\.catch\(\(\) => \{\}\)/g)?.length ?? 0) >= 1 &&
     !runner.includes("await registrarEnviadaHistorico"),
-  "RL-e65b-2/3: TODOS los hooks fire-and-forget (void + catch) — jamás await: el envío JAMÁS espera al ledger",
+  "RL-e65b-2/3 + M-e66-1: TODOS los hooks restantes fire-and-forget (void + catch) — jamás await: el envío JAMÁS espera al ledger",
 );
 
 // ---------- Bloque 4 — T-4: capa 0 payload contra el histórico ----------
