@@ -673,13 +673,29 @@ export const QR_LADO_LARGO_RESCATE = 4096;
  * SIN zxing: presupuesto de reló y memoria). Devuelve {payload} o null.
  * JAMÁS throw hacia el runner (kit §1.1 — cualquier falla = sin-payload =
  * pipeline normal intacto).
+ *
+ * e64-qr T-2.1 — `opciones.tiers` (ADAPTACIÓN DECLARADA del kit FASE 2):
+ * · "completos" (default — MASIVA): la cadena entera + rescate.
+ * · "base" (CÁMARA): SOLO ladderBaseDePixeles — techo ~0.5 s. El flujo de
+ *   escaneo individual tiene timeout 15 s y la cadena completa (~15-17 s
+ *   para sin-QR: barridos + zxing + rescate, bloques SYNC en el hilo UI)
+ *   convertiría cada disparo sin QR en RECHAZADA-TIEMPO (regresión
+ *   prohibida) y congelaría la vista. La señal de cámara es ADITIVA: el QR
+ *   de una acta EN MANO bien encuadrada cae en el tier base; el rescate
+ *   pesado queda en masiva (timeout 120 s), donde ya está presupuestado.
  */
 export async function decodificarQrDeCapture(
   dataUrl: string,
+  opciones: { tiers?: "completos" | "base" } = {},
 ): Promise<{ payload: string } | null> {
+  const tiers = opciones.tiers ?? "completos";
   try {
     const pix = await pixelesDeCapture(dataUrl);
     if (!pix) return null;
+    if (tiers === "base") {
+      const baseRapida = ladderBaseDePixeles(pix);
+      return baseRapida != null ? { payload: baseRapida } : null;
+    }
     const payload = await decodificarQrDePixeles(pix);
     if (payload != null) return { payload };
     // e64-qr T-1.4 — RESCATE a resolución mayor (ADAPTACIÓN DECLARADA: el

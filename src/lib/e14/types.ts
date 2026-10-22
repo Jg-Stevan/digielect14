@@ -259,6 +259,18 @@ export interface Acta {
    *  por el bridge junto al log de auditoría. SIM nunca lo trae (§9.2 —
    *  doble guard) y el ZIP solo nace con status ≠ OPTIMA (§1). */
   diagnostico?: DiagnosticoActa;
+  // ---------- e64-qr-v1 — KIT PLAN-e64-qr (T-2.1) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** Payload QR EXACTO de la CAPA 0 en el flujo de CÁMARA (T-2.1 — el MISMO
+   *  decodificador de masiva, tiers base, señal ADITIVA: jamás afecta
+   *  score/status/gate/OCR). Llave OPACA: NO se parsea, NO se invierte, NO
+   *  se compara por prefijos (red line 10) — el chip de REVISIÓN muestra
+   *  SOLO presencia. Ausente = la capa 0 no corrió o no terminó (timeout —
+   *  jamás inventar). */
+  qrPayload?: string;
+  /** e64-qr T-2.1: estado de la capa 0 de cámara — "leido" con payload,
+   *  "sin-payload" cuando el intento terminó en null. Ausente = n/d (la
+   *  capa 0 no llegó a correr). */
+  qrEstado?: "leido" | "sin-payload";
 }
 
 // ---------- Control de mesas (vista ACTAS) ----------
