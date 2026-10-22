@@ -483,6 +483,21 @@ export function ReviewView() {
           </div>
         )}
 
+        {/* e64-qr T-2.2 — chip estático de la CAPA 0 QR de cámara (kit FASE 2):
+            solo PRESENCIA, JAMÁS contenido del payload (llave opaca — red
+            line 10; misma convención del chip QR ✓/✗ de MASIVA). Solo nace
+            con el flujo de cámara/SIM (T-2.1) — en actas de MASIVA viaja
+            ausente (la señal de esa capa vive en la bandeja/informe). */}
+        {acta.qrPayload && (
+          <div
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#10161f] border border-slate-800 text-[10px] font-mono font-semibold tracking-wide w-full"
+            aria-label="QR leído"
+          >
+            <span className="text-emerald-300/90">QR ✓</span>
+            <span className="text-gray-500 uppercase">capa 0 qr</span>
+          </div>
+        )}
+
         {/* Chips de estado (mock §3.2.3 — grid-cols-3, activo sólido). */}
         <div className="grid grid-cols-3 gap-2 lg:gap-3 w-full select-none">
           <Chip tone={toneEstado} solid>
