@@ -651,6 +651,27 @@ export function MasivaView() {
                           PREPARADA
                         </span>
                       )}
+                      {/* e64-qr T-0.2 — chip del estado de la CAPA 0 QR (solo
+                          presencia, JAMÁS payload — red line 10). QR ✗ solo en
+                          LISTA: en PENDIENTE/PROCESANDO aún no hay veredicto
+                          (honestidad del kit). Resuelve la mitad de los
+                          reportes «no lee»: el dueño VERÁ cuándo sí leyó. */}
+                      {f.qrEstado === "leido" && (
+                        <span
+                          className="rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide text-emerald-300/90"
+                          aria-label="QR leído"
+                        >
+                          QR ✓
+                        </span>
+                      )}
+                      {f.qrEstado === "sin-payload" && f.estado === "LISTA" && (
+                        <span
+                          className="rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide text-white/30"
+                          aria-label="QR no decodificado"
+                        >
+                          QR ✗
+                        </span>
+                      )}
                       {/* KIT e14-masiva-tiempos-v1 (PR-1): la DUPLICADA señala
                           a su original — transparencia total del dedup. */}
                       {f.estado === "DUPLICADA" && f.dupOf && (
