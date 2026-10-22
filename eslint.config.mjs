@@ -2,13 +2,6 @@ import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import nextTypescript from "eslint-config-next/typescript";
 
 const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
-  // ESLint 9 (flat config) reporta en warn las directivas eslint-disable que
-  // no silencian nada HOY. Las directivas prospectivas son legítimas: p.ej.
-  // los 3 useEffect de ScanView documentan deps estables para
-  // react-hooks/exhaustive-deps — regla APAGADA en esta misma config hasta
-  // analizarlos a fondo (auditoría, Fase 4). Mismo criterio que el
-  // «@typescript-eslint/no-unused-disable-directive: off» de abajo.
-  linterOptions: { reportUnusedDisableDirectives: "off" },
   rules: {
     // TypeScript rules
     "@typescript-eslint/no-explicit-any": "off",
@@ -48,6 +41,16 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-unreachable": "error",
     "no-useless-escape": "off",
   },
+}, {
+  // exhaustive-deps ACTIVA SOLO en ScanView.tsx: los 3 useEffect con refs
+  // deliberados ya llevan directiva justificada línea a línea (el loop de
+  // cámara usa refs a propósito para evitar staleness — ver AUDIT.md, hallazgo
+  // ALTO de hooks). El resto del repo sigue sin la regla hasta el análisis de
+  // Fase 4; al activarla global, este bloque se elimina (1 línea) y las
+  // directivas ya están puestas. Reemplaza el enfoque «reportUnusedDisable
+  // Directives: off» (7de9fd7) para no perder la higiene de directivas.
+  files: ["src/components/e14/screens/ScanView.tsx"],
+  rules: { "react-hooks/exhaustive-deps": "warn" },
 }, {
   // "public/vendor/**" + "public/scanner/**": assets del core copiados en L0
   // (opencv/detection-worker, mismos bytes que scanner-lab) — JS vendor
