@@ -1,0 +1,99 @@
+# AUDIT.md — Fase 1: Diagnóstico (`audit/quality-pass-1`)
+
+> **Alcance**: solo diagnóstico. NO se modificó ninguna línea de código de negocio.
+> Único cambio de dependencias: `knip` añadido como devDependency (autorizado en el prompt).
+> **Regla aplicada**: nada se arregló en esta fase; las dudas se anotan como *sospecha*.
+
+---
+
+## 1. Resultado de los comandos de verificación (estado inicial)
+
+| Comando | Resultado | Notas |
+|---|---|---|
+| `bunx tsc --noEmit` | ✅ **0 errores** (exit 0) | Verificado sin pipes (salida vacía, exit real = 0). `strict: true` activo. |
+| `bun run lint` | ✅ **0 errores / 0 warnings** (exit 0) | ⚠️ Verde *engrososo*: casi todas las reglas están `off` (ver A-1). |
+| `bunx knip` | ✅ ejecutado con **knip@5.44.1** | knip ≥5.45 usa `oxc-parser` y crashea con `RangeError: Array buffer allocation failed` en este entorno → se fijó `5.44.1` (parser TypeScript clásico). Resultado: 17 archivos, 63 exports, 40 tipos exportados y 1 devDependency sin uso (detalle abajo). |
+| `bun run build` | ✅ **exit 0** | Next.js 16.4.2 (Turbopack), compilación 10.8 s, 2 rutas estáticas (`/`, `/_not-found`). ⚠️ Log muestra `Skipping validation of types` por `ignoreBuildErrors: true` (ver A-2). |
+| `bunx madge --circular` (extra) | ⚠️ **5 ciclos de imports** | Detalle en M-1/M-2/B-4. |
+
+---
+
+## 2. Tabla de hallazgos
+
+| Severidad | Categoría | Archivo:Línea | Problema | Impacto | Fix sugerido | Riesgo de arreglarlo |
+|-----------|-----------|---------------|----------|---------|--------------|----------------------|
+| **ALTO** | Calidad de proceso (lint) | `eslint.config.mjs:15-49` | Reglas críticas desactivadas en bloque: `no-explicit-any`, `no-unused-vars`, `no-non-null-assertion`, `ban-ts-comment`, `react-hooks/exhaustive-deps`, `react-hooks/purity`, `no-console`, `no-debugger`, `no-empty`, `no-unreachable`, `prefer-const`, etc. | El lint "verde" no protege nada: bugs de hooks, vars muertas, `debugger`, bloques vacíos y código inalcanzable pasan invisibles. Es la causa raíz de varios hallazgos de esta tabla. | Reactivar en tandas: (1) `no-debugger`, `no-empty`, `no-unreachable`, `prefer-const`, `no-unused-vars`; (2) `exhaustive-deps: "warn"`; (3) evaluar resto. Limpiar lo que salga en commits separados. | **Bajo-Medio**: cada tanda puede revelar casos a justificar; se hace gradual y sin tocar lógica. |
+| **ALTO** | Config Next.js | `next.config.ts:41` | `typescript.ignoreBuildErrors: true` — el build de producción **no valida tipos** (log: "Skipping validation of types"). | Hoy `tsc` pasa limpio, así que es gratuito quitarlo; el día que alguien introduzca un error de tipos, el build lo tragará y llegará a producción. | Poner `ignoreBuildErrors: false` (o eliminar el bloque). | **Bajo**: `tsc --noEmit` ya pasa con 0 errores; el build seguirá verde. Verificar con un build tras el cambio. |
+| **ALTO** (sospecha — regla 6) | Hooks / useEffect | `src/components/e14/screens/ScanView.tsx:1615, 1638, 1690` | 3 `useEffect` con dependencias faltantes detectados al re-activar `react-hooks/exhaustive-deps` vía CLI (sin editar archivos): (a) efecto de arranque de cámara usa `aplicarLinternaGuardada`, `setFramePendiente`; (b) efecto "playing" usa `aplicarLinternaGuardada`; (c) frame-loop usa `alimentarAnillo`, `liberarAnillo`, `mostrarAviso`. | **Hoy probablemente benigno**: las 4 funciones son `useCallback` (703, 831, 883, 907) y el loop usa deliberadamente refs (`capturarRef.current`, `autoRef`) para evitar staleness. El riesgo es *latente*: si mañana alguien añade una dependencia reactiva a esos `useCallback`, el efecto capturará la versión vieja sin advertencia (la regla está `off`). | Verificar que los 4 `useCallback` tienen deps estables (`[]` o solo refs); añadir las funciones a los arrays de deps o justificar con comentario `// eslint-disable-next-line react-hooks/exhaustive-deps — estable por useCallback([])`. | **Bajo**: los arrays de deps del efecto principal son `[fuente, reintentoCamara]` y `[camaraViva]`; añadir funciones estables no re-dispara el efecto. Probar escaneo en cámara tras el cambio. |
+| MEDIO | Arquitectura / imports | `src/lib/e14/masiva/store.ts:41` ↔ `src/lib/e14/masiva/precalor.ts:41` | **Ciclo estático real**: `masiva/store` importa `cablearPrecalor` de `./precalor` y `precalor` importa `useMasivaStore` de `./store` (ambos `import` estáticos, valores). Madge además reporta variantes: `runner → precalor → store` y `store(main) → runner → precalor → store`. | Funciona hoy, pero es frágil: el orden de evaluación de módulos decide si un binding está disponible en init (riesgo TDZ). Cualquier reordenación de imports puede romper el arranque sin error claro. | Romper el ciclo con inyección de dependencias (p. ej. `cablearPrecalor(setters)` ya lo es a medias) o un módulo neutro de tipos/eventos. **Requiere diseño previo y tu aprobación (regla 1).** | **Medio-Alto**: es refactor arquitectónico; tocarlo sin diseño puede cambiar el orden de init de los stores. |
+| MEDIO (sospecha — regla 6) | Arquitectura / imports | `src/lib/e14/store.ts:759, 1304` ↔ `src/lib/e14/masiva/runner.ts:28,41` | Ciclo `store(main) → masiva/runner` con back-edge. **Mitigación ya presente**: el back-edge es *dynamic import* (`void import("./masiva/runner")`), por lo que no hay riesgo TDZ en init. | Riesgo bajo hoy (import perezoso), pero el grafo enredado dificulta razonar dependencias y facilita que futuros edits metan un import estático accidental. | Mantener el dynamic import como regla documentada (comentario), o extraer una interfaz que `runner` consuma sin importar `store`. Baja prioridad. | **Bajo** si se documenta; **Medio** si se refactoriza. |
+| MEDIO | Código muerto | 63 exports sin uso — p. ej. `src/lib/e14/clasificador.ts:83-238` (5 funcs: `normalizarNombre`, `normalizarNombreLugar`, `normalizarCodigo`, `similitud`, `tipoDeDigito`, `candidatosCodigo1D`), `src/lib/e14/masiva/identidad-qr.ts` (~20 símbolos: `decodificarQrDePixeles`, `barridoQrZxingDePixeles`, constantes `QR_*`/`ZXING_*`), `src/lib/e14/informe.ts:259-605` (6 funcs), `src/lib/e14/scanner-core-bridge.ts:163,995`, `src/lib/e14/store.ts:82` (`SCORE_SIMULADO`), `src/lib/e14/marco-escaneo.ts:118`, `src/lib/e14/masiva/{cola,dedup,deskew,historico,origen,precalor}.ts` (1-4 c/u). Lista completa reproducible con `bunx knip`. | Bundle y superficie de mantenimiento mayores de lo necesario; funciones "por si acaso" que nadie llama confunden al siguiente desarrollador y a las herramientas. | Borrar export no usados en commits pequeños **por módulo** (un módulo = un commit), empezando por los triviales (`icons.tsx`, tipos exportados). Antes de borrar en `lib/e14`: confirmar que no son API pública para QA/scripts de `scripts/` (knip no sigue entry-points dinámicos — ver M-3). | **Bajo** por módulo con `tsc` + build tras cada commit. **Medio** si se hace todo de golpe (prohibido por regla 4). |
+| MEDIO | Código muerto (tipos) | 40 tipos exportados sin uso — p. ej. `src/lib/e14/types.ts:29,36,277-278` (`ActaUbicacion`, `ActaCandidato`, `MesaEstado`, `PaginaEstado`), `src/lib/e14/informe.ts:46-221` (6 interfaces), `src/lib/e14/divipol.ts:21-49` (4), `src/lib/e14/masiva/archivos.ts:55-245` (4), `src/lib/e14/masiva/store.ts:95,342`, `src/lib/e14/orientacion.ts:63-84` (2 tipos + 3 consts), etc. | Igual que anterior pero para tipos: ruido de API, parsers/docs desalineados. | Mismas tandas por módulo que los exports de valor. | **Bajo**. |
+| MEDIO | Proceso / tooling | raíz del repo (falta `knip.json`) | Los 17 archivos que knip marca sin uso son en su mayoría **intencionales** (falsos positivos): `public/sw.js` (registrado por URL string en `PwaRegister.tsx`), `public/vendor/*` y `public/scanner/detection-worker.js` (assets copiados del core, cargados por URL), `scripts/qa-*.ts` (8 harnesses QA que corren con `bun` directo), `tools/*` (bench/serve). Sin config, knip raporta ruido en cada corrida y **entiera la señal real** (los exports muertos de arriba). | Cualquier auditoría futura repite este análisis a mano o desconfía de knip. | Crear `knip.json` con `entry: ["src/app/**/*.tsx", "scripts/qa-*.ts", "tools/**/*.js", ...]` e `ignore` para assets vendor/`sw.js`. Así el reporte queda limpio y solo señala código verdaderamente muerto. | **Bajo**: solo configuración. |
+| MEDIO | Observabilidad / producción | `src/lib/e14/masiva/runner.ts` (22 `console.info`, líneas 470-732), `src/lib/e14/ocr/rapidocr.ts` (5), `masiva/store.ts` (4), `scanner-core-bridge.ts` (3), `identidad-qr.ts` (3), `store.ts` (2), `orientacion.ts` (2), `precalor.ts` (1), `divipol.ts` (1) — **43 en total** | `console.info/warn` con datos de negocio en producción: IDs de fila, payload QR (`[e14] capa0-qr original ${payloadQrCorto}`), nombres de archivo, presupuesto ms. | App 100 % client/offline → no hay fuga de red; el impacto real es ruido en devtools, leve fuga de info si el usuario comparte capturas de consola y coste de string-building. | Decidir política de logging: gate por `process.env.NODE_ENV !== "production"` o nivel `debug` con flag. **No es urgente.** | **Bajo**: envolver con helper; riesgo de perder trazas útiles para QA — mantener en dev. |
+| BAJO | Config Next.js | `next.config.ts:43` | `reactStrictMode: false`. | En dev no se doble-montan efectos → bugs de cleanup (listeners, streams de cámara) pasan desapercibos. Probablemente **deliberado** (cámara/worker/ONNX no toleran doble init) → *sospecha, no bug*. | Si se quiere activar: probar en rama con el flujo completo de escaneo + masiva y ver si algún efecto no es idempotente. | **Medio**: puede revelar efectos con side-effects no idempotentes (cámara, IDB). |
+| BAJO (sospecha — regla 6) | Dependencias | `package.json:35` (`tailwindcss` devDep) | knip la reporta como devDependency sin uso directo. | Probablemente **necesaria**: `@tailwindcss/postcss` resuelve `@import "tailwindcss"` de `globals.css` a través del paquete; quitarla puede romper el build de CSS o fijar versión ambigua vía hoisting. | NO borrar sin verificar. Si se quiere limpiar: probar build con `BUILD_STATIC=1` y dev tras remover; si falla, restaurar. Alternativa: `knip.json` → `"ignoreDependencies": ["tailwindcss"]`. | **Bajo** (reversible), pero no hay beneficio claro: dejar como está y silenciar en knip. |
+| BAJO | Documentación / deps | `package.json` vs docs del proyecto | El prompt del proyecto lista `tesseract.js` como librería crítica, pero **no está en package.json** (solo aparece en comentarios históricos de `clasificador.ts:869` y `scanner-core-bridge.ts:709`). El OCR real vive en `onnxruntime-web` (RapidOCR) + `zxing-wasm`. | Confusión en onboarding/auditorías (como esta): se busca una dependencia que no existe. | Actualizar el stack descrito en `AGENTS.md`/README/prompt maestro para reflejar el stack real. | **Cero** (solo docs). |
+| BAJO | Arquitectura / imports | `src/lib/e14/store.ts:38` ↔ `src/lib/e14/jornada.ts:29` | Ciclo `store ↔ jornada`, pero el back-edge es `import type` (se borra en compile-time) → **sin riesgo runtime**. | Solo ruido de grafo para herramientas (madge lo cuenta). | Nada urgente; si se toca `jornada.ts`, mover los tipos a un módulo compartido. | **Cero-Bajo**. |
+
+---
+
+## 3. Verificado y LIMPIO ✅ (sin hallazgos)
+
+| Ítem | Resultado |
+|---|---|
+| `debugger` olvidados | 0 en todo `src/` |
+| `TODO` / `FIXME` / `HACK` / `XXX` reales | 0 (los matches son la palabra española "TODO" en comentarios 😄) |
+| XSS / código dinámico | 0: sin `dangerouslySetInnerHTML`, sin `eval`, sin `new Function` |
+| Errores de hidratación | 0: sin `window`/`document`/`navigator` en scope de módulo, sin `Math.random()` en render de componentes |
+| `localStorage` | 3 archivos (`ScanView`, `AyudaOverlay`, `orientacion.ts`) — siempre dentro de efectos/handlers, nunca en render. Seguro. |
+| Directivas `"use client"` / `"use server"` | Coherente: 19 archivos cliente con directiva; `layout.tsx` es server component correcto (font + metadata); `primitives.tsx` e `icons.tsx` no usan hooks (se compilan como cliente vía import). 0 `"use server"` — correcto para app estática/offline sin backend. |
+| Manejo de errores en `fetch`/async | Revisados los 10 puntos con `fetch`: `ScanView.tsx:1134` (try/catch ✓), `divipol.ts:71` (patrón "NUNCA rechaza", degrada a manual ✓), `archivos.ts:456` (try/catch con motivo propio ✓), `rapidocr.ts:190` (caller con try/catch honesto ✓), `dedup.ts`, `scanner-core-bridge.ts` (con fallback). **Único menor**: helper `dataUrlToBlob` (`ReviewView.tsx:108`) no envuelto — su único caller (`:197`, descarga de foto) está en flujo con error boundary de UI; aceptable. |
+| Build / tipos | `tsc --noEmit`: 0 errores · build Turbopack: exit 0 |
+
+---
+
+## 4. Resumen ejecutivo
+
+### Conteo por severidad
+
+| Severidad | Cantidad |
+|-----------|----------|
+| 🔴 BLOQUEANTE | **0** |
+| 🟠 ALTO | **3** (2 confirmados de proceso/config + 1 sospecha de hooks) |
+| 🟡 MEDIO | **5** (ciclos ×2, exports muertos, tipos muertos, config knip/logging) |
+| 🟢 BAJO | **4** |
+| **Total** | **12** |
+
+### Los 5 problemas más urgentes (orden recomendado)
+
+1. **Reactivar reglas ESLint críticas** (`eslint.config.mjs`) — es la causa raíz: el lint verde actual no protege nada y ya permitió acumular dead code y hooks sin verificar. Hacerlo en tandas pequeñas.
+2. **Quitar `typescript.ignoreBuildErrors`** (`next.config.ts:41`) — `tsc` ya pasa 0 errores; el cambio es gratis hoy y evita que un futuro error de tipos llegue silenciosamente a producción.
+3. **Resolver los 3 `useEffect` de `ScanView.tsx` (1615/1638/1690)** — la única sospecha de bug de runtime real. Las funciones implicadas parecen estables (`useCallback`), hay que añadir deps o justificar con comentario; re-probar flujo de cámara.
+4. **Configurar `knip.json`** (entries de QA/tools + ignores vendor/sw) y luego **limpiar los ~103 exports/tipos muertos** en commits atómicos por módulo.
+5. **Diseñar la ruptura del ciclo estático `masiva/store ↔ precalor`** — primero propuesta de diseño (regla 1), después el refactor.
+
+### Qué arreglaría en esta sesión vs. después
+
+**Arreglaría ahora** (riesgo bajo, verificable con los 3 comandos tras cada paso):
+- Quitar `ignoreBuildErrors: true` ✅ trivial
+- Tanda 1 de reglas lint: `no-debugger`, `no-empty`, `no-unreachable`, `prefer-const`, `no-unused-vars` (con `argsIgnorePattern`) ✅ el repo ya pasa tsc; lo que salga se limpia en commits separados
+- Crear `knip.json` y fijar knip `5.44.1` ✅ solo config
+- Deps de los 3 `useEffect` de ScanView (con prueba manual de escaneo)
+
+**Dejaría para después** (requiere tu decisión/diseño):
+- Tanda 2 de lint (`exhaustive-deps` como warn en todo el repo)
+- Limpieza de exports muertos en `lib/e14` grande (`clasificador`, `identidad-qr`, `informe`) — verificar función por función contra `scripts/qa-*`
+- Ciclos `precalor↔store` y `store↔runner` — refactor arquitectónico (regla 1: se pide permiso con diseño antes)
+- Política de `console.*` (43 llamadas) — decisión de producto
+- `reactStrictMode` — experimento en rama aparte
+
+---
+
+## 5. Notas de metodología
+
+- `knip ≥5.45` crashea en este entorno (`oxc-parser` → `RangeError: ArrayBuffer allocation failed`); se instaló **`knip@5.44.1`** fijado, que usa el parser TypeScript clásico y funciona. Recomendación: mantener el pin hasta que el issue de oxc-parser lo permita.
+- `react-hooks/exhaustive-deps` se ejecutó **vía CLI** (`bunx eslint src --rule '...'`) sin modificar `eslint.config.mjs` — 3 warnings reales.
+- Imports circulares detectados con `bunx madge --circular --extensions ts,tsx` (61 archivos, 5 ciclos reportados; 2 son benignos: 1 type-only, 1 dynamic-import).
+- Durante la revisión se sospechó de un posible error de sintaxis en `ScanView.tsx:718-719` (destructuring incompleto); **descartado con hexdump (`od -c`)**: las líneas están correctas — era artefacto de renderizado de la terminal del auditor, no del repo.
+- Ningún archivo de `src/` fue modificado. Los únicos cambios en el working tree son `package.json` + `bun.lock` (knip devDependency, autorizado) y este `AUDIT.md`.
