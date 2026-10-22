@@ -57,7 +57,10 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   // npm tarball (UMD webpack — kit banco-qr-identidad-v1 §1) — MISMO criterio
   // vendor: JS de terceros, no código fuente del repo (el UMD asigna `module`
   // y trae expresiones sueltas del bundle: fallaría lint sin este ignore).
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "lab/**/*.bundle.js", "tools/bench-qr-identidad/jsQR.js"]
+  // "src/lib/e14/masiva/vendor/jsQR.js": EL MISMO archivo vendido a producción
+  // por e63m (kit e63m-capa0-qr-identidad-v1 §1.1 — copia BYTE-IDÉNTICA de la
+  // de #72; d.ts aparte con los tipos): mismo criterio vendor.
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "lab/**/*.bundle.js", "tools/bench-qr-identidad/jsQR.js", "src/lib/e14/masiva/vendor/jsQR.js"]
 }];
 
 export default eslintConfig;
