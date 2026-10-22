@@ -7,6 +7,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
+  // ESLint 9 (flat config) reporta en warn las directivas eslint-disable que
+  // no silencian nada HOY. Las directivas prospectivas son legítimas: p.ej.
+  // los 3 useEffect de ScanView documentan deps estables para
+  // react-hooks/exhaustive-deps — regla APAGADA en esta misma config hasta
+  // analizarlos a fondo (auditoría, Fase 4). Mismo criterio que el
+  // «@typescript-eslint/no-unused-disable-directive: off» de abajo.
+  linterOptions: { reportUnusedDisableDirectives: "off" },
   rules: {
     // TypeScript rules
     "@typescript-eslint/no-explicit-any": "off",
