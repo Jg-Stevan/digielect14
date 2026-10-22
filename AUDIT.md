@@ -70,6 +70,36 @@ recordatorio vivo de §2.2, no ruido.
 
 ---
 
+## Protocolo obligatorio antes de borrar código "muerto"
+
+> Nacido de la **lección 3A.1** (§5): `archivoPipeline` se eliminó como export
+> muerto (`2c011a2`) y rompió el QA e63m — `qa-qr-identidad.ts:353` hace
+> `indexOf` sobre el código fuente de `runner.ts`. Los 3 gates (tsc/lint/build)
+> pasaron limpios; solo la corrida del QA detectó la ruptura (restaurado en
+> `3da7b21`).
+>
+> **Aplicable a CUALQUIER borrado de export/símbolo/import, en cualquier fase,
+> incluidos los "triviales"** (tipos, iconos, primitives: pueden esconder
+> consumo dinámico, re-exports públicos o anclas QA que knip/tsc no siguen).
+
+1. **Grep de evidencia** — `grep -rn "<símbolo>" src/ scripts/ tools/ docs/`
+   → pegar la evidencia (o el grep vacío) en AUDIT.md antes del commit.
+2. **¿Aparece en `scripts/qa-*.ts`?** → NO BORRAR sin antes clasificarlo:
+   - **ancla posicional** (`indexOf`/`slice`/`includes` sobre el fuente), o
+   - **aserción real** (import + llamada ejecutada por el harness).
+   En ambos casos: no borrar el símbolo — aplicar el paso 5.
+3. **Antes del commit** — correr TODOS los harnesses:
+   `for f in scripts/qa-*.ts; do bun "$f" || break; done` → 100 % verde.
+4. **Después del commit** — repetir el paso 3 → si algo falla:
+   `git revert HEAD` + reportar. `tsc`/`lint`/`build` **no** detectan rupturas
+   de anclas QA; los pasos 3-4 sí.
+5. **Símbolo solo-ancla** (sin uso funcional; su único consumidor es el QA):
+   conservarlo/restaurarlo con
+   `// eslint-disable-next-line @typescript-eslint/no-unused-vars — ancla QA <nombre>`
+   + comentario que documente el consumidor real (ej.: `archivoPipeline`, `3da7b21`).
+
+---
+
 ## 3. Verificado y LIMPIO ✅ (sin hallazgos)
 
 | Ítem | Resultado |
@@ -126,7 +156,7 @@ recordatorio vivo de §2.2, no ruido.
 
 - `knip ≥5.45` crashea en este entorno (`oxc-parser` → `RangeError: ArrayBuffer allocation failed`); se instaló **`knip@5.44.1`** fijado, que usa el parser TypeScript clásico y funciona. Recomendación: mantener el pin hasta que el issue de oxc-parser lo permita.
 - `react-hooks/exhaustive-deps` se ejecutó **vía CLI** (`bunx eslint src --rule '...'`) sin modificar `eslint.config.mjs` — 3 warnings reales. → Actualización 3A: la regla quedó activa **scoped a `ScanView.tsx`** (bloque `files:` en `eslint.config.mjs`, `acb839b`) con las 3 directivas justificadas en uso; sustituye el `reportUnusedDisableDirectives: off` temporal (`7de9fd7`) para conservar la higiene de directivas. Activación global: Fase 4.
-- **Lección 3A.1 (nueva)**: los QA de `scripts/qa-*.ts` validan por **grep de fuente con anclas por símbolo** — p. ej. `qa-qr-identidad.ts:353` hace `indexOf("const archivoPipeline = archivo;")` y `qa-dedup-enviadas.ts:257` grepea el filtro de `colaVida` dentro del fuente de MasivaView. Un símbolo sin usos TS puede tener consumidores en los harness: antes de borrar «muertos» en `runner/`/`masiva`, grep en `scripts/` y **correr los QA** (`bun scripts/qa-<x>.ts`) — tsc/lint/build NO detectan estas rupturas (el FAIL saltó en la corrida del QA, no en los 3 gates).
+- **Lección 3A.1 (nueva)**: los QA de `scripts/qa-*.ts` validan por **grep de fuente con anclas por símbolo** — p. ej. `qa-qr-identidad.ts:353` hace `indexOf("const archivoPipeline = archivo;")` y `qa-dedup-enviadas.ts:257` grepea el filtro de `colaVida` dentro del fuente de MasivaView. Un símbolo sin usos TS puede tener consumidores en los harness: antes de borrar «muertos» en `runner/`/`masiva`, grep en `scripts/` y **correr los QA** (`bun scripts/qa-<x>.ts`) — tsc/lint/build NO detectan estas rupturas (el FAIL saltó en la corrida del QA, no en los 3 gates). → Formalizado como checklist obligatoria en la sección **«Protocolo obligatorio antes de borrar código "muerto"»** de este documento (aplica a 3B-B1…B4 y a toda la Fase 4).
 - Imports circulares detectados con `bunx madge --circular --extensions ts,tsx` (61 archivos, 5 ciclos reportados; 2 son benignos: 1 type-only, 1 dynamic-import).
 - Durante la revisión se sospechó de un posible error de sintaxis en `ScanView.tsx:718-719` (destructuring incompleto); **descartado con hexdump (`od -c`)**: las líneas están correctas — era artefacto de renderizado de la terminal del auditor, no del repo.
 - Ningún archivo de `src/` fue modificado. Los únicos cambios en el working tree son `package.json` + `bun.lock` (knip devDependency, autorizado) y este `AUDIT.md`.
