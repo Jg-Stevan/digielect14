@@ -2132,3 +2132,11 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 - Implementación: envoltorio SlotActa {acta sin dataURLs, fotoOriginalBlob?, fotoProcesadaBlob?} — compactarActa en TODO put (dataUrlABlob, fallo → string se queda; cleanup ENVIADA/DUPLICADA → fotoOriginal fuera blob Y string M-e69-1) + materializarActa en TODO get (FileReader determinista; contrato Acta en RAM intacto); esSlotActa detecta el formato pre-e69 (Acta crudo con Strings) → passthrough + compactación en su próximo write (auto-migración al restaurar el arranque). Log [e14] memoria acta (bytes reales + originalLiberada). cola.ts BYTE A BYTE (helpers duplicados M-e69-2); P4/P6/watchdog intactos; null del slot byte a byte.
 - Gates: tsc 0 · lint 0 · 7/7 suites SIN adendas (49·42·68·33·24·32·34) · package.json/bun.lock INTACTOS.
 - Pendiente del dueño: verificar en IDB que fotoOriginal es Blob tras 1 importación individual; log [e14] memoria acta con bytes reales; almacenamientoMB antes/después (~40 % esperado); restauración de REVISIÓN tras recarga con acta a mitad.
+
+## e70-orientacion-condicional-v1 (P4.1) — 2026-10-22
+
+- Base main @ 9083f66 (e69, PR #85) — EXACTA contra el remoto.
+- Recon (M-e70-0): guard real en scanner-core-bridge.ts L1397; sin OCR previo al probe → la pasada 0° del probe ES el det inicial del criterio; T1 sana (D56) tenía el falso positivo: MEDIA por chars>=150 perdonaba basura de actas de lado.
+- Fix: probeOrientacion + OpcionesProbeOrientacion {confirmar:{quadWorker}} — en la pasada 0°: quadWorker && anclas>=3 && conf>=0.7 → cortes=confirmada (sin challengers); si falla → sondeo completo (0° reusado, MARGEN decide). Bridge: branch exif-camara pasa confirmar:{quadWorker: quadOrigen==="worker"}; SIM jamás sondea; recorte manual byte a byte. Traza aditiva: cortes=confirmada + exif=0|1; probeMs real para exif; línea omitida=exif-camara retirada.
+- Gates: tsc 0 · lint 0 · 7/7 suites SIN adendas (49·42·68·33·24·32·34) · package.json/bun.lock INTACTOS.
+- Pendiente del dueño: re-encolar las 3 rotadas (deben salir ENVIADA/ADVERTENCIA con anclas en 90/270 y aplicado=1, exif=1) + verificar que las 5 sanas salen cortes=confirmada sin challengers.
