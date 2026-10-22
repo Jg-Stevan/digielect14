@@ -30,6 +30,7 @@ import { useE14Store } from "../store";
 import { guardarRegistro, leerRegistro } from "./cola";
 import {
   originalQrDePayload,
+  registrarEnviadaHistorico, // e65b — KIT e65b-historico-enviadas-v1 (T-3): hooks de envío
   registrarQrPayload,
   useMasivaStore,
 } from "./store";
@@ -447,6 +448,22 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
       serie: serieCopia, // e63k — identidad de la copia (null = sin consenso, honesto)
     };
     await guardarRegistro(registroListo);
+    // e65b (T-3b): la GEMELA reutilizada con desenlace ENVIADO también
+    // alimenta el LEDGER — sus BYTES son otros y deben quedar (el re-encolado
+    // de SU archivo → YA-ENVIADA por bytes). Guard RL-e65b-2: SOLO cuando el
+    // desenlace copiado es ENVIADA (jamás alimentar con no-enviados). Llaves
+    // del REGISTRO DE LA GEMELA (leído arriba), no las de la original.
+    // Fire-and-forget (RL-e65b-3): jamás bloquea la reutilización.
+    if (actaCopia.status === "ENVIADA") {
+      void registrarEnviadaHistorico({
+        id: fila.id,
+        ts: Date.now(),
+        hashBytes: registro.hashBytes,
+        hashDedup: registro.hashDedup,
+        payloadQr: registro.qrPayload,
+        serie: serieCopia ?? undefined,
+      }).catch(() => {});
+    }
     const ms = Date.now() - t0;
     console.info(
       `[e14] dedup fila=${fila.id} dupOf=${fila.dupOf} reutiliza score=${actaCopia.score ?? "-"} ms=${ms}`,
@@ -1090,6 +1107,19 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         ...(onlineAlEnviar ? {} : { hashSha256: "EN COLA" }),
       };
       enviadaAuto = true;
+      // e65b (T-3a): el envío propio alimenta el LEDGER (historico.ts —
+      // sobrevive vaciar/recargas, D-e65b-1) — fire-and-forget, jamás
+      // bloquea ni tumba el envío (RL-e65b-2/3). El payload/serie VIVOS de
+      // ESTA corrida mandan sobre los del registro leído (la capa 0 acaba
+      // de decodificar el QR y la capa 2 la serie).
+      void registrarEnviadaHistorico({
+        id: fila.id,
+        ts: Date.now(),
+        hashBytes: registro.hashBytes,
+        hashDedup: registro.hashDedup,
+        payloadQr: qrPayload ?? undefined,
+        serie: identidad?.serie ?? registro.serie ?? undefined,
+      }).catch(() => {}); // fire-and-forget — jamás bloquea ni tumba el envío (RL-e65b-3)
       if (onlineAlEnviar) envioMs = Math.round(performance.now() - tEnvio);
     } else {
       useE14Store.getState().contarMotivoNoEnvioActa(actaDesenlace);
