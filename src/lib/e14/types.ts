@@ -272,6 +272,16 @@ export interface Acta {
    *  "sin-payload" cuando el intento terminó en null. Ausente = n/d (la
    *  capa 0 no llegó a correr). */
   qrEstado?: "leido" | "sin-payload";
+  // ---------- e67-watchdog-rescate-v1 — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** e67 (cambio B — rescate post-timeout): marca de PROVENANCE cuando el
+   *  watchdog venció y el pipeline TARDÍO terminó VÁLIDO (el rechazo por
+   *  tiempo se revirtió). Valor canónico: "post-timeout". Ausente = desenlace
+   *  normal del pipeline (el rescate jamás corrió) — jamás inventar. */
+  scoreRescatadoPor?: string;
+  /** e67 (T): ms REALES del pipeline completo cuando el rescate post-timeout
+   *  corrió (medidos en el bridge — dato, no estimación). Ausente = desenlace
+   *  normal (el acta llegó a tiempo y no hay nada que documentar). */
+  tiempoRealMs?: number;
 }
 
 // ---------- Control de mesas (vista ACTAS) ----------
