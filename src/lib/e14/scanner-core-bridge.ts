@@ -164,8 +164,17 @@ export function precargarDecodeArchivo(file: File): Promise<string> {
   return decodeArchivoMemo(file);
 }
 
-/** Timeout de seguridad global §5 (worker colgado en gama baja). */
-const TIMEOUT_MS = 15_000;
+/** Timeout de seguridad global §5 (worker colgado en gama baja).
+ *  KIT e67-watchdog-rescate-v1 (M-e67-0 / cambio A): 15_000 → 120_000 — el
+ *  plan del dueño pedía subirlo (asumía 30 s; el default REAL era 15 s desde
+ *  el split del repo — desviación documentada en el REPORTE). Evidencia:
+ *  un ARCHIVO real terminó VÁLIDO a los ~53.5 s y el watchdog de 15 s ya lo
+ *  había rechazado (resultado descartado en silencio). 120 s da colchón
+ *  frente al peor caso observado (53.5 s + 36 líneas OCR) sin esperar de
+ *  más a un colgaje real. MASIVA no cambia: pasa su propio presupuesto
+ *  (OpcionesEscaneoConTimeout.timeoutMs — WATCHDOG_MS del runner). El
+ *  RECORTE manual conserva su RECORTE_TIMEOUT_MS propio (ruta distinta). */
+const TIMEOUT_MS = 120_000;
 /** KIT e14-recorte-manual-v1 (T1): presupuesto del RECORTE manual — el warp
  *  del editor mide 14–17.4 s en el equipo del dueño (OCR solo: 9.8–14.3 s),
  *  al borde del límite de 15 s del escaneo. El timeout SIGUE RECHAZANDO
