@@ -364,12 +364,12 @@ export async function marcarYaEnviada(
   } catch {
     return false; // fuera de la cola (IDB/vaciar) — nada que marcar
   }
-  const hashBytesEfectivo = hashBytes ?? registro.hashBytes;
+  // Write e65 byte a byte (la QA previa escanea estas líneas — regresión cero).
   try {
     await guardarRegistro({
       ...registro,
       estado: "YA-ENVIADA",
-      hashBytes: hashBytesEfectivo,
+      hashBytes: hashBytes ?? registro.hashBytes,
       enviadaDe: enviadaDeId,
       dedup: "ya-enviada",
       ...(qrPayload ? { qrPayload } : {}), // e65b (T-2d) — aditivo (D57)
@@ -379,7 +379,9 @@ export async function marcarYaEnviada(
   }
   patchFila(id, {
     estado: "YA-ENVIADA",
-    ...(hashBytesEfectivo ? { hashBytes: hashBytesEfectivo } : {}),
+    ...(hashBytes ?? registro.hashBytes
+      ? { hashBytes: hashBytes ?? registro.hashBytes }
+      : {}),
     enviadaDe: enviadaDeId,
   });
   console.info(
@@ -391,7 +393,7 @@ export async function marcarYaEnviada(
   void registrarEnviadaHistorico({
     id,
     ts: Date.now(),
-    hashBytes: hashBytesEfectivo,
+    hashBytes: hashBytes ?? registro.hashBytes,
     hashDedup: registro.hashDedup,
     payloadQr: qrPayload,
     serie: registro.serie ?? undefined,
