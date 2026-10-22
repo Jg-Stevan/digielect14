@@ -98,10 +98,11 @@ export const QR_ESPERA_INTENTOS = 10;
 
 // ─── e63n (T-PRE) — constantes del BARRIDO y del tier ZXING ────────────────
 /** Fracciones de ventana del barrido ceñido (doc hermano §1: grilla por
- *  cuadrante × fracciones [0.11,0.14,0.19,0.25] — el QR de campo mide
- *  ~5-8% del ancho y la ventana ganadora lo llena al 38-55%; T-1.3 del e64
- *  extiende esta lista). Cada fracción es del ANCHO del canvas de trabajo. */
-export const BARRIDO_VENTANAS: readonly number[] = [0.11, 0.14, 0.19, 0.25];
+ *  cuadrante × fracciones — el QR de campo mide ~5-8% del ancho y la
+ *  ventana ganadora lo llena al 38-55%). e64-qr T-1.3: 0.08 y 0.32 cubren
+ *  los EXTREMOS del rango (QR chico ~5% del ancho / QR grande ~8%+).
+ *  Cada fracción es del ANCHO del canvas de trabajo. */
+export const BARRIDO_VENTANAS: readonly number[] = [0.08, 0.11, 0.14, 0.19, 0.25, 0.32];
 /** Presupuesto de reló del barrido zxing (doc hermano §1: 4 000 ms — el
  *  barrido jsQR NO tiene reló: es puro y acotado por nº de ventanas). */
 export const ZXING_BARRIDO_PRESUPUESTO_MS = 4_000;
