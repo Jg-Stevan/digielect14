@@ -361,6 +361,34 @@ export function barridoQrDePixeles(pix: PixelesQr): string | null {
   return null;
 }
 
+// ─── e64-qr T-1.1 · NITIDEZ (unsharp 3×3) ──────────────────────────────
+/** Máscara de enfoque sobre RGBA: salida = clamp(orig + k·(orig − blur3×3)).
+ *  Motivo (doc hermano R-1): el remuestreo a ≤2048 suaviza módulos de ~3-8 px
+ *  — jsQR binariza mejor con filos (evidencia banco #77: motion blur en el
+ *  filo del decode). Pura, sin DOM, sin throw: bordes intactos (y,x ∈
+ *  [1,extremo-1] — el marco de 1 px no aporta al decode, el QR nunca vive
+ *  pegado al filo ABSOLUTO de la foto). Uint8ClampedArray clampea solo. */
+export const NITIDEZ_K = 0.6;
+
+export function nitidezQrDePixeles(pix: PixelesQr): PixelesQr {
+  const { data, width: w, height: h } = pix;
+  const out = new Uint8ClampedArray(data); // orig + delta acumulado
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      for (let c = 0; c < 4; c++) {
+        // blur 3×3 (sin separables — 9 lecturas, ventana local)
+        let suma = 0;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) suma += data[i + (dy * w + dx) * 4 + c]!;
+        const blur = suma / 9;
+        out[i + c] = data[i + c]! + NITIDEZ_K * (data[i + c]! - blur);
+      }
+    }
+  }
+  return { data: out, width: w, height: h };
+}
+
 // ─── e63n (T-PRE) — tier ZXING (zxing-wasm 3.1.6, wasm LOCAL) ──────────────
 /** Módulo zxing-wasm/reader cacheado — undefined = aún no intentado ·
  *  null = la carga falló (degrada a solo-jsQR) · módulo = listo. */
@@ -500,12 +528,13 @@ function trazaQr(tier: string, payload: string, t0: number): void {
 }
 
 /**
- * CADENA COMPLETA de decode sobre píxeles (doc hermano §1 — el orden REAL
- * de e63n): ladderBase → barrido jsQR → barrido zxing → tier rotación,
- * early-exit al primer payload, `null` si nada decodifica. Async SOLO por
- * el tier zxing (wasm). La traza `tier=` sale por cada desenlace (también
- * null — T-0.3 del e64 la usa para verificar la versión desplegada).
- * JAMÁS throw (todas las sub-llamadas ya son a prueba de throw).
+ * CADENA COMPLETA de decode sobre píxeles (doc hermano §1 + e64 Fase 1 —
+ * el orden REAL): ladderBase → barrido jsQR → barrido NITIDEZ (T-1.1) →
+ * barrido zxing → tier rotación, early-exit al primer payload, `null` si
+ * nada decodifica. Async SOLO por el tier zxing (wasm). La traza `tier=`
+ * sale por cada desenlace (también null — T-0.3 del e64 la usa para
+ * verificar la versión desplegada). JAMÁS throw (todas las sub-llamadas
+ * ya son a prueba de throw).
  */
 export async function decodificarQrDePixeles(
   pix: PixelesQr,
@@ -520,6 +549,14 @@ export async function decodificarQrDePixeles(
   if (barrido != null) {
     trazaQr("barrido", barrido, t0);
     return barrido;
+  }
+  // e64-qr T-1.1 — tier NITIDEZ: barrido sobre la imagen enfocada (doc
+  // hermano R-1 — el remuestreo a 2048 suaviza los módulos; convolución
+  // ~25 ms a 2048² + barrido acotado por nº de ventanas).
+  const nitido = barridoQrDePixeles(nitidezQrDePixeles(pix));
+  if (nitido != null) {
+    trazaQr("barrido-nitido", nitido, t0);
+    return nitido;
   }
   const zxing = await barridoQrZxingDePixeles(pix);
   if (zxing != null) {
