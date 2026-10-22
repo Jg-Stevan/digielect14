@@ -426,3 +426,11 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] §3 — cleanup post-envío: ENVIADA/DUPLICADA → fotoOriginalBlob fuera (2.4–16.9 MB/acta); fotoProcesadaBlob y thumb SE CONSERVAN (plan literal). Cero impacto en ZIP (ESTADOS_CARPETA jamás los exportó) y cero riesgo P2 (solo la foto cambia de forma).
 - [x] §4 — observabilidad: log [e14] memoria fila (bytes reales) + totales.almacenamientoMB (navigator.storage.estimate, null honesto).
 - [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
+
+## P5B — BLOB EN EL SLOT INDIVIDUAL — e69-blob-jornada-v1 (2026-10-22): el acta en REVISIÓN deja de dormir como 2.6 MB de base64 en e14-jornada-v1
+
+- [x] M-e69-0 — recon: `src/lib/e14/jornada.ts` (ARCHIVO único) — `guardarActaEnRevision`/`leerActaEnRevision` puntos únicos; el write real lo dispara el suscriptor zustand (identidad de referencia, guard `!masivaOrigen`); ningún QA escanea jornada.ts; DUPLICADA inalcanzable en el slot (concepto masiva).
+- [x] §2 — envoltorio `SlotActa { acta, fotoOriginalBlob?, fotoProcesadaBlob? }` — compactar en TODO put (dataUrlABlob; fallo → string se queda), materializar en TODO get (FileReader determinista; contrato Acta en RAM INTACTO); pre-e69 pasa tal cual y se compacta en su próximo write (auto-migración al restaurar el arranque).
+- [x] §3 — cleanup de desenlace: ENVIADA/DUPLICADA → fotoOriginal FUERA (blob Y string — M-e69-1); fotoProcesada SE CONSERVA (REVISIÓN muestra la enviada). cola.ts byte a byte (helpers duplicados — M-e69-2).
+- [x] §4 — log `[e14] memoria acta` (bytes reales Blob.size + originalLiberada); `almacenamientoMB` del informe e68 ya es origin-wide — intacto.
+- [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
