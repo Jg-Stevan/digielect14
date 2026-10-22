@@ -126,7 +126,8 @@ export interface FilaInforme {
    *  banda 3..6 sin marca pre-OCR (la capa 2 decide); "identidad" = capa 2
    *  marcó DUPLICADA por serie impresa repetida. e63m: "qr" = CAPA 0
    *  (identidad-QR pre-OCR — payload EXACTO repetido, OCR jamás se paga). */
-  dedup: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr" | null;
+  dedup: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr"
+    | "ya-enviada" | null; // e65-dedup-enviadas-v1 — valor NUEVO AL FINAL (contrato D57, export-only)
   /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
   dedupDistancia: number | null;
   // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
@@ -921,6 +922,9 @@ export async function generarInformeZip(
       porEstadoFila,
       porStatusActa,
       tiemposMediosMs: tiemposMedios,
+      // e65-dedup-enviadas-v1 (T-8, opcional del kit): filas que nacieron
+      // YA-ENVIADA (match bytes/dhash contra el histórico) — cero pipeline.
+      yaEnviadas: filas.filter((f) => f.estado === "YA-ENVIADA").length,
     },
     rechazos: {
       porTipo: conteo(

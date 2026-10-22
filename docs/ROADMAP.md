@@ -382,3 +382,14 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] T-2.1 — QR post-captura en el flujo de cámara (bridge): tiers 'base' (techo ~0.5s — timeout 15s intacto, ADAPTACIÓN declarada), en paralelo, aterrizada en construirActa, GUARD masiva (origenActa) — la capa 0 del runner manda.
 - [x] T-2.2 — Chip QR ✓ en ReviewView (solo presencia, jamás payload).
 - [x] T-3.0 — Verificación final + REPORTE + PR: tsc 0 · lint 0 · build estático OK (out/wasm/ desplegado) · QA 68+33+24+30+34 · docs/REPORTE-e64-qr-v1.md.
+
+## DEDUP DE ENVIADAS — NO REPROCESAR POR DEFECTO — e65-dedup-enviadas-v1 (2026-10-22): re-encolar lo ya enviado nace YA-ENVIADA (cero decode, cero OCR, cero envío)
+
+- [x] T-1 — `hashBytesDeArchivo` (dedup.ts): SHA-256 EXACTO de los BYTES del File vía `crypto.subtle` NATIVO (cero dependencias — RL-e65-8); hex 64, fallo → null conservador; JAMÁS identidad del acta ni viaje al envío (RL-e65-1/5).
+- [x] T-2 — tipos: estado `YA-ENVIADA` (SOLO-VISUAL, D-e65-2) + `hashBytes`/`enviadaDe` en FilaMasiva y RegistroMasiva + unión dedup `ya-enviada` — TODO ADITIVO AL FINAL (contrato D57, RL-e65-6).
+- [x] T-3/T-4 — store: ÍNDICE DEL HISTÓRICO de enviadas (D-e65-3 — `listarMapeados` sin Blob ni acta, lección L7; sin llave → fuera) + cadenaDedup ampliada: CAPA BYTES primero (match EXACTO → YA-ENVIADA sin decode) y capa dhash ampliada con el índice (misma cinta — D-e65-6); cinta cierta decide YA-ENVIADA-vs-DUPLICADA leyendo el registro de la original (conservador); hashBytes estampado en el MISMO write del hashDedup (D-e65-4); guards anti-zombi intactos.
+- [x] T-5 — runner: verificación (cero código) — `siguientePendiente` solo toma PENDIENTE/DUPLICADA → YA-ENVIADA jamás entra (D-e65-7).
+- [x] T-6 — recarga/escape/vaciar: `filaDeRegistro` restaura hashBytes SIEMPRE y enviadaDe SOLO-YA-ENVIADA; `vaciar()` invalida el índice (D-e65-8 — el histórico muere con la cola); `procesarIgual` extendido a YA-ENVIADA (PENDIENTE + forzarDedupOff + enviadaDe fuera — RL-e65-7).
+- [x] T-7 — bandeja: píldora + chip «YA ENVIADA» (esmeralda), contador en el resumen, YA-ENVIADA cuenta en terminadas, PROCESAR IGUAL habilitado (escape del dueño); FiltroMasiva sin filtro nuevo (D-e65-2).
+- [x] T-8 — informe: export-only — unión dedup `ya-enviada` (D57) + `totales.yaEnviadas`; hashBytes JAMÁS exporta (RL-e65-1).
+- [x] QA — `scripts/qa-dedup-enviadas.ts` 42/42 (runtime SHA-256 + source-scan F1-F8 + red lines) · suite previa 68/33/24/30/34 cero regresiones · tsc 0 · lint 0 · build estático OK.

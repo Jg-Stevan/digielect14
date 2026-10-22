@@ -35,6 +35,10 @@ function pildoraDe(f: FilaMasiva): { label: string; clases: string } {
       return { label: "PROCESANDO", clases: "border-brand-borderdim text-gray-200 bg-white/5" };
     case "ERROR":
       return { label: "ERROR", clases: "border-red-500/60 text-red-400 bg-red-500/10" };
+    // e65-dedup-enviadas-v1 (T-7, D-e65-2): nació YA-ENVIADA — SOLO-VISUAL
+    // (cero OCR, cero envío; PROCESAR IGUAL fuerza el reproceso completo).
+    case "YA-ENVIADA":
+      return { label: "YA ENVIADA", clases: "border-emerald-500/60 text-emerald-300 bg-emerald-500/10" };
     case "LISTA": {
       const s = f.statusActa;
       if (s === "ENVIADA") {
@@ -227,7 +231,13 @@ export function MasivaView() {
   // PENDIENTES y se cuentan aparte en la línea de conteos. FIX M13: las
   // temps no cuentan como PENDIENTES (mueren al aterrizar sus ids reales).
   const duplicadas = filas.filter((f) => f.estado === "DUPLICADA").length;
-  const terminadas = filas.filter((f) => f.estado === "LISTA" || f.estado === "ERROR").length;
+  const terminadas =
+    filas.filter(
+      (f) =>
+        f.estado === "LISTA" || f.estado === "ERROR" || f.estado === "YA-ENVIADA",
+    ).length; // e65: la YA-ENVIADA está terminada (cero pipeline)
+  // e65-dedup-enviadas-v1 (T-7): contador de la línea de resumen.
+  const yaEnviadas = filas.filter((f) => f.estado === "YA-ENVIADA").length;
   const advertenciasPend = filas.filter(
     (f) => f.estado === "LISTA" && f.statusActa === "ADVERTENCIA",
   ).length;
@@ -556,10 +566,11 @@ export function MasivaView() {
             ))}
             <span
               className="font-mono text-[10px] uppercase tracking-wider text-slate-500"
-              aria-label={`Conteos: ${enviadas} enviadas, ${enCola} en cola, ${pendientes} pendientes, ${duplicadas} duplicadas, ${errores} errores`}
+              aria-label={`Conteos: ${enviadas} enviadas, ${enCola} en cola, ${pendientes} pendientes, ${duplicadas} duplicadas, ${yaEnviadas} ya enviadas, ${errores} errores`}
             >
               ENVIADAS {enviadas} · EN COLA {enCola} · PENDIENTES {pendientes}
-              {duplicadas > 0 && <> · DUPLICADAS {duplicadas}</>} · ERRORES {errores}
+              {duplicadas > 0 && <> · DUPLICADAS {duplicadas}</>}
+              {yaEnviadas > 0 && <> · YA ENVIADAS {yaEnviadas}</>} · ERRORES {errores}
             </span>
             {(advertenciasPend > 0 || enviandoLote) && !corriendo && (
               <button
@@ -679,6 +690,14 @@ export function MasivaView() {
                           ≡ {filas.find((o) => o.id === f.dupOf)?.nombre ?? "OTRA FILA"}
                         </span>
                       )}
+                      {/* e65-dedup-enviadas-v1 (T-7): chip YA ENVIADA — la
+                          fila nació con contenido ya enviado (bytes/dhash);
+                          cero OCR, cero envío. JUNTO al chip DUPLICADA. */}
+                      {f.estado === "YA-ENVIADA" && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/60 text-emerald-300 bg-emerald-500/10">
+                          YA ENVIADA
+                        </span>
+                      )}
                       {f.estado === "ERROR" && f.error && (
                         <span className="font-mono text-[9px] uppercase tracking-wider text-red-400/80 truncate">
                           {f.error}
@@ -734,8 +753,10 @@ export function MasivaView() {
                   <div className="flex items-center gap-1.5 shrink-0">
                     {/* KIT e14-masiva-tiempos-v1 (PR-1): rescate del kit §2 —
                         reprocesar la gemela COMPLETA por si el dhash la
-                        confundió (fotos distintas parecidas en thumb). */}
-                    {f.estado === "DUPLICADA" && (
+                        confundió (fotos distintas parecidas en thumb).
+                        e65 (T-7): también sobre YA-ENVIADA — ÚNICO escape del
+                        dueño para estampar QR/OCR en una fila ya enviada. */}
+                    {(f.estado === "DUPLICADA" || f.estado === "YA-ENVIADA") && (
                       <button
                         type="button"
                         onClick={() => void procesarIgual(f.id)}
