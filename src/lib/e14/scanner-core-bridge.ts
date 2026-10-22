@@ -1387,17 +1387,30 @@ export class RealCoreBridge implements E14Bridge {
     // en el diagnóstico (aditivo — la traza de consola D51 ya existe; esto la
     // vuelve permanente en la ficha). null si el probe no corrió (SIM o error).
     let probeMsOrientacion: number | null = null;
-    // e66 (P4): EXIF de cámara → orientación FIABLE (el core la aplicó al
-    // decodificar; EVIDENCIA del dueño: aplicado=0 SIEMPRE en exif-camara,
-    // 4-10 s por acta de desperdicio puro). OMITIR el sondeo completo —
-    // traza honesta en línea propia (prefijo parseable) y el instrumento
-    // D57 queda null («no corrió» — jamás inventar ms=0). Solo entran-
-    // das MASIVA traen la señal (mismo guard D63-C de origenActa); los
-    // flujos individual/video/recorte-manual corren el probe de siempre.
-    if (opciones.origenSenales === "exif-camara") {
-      console.info(
-        "[e14] orientacion omitida=exif-camara (EXIF de cámara — orientación ya horneada por el core; sondeo de rotaciones innecesario)",
-      );
+    // e66 (P4) → e70 (P4.1) — REVERSA PARCIAL del skip ciego por EXIF: el
+    // EXIF de cámara dice cómo estaba el TELÉFONO, no cómo quedó el acta
+    // (evidencia del dueño: 3 fotos landscape CON EXIF rechazadas score 4.9,
+    // anclas 0 y cabeceraE14 false — el core horneó la orientación del
+    // sensor, el acta física estaba de lado). La omisión del sondeo ahora
+    // exige CONFIRMACIÓN de la detección previa (modo confirmar del probe):
+    // quad del WORKER (el fallback sobel fabricó la geometría — «el quad se
+    // detectó mal» del criterio) + lectura a 0° con anclas >= 3 Y conf >=
+    // 0.7 (la pasada 0° del probe ES la primera pasada rápida del criterio:
+    // det cap rápido + rec — las sanas pagan det+rec0 y se saltan las
+    // challengers 90/180/270; las dudosas sondean 0/90/180/270 completas y
+    // el MARGEN decide la rotación antes del OCR principal). SIM jamás
+    // sondea (mismo guard §2.2 de siempre — SIM nunca trae origenSenales).
+    // Flujos individual/video sin la señal → rama de abajo (probe de
+    // siempre); recorte manual (pipelineRecorte) INTACTO (sin señal ahí).
+    if (!opciones.simular && opciones.origenSenales === "exif-camara") {
+      const probe = await probeOrientacion(fotoOcr, {
+        confirmar: { quadWorker: quadOrigen === "worker" },
+      });
+      if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
+      if (probe?.aplicado) {
+        fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
+        fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
+      }
     } else if (!opciones.simular) {
       const probe = await probeOrientacion(fotoOcr);
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
