@@ -124,8 +124,9 @@ export interface FilaInforme {
    *  "sin-match" = hasheada sin gemela. null = pre-D65 o hash falló.
    *  e63k — valores NUEVOS AL FINAL (contrato D57): "visual-aplazada" =
    *  banda 3..6 sin marca pre-OCR (la capa 2 decide); "identidad" = capa 2
-   *  marcó DUPLICADA por serie impresa repetida. */
-  dedup: "v2" | "sin-match" | "identidad" | "visual-aplazada" | null;
+   *  marcó DUPLICADA por serie impresa repetida. e63m: "qr" = CAPA 0
+   *  (identidad-QR pre-OCR — payload EXACTO repetido, OCR jamás se paga). */
+  dedup: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr" | null;
   /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
   dedupDistancia: number | null;
   // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
@@ -169,6 +170,15 @@ export interface FilaInforme {
    *  general e63k). null = sin lectura consensuada (jamás inventar —
    *  RED LINE 2). Base de la capa 2 de dedup por identidad. */
   serie: string | null;
+  // ---------- e63m — KIT e63m-capa0-qr-identidad-v1 (F3) — ADITIVOS AL FINAL ----------
+  /** Payload QR EXACTO de la CAPA 0 (identidad-qr.ts — base64 de 32 bytes,
+   *  llave OPACA). null = sin-payload / registro previo (jamás inventar).
+   *  EXPORT-ONLY: se lee del registro tal cual — PROHIBIDO recalcular. */
+  qrPayload: string | null;
+  /** Hash perceptual dhash hex-16 de la capa 1 (reg.hashDedup — SI existe en
+   *  memoria/IDB). null = el instrumento no corrió / decode falló. Ídem:
+   *  EXPORT-ONLY, jamás se recalcula en el exportador (kit §1.3). */
+  dedupHash: string | null;
 }
 
 /** Resumen para la UI (T2) — espejo de lo importante del informe.json. */
@@ -325,6 +335,11 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
     // e63k (F1.5): serie impresa del registro (el runner la persiste en el
     // write LISTA — null/ausente = sin consenso, jamás inventar).
     serie: reg.serie ?? null,
+    // e63m (F3): payload QR + hash dhash del registro — EXPORT-ONLY (se
+    // copian tal cual del registro; PROHIBIDO recalcular hashes/payloads
+    // aquí — kit §1.3). null/ausente = sin dato (jamás inventar).
+    qrPayload: reg.qrPayload ?? null,
+    dedupHash: reg.hashDedup ?? null,
   };
 }
 
@@ -361,6 +376,15 @@ function conteo(
  *  el string ES el veredicto de «murió el procesado» — el informe lo usa
  *  para separar colgadas salvadas de colgadas muertas (D65 T4.2). */
 const DETALLE_TIMEOUT_INFORME = "TIEMPO DE PROCESADO EXCEDIDO";
+
+/** e63m (F3) — prefijo corto del payload para la columna dedupQr del txt:
+ *  primeros 8 chars + «…» (kit §1.3 LITERAL — la decisión vive SIEMPRE en
+ *  la igualdad EXACTA; esto es SOLO cosmética). Espejo local de qrCorto de
+ *  identidad-qr.ts (informe.ts NO importa el módulo QR: el exportador jamás
+ *  toca el decodificador — export-only). */
+function qrCortoInforme(payload: string): string {
+  return `${payload.slice(0, 8)}…`;
+}
 
 /** D65 (T4.2) — resumen de COLGADAS (PURO — humo bun): n = filas con
  *  watchdog ≥ 1 (al menos un intento murió); salvadas = de esas, las cuyo
@@ -401,6 +425,9 @@ export function resumenDedup(filas: FilaInforme[]): {
   distanciaMedia: number | null;
   sinMatch: number;
   identidad: number;
+  /** e63m (F3): gemelas atrapadas por la CAPA 0 (dedup "qr" — identidad-QR
+   *  pre-OCR, el OCR jamás se pagó). 0 = la capa no atrapó nada (dato real). */
+  qr: number;
 } {
   const matches = filas.filter((f) => f.dedup === "v2");
   const distancias = matches
@@ -414,6 +441,7 @@ export function resumenDedup(filas: FilaInforme[]): {
       : null,
     sinMatch: filas.filter((f) => f.dedup === "sin-match").length,
     identidad: filas.filter((f) => f.dedup === "identidad").length,
+    qr: filas.filter((f) => f.dedup === "qr").length,
   };
 }
 
@@ -562,6 +590,11 @@ export function actaLivianaJson(fila: FilaInforme) {
     // e63k (F1.5): serie impresa — campo AUSENTE si no hay consenso
     // (misma receta del spread condicional; informes previos intactos).
     ...(fila.serie != null ? { serie: fila.serie } : {}),
+    // e63m (F3): payload QR + hash dhash — campos AUSENTES si el registro
+    // no los trae (misma receta del spread condicional; informes previos
+    // intactos). EXPORT-ONLY: viajan tal cual, jamás se recalculan.
+    ...(fila.qrPayload != null ? { qrPayload: fila.qrPayload } : {}),
+    ...(fila.dedupHash != null ? { dedupHash: fila.dedupHash } : {}),
   };
 }
 
@@ -764,6 +797,17 @@ export function renderTxt(
       `CLASIF-DEBIL: puesto-lugar ${porMotivo["puesto-lugar"]} · tipo ${porMotivo["tipo"]} · mesa ${porMotivo["mesa-registro"]} · ruta ${porMotivo["ruta"]}`,
     );
   }
+  // e63m — KIT e63m-capa0-qr-identidad-v1 (F3): post-mortem de gemelas por
+  // fin posible (kit §1.3) — capa 0 identidad-QR (dedup qr) · capa 1 dhash
+  // (marcada — dedup v2) · capa 2 identidad impresa (dedup identidad). Solo
+  // se imprime si el instrumento corrió (alguna traza dedup — patrón
+  // CLASIF-DEBIL: sin datos el txt queda byte-idéntico, contrato D57).
+  const resumenCapas = resumenDedup(filas);
+  if (resumenCapas.activo) {
+    linea(
+      `DEDUP-CAPAS: capa0-qr ${resumenCapas.qr} - capa1-dhash-marcada ${resumenCapas.matches} - capa2-identidad ${resumenCapas.identidad}`,
+    );
+  }
   linea();
   linea(`ACTAS (${filas.length})`);
   filas.forEach((f, i) => {
@@ -804,6 +848,10 @@ export function renderTxt(
       // e63k (F1.5) — serie impresa AL FINAL de la línea (aditivo — jamás
       // reordenar, contrato D57). Sin dato NO se imprime nada (honesto).
       f.serie != null ? `serie ${f.serie}` : null,
+      // e63m (F3) — columna dedupQr AL FINAL de la línea (aditivo — jamás
+      // reordenar, contrato D57). Kit §1.3 LITERAL: primeros 8 chars + «…»,
+      // «—» si null (la columna SIEMPRE aparece).
+      `dedupQr ${f.qrPayload != null ? qrCortoInforme(f.qrPayload) : "—"}`,
     ].filter((t): t is string => t != null);
     linea(`${i + 1}. ${trozos.join(" - ")}`);
   });
@@ -906,6 +954,7 @@ export async function generarInformeZip(
         sinMatch: r.sinMatch,
         distanciaMedia: r.distanciaMedia,
         identidad: r.identidad, // e63k — capa 2 por identidad (aditivo al final)
+        qr: r.qr, // e63m — capa 0 identidad-QR pre-OCR (aditivo al final)
       };
     })(),
     actas: filas.map(actaLivianaJson),
