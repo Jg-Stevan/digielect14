@@ -365,8 +365,8 @@ let modZxing: ModZxing | null | undefined;
  * reader")` + wasm servido LOCAL desde public/wasm/ vía
  * setZXingModuleOverrides({ locateFile }) con base
  * `${NEXT_PUBLIC_BASE_PATH ?? ""}/wasm/`). Una sola tentativa por sesión
- * (caché); falla → null SIN traza en T-PRE (la traza de indisponibilidad
- * es el T-0.1 del e64). Jamás throw.
+ * (caché); falla → null CON traza de indisponibilidad (T-0.1 del e64 —
+ * doc hermano F-0.2) y el pipeline degrada a solo-jsQR. Jamás throw.
  */
 async function moduloZxingDe(): Promise<ModZxing | null> {
   if (modZxing !== undefined) return modZxing;
@@ -378,9 +378,28 @@ async function moduloZxingDe(): Promise<ModZxing | null> {
     });
     modZxing = mod;
   } catch {
-    modZxing = null; // (T-0.1 añade aquí la traza de indisponibilidad)
+    // e64-qr T-0.1 — el fallo del wasm/glue era SILENCIOSO (doc hermano
+    // H-3): sin esta traza era imposible distinguir «QR ilegible» de
+    // «wasm no cargó» (deploy sin BUILD_STATIC=1, basePath equivocado,
+    // red bloqueada). El pipeline NO se rompe: degrada a solo-jsQR.
+    console.warn(
+      `[e14] qr-capa0 zxing INDISPONIBLE (wasm/glue no cargó) — rescate degrada a solo-jsQR`,
+    );
+    modZxing = null;
   }
   return modZxing;
+}
+
+/** e64-qr T-0.1 — Estado del módulo zxing para diagnóstico (doc hermano
+ *  F-0.2): "no-intentado" = aún sin intentar · "indisponible" = la carga
+ *  falló (rescate degrada a solo-jsQR) · "listo" = wasm cargado. SOLO-
+ *  LECTURA: jamás muta el estado, jamás dispara la carga. */
+export function estadoZxingQr(): "no-intentado" | "indisponible" | "listo" {
+  return modZxing === undefined
+    ? "no-intentado"
+    : modZxing === null
+      ? "indisponible"
+      : "listo";
 }
 
 /** Opciones del barrido por ventana (micro-decisión declarada: el barrido
