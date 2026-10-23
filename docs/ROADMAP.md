@@ -404,61 +404,12 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] T-6 — docs: REPORTE-e65b + ROADMAP + worklog; adenda honesta del QA e65 (scan del índice LIVIANO — la llave se amplió con `qrPayload` por el propio kit T-2b).
 - [x] QA — `scripts/qa-historico-enviadas.ts` **49/49** (source-scan F1-F8 + red lines RL-e65b-1..8 + D57 + M-e65b-*) · regresión TOTAL 7 suites: dedup-enviadas 42/42 · qr-identidad 68/68 · autoenvío 33/33 · escaneo-ya-recortado 24/24 · identidad-acta 30/30 · watchdog-relectura 34/34 · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
 
-## DUPLICADAS CON DESENLACE PROPIO + INFORME MULTI-CAPA + PROBE EXIF OMITIDO — e66-duplicadas-informe-orientacion-v1 (2026-10-23): las 27 gemelas del informe 094214 ya no corrompen métricas
+## AUDIT OVERNIGHT 2026-10-22 — pasada de calidad autónoma (rama `audit/overnight-20261022`, base `quality-pass-1`) — dead code 3B + suite Vitest + logger
 
-- [x] P2 — gemela reutilizada: desenlace DUPLICADA (ActaStatus AL FINAL) — status/diagnostico.status/enviadoAutomaticamente=null/enviadaAuto=false en el PUNTO ÚNICO reutilizarResultado; píldora MasivaView + caso TopBar; D-e66-2 REVERSA e65b T-3b (gemela fuera del ledger; re-encolado protegido por la entrada de la original).
-- [x] P3 — informe: resumenDedup multi-capa (matches=v2+identidad+qr+ya-enviada; desgloses v2/yaEnviada) + porStatusActa/escPorStatus con DUPLICADA + esperaMs propio de la gemela + DEDUP-CAPAS (capa1=v2, +capa3-ya-enviada). yaEnviadas e65 preservada (M-e66-3).
-- [x] P4 — origenSenales al bridge (SOLO MASIVA) → probe de rotaciones OMITIDO para exif-camara (traza omitida=exif-camara; orientacionProbeMs null honesto; 4-10 s/acta ahorrados). SIM/individual/video/recorte-manual intactos.
-- [x] QA — adendas honestas M-e66-1/2 (historico-enviadas 49/49 · identidad-acta 32/32 · qr-identidad 68/68) · regresión TOTAL 7/7 suites (42 · 33 · 24 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
-
-## WATCHDOG INDIVIDUAL: TIMEOUT 120 s + RESCATE POST-TIMEOUT — e67-watchdog-rescate-v1 (2026-10-22): el acta válida de 53.5 s ya no muere a los 15 s
-
-- [x] M-e67-0 — recon: el watchdog REAL es el timeout interno de `escanearActa` (scanner-core-bridge, `TIMEOUT_MS=15_000` desde el split — el plan asumía 30_000); MASIVA tiene el suyo (D65 runner, 75 s — intacto); el rechazo tardío se DESCARTABA en `if (vencido) return`.
-- [x] Cambio A — `TIMEOUT_MS` 15_000 → 120_000 (colchón frente al peor caso real observado 53.5 s; MASIVA pasa su propio presupuesto por llamada — byte a byte).
-- [x] Cambio B — `OpcionesEscaneoConTimeout.onRescateTardio` (opcional): el desenlace tardío del pipeline viaja al caller con `tiempoRealMs` REAL; idempotente (solo tras vencimiento); MASIVA no lo pasa → no-op.
-- [x] Store individual `rescatarActaPostTimeout`: guarda por referencia (jamás pisa captura nueva), solo rescatan OPTIMA/ADVERTENCIA (el gate ya decidió), deshace el RESCANEO_REQUERIDO estampado, desenlace POR LA MISMA RUTA (analisisCompletado — D4 auto-envío). SIM jamás rescata. `Acta` += `scoreRescatadoPor`/`tiempoRealMs` (ADITIVOS AL FINAL, D57).
-- [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
-
-## FOTOS COMO BLOB EN IDB — e68-blob-idb-v1 (2026-10-22): la memoria que P4 perdió vuelve — base64 +33% fuera de la persistencia masiva
-
-- [x] M-e68-0 — recon: el archivo original YA era Blob (registro.archivo); la inflación vivía en acta.fotoOriginal/fotoProcesada (dataURLs del acta persistida). Transformación en la FRONTERA IDB (cola.ts) — contrato Acta en RAM intacto (~20 consumidores).
-- [x] §2 — compactarRegistro en TODO guardarRegistro (dataUrlABlob; fallo → string se queda) + materializarFotos en TODO leerRegistro (blobADataUrl/FileReader determinista; registros viejos pasan tal cual — compat §2.1, compactación en el próximo write).
-- [x] §3 — cleanup post-envío: ENVIADA/DUPLICADA → fotoOriginalBlob fuera (2.4–16.9 MB/acta); fotoProcesadaBlob y thumb SE CONSERVAN (plan literal). Cero impacto en ZIP (ESTADOS_CARPETA jamás los exportó) y cero riesgo P2 (solo la foto cambia de forma).
-- [x] §4 — observabilidad: log [e14] memoria fila (bytes reales) + totales.almacenamientoMB (navigator.storage.estimate, null honesto).
-- [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
-
-## P5B — BLOB EN EL SLOT INDIVIDUAL — e69-blob-jornada-v1 (2026-10-22): el acta en REVISIÓN deja de dormir como 2.6 MB de base64 en e14-jornada-v1
-
-- [x] M-e69-0 — recon: `src/lib/e14/jornada.ts` (ARCHIVO único) — `guardarActaEnRevision`/`leerActaEnRevision` puntos únicos; el write real lo dispara el suscriptor zustand (identidad de referencia, guard `!masivaOrigen`); ningún QA escanea jornada.ts; DUPLICADA inalcanzable en el slot (concepto masiva).
-- [x] §2 — envoltorio `SlotActa { acta, fotoOriginalBlob?, fotoProcesadaBlob? }` — compactar en TODO put (dataUrlABlob; fallo → string se queda), materializar en TODO get (FileReader determinista; contrato Acta en RAM INTACTO); pre-e69 pasa tal cual y se compacta en su próximo write (auto-migración al restaurar el arranque).
-- [x] §3 — cleanup de desenlace: ENVIADA/DUPLICADA → fotoOriginal FUERA (blob Y string — M-e69-1); fotoProcesada SE CONSERVA (REVISIÓN muestra la enviada). cola.ts byte a byte (helpers duplicados — M-e69-2).
-- [x] §4 — log `[e14] memoria acta` (bytes reales Blob.size + originalLiberada); `almacenamientoMB` del informe e68 ya es origin-wide — intacto.
-- [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
-
-## P4.1 — ORIENTACIÓN CONDICIONAL — e70-orientacion-condicional-v1 (2026-10-22): el EXIF ya no omite el sondeo por sí solo
-
-- [x] M-e70-0 — recon: no hay pasada de OCR previa al probe → la «primera pasada de OCR rápido» del criterio ES el baseline 0° del propio probe (anclas0/conf0 — los valores del dueño «anclas: 0, conf: 0.3»); quadOrigen disponible sin costo (misma función, L1262).
-- [x] Fix — MODO CONFIRMACIÓN (opciones.confirmar): skip SOLO si quadOrigen === "worker" Y anclas0 >= 3 Y conf0 >= 0.7 (cortes=confirmada); cualquier fallo → sondeo completo 0/90/180/270 con el 0° ya pagado (MARGEN decide). T1 sana deshabilitado en el modo (chars>=150 perdonaba basura de actas de lado — M-e70-2); T1 intacto para el resto de flujos.
-- [x] Traza aditiva: cortes=confirmada + exif=0|1 (AL FINAL — D51); probeMsOrientacion real para exif (antes null forzado); línea «omitida=exif-camara» retirada (ningún QA la escaneaba).
-- [x] Intactos: SIM (jamás sondea), recorte manual (sin opciones — T1 vigente), individual/video (sin señal), masiva/cola, jornada e69, P6.
-- [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
-
-## CONSOLIDACIÓN — e71-consolidacion-v1 (2026-10-23): fixes de métricas + optimizaciones de rendimiento (benchmark aprobado)
-
-- [x] M-e71-0 — recon: `masiva/runner.ts` (reutilizarResultado L425 · bucle L1340) · `informe.ts` (yaEnviadas L982 · almacenamientoIdbMb L914) · `gate.ts` NO EXISTE → gateCompleta se computa en scanner-core-bridge.ts ×2 (escaneo + pipelineRecorte) · ingesta = agregarFiles/agregarLote · hashSha256 del kit = hashBytes EXISTENTE (M-e71-1).
-- [x] P2.1 — la copia hereda el desenlace del original (ENVIADA/OPTIMA → DUPLICADA · con rechazo → RECHAZADA heredada · sin rechazo → DUPLICADA, M-e71-2); e66 intacto (jamás hereda el envío).
-- [x] P3.1 — yaEnviadas = statusActa === "ENVIADA" (el estado YA-ENVIADA solo nace en re-subidas de la misma sesión → reportaba 0); unión dedup 'ya-enviada' intacta.
-- [x] P9 — fórmula idb/1e6 en forma literal (M-e71-3: ya era matemáticamente idéntica — 330 MB = uso REAL en disco, LevelDB sin compactar; nota para el dueño).
-- [x] P10 — veto 4/4 fiduciales: `cuatroEsquinasFaltan()` (integridad) en AMBOS pipelines (escaneo → RECHAZADA · recorte manual → techo 7.9 con gate.completa=false); SIM inalcanzable (guard) — regla de oro re-verificada en vivo.
-- [x] Opt-1 — SHA-256 en la ingesta (hashBytes en el PRIMER write) + `dedupExactoIngesta` ANTES de rearrancar (DUPLICADA/YA-ENVIADA instantáneo — sin precalor/qr-capa0/OCR) · cadenaDedup reutiliza el hash · modo pruebas C-3 respetado (M-e71-4).
-- [x] Opt-2 — tier `recorte-600` (esquina estándar E14, UNA pasada jsQR+zxing) ENTRE base y barrido: los barridos ~15 s no corren si el QR está en su esquina; fallback sagrado intacto detrás.
-- [x] Opt-3 — pool `PROCESAMIENTO_CONCURRENTE=2` con reserva de fila + vida POR-FILA (Map VidaFila) + mutex promesa-cadena `conExclusionMutua` sobre las secciones de dedup (reutilizar / registro capa-0 con re-chequeo / capa 2 check+marca atómicos — envío doble imposible).
-- [x] QA — 7/7 suites CON adendas honestas (33 · 50 · 24 · 49 · 32 · 72 · 34 = 290) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS · smoke :3001 (ingesta instantánea + SIM 8.2/ENVIADA + 0 errores).
-
-## HOTFIX — e72-guard-dedup-v1 (2026-10-23): la race Opt-1×Opt-3 del smoke en vivo — el duplicado jamás paga OCR ni se envía
-
-- [x] M-e72-0 — recon: `siguientePendiente` toma PENDIENTE||DUPLICADA por diseño (copia rápida) — el gap era el fallback «sin-original reprocesa-completo» cuando la original aún no aterrizó (race reserva-del-pool × dedupExactoIngesta asíncrono); cadenaDedup estampa la traza «v2» AUNQUE el anti-zombi bloquee la marca; watchdog D65 es intra-pipeline (esperar ANTES del try es seguro); literal «YA-ENVIADA» VETADA en el runner (QA F5/D-e65-7) → whitelist de estados copiables.
-- [x] Fix 1 — guard de ingesta × pool: la rama DUPLICADA, al fallar la copia con la original VIVA, ESPERA su desenlace (`esperarDesenlaceOriginal` — sondeo SOLO-LECTURA 400 ms, techo 10 min ≈ 4× peor caso watchdog, salidas honestas QUITAR/ERROR/ausente/techo → fallback intacto) y re-copia. Sin deadlock por construcción (la original SIEMPRE agregadaEn menor — FIFO la reserva antes; el otro slot la alcanza). El duplicado JAMÁS paga OCR.
-- [x] Fix 2 — P2.1-v2 (desenlace-contenido): traza «v2» o gemela EXACTA (hashBytes) ya LISTA al llegar al desenlace → NUNCA envía: (a) reutilizar de la gemela LISTA (P2.1 hereda DUPLICADA/RECHAZADA) · (b) esperar a la gemela ANTERIOR en vuelo y copiar · (c) sin original resoluble → DUPLICADA con SU PROPIO desenlace (status/diagnostico DUPLICADA, enviadoAutomaticamente null, score/rechazo/serie preservados, cero envío, cero contador — patrón capa-2). La original jamás activa el guard (traza sin-match; gemela posterior en cola no cuenta; en vuelo SOLO agregadaEn menor).
-- [x] Tiempos propios de la copia: totalMs = la copia en sí (≈0) + ocrMs = 0 explícito en reutilizarResultadoCritica (criterio del dueño «totalMs casi 0»; totalMs jamás incluye espera — contrato del informe; esperaMs P3.4 intacto).
-- [x] QA — 7/7 suites (33·50·24·49·32·72·34 = 294 — adenda honesta qa-qr-identidad: qrPayload EXACTAMENTE 4 writes, ruta DUPLICADA-e72) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
+- [x] PLAN-overnight.md con clasificación 🟢/🟡/🔒 (commit 233600f) — límites 20 commits/6h, gate por commit.
+- [x] 3B-B1a..B3c dead code con protocolo §2.2-proto (8 commits): 7 iconos borrados; de-exports con uso interno en types/primitives/deskew/cola/informe/orientacion/divipol; 🔒 StitchFrameIcon/borrarHistorico/dhash64DeDataUrl documentados. knip 72→37.
+- [x] Suite unitaria Vitest: vitest@5 + 53 casos (clasificador 23 · completitud 10 · divipol 20) — cero cambios de lógica; script `npm run test`.
+- [x] logger.ts (política debug/info gated, warn/error siempre) + divipol migrado.
+- [x] scripts/check-quality.sh — gate único (tsc+lint+build+vitest+7QA+knip).
+- [x] AUDIT.md §6 + MORNING-REPORT.md + worklog + PR (sin merge).
+- [ ] Fase 4 (dueño): decisiones D65 B1/B2, módulos grandes (identidad-qr/store/precalor/rapidocr), migración console grandes, Playwright smoke.

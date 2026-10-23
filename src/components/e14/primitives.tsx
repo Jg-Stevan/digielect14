@@ -7,7 +7,9 @@
 
 import type { ReactNode } from "react";
 
-export type Tone = "ok" | "warn" | "crit" | "neutral";
+/** Tono del design system STITCH — interno del módulo (de-export 3B-B1c:
+ *  sin consumidores externos; lo usan Chip/SegmentedBar/etc. de aquí). */
+type Tone = "ok" | "warn" | "crit" | "neutral";
 
 const toneDot: Record<Tone, string> = {
   ok: "bg-[#10b981]",
@@ -22,17 +24,6 @@ const toneText: Record<Tone, string> = {
   crit: "text-[#ef4444]",
   neutral: "text-slate-400",
 };
-
-/** Dot de estado (mock: w-2 h-2 rounded-full del color del estado). */
-export function StatusDot({ tone, pulse = false }: { tone: Tone; pulse?: boolean }) {
-  return (
-    <span
-      className={`inline-block w-2 h-2 rounded-full ${toneDot[tone]} ${
-        pulse ? "animate-pulse-sync" : ""
-      }`}
-    />
-  );
-}
 
 /** Chip del chrome (mock §3.2.3): `grid grid-cols-3 gap-2` — el ACTIVO es
  *  relleno sólido del color del estado (mono extrabold xs), los otros 2
