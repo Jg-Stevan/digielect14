@@ -66,9 +66,30 @@
  * MISMO singleton ORT, §2.2). La rotación JAMÁS cambia el score por sí misma:
  * solo habilita que el OCR lea de verdad; los caps/gate existentes mandan
  * después (escudo-fondo, recortada, sin-votos — §2.2).
+ *
+ * KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1) — MINI-PROBE A 320 px:
+ * el probe era el costo oculto gigante del lote 1 en campo (5.3–13.6 s por
+ * acta, ~488 s de ~10 min; 46/46 actas lo pagaron, incluidas las que luego
+ * murieron DUPLICADAS). Ahora sondea PRIMERO una MINIATURA (lado mayor
+ * PROBE_MINI_LADO=320, JPEG q0.92, aspecto preservado — helpers del repo:
+ * loadImageMemo + canvasCon) y solo si su desenlace alcanza la confianza del
+ * FALLO SEGURO (miniaturaConfiada: corte sana/confirmada, o rotación
+ * aplicada con ≥2 anclas y conf ≥0.6) manda ESA decisión; en CUALQUIER otro
+ * caso (vacío, débil, presupuesto, error de la miniatura) se corre el sondeo
+ * a resolución original — el comportamiento de HOY byte a byte — y ESA es la
+ * decisión. Estructura que garantiza la igualdad: UNA sola función de sondeo
+ * (sondeoDe) decide en ambos caminos — mismos crops, mismo orden D62, mismos
+ * atajos, mismo MARGEN; solo cambia la resolución de la fuente. La miniatura
+ * SUB-LEE (crops chicos → conf menor), así que la dirección del sesgo es
+ * conocida: hacia «no alcanza confianza» → camino original (conservador).
+ * Campo NUEVO ADITIVO en el resultado: orientacionProbeEscala (320 = decidió
+ * la miniatura; >320 = decidió la re-corrida original; ≤320 = la foto ya era
+ * pequeña — un solo sondeo). Traza: campo `escala=` ADITIVO AL FINAL de la
+ * línea de siempre (D51/D56 — los campos previos no cambian de forma). El
+ * presupuesto PROBE_BUDGET_MS=12000 cubre el probe COMPLETO (t0 compartido).
  */
 
-import { canvasCon } from "./image-utils"; // SPRINT-A A3 — factory de canvas
+import { canvasCon, loadImageMemo } from "./image-utils"; // SPRINT-A A3/A1 — factory de canvas + decode memo
 import { ANCLAS_LECTURA, norm, senalDeLectura } from "./senal-lectura";
 import {
   rapidOcrCropsOrientacion,
@@ -86,6 +107,16 @@ interface ProbeOrientacion {
   anclas: Partial<Record<Rotacion, number>>;
   conf: Partial<Record<Rotacion, number>>;
   ms: number;
+  // KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1) — campo NUEVO ADITIVO:
+  // lado mayor (px) del canvas sobre el que se produjo la decisión final.
+  //  320  → decidió la MINIATURA (camino mini, confianza suficiente — ver
+  //         PROBE_MINI_* abajo).
+  //  >320 → la miniatura NO alcanzó confianza (fallo seguro) → la decisión
+  //         es del sondeo a resolución original (comportamiento de HOY).
+  //  ≤320 → la foto ya era pequeña: UN solo sondeo (byte-idéntico a hoy).
+  // Cero consumidores rotos: el bridge solo lee rot/aplicado/ms; el informe
+  // (territorio del Agente C) puede anotarlo después (append-only).
+  orientacionProbeEscala: number;
 }
 
 /** e70 (P4.1) — opciones del probe. Su PRESENCIA activa el MODO
@@ -112,6 +143,31 @@ const PROBE_K_CROPS = 8;
 /** Tope del score por rotación (§2.1 «con tope por rotación»: 5 anclas ya
  *  saturan la señal; el MARGEN compara igual en 0..10). */
 const TOPE_SCORE = 10;
+
+// ─── KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1): MINI-PROBE a 320 px ─────
+// El probe de HOY corre det (cap 1280) + rec ×4 rotaciones sobre la foto a
+// resolución completa — el paso más caro invisible del pipeline (lote 1 del
+// dueño: 5.3–13.6 s por acta, ~488 s del lote, 46/46 actas lo pagaron). La
+// miniatura hace det+rec ~50-100× más barato; el FALLO SEGURO devuelve el
+// comportamiento de HOY (sondeo a resolución original) en cuanto la
+// miniatura no alcanza confianza — la decisión final JAMÁS cambia por este
+// cambio: o la miniatura decide con evidencia fuerte, o decide la pasada
+// completa de siempre.
+
+/** Lado mayor MÁXIMO de la miniatura (px, aspecto preservado). 320 = un E-14
+ *  completo cabe con sus líneas largas legibles por det (las cajas existen;
+ *  el rec sobre crops tan chicos SÍ pierde conf — de ahí el fallo seguro). */
+const PROBE_MINI_LADO = 320;
+/** FALLO SEGURO — umbral conservador Nº 1: la rotación GANADORA de la
+ *  miniatura necesita ≥ 2 anclas de ANCLAS_LECTURA (cabecera E-14,
+ *  CONSULADO/PAÍS/ZONA/PUESTO/MESA, código 1D — matches regex estructurales,
+ *  no ruido) para confiarse. Con 1 ancla o 0 → re-corrida a resolución
+ *  original (comportamiento de HOY). */
+const PROBE_MINI_ANCLAS_MIN = 2;
+/** FALLO SEGURO — umbral conservador Nº 2: conf media del rec ≥ 0.6 en la
+ *  ganadora. El rec de producción sobre texto legible da 0.8-0.97; 0.6 es el
+ *  piso conservador (por debajo → la miniatura está adivinando → original). */
+const PROBE_MINI_CONF_MIN = 0.6;
 
 // ─── KIT e14-probe-adaptativo-v1 (D62 T1): ganador persistente del sondeo ───
 // El patrón del escáner/fotógrafo del dueño es consistente (lote 15:04: CCW →
@@ -268,11 +324,232 @@ export async function rotarDataUrl(
   }
 }
 
+/** Desenlace CRUDO de UN sondeo (det + rec por rotación) sobre UNA fuente.
+ *  Compartido por el camino miniatura y el camino de resolución original —
+ *  la MISMA función decide en ambos: la decisión de la miniatura es la
+ *  decisión de la resolución completa salvo por la RESOLUCIÓN de sus entradas
+ *  (mismos crops, mismo orden, mismos atajos, mismo MARGEN). */
+interface SondeoSalida {
+  /** true = det sin cajas (traza cortes=vacio — el sondeo no puntúa). */
+  vacio: boolean;
+  w: number;
+  h: number;
+  rot: Rotacion;
+  aplicado: boolean;
+  scores: Partial<Record<Rotacion, number>>;
+  anclas: Partial<Record<Rotacion, number>>;
+  conf: Partial<Record<Rotacion, number>>;
+  corte: "sana" | "presupuesto" | "completo" | "confirmada";
+  orden: Rotacion[];
+}
+
+async function sondeoDe(
+  rt: Awaited<ReturnType<typeof rapidOcrInit>>,
+  fuente: string,
+  opciones: OpcionesProbeOrientacion | undefined,
+  gan: Rotacion | null,
+  t0: number,
+): Promise<SondeoSalida> {
+  const { crops, w, h } = await rapidOcrCropsOrientacion(rt, fuente, PROBE_K_CROPS);
+  if (crops.length === 0) {
+    return {
+      vacio: true,
+      w,
+      h,
+      rot: 0,
+      aplicado: false,
+      scores: { 0: 0 },
+      anclas: { 0: 0 },
+      conf: { 0: 0 },
+      corte: "completo",
+      orden: [],
+    };
+  }
+  const scores: Partial<Record<Rotacion, number>> = {};
+  const anclas: Partial<Record<Rotacion, number>> = {};
+  const conf: Partial<Record<Rotacion, number>> = {};
+  // Orden de sondeo (§2.1 paso 3): 0° SIEMPRE primero (baseline del MARGEN;
+  // el atajo T1 de lectura-sana depende de él — INTACTO) y luego el
+  // desafiante probable según la forma de la tira.
+  // D62 T1 — orden ADAPTATIVO: con ganador persistente (aplicado=1 reciente)
+  // se sondea [0, ganador, resto…] (el resto conserva el orden actual minus
+  // ganador); sin ganador ⇒ el orden de HOY sin cambio (rama h > w respetada).
+  // (El orden se deriva de w/h de la FUENTE del sondeo — miniatura y original
+  // comparten aspecto ⇒ mismo orden en ambos caminos.)
+  const base: Rotacion[] = h > w ? [0, 180, 90, 270] : [0, 90, 270, 180];
+  const orden: Rotacion[] =
+    gan === null || gan === 0
+      ? base
+      : [0, gan, ...base.filter((r) => r !== 0 && r !== gan)];
+  let mejor: Rotacion | null = null;
+  // D56 §3 T4 — por qué terminó el sondeo (solo para la traza, aditivo).
+  // e70: + "confirmada" (criterio del dueño — valor ADITIVO, los previos
+  // no cambian de forma; D51).
+  let corte: "sana" | "presupuesto" | "completo" | "confirmada" = "completo";
+  for (const rot of orden) {
+    // §2.2 presupuesto: a mitad de probe, abortar y seguir con 0° (hoy).
+    // El t0 es COMPARTIDO con el camino miniatura: el techo de 12 s es el
+    // del probe COMPLETO (mini + posible re-corrida), no por pasada.
+    if (rot !== 0 && performance.now() - t0 > PROBE_BUDGET_MS) {
+      corte = "presupuesto";
+      break;
+    }
+    // 0° usa los crops DIRECTOS (rec no muta canvases — no hace falta copia).
+    const girados = rot === 0 ? crops : crops.map((c) => girarFuente(c, rot));
+    const lineas = await rapidOcrRecLote(rt, girados);
+    const texto = lineas.map((l) => l.texto).join("\n");
+    const confMedia =
+      lineas.length === 0
+        ? 0
+        : lineas.reduce((s, l) => s + l.conf, 0) / lineas.length;
+    const nAnclas = ANCLAS_LECTURA.filter(([, re]) => re.test(texto)).length;
+    const chars = norm(texto).replace(/ /g, "").length;
+    scores[rot] = Math.min(TOPE_SCORE, nAnclas * 2 + confMedia * (chars / 40));
+    anclas[rot] = nAnclas;
+    conf[rot] = confMedia;
+    if (rot === 0) {
+      // e70 — MODO CONFIRMACIÓN (P4.1): el criterio del dueño es EL gate —
+      // quad del WORKER + anclas >= 3 Y conf >= 0.7 a 0° ⇒ la primera
+      // pasada rápida CONFIRMÓ la orientación ⇒ sin challengers. En este
+      // modo T1 sana NO aplica (su MEDIA por chars>=150 perdonaba lecturas
+      // basura de actas fotografiadas de lado — el falso positivo exacto
+      // del skip por EXIF).
+      if (opciones?.confirmar) {
+        if (
+          opciones.confirmar.quadWorker &&
+          nAnclas >= 3 &&
+          confMedia >= 0.7
+        ) {
+          corte = "confirmada";
+          break;
+        }
+        continue;
+      }
+      // D56 §3 T1 — atajo de lectura-sana: si el texto a 0° YA se lee,
+      // ninguna rotación puede necesitar aplicarse y ninguna debe arriesgar
+      // la lectura (rotar es riesgo puro). El acta sana sale en ~4 s sin
+      // sondear 90/270/180; la rotada del dueño leyó anclas0=0 chars=9 →
+      // DEBIL → sigue a los challengers ✓. Regresión nula esperada: el
+      // MARGEN ya protegía parcialmente; esto lo hace explícito y barato.
+      if (senalDeLectura(texto).nivel !== "DEBIL") {
+        corte = "sana";
+        break;
+      }
+      continue;
+    }
+    // Guard absoluto (§2.1 paso 2): score<1.0 Y conf<0.55 → NO candidata.
+    const candidata = (scores[rot] ?? 0) >= 1.0 || (conf[rot] ?? 0) >= 0.55;
+    if (!candidata) continue;
+    if (mejor === null || (scores[rot] ?? 0) > (scores[mejor] ?? 0)) mejor = rot;
+    // Atajo (§2.1 paso 3): el desafiante ya dispara contra 0° → dejar de
+    // sondear (ahorra las rotaciones restantes).
+    if ((scores[mejor] ?? 0) >= (scores[0] ?? 0) + MARGEN_ORIENTACION) break;
+  }
+  // Liberar los canvases transitorios (§2.1 paso 4 — sin retener memoria).
+  crops.length = 0;
+  const aplicado =
+    mejor !== null && (scores[mejor] ?? 0) >= (scores[0] ?? 0) + MARGEN_ORIENTACION;
+  const rot: Rotacion = aplicado ? mejor! : 0;
+  return { vacio: false, w, h, rot, aplicado, scores, anclas, conf, corte, orden };
+}
+
+/** FALLO SEGURO del mini-probe — ¿la decisión de la miniatura alcanza
+ *  confianza para manda? SOLO tres desenlaces se confían (todo lo demás →
+ *  re-corrida a resolución original, el comportamiento de HOY):
+ *  · corte "sana": 0° leyó texto no-DEBIL (chars ≥ 150 o cabecera E-14 o
+ *    ≥2 anclas — senalDeLectura). La miniatura SUB-LEE respecto a la
+ *    original: si ELLA ya lee, la original lee ≥ ⇒ también "sana" ⇒
+ *    aplicado=0 en ambos.
+ *  · corte "confirmada": el gate del dueño (quadWorker + anclas ≥ 3 Y
+ *    conf ≥ 0.7 a 0°) — su evidencia ya es fuerte por construcción.
+ *  · aplicado=1 con ganadora FUERTE: ≥ PROBE_MINI_ANCLAS_MIN anclas Y
+ *    ≥ PROBE_MINI_CONF_MIN conf en la rotación ganadora (señal estructural
+ *    de rotación real — el texto de una acta rotada solo se lee girado).
+ *  aplicado=0 débil, corte "vacio" y "presupuesto" NUNCA se confían: la
+ *  miniatura sub-lee ⇒ un «no rotar» suyo podría esconder una rotación que
+ *  la resolución completa sí encontraría (dirección peligrosa). */
+function miniaturaConfiada(s: SondeoSalida): boolean {
+  if (s.vacio) return false;
+  if (s.corte === "sana" || s.corte === "confirmada") return true;
+  if (
+    s.aplicado &&
+    (s.anclas[s.rot] ?? 0) >= PROBE_MINI_ANCLAS_MIN &&
+    (s.conf[s.rot] ?? 0) >= PROBE_MINI_CONF_MIN
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Miniatura JPEG (q0.92 — misma calidad del re-encode de rotarDataUrl) a
+ *  PROBE_MINI_LADO del lado mayor, aspecto preservado. Reúsa los helpers del
+ *  repo: decode vía loadImageMemo (LRU compartido — el decode que ya usaba
+ *  cropsOrientacion) y canvasCon (factory SPRINT-A A3); el suavizado es el
+ *  default del navegador — la MISMA receta de decodeImagenLru/analizarPixeles
+ *  (fidelidad byte-idéntica del reescalado). null ante CUALQUIER fallo → el
+ *  sondeo corre a resolución original (comportamiento de HOY, jamás tumba). */
+async function miniaturaDataUrlDe(fotoOcr: string): Promise<string | null> {
+  try {
+    const img = await loadImageMemo(fotoOcr);
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (!w || !h) return null;
+    const escala = Math.min(1, PROBE_MINI_LADO / Math.max(w, h));
+    const ancho = Math.max(1, Math.round(w * escala));
+    const alto = Math.max(1, Math.round(h * escala));
+    const cv = canvasCon(ancho, alto);
+    const ctx = cv.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, ancho, alto);
+    const url = cv.toDataURL("image/jpeg", 0.92);
+    cv.width = 0; // liberar el canvas transitorio (§2.1 — sin retener memoria)
+    cv.height = 0;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/** Traza del sondeo DECISOR (formato §2.1 paso 5 — los instrumentos del dueño
+ *  parsean por prefijo; UNA línea por probe, los campos previos NO cambian de
+ *  forma). `escala=` es ADITIVO AL FINAL (D51/D56): lado mayor del canvas que
+ *  produjo la decisión (320 = camino miniatura; >320 = re-corrida original;
+ *  ≤320 = foto ya pequeña — un solo sondeo). */
+function trazarSondeo(s: SondeoSalida, ms: number, escala: number, gan: Rotacion | null, conExif: boolean): void {
+  if (s.vacio) {
+    logger.info(
+      `[e14] orientacion crop=${s.w}x${s.h} rot=0 probe={0:0.00} anclas0=0 conf0=0.00 aplicado=0 ms=${ms} cortes=vacio escala=${escala}`,
+    );
+    return;
+  }
+  const probeTxt = (Object.keys(s.scores) as unknown as Rotacion[])
+    .map((r) => `${r}:${(s.scores[r] ?? 0).toFixed(2)}`)
+    .join(",");
+  logger.info(
+    `[e14] orientacion crop=${s.w}x${s.h} rot=${s.rot} probe={${probeTxt}} anclas${s.rot}=${s.anclas[s.rot] ?? 0} conf${s.rot}=${(s.conf[s.rot] ?? 0).toFixed(2)} aplicado=${s.aplicado ? 1 : 0} ms=${ms} cortes=${s.corte} orden=${s.orden.join(",")} gan=${gan ?? "-"} exif=${conExif ? 1 : 0} escala=${escala}`,
+  );
+}
+
+function resultadoDe(s: SondeoSalida, ms: number, escala: number): ProbeOrientacion {
+  if (s.vacio) {
+    return { rot: 0, aplicado: false, scores: { 0: 0 }, anclas: { 0: 0 }, conf: { 0: 0 }, ms, orientacionProbeEscala: escala };
+  }
+  return { rot: s.rot, aplicado: s.aplicado, scores: s.scores, anclas: s.anclas, conf: s.conf, ms, orientacionProbeEscala: escala };
+}
+
 /** Probe de orientación (§2.1). Devuelve null SOLO si no pudo correr
  *  (fallo de init/det — el pipeline sigue con 0°; sin traza, «el probe ni
  *  siquiera corrió»). Con det sin cajas: traza con 0:0.00 y aplicado=0
  *  (AC-4 — la traza está en el 100% de las no-SIM donde el probe corrió;
- *  NUNCA se alimenta a rec un lote vacío). */
+ *  NUNCA se alimenta a rec un lote vacío).
+ *
+ *  KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1) — MINI-PROBE: sondea PRIMERO
+ *  una miniatura a PROBE_MINI_LADO (320 px del lado mayor). Si su desenlace
+ *  alcanza la confianza del fallo seguro (miniaturaConfiada), ESA es la
+ *  decisión (ahorro ~5-13 s/acta). Si NO la alcanza (o la miniatura no pudo
+ *  construirse/correr), se corre el sondeo a resolución original — el
+ *  comportamiento de HOY byte a byte — y ESA es la decisión. El presupuesto
+ *  de 12 s cubre TODO el probe (t0 compartido por ambas pasadas). */
 export async function probeOrientacion(
   fotoOcr: string,
   opciones?: OpcionesProbeOrientacion,
@@ -280,107 +557,44 @@ export async function probeOrientacion(
   const t0 = performance.now();
   try {
     const rt = await rapidOcrInit(); // MISMO singleton (§2.2 — sin sesiones nuevas)
-    const { crops, w, h } = await rapidOcrCropsOrientacion(rt, fotoOcr, PROBE_K_CROPS);
-    if (crops.length === 0) {
-      const msVacio = Math.round(performance.now() - t0);
-      logger.info(
-        `[e14] orientacion crop=${w}x${h} rot=0 probe={0:0.00} anclas0=0 conf0=0.00 aplicado=0 ms=${msVacio} cortes=vacio`,
-      );
-      return { rot: 0, aplicado: false, scores: { 0: 0 }, anclas: { 0: 0 }, conf: { 0: 0 }, ms: msVacio };
-    }
-    const scores: Partial<Record<Rotacion, number>> = {};
-    const anclas: Partial<Record<Rotacion, number>> = {};
-    const conf: Partial<Record<Rotacion, number>> = {};
-    // Orden de sondeo (§2.1 paso 3): 0° SIEMPRE primero (baseline del MARGEN;
-    // el atajo T1 de lectura-sana depende de él — INTACTO) y luego el
-    // desafiante probable según la forma de la tira.
-    // D62 T1 — orden ADAPTATIVO: con ganador persistente (aplicado=1 reciente)
-    // se sondea [0, ganador, resto…] (el resto conserva el orden actual minus
-    // ganador); sin ganador ⇒ el orden de HOY sin cambio (rama h > w respetada).
+    // D62 T1 — el ganador se lee UNA vez: miniatura y original sondean con el
+    // MISMO orden (mismo aspecto ⇒ mismo orden de todas formas).
     const gan = ganadorPersistente();
-    const base: Rotacion[] = h > w ? [0, 180, 90, 270] : [0, 90, 270, 180];
-    const orden: Rotacion[] =
-      gan === null || gan === 0
-        ? base
-        : [0, gan, ...base.filter((r) => r !== 0 && r !== gan)];
-    let mejor: Rotacion | null = null;
-    // D56 §3 T4 — por qué terminó el sondeo (solo para la traza, aditivo).
-    // e70: + "confirmada" (criterio del dueño — valor ADITIVO, los previos
-    // no cambian de forma; D51).
-    let corte: "sana" | "presupuesto" | "completo" | "confirmada" = "completo";
-    for (const rot of orden) {
-      // §2.2 presupuesto: a mitad de probe, abortar y seguir con 0° (hoy).
-      if (rot !== 0 && performance.now() - t0 > PROBE_BUDGET_MS) {
-        corte = "presupuesto";
-        break;
-      }
-      // 0° usa los crops DIRECTOS (rec no muta canvases — no hace falta copia).
-      const girados = rot === 0 ? crops : crops.map((c) => girarFuente(c, rot));
-      const lineas = await rapidOcrRecLote(rt, girados);
-      const texto = lineas.map((l) => l.texto).join("\n");
-      const confMedia =
-        lineas.length === 0
-          ? 0
-          : lineas.reduce((s, l) => s + l.conf, 0) / lineas.length;
-      const nAnclas = ANCLAS_LECTURA.filter(([, re]) => re.test(texto)).length;
-      const chars = norm(texto).replace(/ /g, "").length;
-      scores[rot] = Math.min(TOPE_SCORE, nAnclas * 2 + confMedia * (chars / 40));
-      anclas[rot] = nAnclas;
-      conf[rot] = confMedia;
-      if (rot === 0) {
-        // e70 — MODO CONFIRMACIÓN (P4.1): el criterio del dueño es EL gate —
-        // quad del WORKER + anclas >= 3 Y conf >= 0.7 a 0° ⇒ la primera
-        // pasada rápida CONFIRMÓ la orientación ⇒ sin challengers. En este
-        // modo T1 sana NO aplica (su MEDIA por chars>=150 perdonaba lecturas
-        // basura de actas fotografiadas de lado — el falso positivo exacto
-        // del skip por EXIF).
-        if (opciones?.confirmar) {
-          if (
-            opciones.confirmar.quadWorker &&
-            nAnclas >= 3 &&
-            confMedia >= 0.7
-          ) {
-            corte = "confirmada";
-            break;
-          }
-          continue;
-        }
-        // D56 §3 T1 — atajo de lectura-sana: si el texto a 0° YA se lee,
-        // ninguna rotación puede necesitar aplicarse y ninguna debe arriesgar
-        // la lectura (rotar es riesgo puro). El acta sana sale en ~4 s sin
-        // sondear 90/270/180; la rotada del dueño leyó anclas0=0 chars=9 →
-        // DEBIL → sigue a los challengers ✓. Regresión nula esperada: el
-        // MARGEN ya protegía parcialmente; esto lo hace explícito y barato.
-        if (senalDeLectura(texto).nivel !== "DEBIL") {
-          corte = "sana";
-          break;
-        }
-        continue;
-      }
-      // Guard absoluto (§2.1 paso 2): score<1.0 Y conf<0.55 → NO candidata.
-      const candidata = (scores[rot] ?? 0) >= 1.0 || (conf[rot] ?? 0) >= 0.55;
-      if (!candidata) continue;
-      if (mejor === null || (scores[rot] ?? 0) > (scores[mejor] ?? 0)) mejor = rot;
-      // Atajo (§2.1 paso 3): el desafiante ya dispara contra 0° → dejar de
-      // sondear (ahorra las rotaciones restantes).
-      if ((scores[mejor] ?? 0) >= (scores[0] ?? 0) + MARGEN_ORIENTACION) break;
+    // ¿La foto ya es una «miniatura» (lado mayor ≤ PROBE_MINI_LADO)? Escalarla
+    // no cambia nada: UN solo sondeo sobre la fuente real — byte-idéntico a
+    // HOY (el det a cap 1280 no la reduce).
+    const base = await loadImageMemo(fotoOcr);
+    const ladoMayor = Math.max(base.naturalWidth || 0, base.naturalHeight || 0);
+    if (ladoMayor > 0 && ladoMayor <= PROBE_MINI_LADO) {
+      const s = await sondeoDe(rt, fotoOcr, opciones, gan, t0);
+      const ms = Math.round(performance.now() - t0);
+      trazarSondeo(s, ms, Math.max(s.w, s.h), gan, !!opciones?.confirmar);
+      if (s.aplicado) anilloGanadorRegistrar(s.rot); // D62 T1.4
+      return resultadoDe(s, ms, Math.max(s.w, s.h));
     }
-    // Liberar los canvases transitorios (§2.1 paso 4 — sin retener memoria).
-    crops.length = 0;
-    const aplicado =
-      mejor !== null && (scores[mejor] ?? 0) >= (scores[0] ?? 0) + MARGEN_ORIENTACION;
-    const rot: Rotacion = aplicado ? mejor! : 0;
-    // D62 T1.4 — el anillo SOLO registra desenlaces APLICADOS (aplicado=1);
-    // fallo del probe (catch), vacío y aplicado=0 NUNCA escriben.
-    if (aplicado) anilloGanadorRegistrar(rot);
+    // Camino MINIATURA (cualquier fallo aquí → null → camino original).
+    let mini: SondeoSalida | null = null;
+    const miniUrl = await miniaturaDataUrlDe(fotoOcr);
+    if (miniUrl) {
+      try {
+        mini = await sondeoDe(rt, miniUrl, opciones, gan, t0);
+      } catch {
+        mini = null; // det/rec de la miniatura falló → resolución original
+      }
+    }
+    if (mini && miniaturaConfiada(mini)) {
+      const ms = Math.round(performance.now() - t0);
+      trazarSondeo(mini, ms, PROBE_MINI_LADO, gan, !!opciones?.confirmar);
+      if (mini.aplicado) anilloGanadorRegistrar(mini.rot); // D62 T1.4
+      return resultadoDe(mini, ms, PROBE_MINI_LADO);
+    }
+    // FALLO SEGURO — la miniatura no alcanzó confianza (o no corrió): el
+    // sondeo a resolución original de SIEMPRE decide (comportamiento de HOY).
+    const full = await sondeoDe(rt, fotoOcr, opciones, gan, t0);
     const ms = Math.round(performance.now() - t0);
-    const probeTxt = (Object.keys(scores) as unknown as Rotacion[])
-      .map((r) => `${r}:${(scores[r] ?? 0).toFixed(2)}`)
-      .join(",");
-    logger.info(
-      `[e14] orientacion crop=${w}x${h} rot=${rot} probe={${probeTxt}} anclas${rot}=${anclas[rot] ?? 0} conf${rot}=${(conf[rot] ?? 0).toFixed(2)} aplicado=${aplicado ? 1 : 0} ms=${ms} cortes=${corte} orden=${orden.join(",")} gan=${gan ?? "-"} exif=${opciones?.confirmar ? 1 : 0}`,
-    );
-    return { rot, aplicado, scores, anclas, conf, ms };
+    trazarSondeo(full, ms, Math.max(full.w, full.h), gan, !!opciones?.confirmar);
+    if (full.aplicado) anilloGanadorRegistrar(full.rot); // D62 T1.4
+    return resultadoDe(full, ms, Math.max(full.w, full.h));
   } catch {
     return null; // §5: el probe jamás tumba el pipeline (comportamiento de hoy)
   }
