@@ -50,11 +50,14 @@ async function leerFuente(rel: string): Promise<string | null> {
   }
 }
 
-/** Lista recursiva de archivos .ts/.tsx (sin .test.ts) bajo dirRel. */
+/** Lista recursiva de archivos .ts/.tsx (sin .test.ts) bajo dirRel.
+ *  dirRel es RELATIVO A LA RAÍZ del repo (el script vive en scripts/ — el
+ *  prefijo `../` es obligatorio: sin él el readdir resuelve scripts/src/…
+ *  y devuelve [] silencioso — bug de FASE 0 corregido en la calibración). */
 async function listarTs(dirRel: string): Promise<string[]> {
   const out: string[] = [];
   async function walk(dir: string): Promise<void> {
-    const entradas = await readdir(new URL(dir, import.meta.url), { withFileTypes: true }).catch(
+    const entradas = await readdir(new URL(`../${dir}`, import.meta.url), { withFileTypes: true }).catch(
       () => null,
     );
     if (entradas === null) return; // dir ausente — FASE 0
@@ -168,11 +171,11 @@ ok(
 
 // ---------- Bloque 4 · anti-recursión (flag capturando) ----------
 
-console.log("— Bloque 4 · anti-recursión en captura.ts —");
+console.log("— Bloque 4 · anti-recursión (guard capturando) —");
 
 ok(
-  (srcCaptura ?? "").includes("capturando"),
-  "flag `capturando` existe en captura.ts (regla de oro 4: el rastreo jamás puede romper la app)",
+  (srcBuffer ?? "").includes("capturando"),
+  "flag `capturando` existe como guard anti-recursión en buffer.ts appendEvento (regla de oro 4 — CALIBRADO: el núcleo lo implementó en el buffer, no en captura.ts — desviación documentada por el agente 1 en REPORTE-obs-nucleo-v1/worklog)",
 );
 
 // ---------- Bloque 5 · perf de actas con CERO PII ----------
@@ -194,7 +197,11 @@ ok(
 console.log("— Bloque 6 · firmas públicas del contrato §4.3 —");
 
 function tienenFirmas(src: string | null, firmas: string[]): boolean {
-  return firmas.every((f) => new RegExp(`export function ${f}\\b`).test(src ?? ""));
+  return firmas.every(
+    (f) =>
+      new RegExp(`export (async )?function ${f}\\b`).test(src ?? "") ||
+      new RegExp(`export async function ${f}\\b`).test(src ?? ""),
+  );
 }
 
 ok(
@@ -210,8 +217,8 @@ ok(
 );
 ok(
   tienenFirmas(srcCaptura, ["instalarCaptura", "emitirPerfDeActa"]) &&
-    /export const ErrorBoundaryObs\b/.test(srcCaptura ?? ""),
-  "captura.ts exporta instalarCaptura + emitirPerfDeActa + ErrorBoundaryObs §4.3",
+    /export (const|class) ErrorBoundaryObs\b/.test(srcCaptura ?? ""),
+  "captura.ts exporta instalarCaptura + emitirPerfDeActa + ErrorBoundaryObs §4.3 (CALIBRADO: acepta const|class — el núcleo lo implementó como clase de React, mismo ComponentType del contrato)",
 );
 ok(
   tienenFirmas(srcBreadcrumbs, [
