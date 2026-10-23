@@ -910,7 +910,16 @@ export function renderTxt(
 /** e68-blob-idb-v1 (Paso 4): uso REAL de IndexedDB reportado por el
  *  navegador (navigator.storage.estimate) en MB con 1 decimal. null cuando
  *  el navegador no lo expone (Safari viejo, contexto no seguro) — jamás
- *  inventar. Best-effort: cualquier fallo → null. */
+ *  inventar. Best-effort: cualquier fallo → null.
+ *  e71 (P9): fórmula en forma LITERAL del kit — bytes / 1e6 = MB, redondeo a
+ *  1 decimal. AUDITORÍA honesta: la forma previa (Math.round(idb / 1e5) / 10)
+ *  ya era matemáticamente idéntica (idb/1e6) — el 330 MB observado por el
+ *  dueño NO era un multiplicador erróneo sino el uso REAL que Chrome reporta
+ *  en usageDetails.indexedDB (LevelDB nunca encoge: páginas muertas de los
+ *  re-writes de registros — migración e68 reescribe cada registro — hasta la
+ *  próxima compactación). La fórmula queda explícita para auditoría a la
+ *  vista; el número que reporta es el uso EN DISCO del origen, no el dato
+ *  vivo (nota para el dueño en REPORTE-e71 §P9). */
 async function almacenamientoIdbMb(): Promise<number | null> {
   try {
     const estimacion = await navigator.storage?.estimate?.();
@@ -919,7 +928,7 @@ async function almacenamientoIdbMb(): Promise<number | null> {
     const detalles = (estimacion as { usageDetails?: Record<string, number> })
       ?.usageDetails;
     const idb = detalles?.indexedDB;
-    return typeof idb === "number" ? Math.round(idb / 1e5) / 10 : null;
+    return typeof idb === "number" ? Math.round((idb / 1e6) * 10) / 10 : null;
   } catch {
     return null;
   }
@@ -973,13 +982,14 @@ export async function generarInformeZip(
       porEstadoFila,
       porStatusActa,
       tiemposMediosMs: tiemposMedios,
-      // e65-dedup-enviadas-v1 (T-8, opcional del kit): filas que nacieron
-      // YA-ENVIADA (match bytes/dhash contra el histórico) — cero pipeline.
-      // e66 (M-e66-3): SEMÁNTICA PRESERVADA — el plan P3 pedía «solo las
-      // realmente enviadas»; YA-ENVIADA por definición lo es (su original
-      // fue enviada y matchea el ledger). El conteo de ENVIADAS de ESTA cola
-      // vive en porStatusActa.ENVIADA — que P2 limpió de gemelas heredadas.
-      yaEnviadas: filas.filter((f) => f.estado === "YA-ENVIADA").length,
+      // e71 (P3.1) — yaEnviadas ahora cuenta las actas con desenlace ENVIADA
+      // (auto OPTIMA o envío manual) de ESTA cola — el dueño la lee como
+      // «actas enviadas» y reportaba 0: el estado YA-ENVIADA (dedup contra
+      // el ledger, e65) solo existe en re-subidas de la misma sesión y NO es
+      // el significado que el reporte necesita. porStatusActa.ENVIADA sigue
+      // siendo el censo completo por status (intacto); este contador queda
+      // como atajo honesto = porStatusActa.ENVIADA.
+      yaEnviadas: filas.filter((f) => f.statusActa === "ENVIADA").length,
       // e68-blob-idb-v1 (Paso 4 — observabilidad, ADITIVO AL FINAL): uso
       // REAL de IndexedDB en MB (navegador — estimate). null = no expuesto
       // (jamás inventar). Base de comparación del criterio «IDB ~40 % menos»

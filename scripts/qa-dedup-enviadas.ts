@@ -117,10 +117,16 @@ ok(hSinSubtle === null, "subtle ausente → null conservador (jamás tumba el en
 
 console.log("\n── Bloque 2 · cadenaDedup ampliada (source-scan por símbolo) ──");
 
-const iBytes = store.indexOf("const bytes = await hashBytesDeArchivo(entrada.archivo);");
+const iBytes = store.indexOf(
+  "entrada.hashBytes ?? (await hashBytesDeArchivo(entrada.archivo));",
+);
 const iDhash = store.indexOf("const hash = await dhashDeArchivo(entrada.archivo);");
+// ADENDA e71 (Opt-1): la capa bytes REUTILIZA el hash PRE-CALCULADO por la
+// ingesta (agregarFiles → agregarLote → cadenaDedup) y solo re-hashea si no
+// viajó — la llave es LA MISMA (hashBytesDeArchivo determinista). El intent
+// F1 (bytes antes de dhash, SIN decode) queda intacto.
 ok(iBytes > -1 && iDhash > -1 && iBytes < iDhash,
-  "F1: CAPA BYTES corre PRIMERO (SHA-256 sin decode antes del dhash — D-e65-5)");
+  "F1: CAPA BYTES corre PRIMERO (SHA-256 sin decode antes del dhash — D-e65-5) [e71: hash pre-computado de la ingesta o re-hash conservador]");
 
 ok(
   store.includes("if (await marcarYaEnviada(entrada.id, hitHistorico.id, \"bytes\", bytes)) continue;") &&
@@ -262,8 +268,8 @@ ok(
 
 ok(
   informe.includes("| \"ya-enviada\" | null;") &&
-    informe.includes("yaEnviadas: filas.filter((f) => f.estado === \"YA-ENVIADA\").length,"),
-  "T-8: informe export-only — unión dedup con 'ya-enviada' + contador yaEnviadas en totales",
+    informe.includes('yaEnviadas: filas.filter((f) => f.statusActa === "ENVIADA").length,'),
+  "T-8 + e71/P3.1: informe export-only — unión dedup con 'ya-enviada' intacta; contador yaEnviadas ahora cuenta statusActa === ENVIADA (kit e71: reportaba 0 porque YA-ENVIADA solo nace en re-subidas de la misma sesión)",
 );
 
 ok(!informe.includes("hashBytes"),
@@ -327,6 +333,71 @@ ok(
   dedup.includes("e65-dedup-enviadas-v1 — CAPA BYTES (SHA-256 exacto)") &&
     dedup.includes("export async function hashBytesDeArchivo"),
   "T-1: hashBytesDeArchivo exportada al final de dedup.ts (funciones e63m/D65 intactas arriba)",
+);
+
+// ---------- e71 (Opt-1) — DEDUP EXACTO INSTANTÁNEO en la ingesta ----------
+
+console.log("\n── Bloque 5 · e71 Opt-1 — dedupExactoIngesta (source-scan) ──");
+
+ok(
+  store.includes("async function dedupExactoIngesta(") &&
+    store.includes("guardarRegistro({ ...reg, estado: \"DUPLICADA\", dupOf })") &&
+    store.includes("[e14] dedup fila=${e.id} instantanea sha256 dupOf=${dupOf}"),
+  "Opt-1: pase instantáneo existe — DUPLICADA con dupOf + traza propia (mismo patrón anti-zombi de cadenaDedup)",
+);
+
+ok(
+  store.indexOf("await dedupExactoIngesta(") > -1 &&
+    store.indexOf("await dedupExactoIngesta(") < store.indexOf("rearrancarTrasEncolar();") &&
+    store.indexOf("rearrancarTrasEncolar();") < store.indexOf("void cadenaDedup("),
+  "Opt-1: el pase corre ANTES de rearrancarTrasEncolar (el runner jamás ve un duplicado exacto PENDIENTE — no paga precalor/qr-capa0/OCR) y cadenaDedup sigue detrás (capa visual)",
+);
+
+ok(
+  store.includes("const hash = await hashBytesDeArchivo(file);") &&
+    store.includes("agregarLote(imagenes, paginasPdf, hashesBytes)") &&
+    cola.includes("hashesBytes?: (string | null)[]") &&
+    cola.includes("...(hash ? { hashBytes: hash } : {})"),
+  "Opt-1: SHA-256 calculado EN LA INGESTA (agregarFiles) y nace en el PRIMER write del registro (agregarLote) — kit: «guardar como hashSha256 en el registro» (M-e71: hashBytes ya ES ese SHA-256)",
+);
+
+ok(
+  store.includes("(await indiceEnviadasDe()).find") ||
+    store.includes("indice = await indiceEnviadasDe();"),
+  "Opt-1: match contra el índice de enviadas (ledger + cola — D-e65-3; respeta COLA_PERSISTENTE/C-3) → YA-ENVIADA vía marcarYaEnviada",
+);
+
+// ---------- e71 (Opt-3) — paralelismo 2 workers + mutex de dedup ----------
+
+console.log("\n── Bloque 6 · e71 Opt-3 — pool + mutex (source-scan) ──");
+
+ok(
+  runner.includes("const PROCESAMIENTO_CONCURRENTE = 2;") &&
+    runner.includes("const reservadas = new Set<string>();") &&
+    runner.includes("!reservadas.has(f.id)"),
+  "Opt-3: pool de 2 workers con RESERVA de fila (siguientePendiente jamás toma una fila reservada — sin doble-proceso)",
+);
+
+ok(
+  runner.includes("let mutexDedup: Promise<void> = Promise.resolve();") &&
+    runner.includes("async function conExclusionMutua<") &&
+    (runner.match(/conExclusionMutua/g) ?? []).length >= 4,
+  "Opt-3: mutex simple (promesa-cadena FIFO del kit) con las secciones críticas encoladas (def + ≥3 usos)",
+);
+
+ok(
+  runner.includes(
+    "return conExclusionMutua(() => reutilizarResultadoCritica(fila, t0));",
+  ) &&
+    runner.includes("const marcadaIdentidad = await conExclusionMutua(async () => {") &&
+    runner.includes("const idEnMapa = originalQrDePayload(qrPayloadSeguro);"),
+  "Opt-3: verificación de dedup en UN SOLO HILO — reutilizarResultado (copia del desenlace), registro capa-0 (re-chequeo) y capa 2 identidad (check+marca atómicos: el envío doble es imposible por construcción)",
+);
+
+ok(
+  runner.includes("await Promise.all(enVuelo);") &&
+    runner.includes("await Promise.race(enVuelo);"),
+  "Opt-3: bucle del runner con pool (Promise.race libera slot · Promise.all al terminar — el finally apaga solo cuando TODO aterrizó)",
 );
 
 // ---------- resultado ----------
