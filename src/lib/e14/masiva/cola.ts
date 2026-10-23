@@ -17,8 +17,9 @@ let dbSingleton: IDBDatabase | null = null;
 
 /** Abrir (singleton). Rechazo CLARO si IndexedDB no está disponible → la
  *  vista muestra la píldora «TU NAVEGADOR NO SOPORTA LA COLA — IMPORTA DE
- *  A UNA EN ESCANEAR» (kit §3). */
-export function abrirCola(): Promise<IDBDatabase> {
+ *  A UNA EN ESCANEAR» (kit §3). Overnight 3B-B2b: de-export — 7 usos
+ *  internos, 0 externos (knip); el patrón sigue citándose en docs/QA. */
+function abrirCola(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (dbSingleton) {
       resolve(dbSingleton);
