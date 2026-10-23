@@ -490,6 +490,10 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
 
 async function reutilizarResultadoCritica(fila: FilaMasiva, t0: number): Promise<boolean> {
   if (!fila.dupOf) return false;
+  // e72 — reloj de la COPIA en sí (lecturas+writes+thumb): alimenta el
+  // totalMs PROPIO de la copia (abajo) — el duplicado muestra SU consumo en
+  // el informe, no el del original (criterio del dueño e72).
+  const tCopia = Date.now();
   try {
     const [registro, original] = await Promise.all([
       leerRegistro(fila.id),
@@ -526,6 +530,15 @@ async function reutilizarResultadoCritica(fila: FilaMasiva, t0: number): Promise
       // cuenta la espera de la original DOS veces. ≥ 0 defensivo (D57 T1).
       if (actaCopia.diagnostico.tiempos) {
         actaCopia.diagnostico.tiempos.esperaMs = Math.max(0, t0 - fila.agregadaEn);
+        // e72 — TIEMPOS PROPIOS de la copia (criterio del dueño: el segundo
+        // del mismo archivo NO debe mostrar OCR): totalMs = la copia en sí
+        // («casi 0» — la espera vive en esperaMs de arriba; totalMs jamás
+        // incluye espera, contrato del informe) y ocrMs = 0 EXPLÍCITO (la
+        // copia JAMÁS paga OCR — guard e72). El resto (procesoMs/calidadMs…)
+        // queda heredado: describe el pipeline que produjo el desenlace
+        // copiado (nulls jamás inventados).
+        actaCopia.diagnostico.tiempos.totalMs = Date.now() - tCopia;
+        actaCopia.diagnostico.tiempos.ocrMs = 0;
       }
     }
     actaCopia.enviadoAutomaticamente = null;
@@ -579,6 +592,62 @@ async function reutilizarResultadoCritica(fila: FilaMasiva, t0: number): Promise
   }
 }
 
+// ─── e72 — ESPERA ACOTADA por el desenlace de la original (guard de
+// ingesta × pool) ─── La rama DUPLICADA de procesarUno caía al REPROCESO
+// COMPLETO cuando la original aún no tenía desenlace (race Opt-1×Opt-3 del
+// smoke del dueño — imagen10 pagó 32 s de OCR por ser gemela exacta de
+// imagen9). Sondeo SOLO-LECTURA cada INTERVALO hasta que el registro de la
+// original traiga acta (→ reutilizar copia al instante) o la espera muera:
+// original QUITADA/ERROR/YA-ENVIADA (sin acta propia — jamás habrá copia),
+// ESTA fila QUITADA (la voluntad del dueño manda) o TECHO (10 min ≈ 4× el
+// peor caso del watchdog D65 con reintentos — el slot del pool queda libre
+// y el fallback honesto de SIEMPRE corre: el dueño nunca pierde la foto).
+// PENDIENTE/PROCESANDO ESPERAN (la original siempre va delante en la FIFO
+// — el otro slot del pool la alcanza; sin deadlock por construcción).
+// Sin timers globales — mismo patrón de esperarDesenlaceQr (e63m), techo a
+// escala OCR (15 s del QR no cubren un pipeline completo).
+const ESPERA_ORIGINAL_INTERVALO_MS = 400;
+const ESPERA_ORIGINAL_TECHO_MS = 600_000;
+async function esperarDesenlaceOriginal(
+  estaFilaId: string,
+  originalId: string,
+): Promise<boolean> {
+  const tEspera = Date.now();
+  console.info(
+    `[e14] dedup fila=${estaFilaId} espera-original dupOf=${originalId}`,
+  );
+  while (Date.now() - tEspera < ESPERA_ORIGINAL_TECHO_MS) {
+    await new Promise((r) => setTimeout(r, ESPERA_ORIGINAL_INTERVALO_MS));
+    if (!useMasivaStore.getState().filas.some((f) => f.id === estaFilaId)) {
+      return false; // esta fila QUITADA/VACIADA en la espera — nada que copiar
+    }
+    const original = useMasivaStore
+      .getState()
+      .filas.find((f) => f.id === originalId);
+    // Whitelist COPIABLE (T-5 e65: la literal YA-ENVIADA jamás se escribe en
+    // el runner — el QA la veta; AUSENTE/ERROR/ya-enviada quedan fuera por
+    // construcción: sin acta propia no hay copia posible).
+    const copiable =
+      original != null &&
+      (original.estado === "PENDIENTE" ||
+        original.estado === "PROCESANDO" ||
+        original.estado === "LISTA" ||
+        original.estado === "DUPLICADA");
+    if (!copiable) {
+      return false; // sin desenlace copiable — fallback honesto de siempre
+    }
+    try {
+      if ((await leerRegistro(originalId)).acta) return true;
+    } catch {
+      /* IDB caída — seguir sondeando (el techo manda) */
+    }
+  }
+  console.info(
+    `[e14] dedup fila=${estaFilaId} espera-original techo=${ESPERA_ORIGINAL_TECHO_MS}ms → reprocesa-completo`,
+  );
+  return false;
+}
+
 /** Desenlace de UNA foto — byte a byte el pipeline real (kit §6-C: el
  *  desenlace DEBE ser idéntico al del IMPORTAR normal).
  *  D66 — KIT e14-decode-unico-precalor-v1: el pipeline recibe el MASTER
@@ -604,6 +673,21 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     marcarFila(fila.id, { estado: "PROCESANDO", error: null });
     const t0 = Date.now();
     if (await reutilizarResultado(fila, t0)) return;
+    // e72 — GUARD de ingesta × pool: reutilizar falló con la original VIVA
+    // pero SIN desenlace — la race del smoke del dueño (imagen9/imagen10
+    // idénticas en un lote EN VUELO): la ingesta marcó «instantanea sha256»
+    // al instante, pero el pool reservó la copia ANTES de que la original
+    // aterrizara y el fallback de abajo la mandaba al REPROCESO COMPLETO
+    // (32 s de OCR pagados + desenlace ENVIADA propio). Si la original está
+    // EN COLA o EN VUELO → ESPERAR su desenlace (sondeo ligero, techo
+    // generoso) y copiar: el duplicado JAMÁS paga OCR (kit e71 literal —
+    // totalMs de la copia ≈ 0, criterio del dueño). La original SIEMPRE va
+    // delante en la FIFO (agregadaEn menor) → el otro slot del pool la
+    // alcanza — sin deadlock por construcción; QUITAR/ERROR/techo → el
+    // fallback honesto de abajo queda intacto.
+    if (fila.dupOf && (await esperarDesenlaceOriginal(fila.id, fila.dupOf))) {
+      if (await reutilizarResultado(fila, t0)) return;
+    }
     // Fallback: des-marcar y reprocesar como fila normal (mismo pase).
     fila = { ...fila, estado: "PENDIENTE", dupOf: null };
     marcarFila(fila.id, { estado: "PENDIENTE", dupOf: null });
@@ -1232,6 +1316,128 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       console.info(
         `[e14] dedup-identidad fila=${fila.id} falso-positivo-visual evitado serie=${identidad!.serie} original-visual=${dedupVisualDeAplazada}`,
       );
+    }
+
+    // ─── e72 — P2.1-v2: el veredicto de dedup por CONTENIDO manda sobre el
+    // envío ─── Segundo plano de la MISMA race del smoke del dueño
+    // (imagen9/imagen10): la fila llegó AL DESENLACE con el veredicto puesto
+    // (traza «v2» de cadenaDedup — cinta cierta, estampada aunque el guard
+    // anti-zombi bloqueara la marca pre-OCR) o con una gemela EXACTA
+    // (hashBytes sha256 idéntico) ya resuelta. El desenlace NUNCA envía:
+    // resolver por la maquinaria P2.1 (reutilizarResultado — la copia hereda
+    // DUPLICADA o RECHAZADA) o, sin original resoluble, DUPLICADA con SU
+    // PROPIO desenlace (doctrina capa-2 e63k: revisión disponible, cero
+    // envío, cero contador). LA ORIGINAL JAMÁS CAE AQUÍ: su traza es
+    // «sin-match» (la cadena es FIFO — sus candidatas son ANTERIORES) y una
+    // gemela en cola (DUPLICADA/PENDIENTE posterior) sin traza v2 no activa
+    // el guard. La gemela en vuelo cuenta SOLO si es ANTERIOR (agregadaEn
+    // menor): esperar a una POSTERIOR sería esperarla a ELLA que espera por
+    // ESTA — deadlock imposible por construcción. forzarDedupOff (PROCESAR
+    // IGUAL) manda SIEMPRE (RL-e65b-6 — el escape del dueño es sagrado).
+    if (!fila.forzarDedupOff && registro != null && registro.hashBytes != null) {
+      const hashNeto: string = registro.hashBytes;
+      // Whitelist de estados (T-5 e65: la literal YA-ENVIADA jamás se escribe
+      // en el runner — el QA la veta; AUSENTE/ERROR/ya-enviada quedan fuera
+      // por construcción: sin acta copiable no hay resolución posible).
+      const gemelasHash = useMasivaStore
+        .getState()
+        .filas.filter(
+          (f) =>
+            f.id !== fila.id &&
+            f.hashBytes === hashNeto &&
+            (f.estado === "PENDIENTE" ||
+              f.estado === "PROCESANDO" ||
+              f.estado === "LISTA" ||
+              f.estado === "DUPLICADA"),
+        )
+        .sort((a, b) => a.agregadaEn - b.agregadaEn);
+      const originalLista =
+        gemelasHash.find((f) => f.estado === "LISTA") ?? null;
+      const originalEnVuelo =
+        gemelasHash.find(
+          (f) =>
+            (f.estado === "PENDIENTE" || f.estado === "PROCESANDO") &&
+            f.agregadaEn < fila.agregadaEn,
+        ) ?? null;
+      if (registro.dedup === "v2" || originalLista != null) {
+        const tNet = Date.now();
+        let copiado = false;
+        if (originalLista != null) {
+          const filaGemela: FilaMasiva = {
+            ...fila,
+            estado: "DUPLICADA",
+            dupOf: originalLista.id,
+          };
+          copiado = await reutilizarResultado(filaGemela, tNet);
+        }
+        if (!copiado && originalEnVuelo != null) {
+          // La gemela cierta aún no aterriza (profunda en la cola/vuelo) →
+          // esperar su desenlace (mismo guard acotado de la rama DUPLICADA)
+          // y copiar: la OCR de ESTA fila ya se pagó (precio de la race) —
+          // el desenlace correcto sigue siendo el de la original.
+          if (await esperarDesenlaceOriginal(fila.id, originalEnVuelo.id)) {
+            const filaGemela: FilaMasiva = {
+              ...fila,
+              estado: "DUPLICADA",
+              dupOf: originalEnVuelo.id,
+            };
+            copiado = await reutilizarResultado(filaGemela, tNet);
+          }
+        }
+        if (copiado) return;
+        // (c) Sin original resoluble (gemela QUITADA en la carrera / «v2»
+        // por dHash de bytes distintos / gemela desaparecida) → DUPLICADA
+        // con SU PROPIO desenlace (revisión disponible — cero envío, cero
+        // contador; el OCR pagado fue el precio de la race y el informe lo
+        // muestra honesto con sus tiempos reales). La voluntad del dueño
+        // manda: una fila QUITADA en la espera no resucita registro.
+        if (!useMasivaStore.getState().filas.some((f) => f.id === fila.id)) {
+          return;
+        }
+        const thumbNet = await hacerThumb(
+          actaDesenlace.fotoProcesada ?? actaDesenlace.fotoOriginal,
+        );
+        await guardarRegistro({
+          ...registro,
+          estado: "DUPLICADA",
+          acta: {
+            ...actaDesenlace,
+            status: "DUPLICADA",
+            enviadoAutomaticamente: null,
+            ...(actaDesenlace.diagnostico
+              ? {
+                  diagnostico: {
+                    ...actaDesenlace.diagnostico,
+                    status: "DUPLICADA" as const,
+                  },
+                }
+              : {}),
+          },
+          thumb: thumbNet,
+          infoTitulo: tituloDeActa(actaDesenlace),
+          ...(identidad ? { serie: identidad.serie } : {}),
+          ...(qrPayload ? { qrPayload } : {}),
+          ...(qrEstadoCapa0 ? { qrEstado: qrEstadoCapa0 } : {}),
+        });
+        marcarFila(fila.id, {
+          estado: "DUPLICADA",
+          dupOf: originalLista?.id ?? originalEnVuelo?.id ?? null,
+          statusActa: "DUPLICADA",
+          score: actaDesenlace.score,
+          nivel: actaDesenlace.clasificacion?.nivel ?? null,
+          pagina: paginaDeActa(actaDesenlace),
+          infoTitulo: tituloDeActa(actaDesenlace),
+          motivo: actaDesenlace.rechazo?.tipo ?? null,
+          thumb: thumbNet,
+          enviadaAuto: false,
+          ...(identidad ? { serie: identidad.serie } : {}),
+          error: null,
+        });
+        console.info(
+          `[e14] dedup fila=${fila.id} desenlace-contenido DUPLICADA v2=${registro.dedup === "v2"} gemela=${originalLista?.id ?? originalEnVuelo?.id ?? "sin-original"} (sin envío propio)`,
+        );
+        return; // NO registrarEnvioMasiva NI contarMotivoNoEnvioActa (patrón capa-2)
+      }
     }
 
     // Desenlace → la MISMA vía que el flujo normal (T3.3/T3.2). El envío
