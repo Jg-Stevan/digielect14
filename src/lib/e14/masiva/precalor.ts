@@ -43,7 +43,8 @@ import { useMasivaStore } from "./store";
 import type { FilaMasiva } from "./tipos";
 
 /** D66 (T3.1) — masters PRECALORADOS máximos en memoria (blobs ~1-4 MB c/u). */
-export const PRECALOR_COLA = 3;
+// knip C3: de-export — uso SOLO interno (tope del mapa de masters).
+const PRECALOR_COLA = 3;
 
 /** Entrada del mapa de masters (SOLO memoria — jamás IDB). */
 interface EntradaPrecalor {
@@ -218,11 +219,6 @@ async function precalentarUno(
 }
 
 // ---------- API para el runner (zona D66 del kit: consumir masters) ----------
-
-/** ¿Esta fila tiene un master listo? (el runner lo consulta al tomarla). */
-export function filaPrecalentada(id: string): boolean {
-  return entradas.has(id);
-}
 
 /** CONSUMIR el master de una fila (el runner lo alimenta al bridge — T3.3:
  *  decode = 0 s). Borra la entrada (un master se consume UNA vez). */

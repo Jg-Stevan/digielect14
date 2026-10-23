@@ -84,7 +84,8 @@ export type BandaSim = "optima" | "medio" | "baja";
  *  8.2 + AUTO → piso 10.0 (ÓPTIMA enviada) · 7.0 con AUTO → ADVERTENCIA
  *  (el chip manda — el piso solo re-aplica con score ≥ 8) · 4.3 →
  *  RECHAZADA. Los mismos números viven pintados en NIVELES_CALIDAD. */
-export const SCORE_SIMULADO: Record<BandaSim, number> = {
+// knip C3: de-export — uso SOLO interno (avanzarSimulacion).
+const SCORE_SIMULADO: Record<BandaSim, number> = {
   optima: 8.2,
   medio: 7.0,
   baja: 4.3,
@@ -92,7 +93,8 @@ export const SCORE_SIMULADO: Record<BandaSim, number> = {
 
 /** §D3: opciones de simulación por chips — SOLO store↔dispararEscaneo; el
  *  bridge las recibe como `simular`/`scoreSimulado` (OpcionesEscaneo). */
-export interface OpcionesSimEscaneo {
+// knip C3: de-export — uso SOLO interno (dispararEscaneo).
+interface OpcionesSimEscaneo {
   simular: boolean;
   scoreSimulado: number;
 }
@@ -334,7 +336,8 @@ function marcarPaginaOK(mesas: Mesa[], objetivo: PaginaObjetivo): Mesa[] {
  *  RESCANEO (la captura archivada llegó ADVERTENCIA: ⚠ en ACTAS, cuenta
  *  como no-OK y deja la mesa EN PROCESO invitando al re-escaneo; el
  *  re-archivo del mismo hueco lo sube a OK — la más reciente manda). */
-export interface HuecoArchivado {
+// knip C3: de-export — uso SOLO interno (estado.huecos/archivarHueco).
+interface HuecoArchivado {
   tipo: TipoPagina;
   pagina: 1 | 2;
   estado: "OK" | "RESCANEO";

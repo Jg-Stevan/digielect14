@@ -16,7 +16,8 @@
  *    completa, 1 ≤ mesa ≤ p.t (regla 5 — KIT_MESA_FUERA_RANGO).
  */
 
-export interface RegistroKit {
+// knip C3: de-export — uso SOLO interno (REGISTRO_KITS/kitEnRegistro).
+interface RegistroKit {
   mun: string;
   zon: string;
   std: string;
