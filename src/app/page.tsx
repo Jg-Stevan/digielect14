@@ -35,6 +35,16 @@ import { MasivaView } from "@/components/e14/screens/MasivaView";
 import { PwaRegister } from "@/components/e14/PwaRegister";
 // Task 4: guía de uso (onboarding 1.ª visita + «?»/«h» + SideNav).
 import { AyudaOverlay, abrirAyuda } from "@/components/e14/AyudaOverlay";
+// KIT e14-observabilidad-v1 (A1-C7): bootstrap del rastreo — captura de
+// errores + ErrorBoundary + breadcrumbs + uso + salud (modo dev) +
+// transporte (stub → agente 3) + refresco de flags. TODO idempotente y
+// silencioso (§2.4): la app se comporta IDÉNTICA con esto en marcha.
+import { ErrorBoundaryObs, instalarCaptura } from "@/lib/e14/obs/captura";
+import { iniciarBreadcrumbs } from "@/lib/e14/obs/breadcrumbs";
+import { iniciarUso } from "@/lib/e14/obs/uso";
+import { iniciarMuestreoSalud } from "@/lib/e14/obs/dispositivo";
+import { iniciarTransporte } from "@/lib/e14/obs/transporte";
+import { refrescarFlags } from "@/lib/e14/flags";
 
 export default function Page() {
   const vista = useE14Store((s) => s.vista);
@@ -47,6 +57,23 @@ export default function Page() {
   useEffect(() => {
     void arrancarJornada();
   }, [arrancarJornada]);
+
+  // KIT e14-observabilidad-v1 (A1-C7): bootstrap del rastreo — UNA vez por
+  // carga, TODAS las piezas idempotentes. El muestreo de salud NO crea
+  // timer si el modo dev está OFF (cero costo); el transporte es no-op sin
+  // endpoint (D1). Nada de esto renderiza ni toca la UI.
+  useEffect(() => {
+    try {
+      instalarCaptura();
+      iniciarBreadcrumbs();
+      iniciarUso();
+      iniciarMuestreoSalud();
+      iniciarTransporte();
+      void refrescarFlags();
+    } catch {
+      /* el rastreo jamás rompe la app (§2.4) */
+    }
+  }, []);
 
   // KIT e14-esquinas-suaves-v1 (T-R): tick del SIM VIVO en el SHELL — corre en
   // TODAS las vistas (el dueño mira RESUMEN y el puesto se llena a la vista).
@@ -88,59 +115,70 @@ export default function Page() {
   }, [navegar]);
 
   return (
-    // D38 (F5): shell candado a h-dvh (NO min-h) — la cadena de alturas de
-    // REVISIÓN queda DEFINITA (main flex-1 → tarjeta flex-1 → img h-full) y la
-    // barra de controles vive SIEMPRE pegada a los CTAs/BottomNav, sin importar
-    // la orientación del documento. Cada vista gestiona su propio scroll
-    // (Actas/Resumen ya son overflow-y-auto; ScanView cabe por diseño).
-    // Task 2-a: en lg+ el shell se vuelve horizontal — SideNav + columna.
-    <div className="h-dvh bg-[#090d12] text-slate-100 flex font-sans overflow-hidden">
-      {/* Navegación de escritorio (lg+) — en móvil la da BottomNav */}
-      <SideNav />
+    <ErrorBoundaryObs>
+      {/* KIT e14-observabilidad-v1 (A1-C7): ErrorBoundaryObs envuelve el
+          shell COMPLETO — un error de render → evento en el buffer + UI de
+          fallo sobria con Recargar (nada de pantalla blanca muda). */}
+      {/* D38 (F5): shell candado a h-dvh (NO min-h) — la cadena de alturas
+          de REVISIÓN queda DEFINITA (main flex-1 → tarjeta flex-1 → img
+          h-full) y la barra de controles vive SIEMPRE pegada a los CTAs/
+          BottomNav, sin importar la orientación del documento. Cada vista
+          gestiona su propio scroll (Actas/Resumen ya son overflow-y-auto;
+          ScanView cabe por diseño). Task 2-a: en lg+ el shell se vuelve
+          horizontal — SideNav + columna. */}
+      <div className="h-dvh bg-[#090d12] text-slate-100 flex font-sans overflow-hidden">
+        {/* Navegación de escritorio (lg+) — en móvil la da BottomNav */}
+        <SideNav />
 
-      <div className="flex-1 min-w-0 flex flex-col relative">
-        {vista === "revision" && <TopBar />}
+        <div className="flex-1 min-w-0 flex flex-col relative">
+          {vista === "revision" && <TopBar />}
 
-        <main className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-          <div key={vista} className="flex-1 min-h-0 flex flex-col animate-view-enter">
-            {vista === "escanear" && <ScanView />}
-            {vista === "analizando" && <AnalyzingView />}
-            {vista === "revision" && <ReviewView />}
-            {vista === "actas" && <ActasView />}
-            {vista === "resumen" && <ResumenView />}
-            {/* KIT e14-carga-masiva-v1 (T4): MASIVA en la grilla de vistas —
+          <main className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
+            <div
+              key={vista}
+              className="flex-1 min-h-0 flex flex-col animate-view-enter"
+            >
+              {vista === "escanear" && <ScanView />}
+              {vista === "analizando" && <AnalyzingView />}
+              {vista === "revision" && <ReviewView />}
+              {vista === "actas" && <ActasView />}
+              {vista === "resumen" && <ResumenView />}
+              {/* KIT e14-carga-masiva-v1 (T4): MASIVA en la grilla de vistas —
               TopBar queda como está (solo REVISIÓN), scroll propio. */}
-            {vista === "masiva" && <MasivaView />}
-          </div>
-        </main>
+              {vista === "masiva" && <MasivaView />}
+            </div>
+          </main>
 
-        {/* Navegación móvil (<lg). Las CTAs de REVISIÓN viajan dentro del
+          {/* Navegación móvil (<lg). Las CTAs de REVISIÓN viajan dentro del
             BottomNav (encima de la barra), como siempre. */}
-        {vista !== "analizando" && (
-          <div className="lg:hidden shrink-0">
-            <BottomNav mode={vista === "actas" || vista === "resumen" ? "app" : "dark"}>
-              {vista === "revision" && <ReviewCtas />}
-            </BottomNav>
-          </div>
-        )}
+          {vista !== "analizando" && (
+            <div className="lg:hidden shrink-0">
+              <BottomNav
+                mode={vista === "actas" || vista === "resumen" ? "app" : "dark"}
+              >
+                {vista === "revision" && <ReviewCtas />}
+              </BottomNav>
+            </div>
+          )}
 
-        {/* CTAs de REVISIÓN en escritorio: al fondo de la columna (no hay
+          {/* CTAs de REVISIÓN en escritorio: al fondo de la columna (no hay
             barra inferior en lg+). Misma pieza (ReviewCtas), sin duplicar
             estado — es presentacional pura. */}
-        {vista === "revision" && (
-          <div className="hidden lg:flex shrink-0 justify-center px-6 pb-4">
-            <div className="w-full max-w-2xl xl:max-w-3xl">
-              <ReviewCtas />
+          {vista === "revision" && (
+            <div className="hidden lg:flex shrink-0 justify-center px-6 pb-4">
+              <div className="w-full max-w-2xl xl:max-w-3xl">
+                <ReviewCtas />
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* F-PWA (H6): SW offline + instalación — SIEMPRE montado (todas las
+        {/* F-PWA (H6): SW offline + instalación — SIEMPRE montado (todas las
           vistas) porque el registro vive en el shell, no en una pantalla. */}
-      <PwaRegister />
-      {/* Task 4: guía de uso — montada única, se abre en 1.ª visita. */}
-      <AyudaOverlay />
-    </div>
+        <PwaRegister />
+        {/* Task 4: guía de uso — montada única, se abre en 1.ª visita. */}
+        <AyudaOverlay />
+      </div>
+    </ErrorBoundaryObs>
   );
 }

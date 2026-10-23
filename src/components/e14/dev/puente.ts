@@ -1,43 +1,81 @@
 /**
- * KIT e14-observabilidad-v1 — AGENTE 2 (UI modo dev) · FASE 0 · PUENTE.
+ * KIT e14-observabilidad-v1 — AGENTE 2 (UI modo dev) · FASE 1 · PUENTE.
  *
- * Costura local entre la UI (`dev/*.tsx`) y el núcleo de observabilidad del
- * agente 1 (`src/lib/e14/obs/**`), que AÚN NO EXISTE en FASE 0. Las firmas
- * son EXACTAMENTE las del contrato pinned (README-KITS.md §4.3) — la UI
- * codifica contra el contrato, no contra el núcleo.
+ * Costura entre la UI (`dev/*.tsx`) y el núcleo real de observabilidad del
+ * agente 1 (`src/lib/e14/obs/**` + `src/lib/e14/flags.ts`). Las firmas son
+ * EXACTAMENTE las del contrato pinned (README-KITS.md §4.3) — la UI codifica
+ * contra el contrato, no contra el núcleo: FASE 1 SOLO cambió los cuerpos
+ * (delegación); consumidores y JSX no se tocó.
  *
- * FASE 0 (esta): persistencia local SOLO en las claves PINNEADAS e
- * inalterables (§4.1) con los defaults del contrato; todo lo que depende
- * del núcleo responde con un valor HONESTO vacío (0 / [] / null / no-op) —
- * jamás inventa datos.
+ * Delegación (obs/ = núcleo agente 1):
+ *  · modo dev / política / overrides → obs/politica.ts (claves pinned §4.1,
+ *    defaults D4, saneo de corruptos del núcleo).
+ *  · flags efectivas / refresco → lib/e14/flags.ts (cadena real:
+ *    DEFAULTS ← public/flags.json cacheado ← overrides — máxima prioridad).
+ *  · salud / muestreo 5 min → obs/dispositivo.ts (timer del NÚCLEO, no de la
+ *    UI; re-verifica modo dev + saludEnVivo + telemetriaSalud cada tick).
+ *  · buffer de eventos → obs/buffer.ts (IDB e14-obs, tope 500 + TTL 30d).
+ *  · identidad → obs/identidad.ts (appVersion de package.json — ya no hay
+ *    constante espejo; idDispositivo crea el UUID persistente en la primera
+ *    lectura — diseño lazy del núcleo).
+ *  · export ZIP/JSON → obs/export.ts (ReporteSesion del contrato).
  *
- * CRECIMIENTO POR TAREA (gate: «cada export nace con consumidor»):
- *  · C1 (hecho): modo dev — `guardarModoDev` / `useModoDev` (tuerca).
- *  · C4 (este commit): política, overrides, flags, salud, buffer de
- *    lectura, identidad y export (consumidor: PanelDev).
- *  · C5: `purgarBuffer` gana su 2.º consumidor (VistaErrores).
- *  · C6: hook `useSaludVivo` (consumidor: PanelDev).
+ * Reactividad: los setters del núcleo no notifican a la UI, así que este
+ * puente conserva el evento DOM intra-pestaña `e14-obs:cambio` (más el
+ * `storage` cross-pestaña) — CERO timers/polling.
  *
- * FASE 1 (cuando exista `origin/feat/obs-nucleo-v1`): los cuerpos se
- * reemplazan por delegación a los módulos reales (`obs/politica.ts`,
- * `obs/buffer.ts`, `obs/dispositivo.ts`, `obs/identidad.ts`,
- * `obs/export.ts`, `lib/e14/flags.ts`) — las firmas y los consumidores
- * NO cambian.
+ * DESVIACIÓN DOCUMENTADA (única): guardarOverridesFlags mantiene semántica
+ * de REEMPLAZO completo (FASE 0) en vez de delegar — el kill switch del
+ * panel necesita APAGAR un override (delete de la clave), y el núcleo hace
+ * MERGE ({...actual, ...o}): una clave borrada del objeto sobreviviría en
+ * storage y el switch jamás apagaría. Se escribe el objeto FINAL directo en
+ * la clave PINNED `e14-flags-overrides` (§4.1 — exportada por el núcleo
+ * como CLAVE_OVERRIDES); la lectura y el saneo siguen siendo 100 % del
+ * núcleo (leerOverridesFlags → sanearFlags en leerFlags).
  */
 import { useEffect, useState } from "react";
+import {
+  CLAVE_OVERRIDES,
+  POLITICA_DEFAULT,
+  guardarModoDev as nucleoGuardarModoDev,
+  guardarPolitica as nucleoGuardarPolitica,
+  leerModoDev as nucleoLeerModoDev,
+  leerPolitica as nucleoLeerPolitica,
+  leerOverridesFlags as nucleoLeerOverridesFlags,
+} from "@/lib/e14/obs/politica";
+import {
+  contarEventos as nucleoContarEventos,
+  eventosPorDigest as nucleoEventosPorDigest,
+  purgarBuffer as nucleoPurgarBuffer,
+} from "@/lib/e14/obs/buffer";
+import {
+  detenerMuestreoSalud as nucleoDetenerMuestreoSalud,
+  iniciarMuestreoSalud as nucleoIniciarMuestreoSalud,
+  obtenerDispositivo as nucleoObtenerDispositivo,
+} from "@/lib/e14/obs/dispositivo";
+import {
+  appVersion as nucleoAppVersion,
+  idDispositivo as nucleoIdDispositivo,
+  idSesion as nucleoIdSesion,
+} from "@/lib/e14/obs/identidad";
+import { descargarReporte as nucleoDescargarReporte } from "@/lib/e14/obs/export";
+import {
+  leerFlags as nucleoLeerFlags,
+  refrescarFlags as nucleoRefrescarFlags,
+} from "@/lib/e14/flags";
 import type {
   ErroresAgrupados,
   FlagsApp,
   PoliticaDatos,
   SaludSnapshot,
-} from "./contrato";
-import { FLAGS_DEFAULT, POLITICA_DEFAULT } from "./contrato";
+} from "@/lib/e14/obs/tipos";
 
-// ── Claves de persistencia (README-KITS.md §4.1 — INALTERABLES) ────────────
-const CLAVE_MODO_DEV = "e14-dev-mode"; // "on" | "off"
-const CLAVE_POLITICA = "e14-obs-politica"; // PoliticaDatos JSON
-const CLAVE_OVERRIDES = "e14-flags-overrides"; // Partial<FlagsApp> JSON
-const CLAVE_DEVICE_ID = "e14-obs-device-id"; // la ESCRIBE el agente 1 — aquí SOLO se lee si existe
+// ── Claves para FILTRAR los eventos de reactividad (valores pinned §4.1) ───
+// La persistencia vive en el núcleo; aquí solo importan los nombres para
+// decidir qué evento re-renderiza qué hook. CLAVE_POLITICA no la exporta el
+// núcleo → literal local (mismo valor pinned).
+const CLAVE_MODO_DEV = "e14-dev-mode"; // exportada también por obs/politica
+const CLAVE_POLITICA = "e14-obs-politica";
 
 /** Evento DOM intra-pestaña: `storage` solo cruza pestañas, así que los
  *  setters de este puente disparan este evento para re-render reactivo
@@ -70,23 +108,13 @@ function suscribirObs(claves: string[], cb: () => void): () => void {
   };
 }
 
-// ── Modo dev (contrato §4.3 obs/politica.ts) ───────────────────────────────
-/** Contrato §4.3 — interno del puente en FASE 0 (consumidor: `useModoDev`);
- *  FASE 1 delega en obs/politica.ts. */
+// ── Modo dev (delega en obs/politica.ts — contrato §4.3) ───────────────────
 function leerModoDev(): boolean {
-  try {
-    return localStorage.getItem(CLAVE_MODO_DEV) === "on";
-  } catch {
-    return false; // modo privado / sin localStorage → OFF
-  }
+  return nucleoLeerModoDev();
 }
 
 export function guardarModoDev(on: boolean): void {
-  try {
-    localStorage.setItem(CLAVE_MODO_DEV, on ? "on" : "off");
-  } catch {
-    /* modo privado: el ajuste no persiste — la UI lo refleja igual */
-  }
+  nucleoGuardarModoDev(on);
   emitirCambio(CLAVE_MODO_DEV);
 }
 
@@ -101,128 +129,121 @@ export function useModoDev(): boolean {
   return on;
 }
 
-// ── Política de datos (contrato §4.3 obs/politica.ts · defaults D4) ───────
-/** Contrato §4.3 — interno del puente en FASE 0 (consumidor: `usePolitica`);
- *  FASE 1 delega en obs/politica.ts. */
+// ── Política de datos (delega en obs/politica.ts · defaults D4) ────────────
+/** El núcleo aporta defaults + saneo de JSON corrupto (→ defaults + evento
+ *  warn PoliticaCorrupta) — ya no hay spread local. */
 function leerPolitica(): PoliticaDatos {
-  try {
-    const crudo = localStorage.getItem(CLAVE_POLITICA);
-    if (!crudo) return POLITICA_DEFAULT;
-    return { ...POLITICA_DEFAULT, ...(JSON.parse(crudo) as Partial<PoliticaDatos>) };
-  } catch {
-    return POLITICA_DEFAULT;
-  }
+  return nucleoLeerPolitica();
 }
 
 export function guardarPolitica(p: PoliticaDatos): void {
-  try {
-    localStorage.setItem(CLAVE_POLITICA, JSON.stringify(p));
-  } catch {
-    /* modo privado: no persiste */
-  }
+  nucleoGuardarPolitica(p);
   emitirCambio(CLAVE_POLITICA);
 }
 
-// ── Overrides de flags (contrato §4.3 obs/politica.ts · kill switch) ──────
-/** Contrato §4.3 — interno del puente en FASE 0 (consumidor:
- *  `useOverridesFlags`); FASE 1 delega en obs/politica.ts. */
+// ── Overrides de flags (kill switch — ver desviación en el encabezado) ─────
 function leerOverridesFlags(): Partial<FlagsApp> {
-  try {
-    const crudo = localStorage.getItem(CLAVE_OVERRIDES);
-    if (!crudo) return {};
-    return JSON.parse(crudo) as Partial<FlagsApp>;
-  } catch {
-    return {};
-  }
+  return nucleoLeerOverridesFlags();
 }
 
 /** Semántica de REEMPLAZO completo: el caller pasa el objeto final (sin la
- *  clave = sin override). FASE 1 verifica contra obs/politica.ts real. */
+ *  clave = sin override). El núcleo hace MERGE y no puede BORRAR claves, así
+ *  que el puente escribe el objeto final en la clave pinned (CLAVE_OVERRIDES,
+ *  exportada por el núcleo); el saneo sigue en el núcleo vía leerFlags. */
 export function guardarOverridesFlags(o: Partial<FlagsApp>): void {
   try {
-    localStorage.setItem(CLAVE_OVERRIDES, JSON.stringify(o));
+    window.localStorage.setItem(CLAVE_OVERRIDES, JSON.stringify(o));
   } catch {
     /* modo privado: no persiste */
   }
   emitirCambio(CLAVE_OVERRIDES);
 }
 
-// ── Flags efectivas (contrato §4.3 lib/e14/flags.ts) ──────────────────────
-/** FASE 0: defaults del contrato + overrides locales. La capa
- *  `public/flags.json` / endpoint remoto vive en flags.ts del agente 1. */
+// ── Flags efectivas (delega en lib/e14/flags.ts — cadena REAL) ─────────────
+/** DEFAULTS ← public/flags.json (cacheado 24 h, offline-safe) ← overrides
+ *  (máxima prioridad). El endpoint hoy no existe → «sin-endpoint» honesto. */
 export function leerFlags(): FlagsApp {
-  return { ...FLAGS_DEFAULT, ...leerOverridesFlags() };
+  return nucleoLeerFlags();
 }
 
 export async function refrescarFlags(): Promise<"ok" | "sin-endpoint" | "error"> {
-  // Contrato: "sin-endpoint" si no hay endpoint de flags configurado.
-  // FASE 0 no conoce endpoint (endpointReportes default null) → honesto.
-  return "sin-endpoint";
+  return nucleoRefrescarFlags();
 }
 
-// ── Salud del dispositivo (contrato §4.3 obs/dispositivo.ts) ──────────────
+// ── Salud del dispositivo (delega en obs/dispositivo.ts) ───────────────────
 export type SnapshotDispositivo = SaludSnapshot & { os: string; ua: string };
 
-/** FASE 0: el núcleo no existe → null (la UI muestra "—", jamás inventa). */
+/** El núcleo lee navigator/batería/storage (client-only) — el try/catch del
+ *  puente mantiene la firma `| null` del contrato de UI: SSR o navegador
+ *  sin APIs → null (la UI muestra "—", jamás inventa). */
 export async function obtenerDispositivo(): Promise<SnapshotDispositivo | null> {
-  return null;
-}
-
-export function iniciarMuestreoSalud(): void {
-  /* FASE 1: delegar en obs/dispositivo.ts (timer 5 min, idempotente) */
-}
-
-export function detenerMuestreoSalud(): void {
-  /* FASE 1: delegar en obs/dispositivo.ts */
-}
-
-// ── Buffer de eventos (contrato §4.3 obs/buffer.ts) ───────────────────────
-/** FASE 0: buffer vacío (obs/buffer.ts es del agente 1). */
-export async function contarEventos(): Promise<number> {
-  return 0;
-}
-
-export async function eventosPorDigest(): Promise<ErroresAgrupados[]> {
-  return [];
-}
-
-export async function purgarBuffer(): Promise<void> {
-  /* FASE 1: delegar en obs/buffer.ts (tope 500 + TTL 30d, FIFO) */
-}
-
-// ── Identidad (contrato §4.3 obs/identidad.ts) ────────────────────────────
-/** FASE 0: solo LECTURA de la clave pinned si el núcleo la llegó a escribir. */
-export function idDispositivo(): string | null {
   try {
-    return localStorage.getItem(CLAVE_DEVICE_ID);
+    return await nucleoObtenerDispositivo();
   } catch {
     return null;
   }
 }
 
-/** FASE 0: la identidad de sesión la crea obs/identidad.ts (agente 1). */
+/** Muestreo 5 min del NÚCLEO: idempotente, solo corre con modo dev ON &&
+ *  politica.saludEnVivo && flags.telemetriaSalud — re-verifica CADA tick y
+ *  se auto-detiene (cero timers huérfanos con OFF). */
+export function iniciarMuestreoSalud(): void {
+  nucleoIniciarMuestreoSalud();
+}
+
+export function detenerMuestreoSalud(): void {
+  nucleoDetenerMuestreoSalud();
+}
+
+// ── Buffer de eventos (delega en obs/buffer.ts — IDB e14-obs real) ─────────
+export async function contarEventos(): Promise<number> {
+  return nucleoContarEventos();
+}
+
+export async function eventosPorDigest(): Promise<ErroresAgrupados[]> {
+  return nucleoEventosPorDigest();
+}
+
+export async function purgarBuffer(): Promise<void> {
+  await nucleoPurgarBuffer();
+}
+
+// ── Identidad (delega en obs/identidad.ts) ─────────────────────────────────
+/** UUID anónimo persistente (e14-obs-device-id). Nota FASE 1: el núcleo lo
+ *  CREA en la primera lectura (lazy, diseño obs) — antes el puente solo leía. */
+export function idDispositivo(): string | null {
+  try {
+    return nucleoIdDispositivo();
+  } catch {
+    return null; // jamás romper la UI por identidad
+  }
+}
+
+/** UUID por sesión de página (memo del núcleo — estable dentro de la sesión). */
 export function idSesion(): string | null {
-  return null;
+  try {
+    return nucleoIdSesion();
+  } catch {
+    return null;
+  }
 }
 
-/** FASE 0: constante espejo de package.json. FASE 1: obs/identidad.ts
- *  (`appVersion(): string // de package.json importado`). */
+/** Versión horneada del build (package.json importado por el núcleo). */
 export function appVersion(): string {
-  return "0.1.0";
+  return nucleoAppVersion();
 }
 
-// ── Export (contrato §4.3 obs/export.ts) ──────────────────────────────────
-/** FASE 0: inalcanzable desde la UI (los botones exigen buffer no vacío y
- *  el buffer FASE 0 siempre está en 0). Falla HONESTA si algún día se
- *  invoca — jamás simula una descarga. FASE 1: delegar en obs/export.ts. */
+// ── Export (delega en obs/export.ts — ReporteSesion del contrato) ──────────
+/** ZIP (fflate level 0, muestras/ solo con miniaturas ON) o JSON; con
+ *  vaciarDespues purga el buffer (D1: export MANUAL). */
 export async function descargarReporte(
-  _formato: "zip" | "json",
-  _vaciarDespues: boolean,
+  formato: "zip" | "json",
+  vaciarDespues: boolean,
 ): Promise<{ nombre: string; bytes: number }> {
-  throw new Error("NÚCLEO OBS PENDIENTE (FASE 1) — obs/export.ts");
+  return nucleoDescargarReporte(formato, vaciarDespues);
 }
 
-// ── Hooks de política/overrides reactivos (consumidor: PanelDev C4) ───────
+// ── Hooks de política/overrides reactivos (consumidor: PanelDev C4) ────────
 
 /** Política de datos reactiva (panel C4). */
 export function usePolitica(): PoliticaDatos {
