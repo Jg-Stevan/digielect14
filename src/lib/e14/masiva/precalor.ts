@@ -36,6 +36,7 @@
  * Un fallo del precalor JAMÁS tumba nada: la fila procesa normal.
  */
 import { maestroDeImagen, type MaestroImagen } from "./archivos";
+import { logger } from "../../logger";
 import { leerRegistro } from "./cola";
 import { warmUpScannerWorker } from "@jg-stevan/scanner-core/detector-client";
 import { useMasivaStore } from "./store";
@@ -206,7 +207,7 @@ async function precalentarUno(
     entradas.set(id, entrada);
     // Flag TRANSITORIO en la fila (mini-store — NUNCA IDB, kit T3.2).
     marcarFila(id, { precalentada: true });
-    console.info(
+    logger.info(
       `[e14] precalor fila=${id} listo ms=${entrada.precalorMs} origen=${maestro.origenDecode} ${maestro.ancho}x${maestro.alto}`,
     );
     return true;

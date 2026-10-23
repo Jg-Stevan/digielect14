@@ -13,6 +13,7 @@
  * Este archivo NUNCA importa de otros runner-*.ts.
  */
 import { leerRegistro } from "./cola";
+import { logger } from "../../logger";
 import { useMasivaStore } from "./store";
 
 // ─── e72 — ESPERA ACOTADA por el desenlace de la original (guard de
@@ -36,7 +37,7 @@ async function esperarDesenlaceOriginal(
   originalId: string,
 ): Promise<boolean> {
   const tEspera = Date.now();
-  console.info(
+  logger.info(
     `[e14] dedup fila=${estaFilaId} espera-original dupOf=${originalId}`,
   );
   while (Date.now() - tEspera < ESPERA_ORIGINAL_TECHO_MS) {
@@ -65,7 +66,7 @@ async function esperarDesenlaceOriginal(
       /* IDB caída — seguir sondeando (el techo manda) */
     }
   }
-  console.info(
+  logger.info(
     `[e14] dedup fila=${estaFilaId} espera-original techo=${ESPERA_ORIGINAL_TECHO_MS}ms → reprocesa-completo`,
   );
   return false;
