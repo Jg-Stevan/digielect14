@@ -367,6 +367,39 @@ ok(
   "Opt-1: match contra el índice de enviadas (ledger + cola — D-e65-3; respeta COLA_PERSISTENTE/C-3) → YA-ENVIADA vía marcarYaEnviada",
 );
 
+// ---------- e71 (Opt-3) — paralelismo 2 workers + mutex de dedup ----------
+
+console.log("\n── Bloque 6 · e71 Opt-3 — pool + mutex (source-scan) ──");
+
+ok(
+  runner.includes("const PROCESAMIENTO_CONCURRENTE = 2;") &&
+    runner.includes("const reservadas = new Set<string>();") &&
+    runner.includes("!reservadas.has(f.id)"),
+  "Opt-3: pool de 2 workers con RESERVA de fila (siguientePendiente jamás toma una fila reservada — sin doble-proceso)",
+);
+
+ok(
+  runner.includes("let mutexDedup: Promise<void> = Promise.resolve();") &&
+    runner.includes("async function conExclusionMutua<") &&
+    (runner.match(/conExclusionMutua/g) ?? []).length >= 4,
+  "Opt-3: mutex simple (promesa-cadena FIFO del kit) con las secciones críticas encoladas (def + ≥3 usos)",
+);
+
+ok(
+  runner.includes(
+    "return conExclusionMutua(() => reutilizarResultadoCritica(fila, t0));",
+  ) &&
+    runner.includes("const marcadaIdentidad = await conExclusionMutua(async () => {") &&
+    runner.includes("const idEnMapa = originalQrDePayload(qrPayloadSeguro);"),
+  "Opt-3: verificación de dedup en UN SOLO HILO — reutilizarResultado (copia del desenlace), registro capa-0 (re-chequeo) y capa 2 identidad (check+marca atómicos: el envío doble es imposible por construcción)",
+);
+
+ok(
+  runner.includes("await Promise.all(enVuelo);") &&
+    runner.includes("await Promise.race(enVuelo);"),
+  "Opt-3: bucle del runner con pool (Promise.race libera slot · Promise.all al terminar — el finally apaga solo cuando TODO aterrizó)",
+);
+
 // ---------- resultado ----------
 
 console.log(`\nQA dedup-enviadas: ${pasadas - fallos}/${pasadas} OK`);
