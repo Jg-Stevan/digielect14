@@ -24,10 +24,11 @@
  *  · T4 nada más — sin score, sin reintentos, sin veredictos. Si el
  *    escaneo sigue débil → se rechaza como siempre (honestidad).
  *
- *  Partes PURAS (sin DOM, testeables con bun): detectarSkew / puntoBlanco /
- *  normalizarPuntoBlanco. Partes DOM (decode/rotación/encode): solo corren
- *  en el navegador — el humo de bun cubre la matemática; el desenlace real
- *  lo valida el dueño con sus escaneos. */
+ *  Partes PURAS (sin DOM — overnight 3B-B2a: dejaron de ser export, su
+ *  único consumidor es preProcesoEscaneo en este mismo módulo). Partes DOM
+ *  (decode/rotación/encode): solo corren en el navegador — el humo de bun
+ *  cubre la matemática; el desenlace real lo valida el dueño con sus
+ *  escaneos. */
 
 import type { OrigenActa } from "./origen";
 
@@ -89,7 +90,7 @@ export interface PreProcesoEscaneo {
   totalMs: number;
 }
 
-// ---------- Partes PURAS (sin DOM — humo bun) ----------
+// ---------- Partes PURAS (sin DOM — internas del módulo) ----------
 
 /** T1 — ángulo de skew por varianza del perfil de proyección horizontal de
  *  la banda del encabezado (kit T1). Para cada θ, los píxeles de tinta se
@@ -98,7 +99,7 @@ export interface PreProcesoEscaneo {
  *  signo. Convenio: rotar el master por −skewGrados lo endereza.
  *  Devuelve el ángulo dentro de ±SKEW_MAX_GRADOS (con signo, 1 decimal) o
  *  null (banda sin tinta suficiente / bitmap vacío). */
-export function detectarSkew(
+function detectarSkew(
   ancho: number,
   alto: number,
   rgba: Uint8ClampedArray,
@@ -162,7 +163,7 @@ export function detectarSkew(
 
 /** T3 — punto blanco del histograma por canal (percentil PERCENTIL_BLANCO).
  *  El histograma se toma del bitmap de ANÁLISIS (mismo contenido, costo bajo). */
-export function puntoBlanco(rgba: Uint8ClampedArray): { r: number; g: number; b: number } {
+function puntoBlanco(rgba: Uint8ClampedArray): { r: number; g: number; b: number } {
   const hists = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
   let n = 0;
   for (let i = 0; i < rgba.length; i += 4) {
@@ -188,7 +189,7 @@ export function puntoBlanco(rgba: Uint8ClampedArray): { r: number; g: number; b:
  *  sombras: la ganancia está TOPEADA a GAIN_MAX y es una sola multiplicación
  *  lineal (sin binarización, sin curvas, sin contraste agresivo — kit T3.2).
  *  Devuelve la ganancia aplicada (máx de los canales, para la traza). */
-export function normalizarPuntoBlanco(rgba: Uint8ClampedArray, wp: { r: number; g: number; b: number }): number {
+function normalizarPuntoBlanco(rgba: Uint8ClampedArray, wp: { r: number; g: number; b: number }): number {
   const gain = (v: number) => (v > 0 ? Math.min(GAIN_MAX, 255 / v) : 1);
   const gr = gain(wp.r);
   const gg = gain(wp.g);

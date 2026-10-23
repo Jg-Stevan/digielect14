@@ -5,25 +5,6 @@
 
 type IconProps = { className?: string };
 
-/** Flecha «←» (TopBar — SPEC-e14-cyber-neon §3.3: peso más grueso, strokeWidth 2.5). */
-export const ArrowLeftIcon = ({ className = "w-6 h-6" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-[2.5] fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M19 12H5M12 19l-7-7 7-7" />
-  </svg>
-);
-
-export const CloudCheckIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
-  <svg className={`${className} fill-current`} viewBox="0 0 24 24" aria-hidden>
-    <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM10 17l-3.5-3.5 1.41-1.41L10 14.17 15.09 9.09 16.5 10.5 10 17z" />
-  </svg>
-);
-
 
 export const CameraNavIcon = ({ className = "w-4 h-4" }: IconProps) => (
   <svg className={`${className} fill-current`} viewBox="0 0 24 24" aria-hidden>
@@ -32,18 +13,6 @@ export const CameraNavIcon = ({ className = "w-4 h-4" }: IconProps) => (
   </svg>
 );
 
-
-/** RESUMEN del nav — SPEC-e14-cyber-neon §9: icono NUEVO «GridIcon» =
- *  cuadrícula 2×2 de 4 cuadritos redondeados (7×7, rx 2, gap 3px),
- *  viewBox exacto 17×17. */
-export const GridIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg className={`${className} fill-current`} viewBox="0 0 17 17" aria-hidden>
-    <rect x="0" y="0" width="7" height="7" rx="2" />
-    <rect x="10" y="0" width="7" height="7" rx="2" />
-    <rect x="0" y="10" width="7" height="7" rx="2" />
-    <rect x="10" y="10" width="7" height="7" rx="2" />
-  </svg>
-);
 
 export const RefreshIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
   <svg
@@ -62,19 +31,6 @@ export const WarnTriangleIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
     aria-hidden
   >
     <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-  </svg>
-);
-
-export const CropIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-2 fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M6.13 1L6 16a2 2 0 0 0 2 2h15" />
-    <path d="M1 6.13L16 6a2 2 0 0 1 2 2v15" />
   </svg>
 );
 
@@ -155,31 +111,6 @@ export const CheckIcon = ({
     aria-hidden
   >
     <path d="M20 6L9 17l-5-5" />
-  </svg>
-);
-
-export const ImportIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-2 fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-  </svg>
-);
-
-export const EyeIcon = ({ className = "w-3.5 h-3.5" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-2 fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-    <circle cx="12" cy="12" r="3" />
   </svg>
 );
 
@@ -302,21 +233,6 @@ export const FolderImportIcon = ({ className = "w-4 h-4" }: IconProps) => (
     <path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1" />
     <path d="M2 13h10" />
     <path d="m9 16 3-3-3-3" />
-  </svg>
-);
-
-/** Bolt (SPEC-e14-cyber-neon-captura §1/§8 — botón FLASH de la fila de
- *  disparo: rayo HUD del mock; trazo calca el `zap` clásico de lucide,
- *  strokeWidth 1.8 como pide la spec). */
-export const BoltIcon = ({ className = "w-4 h-4" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current stroke-[1.8] fill-none`}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
   </svg>
 );
 
