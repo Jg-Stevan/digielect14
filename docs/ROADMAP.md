@@ -413,3 +413,12 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] scripts/check-quality.sh — gate único (tsc+lint+build+vitest+7QA+knip).
 - [x] AUDIT.md §6 + MORNING-REPORT.md + worklog + PR (sin merge).
 - [ ] Fase 4 (dueño): decisiones D65 B1/B2, módulos grandes (identidad-qr/store/precalor/rapidocr), migración console grandes, Playwright smoke.
+
+## SPRINT-B — ui-hooks-v1 (capa visual: orden + regresiones del zip 4f9c871) — rama `refactor/ui-hooks-v1`
+
+- [x] B1 — ScanView → 5 hooks dedicados (movimiento puro, 2,487→1,159 L, mismo orden de efectos, lib intacto).
+- [x] B2 — BARRA DE VIDA D65 T3.3 re-cableada verbatim en MasivaView (regresión #1/#2; recienListas/posCola consumidas).
+- [x] B3 — menú §6.3 abandonado + StitchFrameIcon fuera + pulso EN LÍNEA restaurado (regresiones #3/#5/#7) — 3 warnings lint deliberados eliminados.
+- [x] B4 — barrido de higiene: sin hallazgos accionables (a11y ya cubierta; keys posicionales correctas) — cero churn.
+- [x] Gate por commit: tsc 0 · lint 0 err/1 warn (logger.ts fuera de zona) · vitest 53/53 · QA 7/7 · build 0 · humo navegador 5/5 (REPORTE §6).
+- [ ] Dueño: humo con hardware real de cámara + merge del PR + fix logger.ts (fuera de zona) + comentario stale check-quality.sh.
