@@ -1,0 +1,141 @@
+server HTTP=200
+✓ Digitalizador E-14 — Precisión electoral
+  http://127.0.0.1:3011/
+✓ Done
+════ overlay (si reaparece) ════
+════ navegar MASIVA ════
+✓ Done
+"{\"seccion\":true,\"input\":true}"
+════ upload ════
+"subidos=0"
+"[\"PENDIENTE\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\"]"
+════ clic PROCESAR COLA ════
+PREF=e114
+✓ Done
+✓ Screenshot saved to /home/z/e14test/40-procesando.png
+════ polling con sonda anti-destello (hasta 150s) ════
+t=1s "{\"est\":[\"PROCESANDO\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=3s "{\"est\":[\"PROCESANDO\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=4s "{\"est\":[\"PROCESANDO\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=6s "{\"est\":[\"PROCESANDO\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\",\"DUPLICADA\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=7s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=9s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=10s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=12s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=13s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=15s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=16s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=18s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=19s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=21s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=22s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=24s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=25s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=27s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=28s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=30s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=31s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=33s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=34s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=36s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=37s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=39s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=40s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=42s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=43s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=45s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=46s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=48s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=49s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=51s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=52s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=54s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=55s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=57s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=58s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=60s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=61s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=63s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=64s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=66s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=67s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=69s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=70s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=72s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=73s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=75s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=76s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=78s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=79s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=81s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=82s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=84s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=85s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=87s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=88s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=90s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=91s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=93s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=94s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=96s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=97s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=99s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=100s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=102s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=103s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=105s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=106s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=108s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=109s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=111s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=112s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=114s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=115s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=117s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=118s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=120s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=121s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=123s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=124s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=126s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=127s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=129s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=130s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=132s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=133s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=135s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=136s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=138s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=139s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=141s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=142s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=144s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=145s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=147s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=148s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+t=150s "{\"est\":[\"?\",\"?\",\"?\",\"?\",\"?\",\"?\"],\"barrasEnBandeja\":0,\"verdesEnBandeja\":0}"
+✓ Screenshot saved to /home/z/e14test/41-final.png
+════ HTML fila final (¿barra/destello?) ════
+"?::sin-barra · ?::sin-barra · ?::sin-barra · ?::sin-barra · ?::sin-barra · ?::sin-barra"
+"<li class=\"rounded-2xl border px-3.5 py-3 transition-all bg-[#10161f] border-slate-800 hover:border-slate-700\"><div class=\"flex items-center gap-3\"><img alt=\"Miniatura de acta1.png\" class=\"w-11 h-11 rounded-xl object-cover bg-[#090d12] border border-slate-700 shrink-0\" src=\"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAFAAN4DASIAAhEBAxEB/8QAGwABAQEBAQEBAQAAAAAAAAAAAAYFAwIHBAH/xABHEAABAwMBAwYKBwYGAgMBAAABAAIDBAURBhIhdAcTMTI2sRQVIjVBUXKUsrMWF2FxgZHSVFVWk6HRI0JSU5KVV2JzgqLD/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/ANmlpdSao1fqSnp9W1lsp7dVNjiiijDxhwJ9JGOhaf0F1R/5DuPu7f1JoXtrrbjovhcqGkpH1z6qWWtq2ltS9jWxzFrQAcAYCCe+guqP/Idx93b+peJdAalmaGv5Q7ngHPkwhvc5Vvihv7dX+8FeZLIyRhY6vuAB/wBNU5p/Mb0EpDyc3hoPP6+vbz6NghuPzJXX6u7j/HV+/mhULNOwMeHeMLo7HodXykd67+JoP2qv98k/ugl/q7uP8dX7+aF4l5Nq+Zuy/XWoMA58mfHcqvxNB+1V/vkn908TQftVf75J/dBJw8l8jXHn9bameMbgyu2e8Fdfqxi/jDVf/ZD9CoH6bpHvLjWXUE+q5zgfkHrqyxUjGBvP3A49LrjOT8aCa+rGL+MNV/8AZD9C8y8llLPGY5tWapkY7pa+4gg/gWKp8SUn+9X/APYT/rTxJSf71f8A9hP+tBIw8j9lik2n3q/TDHVfWgD+jQV3+qewftt39+cqGo0za6sNFSypnDd4ElbM7H5vXOPR9hidtNocn/2mkcPyLkGF9U9g/bbv785PqnsH7bd/fnKi+jFl/d8f5n+6fRiy/u+P8z/dBLt5GdHmczTw1lQ5293O1Tt5+0jB/qu31PaG/dD/AHqX9SoTpeyOBBt0RB3EHO/+q/H9X+kP4ct/8kIMr6ntDfuh/vUv6k+p7Q37of71L+pbo0ZpUAD6NWjd66GL9KfQzSv8NWj3GL9KDDHI/oYHPih/vUv6l/ZeTbQED9iW2UsbunZfUOB+Jbf0M0r/AA1aPcYv0p9DNK/w1aPcYv0oML6vOTv9go/eXfqT6v"
+════ consola final ════
+[info] [e14] decode-maestro fila=masiva-1792702188438-0 intento=1 ms=0 origen=nativo precalentada=true 620x877
+[info] [e14-rapidocr] det run [1,3,864,608]...
+[info] [e14-rapidocr] det run OK (395ms)
+[info] [e14] orientacion crop=604x870 rot=0 probe={0:1.59,90:0.00,180:0.16,270:0.00} anclas0=0 conf0=0.98 aplicado=0 ms=3618 cortes=completo orden=0,180,90,270 gan=-
+[info] [e14-rapidocr] celda: det=395ms cls=37ms rec=986ms · 10 cajas · 10 líneas · conf 98.2% · 1026ms detMemo=hit msAhorrado=395
+[info] [e14-rapidocr] det run [1,3,864,608]...
+[info] [e14-rapidocr] det run OK (378ms)
+[info] [e14-rapidocr] celda: det=378ms cls=31ms rec=963ms · 10 cajas · 10 líneas · conf 98.2% · 1409ms detMemo=miss
+[info] [e14] ocr-escalonado pasada1=1280 lectura=DEBIL reocr=1 elegido=1280 anclas1=0 anclas2=0 ms1=1033 ms2=1415
+[info] [e14-rapidocr] det run [1,3,160,800]...
+[info] [e14-rapidocr] det run OK (101ms)
+[info] [e14-rapidocr] celda: det=102ms cls=8ms rec=128ms · 1 cajas · 1 líneas · conf 96.8% · 245ms detMemo=miss
+[info] [e14] pipeline ARCHIVO/file total=6756ms (decode=18 detect=0 proceso=369 calidad=34 ocr=2697 motor=worker ocrValido=true cabeceraE14=false completa=true senal=false vacia=false votos=0.4% SIN_VOTOS recortada=1 lado=sup-izq esquinas=FALTA_tl+tr+bl+br quad=[0.000,0.000 1.000,0.000 1.000,1.000 0.000,1.000] piso10=0 score=4.9 filtro=bw ocrIn=original ocr=rapidocr conf=0.98 det=395ms rec=986ms lectura=DEBIL anclas=0 piso=false clasif={sin-clasificar} crop=620x877 metricas={sharpness:100 brightness:95 contrast:73 contEff:100 level:excellent}) diag=1
+[info] [e14] dedup fila=masiva-1792702188438-1 dupOf=masiva-1792702188438-0 reutiliza score=4.9 ms=8
+[info] [e14] dedup fila=masiva-1792702188438-2 dupOf=masiva-1792702188438-0 reutiliza score=4.9 ms=24
+[info] [e14] dedup fila=masiva-1792702292848-0 dupOf=masiva-1792702188438-0 reutiliza score=4.9 ms=12
+[info] [e14] dedup fila=masiva-1792702292848-1 dupOf=masiva-1792702188438-0 reutiliza score=4.9 ms=15
+[info] [e14] dedup fila=masiva-1792702292848-2 dupOf=masiva-1792702188438-0 reutiliza score=4.9 ms=14
+════ limpieza ════
+════ FIN v5 ════

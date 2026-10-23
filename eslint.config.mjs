@@ -1,16 +1,11 @@
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import nextTypescript from "eslint-config-next/typescript";
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   rules: {
     // TypeScript rules
     "@typescript-eslint/no-explicit-any": "off",
-    "@typescript-eslint/no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
     "@typescript-eslint/no-non-null-assertion": "off",
     "@typescript-eslint/ban-ts-comment": "off",
     "@typescript-eslint/prefer-as-const": "off",
@@ -32,20 +27,30 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "@next/next/no-html-link-for-pages": "off",
 
     // General JavaScript rules
-    "prefer-const": "off",
+    "prefer-const": "warn",
     "no-unused-vars": "off",
     "no-console": "off",
-    "no-debugger": "off",
-    "no-empty": "off",
+    "no-debugger": "error",
+    "no-empty": ["warn", { allowEmptyCatch: true }],
     "no-irregular-whitespace": "off",
     "no-case-declarations": "off",
     "no-fallthrough": "off",
     "no-mixed-spaces-and-tabs": "off",
     "no-redeclare": "off",
     "no-undef": "off",
-    "no-unreachable": "off",
+    "no-unreachable": "error",
     "no-useless-escape": "off",
   },
+}, {
+  // exhaustive-deps ACTIVA SOLO en ScanView.tsx: los 3 useEffect con refs
+  // deliberados ya llevan directiva justificada línea a línea (el loop de
+  // cámara usa refs a propósito para evitar staleness — ver AUDIT.md, hallazgo
+  // ALTO de hooks). El resto del repo sigue sin la regla hasta el análisis de
+  // Fase 4; al activarla global, este bloque se elimina (1 línea) y las
+  // directivas ya están puestas. Reemplaza el enfoque «reportUnusedDisable
+  // Directives: off» (7de9fd7) para no perder la higiene de directivas.
+  files: ["src/components/e14/screens/ScanView.tsx"],
+  rules: { "react-hooks/exhaustive-deps": "warn" },
 }, {
   // "public/vendor/**" + "public/scanner/**": assets del core copiados en L0
   // (opencv/detection-worker, mismos bytes que scanner-lab) — JS vendor

@@ -82,8 +82,6 @@ function ok(cond: boolean, etiqueta: string): void {
   if (!cond) fallos++;
 }
 
-const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 // ─── Fixtures: matrices QR 29×29 (versión 3, ECC L) generadas con el
 // encoder de referencia y congeladas aquí — los payloads son el par del
 // banco: el G1 real del corpus del dueño y un gemelo-estructural con el

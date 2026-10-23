@@ -748,6 +748,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     // KIT e14-masiva-tiempos-v1 (PR-2): la instancia del File de SIEMPRE —
     // base de origen/pre-proceso (D63-A/B corren sobre el ORIGINAL: EXIF y
     // márgenes viven ahí; el master es un re-encode sin EXIF).
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- NO es código muerto: ancla del QA e63m (qa-qr-identidad.ts:353 grepea esta línea para «bloque capa 0 ANCLA»)
     const archivoPipeline = archivo;
 
     // D57 — KIT e14-instrumentos-espera-v1 (T1): espera en cola → inicio del
