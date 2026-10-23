@@ -159,12 +159,10 @@ function decodeArchivoMemo(file: File): Promise<string> {
   return p;
 }
 
-/** KIT e14-masiva-tiempos-v1 (PR-2): precalentar el decode de un archivo
- *  (runner MASIVA — prefetch de 1 slot durante el OCR de la fila N). Misma
- *  memo del pipeline: si la fila llega a procesarse, su decode es HIT. */
-export function precargarDecodeArchivo(file: File): Promise<string> {
-  return decodeArchivoMemo(file);
-}
+// SPRINT-A (perf/decode-once-v1) A5: el export precargarDecodeArchivo fue
+// eliminado — DEAD desde D66 (el prefetch del runner se re-apuntó a
+// asegurarMaestro; 0 anclas en scripts/, 0 usos en src). La memo interna
+// decodeArchivoMemo sigue viva (el pipeline la usa).
 
 /** Timeout de seguridad global §5 (worker colgado en gama baja).
  *  KIT e67-watchdog-rescate-v1 (M-e67-0 / cambio A): 15_000 → 120_000 — el

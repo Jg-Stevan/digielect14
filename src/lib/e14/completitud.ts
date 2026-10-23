@@ -150,7 +150,7 @@ function ladosAlBorde(quad: Quad): Lado[] {
  * `utilizable: false` ante cualquier fallo de decode/canvas o recorte
  * degenerado (<80 px de lado útil — §7) — cada consumidor decide.
  */
-export interface MotorTinta {
+interface MotorTinta {
   utilizable: boolean;
   /** Dimensiones (px) del canvas de análisis. */
   cw: number;
