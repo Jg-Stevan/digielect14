@@ -111,13 +111,13 @@ export function rapidOcrPrecalentar(): Promise<boolean> {
       ctx.fillText("TRANSMISION 98.7% 15:30:22", 40, 340);
       const dataUrl = c.toDataURL("image/png");
       const r = await rapidOcrReconocer(rt, dataUrl); // resultado DESCARTADO
-      console.info(
+      logger.info(
         `[e14-prowarm] listo det=${r.msDet}ms cls=${r.msCls}ms rec=${r.msRec}ms · ${r.nBoxes} cajas · ${r.lineas.length} líneas`,
       );
       return true;
     } catch (e) {
       // Frío como hoy: el pipeline NO depende de esto (fallback honesto).
-      console.info(
+      logger.info(
         `[e14-prowarm] fallo (continua como hoy): ${e instanceof Error ? e.message : String(e)}`,
       );
       return false;
@@ -204,6 +204,7 @@ async function initReal(): Promise<RapidRuntime> {
 // (máx 2 entradas en la ruta del OCR); el re-OCR de la banda corre DESPUÉS
 // de la elección, sin dependencia con la entrada viva.
 import { canvasCon, loadImageMemo } from "../image-utils";
+import { logger } from "../../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 function canvasDe(img: HTMLImageElement | HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {
   const c = canvasCon(w, h); // SPRINT-A A3 — factory
@@ -715,9 +716,9 @@ async function inferDet(
     data[2 * w * h + px] = (img.data[i] / 255 - 0.5) / 0.5; // R
   }
   const tensor = new rt.ort.Tensor("float32", data, [1, 3, h, w]);
-  console.info(`[e14-rapidocr] det run [1,3,${h},${w}]...`);
+  logger.info(`[e14-rapidocr] det run [1,3,${h},${w}]...`);
   const res = await rt.det.run({ [rt.det.inputNames[0]]: tensor });
-  console.info(`[e14-rapidocr] det run OK (${Math.round(performance.now() - t0)}ms)`);
+  logger.info(`[e14-rapidocr] det run OK (${Math.round(performance.now() - t0)}ms)`);
   const out = res[rt.det.outputNames[0]];
   const pred = out.data as Float32Array;
   const pw = out.dims[3];
@@ -922,7 +923,7 @@ export async function rapidOcrReconocer(
   const texto = aceptadas.map((l) => l.texto).join("\n");
   const confMedia =
     aceptadas.length === 0 ? 0 : aceptadas.reduce((s, l) => s + l.conf, 0) / aceptadas.length;
-  console.info(
+  logger.info(
     `[e14-rapidocr] celda: det=${msDet}ms cls=${msCls}ms rec=${msRec}ms · ${boxesFuente.length} cajas · ${aceptadas.length} líneas · conf ${(confMedia * 100).toFixed(1)}% · ${Math.round(performance.now() - tTotal)}ms detMemo=${memoMsAhorrado != null ? `hit msAhorrado=${memoMsAhorrado}` : "miss"}`,
   );
   return {

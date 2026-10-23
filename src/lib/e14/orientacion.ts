@@ -75,6 +75,7 @@ import {
   rapidOcrInit,
   rapidOcrRecLote,
 } from "./ocr/rapidocr";
+import { logger } from "../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 type Rotacion = 0 | 90 | 180 | 270;
 
@@ -282,7 +283,7 @@ export async function probeOrientacion(
     const { crops, w, h } = await rapidOcrCropsOrientacion(rt, fotoOcr, PROBE_K_CROPS);
     if (crops.length === 0) {
       const msVacio = Math.round(performance.now() - t0);
-      console.info(
+      logger.info(
         `[e14] orientacion crop=${w}x${h} rot=0 probe={0:0.00} anclas0=0 conf0=0.00 aplicado=0 ms=${msVacio} cortes=vacio`,
       );
       return { rot: 0, aplicado: false, scores: { 0: 0 }, anclas: { 0: 0 }, conf: { 0: 0 }, ms: msVacio };
@@ -376,7 +377,7 @@ export async function probeOrientacion(
     const probeTxt = (Object.keys(scores) as unknown as Rotacion[])
       .map((r) => `${r}:${(scores[r] ?? 0).toFixed(2)}`)
       .join(",");
-    console.info(
+    logger.info(
       `[e14] orientacion crop=${w}x${h} rot=${rot} probe={${probeTxt}} anclas${rot}=${anclas[rot] ?? 0} conf${rot}=${(conf[rot] ?? 0).toFixed(2)} aplicado=${aplicado ? 1 : 0} ms=${ms} cortes=${corte} orden=${orden.join(",")} gan=${gan ?? "-"} exif=${opciones?.confirmar ? 1 : 0}`,
     );
     return { rot, aplicado, scores, anclas, conf, ms };
