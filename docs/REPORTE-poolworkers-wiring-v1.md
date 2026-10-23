@@ -87,7 +87,7 @@ Flujo real ejecutado: tuerca → «¿ACTIVAR EL MODO DE DIAGNÓSTICO?» SÍ → 
 5. **Sin ciclo de imports:** `flags.ts` importa `obs/tipos` + `obs/politica`; `politica.ts` importa `obs/{buffer,digest,breadcrumbs,tipos}` — ninguna cadena regresa a `masiva/runner` (verificado con los imports reales del árbol).
 6. **Evidencia de bundle:** el build de producción contiene la forma minificada `poolWorkers??2` en `.next/static/chunks/` — el cableado llegó al artefacto.
 
-**Humo NO ejecutado (honesto):** logs visibles de procesamiento secuencial vs 2-en-vuelo con actas reales — queda para campo/campo QA del dueño (CHECKLIST-CAMPO), o para el auditor con el smoke del REPARTE §4.5.
+**Humo pendiente (honesto):** solo queda la observación de LOGS de cola con actas reales (1-en-vuelo vs 2-en-vuelo visibles en el consola del módulo masiva) — requiere fotos + flujo MASIVA completo, no ejecutable en este entorno; queda para campo del dueño (CHECKLIST-CAMPO) o para el auditor con el smoke del REPARTE §4.5. La CADENA del flag (override → leerFlags → valor ligado por el pool) sí quedó verificada de punta a punta en runtime (§4.a).
 
 ---
 
@@ -107,3 +107,55 @@ Flujo real ejecutado: tuerca → «¿ACTIVAR EL MODO DE DIAGNÓSTICO?» SÍ → 
 ---
 
 *Reporte por el Agente B (Z.ai Code) — commit docs de este archivo + worklog en el mismo push.*
+
+---
+
+# ANEXO — cola-persistente-v1 (segunda entrega en esta misma branch)
+
+**Kit:** `AGENTE-B-ANEXO-cola-persistente-v1.md` · **Vía elegida:** la PRIMARIA del kit — mismos commits en `feat/poolworkers-wiring-v1` (el PR #98 seguía open/draft, sin review iniciada; la alternativa «branch aparte» queda declarada por si el dueño prefiere separar al integrar).
+
+**Petición literal cumplida:** la carga masiva NO se elimina automáticamente — **solo muere con `vaciar()` del dueño**. El MODO PRUEBAS e64p (auto-borrado al cargar) queda alcanzable vía override `colaPersistente: false` en `e14-flags-overrides`, mismo patrón que `poolWorkers`.
+
+## A1. Seguimiento del kit + desviación justificada
+
+| § Kit | Pedido | Estado |
+|---|---|---|
+| §1 | Contrato: `colaPersistente: boolean` default **true** + saneo + flags-ejemplo.json | **HECHO** — campo en `FlagsApp` (`obs/tipos.ts:88`), `FLAGS_DEFAULT.colaPersistente = true` (`flags.ts:33`), saneo en `sanearFlags` (`flags.ts:47`), línea documentada en `public/flags-ejemplo.json` |
+| §2 | `store.ts` L260 → `const COLA_PERSISTENTE = leerFlags().colaPersistente ?? true;` + import | **HECHO** — string EXACTO (L264). El import YA existía (store.ts L34, por thumbsOn — cero import añadido) |
+| §3 | CRÍTICO: identificador `COLA_PERSISTENTE` intacto + comentarios ancla intactos + bloques internos sin tocar | **RESPECTADO** — verificado por gate: `qa-historico-enviadas` **49/49** (L132 import-borrarHistorico · L168 `if (COLA_PERSISTENTE) {` del índice · L340 `!COLA_PERSISTENTE` en vaciar · L421 docstrings de historico.ts), `qa-qr-identidad` **72/72**, `qa-watchdog` **34/34**. El comentario nuevo del kit se AÑADIÓ (los viejos e64p C-1/C-2/C-3 quedaron completos — doc append-only en el propio bloque) |
+| §4 | Test del saneo (default true · override false · "x"/0 → true) + smokes | **HECHO** — 3 tests nuevos en `flags.test.ts` (describe «colaPersistente wiring»). Smokes: **RUNTIME real** (§A3) |
+| §5 | Advertencia de almacenamiento en el reporte | **§A4 abajo** |
+| §6 | Gate completo | **VERDE** (§A2) |
+| §7 | Reporte añadido al del kit B + hashes | **Este sección** |
+
+**Desviación (1, justificada — la única):** el ANEXO nombra `flags.ts` + tipos, pero la cadena del override pasa por **DOS whitelists**: `sanearFlags` (flags.ts) Y `leerOverridesFlags` (`obs/politica.ts:116-121`). Sin la línea en el segundo, `e14-flags-overrides` con `{"colaPersistente":false}` se descarta ANTES de llegar a `leerFlags()` y el MODO PRUEBAS sería inalcanzable (el smoke §4.3 del propio kit fallaría). Se añadió la línea espejo en el whitelist de politica.ts (con comentario que lo explica). Es el mismo patrón que ya vive para poolWorkers. Nota de zona: `obs/tipos.ts` y `obs/politica.ts` son zonas del núcleo — el ANEXO del dueño («contrato de flags (flags.ts + tipos)») las autoriza explícitamente para este campo; cero lógica obs tocada.
+
+**Calibración de test existente (1):** `flags.test.ts` «defaults del contrato» tenía un `toEqual` EXHAUSTIVO de `FLAGS_DEFAULT` — se añadió `colaPersistente: true` al objeto esperado (territorio «tests de flags» del kit B). Los demás asserts (sanearFlags hostiles, refrescarFlags) pasan intactos: sus inputs no llevan la clave nueva. `obs.test.ts` (L843-861, leerOverridesFlags) verificado: sus inputs tampoco llevan la clave → sin cambios.
+
+## A2. Gate (100 % verde)
+
+tsc **0** · lint **0/0** · vitest **169/169** (166 + 3 nuevos) · check-quality.sh **TODO VERDE — QA 11/11 · 355/355** (los 7 clásicos 294/294 INTACTOS — el «294/294» del kit es el total pre-PR #97; hoy el gate integrado suma los 4 QA-obs) · build **exit 0** · knip **0 ítems nuevos** (exit 0).
+
+## A3. Smokes — RUNTIME real (producción standalone :3001, navegador, fixtures PNG)
+
+1. **Persistente (default true):** 3 archivos subidos → cola `PROCESAR COLA 3` → **RELOAD → `COLA=3` SIGUEN** (con el código del ANEXO ausente, `cargarFilas()` habría ejecutado vaciarCola+borrarHistorico: antes era imposible). ✅
+2. **`vaciar()` del dueño:** botón VACIAR → armado («¿SEGURO?») → confirmar → **cola vacía** (contador fuera). La válvula manual pedida por el dueño funciona. ✅
+3. **Modo pruebas (override false):** 3 archivos de nuevo → `e14-flags-overrides = {"colaPersistente":false}` → RELOAD → **COLA VACÍA** (auto-borrado e64p intacto y alcanzable). ✅
+4. **0 errores de página / 0 de consola** en todo el ciclo. Capturas: `/tmp/anexo-1-cola.png`, `/tmp/anexo-2-persistente.png`, `/tmp/anexo-3-vaciada.png`, `/tmp/anexo-4-modopruebas.png`.
+
+**No ejecutado en runtime (honesto):** la re-subida post-vaciar naciendo **YA-ENVIADA** (RL-e65b-5) requiere actas reales con OCR válido (los fixtures PNG de 1×1 no producen QR/ENVIADA). Esa semántica queda cubierta por: `qa-historico-enviadas` 49/49 (anclas del ledger que sobrevive vaciar), tests del núcleo, y el smoke de campo del dueño (re-subir los 46).
+
+## A4. Advertencia de almacenamiento (kit §5)
+
+Con el default persistente, el IndexedDB conserva las actas completas hasta el `vaciar()` manual: el lote 1 real pesó **345.9 MB** (`almacenamientoMB` ya sale en `totales` del informe). Rutina recomendada al dueño: **arqueo → `vaciar()`**. PROHIBIDO reintroducir auto-borrado alguno; el aviso de cuota es wave 3, NO este kit (per kit).
+
+## A5. Riesgos / puntos exactos a auditar
+
+1. **`obs/politica.ts:121`** — la línea del whitelist (Desviación 1): confirmar que el dueño acepta el toque mínimo en zona núcleo.
+2. **`obs/tipos.ts:88`** — campo nuevo en el contrato §4.2: `qa-obs-contract` valida presencia de la interface (38/38), NO bloque verbatim → sin rotura; el README-KITS §4.2 quedó un campo atrás del código (doc viva del dueño, NO editada por este agente).
+3. **Timing de carga:** `COLA_PERSISTENTE` se liga AL CARGAR el módulo store → el override aplica al RELOAD (idéntico a poolWorkers, kit §0/ANEXO §0).
+4. **Doble saneo** (politica + flags): auditar que ambos whitelists quedan sincronizados si el contrato crece de nuevo.
+
+## A6. Bloqueos
+
+**Ninguno.** 3 commits en `feat/poolworkers-wiring-v1` (feat + test + docs) pusheados al mismo PR DRAFT #98.
