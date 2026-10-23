@@ -136,3 +136,99 @@ editar el QA ni código ajeno; documentar en el REPORTE con archivo:línea y avi
 - Anclas de UI (qa-obs-ui): se activan con `feat/obs-modo-dev-v1` del agente 2 (cualquier orden vs este branch).
 - Verificación en campo de los 9 ítems: requiere núcleo + UI integrados (CHECKLIST §cabecera).
 - Seguridad: el token GitHub usado para push estuvo expuesto en el chat — **regenerarlo** al cerrar la ola (ya figuraba como pendiente en worklog overnight).
+
+---
+
+# FASE 1 — ENTREGA FINAL (disparador cumplido: `origin/feat/obs-nucleo-v1` @ `7475625`)
+
+## 8 · Ejecución de FASE 1
+
+| Paso | Resultado |
+|---|---|
+| Rebase | Los 4 commits FASE 0 re-rebased sobre `feat/obs-nucleo-v1` @ `7475625` (kit §FASE 1, letra exacta). Conflicto único en `docs/worklog.md` (A1 y A3 añadieron bloque) resuelto **conservando ambos bloques** (protocolo README §5). NOTA de contexto: `main` @ `c6ecbcf` ya trae `feat/obs-modo-dev-v1` (PR #94) pero **NO trae el núcleo** (`obs/**` verificado ausente en `origin/main` — la UI del agente 2 llegó en su propia FASE 0 con `dev/puente.ts` local). Por eso la base correcta de esta rama sigue siendo `obs-nucleo-v1`, y el PR sale **stacked** (el dueño mergea 1º núcleo → este branch cae limpio). |
+| A3-C1 | `5489d27` — transporte HTTP implementado + `transporte.test.ts` (9 tests) |
+| Calibración | `831203b` — anclas QA-obs ajustadas al núcleo y a la UI REALES (§9 — intención preservada, evidencia file:línea) |
+| A3-C5 | `d07bd0f` — check-quality.sh: STALE fuera + 11 QA en NOMBRES + conteos honestos |
+| A3-C6 | este commit — REPORTE + worklog |
+
+**Implementación A3-C1** (`src/lib/e14/obs/transporte.ts`): outbox PROPIO `e14-obs-outbox` v1
+store `lotes` keyPath `id` (JAMÁS abre `e14-obs`) · `iniciarTransporte()` idempotente, no-op TOTAL
+sin `endpointReportes` (cero timers/listeners, `{activo:false, lotesPendientes:0, fallosSeguidos:0}`) ·
+batcher `BATCHER_MS = 10 * 60 * 1000` cosecha ≤ `LOTE_TOPE = 50` eventos **error/warn/salud/uso**
+(perf NO viaja por red — llega por export manual) → lote `{id, ts, intentos:0}` → POST
+`{loteId, deviceId, appVersion, eventos[]}` con **scrub previo por `leerPolitica()`**
+(`depurarParaEnvio` puro y testeado) · backoff `BACKOFF_MS = [60_000, 300_000, 1_800_000]` por lote
+(tope 3 intentos) · **kill local `FALLOS_KILL_LOCAL = 3`**: 3 fallos seguidos → autodetención
+(`activo:false`), outbox INTACTO, un solo `logger.warn`; reactivación manual o por reinicio (el
+arranque re-lee el outbox → «modo avión: envía al recuperar», checklist ítem 8) · semántica
+at-least-once (el receptor deduplica por `evento.id`; los eventos no salen del buffer) · todo
+try/catch silencioso, cero consola nativa.
+
+## 9 · Calibración de anclas (lo que pidió el dueño) — intención PRESERVADA, evidencia file:línea
+
+Al pasar de PENDIENTE a ESTRICTO se encontraron **3 bugs del propio harness FASE 0** y **4
+realidades del código integrado** (desviaciones ya documentadas por A1/A2). Regla aplicada (kit
+A3-C4 ⚠ / §Desviaciones): NUNCA editar código ajeno; el QA se ajusta a lo que el contrato
+REALMENTE garantiza, cada ajuste con su justificación:
+
+| # | Ancla | Antes (FASE 0) | Después (calibrado) | Evidencia |
+|---|---|---|---|---|
+| 1 | listarTs (contract/privacidad/ui) | `new URL(dir, import.meta.url)` resolviendo `scripts/src/…` → `[]` silencioso: las 6 anclas de claves §4.1 NUNCA evaluaron nada | prefijo `../` — los greps leen `src/lib/**` real | bug del harness (mío); claves verificadas presentes en `buffer.ts:22`, `politica.ts:18-20`, `identidad.ts:19` |
+| 2 | firmas §4.3 | regex `export function` solo-sync → 6 grupos en rojo por funciones `async` | `export (async )?function` | `buffer.ts` (6 async), `uso.ts:60`, `dispositivo.ts:146`, `export.ts:117/225`, `flags.ts:107` |
+| 3 | `ErrorBoundaryObs` | exigía `export const` | acepta `const\|class` | `captura.ts:150` — `export class ErrorBoundaryObs extends Component<…>` (mismo `React.ComponentType` del contrato §4.3) |
+| 4 | `capturando` anti-recursión | lo buscaba en `captura.ts` | lo busca en `buffer.ts` con la desviación citada en la etiqueta | `buffer.ts:122` — A1 lo documentó («anti-recursión como guard de appendEvento — misma garantía, superficie mínima», REPORTE-obs-nucleo-v1 §4) |
+| 5 | miniaturas gated en export.ts | heurística «toda mención de la palabra cerca de `politica`» — marcaba el NOMBRE del helper `miniaturasDeFallidas` (no es la ruta) | verifica la RUTA: la llamada a `miniaturasDeFallidas()` ocurre DENTRO de `if (…politica.miniaturas…)` | `export.ts:247-248` — gate real |
+| 6 | toggles re-verificados en export.ts | exigía literales `textoOcr`/`miniaturas` en código | `leerPolitica()` real + gate de muestras; textoOcr es ESTRUCTURAL (ReporteSesion §4.2 no tiene campo de texto — doc de export.ts L18-20) | `export.ts:118` (llamada) + gate §5 |
+| 7 | ResumenView sin INFORME ZIP (negativo) | grep sobre fuente cruda — la CABECERA documenta la migración en comentario → falso rojo | grep negativo sobre CÓDIGO (sin comentarios) | `ResumenView.tsx:13-15` comentario vs código limpio (verificado); el flujo vive en `PanelDev.tsx:250-260` |
+| 8 | puerta del modo dev `aria-label` | exigía el literal concatenado `aria-label="Abrir modo de diagnóstico"` | exige binding + ambos nombres accesibles | `TuercaResumen.tsx:88` — `aria-label={modoDev ? "Abrir modo de diagnóstico" : "Activar modo de diagnóstico"}` |
+
+**Hardening extra**: la ancla «actaId plano SOLO en captura.ts» ahora exige que `captura.ts` EXISTA
+(pasaba en vacío si el archivo faltara) y elimina la única var sin uso del harness → lint 0 warnings.
+
+**Validación de las anclas UI (8) contra la UI REAL del agente 2**: worktree de `origin/main`
+@ `c6ecbcf` (que ya trae `dev/**`) + script calibrado → **8/8 OK**. Al mergear esta rama sobre
+main, `qa-obs-ui` nace ESTRICTO y VERDE (el gate de main no se rompe).
+
+## 10 · Gate FASE 1 (por commit, contra el árbol commiteado)
+
+| Gate | Resultado |
+|---|---|
+| `bunx tsc --noEmit` | **0 errores** |
+| `bun run lint` | **0 errores / 0 warnings** (la de logger.ts la eliminó A1; la única var sin uso del harness, corregida aquí) |
+| `bun run test` | **162/162** (70 base + 83 obs/flags del núcleo + **9 transporte** nuevos) |
+| QA 7 viejos | **294/294 INTACTO** (33+50+24+49+32+72+34) |
+| QA obs ESTRICTO | **contract 38/38 · privacidad 7/7 · transporte 8/8** · ui PENDIENTE rc=0 (se activa al integrar; 8/8 vs main verificado — §9) |
+| `bash scripts/check-quality.sh` | **TODO VERDE — QA 11/11** |
+| `bun run build` | **exit 0** (Next 16, prerender estático) |
+| `bunx knip` | **40 ítems (23 exports + 17 types) vs 42 del estado FASE 0 — SIN ítems nuevos, neto −2** (los exports del transporte nacen con consumidor: `page.tsx` bootstrap + tests) |
+
+## 11 · Cómo probar esta rama
+
+```bash
+bun scripts/qa-obs-transporte.ts   # 8/8 OK (ESTRICTO — contra la implementación real)
+bash scripts/check-quality.sh      # TODO VERDE — QA 11/11
+bunx vitest run src/lib/e14/obs/transporte.test.ts   # 9 tests (fake IDB + fake fetch + fake timers)
+```
+
+Prueba manual del transporte (endpoint real, en DevTools del build servido):
+```js
+// 1) configurar el endpoint (override manual del dueño — D6) y recargar:
+localStorage.setItem("e14-flags-overrides",
+  JSON.stringify({ endpointReportes: "http://localhost:9999/reportes" }));
+// 2) receptor mínimo en otra terminal:  nc -l -p 9999   (o docs/ENDPOINT-REPORTES.md §receptor)
+// 3) provocar un error en la app → iniciarTransporte ya corre en el bootstrap →
+//    el lote sale en el siguiente tick (o al recargar: backlog). Estado:
+import("/src/lib/e14/obs/transporte.ts").then((m) => console.log(m.estadoTransporte()));
+// → { activo: true, lotesPendientes: 0, fallosSeguidos: 0 } tras el éxito
+// 4) tumbar el receptor 3 ticks → autodetención con outbox intacto + logger.warn
+```
+
+## 12 · Pendiente (post-merge)
+
+- El dueño mergea: **1º `feat/obs-nucleo-v1` → luego este branch** (caerá limpio; `qa-obs-ui`
+  nace ESTRICTO 8/8 contra main — verificado con worktree §9).
+- El FASE 1 del agente 2 (delegar `dev/puente.ts` a los módulos reales — incluido
+  `estadoTransporte()` en su panel) queda para su propio disparador; las firmas del contrato
+  ya existen y están congeladas por `qa-obs-contract.ts`.
+- Verificación en campo de los 9 ítems del CHECKLIST-CAMPO (requiere núcleo + UI integrados).
+- **Seguridad: REGENERAR el token GitHub** (expuesto en chat — pendiente permanente).
