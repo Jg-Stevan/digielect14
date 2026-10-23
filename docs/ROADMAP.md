@@ -442,3 +442,15 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] Traza aditiva: cortes=confirmada + exif=0|1 (AL FINAL — D51); probeMsOrientacion real para exif (antes null forzado); línea «omitida=exif-camara» retirada (ningún QA la escaneaba).
 - [x] Intactos: SIM (jamás sondea), recorte manual (sin opciones — T1 vigente), individual/video (sin señal), masiva/cola, jornada e69, P6.
 - [x] QA — 7/7 suites SIN adendas (49 · 42 · 68 · 33 · 24 · 32 · 34) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
+
+## CONSOLIDACIÓN — e71-consolidacion-v1 (2026-10-23): fixes de métricas + optimizaciones de rendimiento (benchmark aprobado)
+
+- [x] M-e71-0 — recon: `masiva/runner.ts` (reutilizarResultado L425 · bucle L1340) · `informe.ts` (yaEnviadas L982 · almacenamientoIdbMb L914) · `gate.ts` NO EXISTE → gateCompleta se computa en scanner-core-bridge.ts ×2 (escaneo + pipelineRecorte) · ingesta = agregarFiles/agregarLote · hashSha256 del kit = hashBytes EXISTENTE (M-e71-1).
+- [x] P2.1 — la copia hereda el desenlace del original (ENVIADA/OPTIMA → DUPLICADA · con rechazo → RECHAZADA heredada · sin rechazo → DUPLICADA, M-e71-2); e66 intacto (jamás hereda el envío).
+- [x] P3.1 — yaEnviadas = statusActa === "ENVIADA" (el estado YA-ENVIADA solo nace en re-subidas de la misma sesión → reportaba 0); unión dedup 'ya-enviada' intacta.
+- [x] P9 — fórmula idb/1e6 en forma literal (M-e71-3: ya era matemáticamente idéntica — 330 MB = uso REAL en disco, LevelDB sin compactar; nota para el dueño).
+- [x] P10 — veto 4/4 fiduciales: `cuatroEsquinasFaltan()` (integridad) en AMBOS pipelines (escaneo → RECHAZADA · recorte manual → techo 7.9 con gate.completa=false); SIM inalcanzable (guard) — regla de oro re-verificada en vivo.
+- [x] Opt-1 — SHA-256 en la ingesta (hashBytes en el PRIMER write) + `dedupExactoIngesta` ANTES de rearrancar (DUPLICADA/YA-ENVIADA instantáneo — sin precalor/qr-capa0/OCR) · cadenaDedup reutiliza el hash · modo pruebas C-3 respetado (M-e71-4).
+- [x] Opt-2 — tier `recorte-600` (esquina estándar E14, UNA pasada jsQR+zxing) ENTRE base y barrido: los barridos ~15 s no corren si el QR está en su esquina; fallback sagrado intacto detrás.
+- [x] Opt-3 — pool `PROCESAMIENTO_CONCURRENTE=2` con reserva de fila + vida POR-FILA (Map VidaFila) + mutex promesa-cadena `conExclusionMutua` sobre las secciones de dedup (reutilizar / registro capa-0 con re-chequeo / capa 2 check+marca atómicos — envío doble imposible).
+- [x] QA — 7/7 suites CON adendas honestas (33 · 50 · 24 · 49 · 32 · 72 · 34 = 290) · tsc 0 · lint 0 · package.json/bun.lock INTACTOS · smoke :3001 (ingesta instantánea + SIM 8.2/ENVIADA + 0 errores).
