@@ -17,8 +17,9 @@
  * `clasificador.ts` (§3.3, ~40 líneas).
  */
 
-/** Puesto de votación (stand): nombre + número de mesas (countTable). */
-export interface DivipolPuesto {
+/** Puesto de votación (stand): nombre + número de mesas (countTable).
+ *  Overnight 3B-B3c: de-export (uso interno en la jerarquía; knip). */
+interface DivipolPuesto {
   n: string;
   t: number;
 }
@@ -27,7 +28,7 @@ export interface DivipolPuesto {
  * Nodo de la jerarquía: `n` = nombre; los hijos dependen del nivel:
  * dep → `m` (municipios/países) · mun → `z` (zonas) → `s` (puestos).
  */
-export interface DivipolNodo {
+interface DivipolNodo {
   n: string;
   m?: Record<string, DivipolNodo & { z?: Record<string, { s: Record<string, DivipolPuesto> }> }>;
 }
@@ -38,7 +39,7 @@ export interface DivipolBase {
 }
 
 /** Ruta completa a un puesto (para validar mesa — §3.3 regla 5). */
-export interface RutaDivipol {
+interface RutaDivipol {
   dep: string;
   mun: string;
   zon: string;
@@ -46,7 +47,7 @@ export interface RutaDivipol {
 }
 
 /** Estado de la carga (§1.3) — el panel de corrección lo consulta. */
-export type EstadoDivipol = "cargando" | "cargada" | "fallo";
+type EstadoDivipol = "cargando" | "cargada" | "fallo";
 
 // GitHub Pages sirve la app bajo /web-scanner/ → el asset se referencia con
 // el prefijo público del build (vacío en dev/servidor local) — mismo patrón
