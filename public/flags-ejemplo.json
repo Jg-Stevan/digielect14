@@ -4,5 +4,6 @@
   "thumbsOn": true, // default true — miniaturas en la bandeja de MASIVA. OFF ahorra memoria en dispositivos BAJO (override manual, D6)
   "ocrThreadsTope": 4, // default 4 — tope de hilos del runtime OCR (onnxruntime-web). Menor = menos CPU concurrente (override manual, D6)
   "telemetriaSalud": true, // default true — muestreo de salud en vivo (timer 5 min). SOLO corre con el modo dev activado (e14-dev-mode=on) y respeta politica.saludEnVivo (D4)
+  "colaPersistente": true, // default true (cola-persistente-v1) — la cola masiva SOLO se elimina con vaciar() del dueño (petición literal): sobrevive recargas/crashes. Override FALSE = MODO PRUEBAS e64p: al recargar, la cola arranca vacía (auto-borrado de cola IDB + ledger — QA doble pasada)
   "endpointReportes": null // default null — sin backend el transporte está en NO-OP TOTAL (D1: nada sale del dispositivo sin acción explícita; cero timers, cero requests). Con URL configurada, el transporte batchea cada 10 min hasta 50 eventos (error/warn/perf/salud/uso), con scrub previo por leerPolitica() — jamás envía textoOcr/miniaturas si están OFF ni contenido de actas. Reintentos 1m→5m→30m; tras 3 fallos seguidos se auto-detiene (kill local) y se reactiva desde iniciarTransporte() o al reiniciar la app. Ver docs/ENDPOINT-REPORTES.md
 }

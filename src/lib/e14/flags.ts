@@ -22,13 +22,15 @@ const REINTENTO_TOPE_MS = REFRESH_MS;
 
 /** Defaults del contrato §4.2 (poolWorkers 2 · thumbsOn true ·
  *  ocrThreadsTope 4 · telemetriaSalud true · endpointReportes null — sin
- *  backend, D1). */
+ *  backend, D1 · colaPersistente true — ANEXO cola-persistente-v1: la masiva
+ *  SOLO se elimina con vaciar() del dueño; false = MODO PRUEBAS e64p). */
 export const FLAGS_DEFAULT: FlagsApp = {
   poolWorkers: 2,
   thumbsOn: true,
   ocrThreadsTope: 4,
   telemetriaSalud: true,
   endpointReportes: null,
+  colaPersistente: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -42,6 +44,7 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   const limpio: Partial<FlagsApp> = {};
   if (p.poolWorkers === 1 || p.poolWorkers === 2) limpio.poolWorkers = p.poolWorkers;
   if (typeof p.thumbsOn === "boolean") limpio.thumbsOn = p.thumbsOn;
+  if (typeof p.colaPersistente === "boolean") limpio.colaPersistente = p.colaPersistente;
   if (typeof p.ocrThreadsTope === "number" && Number.isFinite(p.ocrThreadsTope)) {
     limpio.ocrThreadsTope = Math.max(1, Math.min(8, Math.round(p.ocrThreadsTope)));
   }
