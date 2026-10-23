@@ -23,6 +23,7 @@ import {
 // histórico se FUSIONA con el ledger: sobrevive vaciar() y recargas
 // (REVERSA de D-e65-8 → D-e65b-1).
 import {
+  borrarHistorico,
   listarHistorico,
   registrarEntradaHistorico,
   type EntradaHistorica,
@@ -235,6 +236,27 @@ function patchFila(id: string, patch: Partial<FilaMasiva>): void {
 // (jamás prefijos — RED LINE 10); sin umbrales, sin fuzzy (RED LINE 5).
 const mapaQrPayload = new Map<string, string>();
 
+// ─── e64p — KIT e64p-modo-pruebas-memoria-v1 (C-1): MODO PRUEBAS ───────────
+// MODO PRUEBAS (pre-elección): la cola NO sobrevive recargas — revertir a
+// true para producción.
+// Pedido literal del dueño: «que las actas no se guarden en memoria por el
+// momento, porque estamos haciendo pruebas y la gracia es que en cada lote
+// pueda identificar el acta antes de procesarla».
+// Con FALSE (modo pruebas):
+//  · C-1 — cargarFilas() arranca la cola VACÍA (no restaura filas ni
+//    reconstruye Maps desde persistencia) y borra la persistencia vieja
+//    (cola IDB + ledger del histórico — higiene).
+//  · C-2 — vaciar() resetea TODO el ciclo de vida de la memoria de dedup:
+//    mapaQrPayload + ledger + índice → limpiar y re-subir el MISMO lote
+//    procesa completo de cero.
+//  · C-3 — el LEDGER de enviadas NO alimenta el índice del histórico (los
+//    Maps de dedup no se alimentan de NADA persistido); la dedup DENTRO del
+//    lote/sesión queda INTACTA (la gracia — gemelas atrapadas en vivo).
+// Con TRUE (producción): byte a byte el comportamiento de siempre —
+// restauración tras recarga/crash + dedup inter-lote + ledger e65b que
+// sobrevive vaciar() (D-e65b-1). Cero código borrado — solo ciclo de vida.
+const COLA_PERSISTENTE = false;
+
 /** Registra el payload de UNA fila como original del lote. Solo se llama
  *  cuando el payload es NUEVO en el mapa o su entrada apuntaba a una fila
  *  ya muerta (re-apuntado honesto — el carrier vivo del payload manda). */
@@ -277,11 +299,16 @@ async function indiceEnviadasDe(): Promise<EntradaHistorica[]> {
   // e65b (M-e65b-2): el ledger NO es fatal — si cae, el índice se construye
   // SOLO con la cola viva (exactamente el comportamiento e65; conservador
   // RL-e65b-3 — jamás tumba la cadena de dedup).
+  // e64p (C-3 — MODO PRUEBAS): con COLA_PERSISTENTE=false el ledger NO
+  // alimenta el índice — cero memoria ENTRE lotes (el histórico de sesiones
+  // anteriores jamás marca YA-ENVIADA); solo la cola viva de ESTA sesión.
   let deLedger: EntradaHistorica[] = [];
-  try {
-    deLedger = await listarHistorico(); // llaves chicas — getAll seguro (L7)
-  } catch {
-    deLedger = [];
+  if (COLA_PERSISTENTE) {
+    try {
+      deLedger = await listarHistorico(); // llaves chicas — getAll seguro (L7)
+    } catch {
+      deLedger = [];
+    }
   }
   const porId = new Map<string, EntradaHistorica>();
   for (const e of deLedger) porId.set(e.id, e);
@@ -415,7 +442,9 @@ export async function marcarYaEnviada(
  *  D65 (T2): dedup v2 POR CONTENIDO con EXIF normalizada (dedup.ts) — misma
  *  cadena, y la traza aditiva dedup/dedupDistancia (kit T2.3) persiste en el
  *  MISMO write del hashDedup (campos nuevos al final del contrato D57). */
-async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void> {
+async function cadenaDedup(
+  lote: { id: string; archivo: File; hashBytes?: string | null }[],
+): Promise<void> {
   for (const entrada of lote) {
     try {
       // e65 — CAPA BYTES primero (D-e65-5): barata (~50-200 ms, SIN decode).
@@ -423,7 +452,11 @@ async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void>
       // y (b) las filas vivas de la cola cuyo registro ya fue ENVIADO (se
       // verifica leyendo el registro — la fila sola no basta). null →
       // conservador: cae a la capa dhash de siempre.
-      const bytes = await hashBytesDeArchivo(entrada.archivo);
+      // e71 (Opt-1): el hash pudo llegar PRE-CALCULADO por la ingesta
+      // (agregarFiles → agregarLote) — reutilizado, cero re-hash (la SHA de
+      // la ingesta es la MISMA llave: hashBytesDeArchivo determinista).
+      const bytes =
+        entrada.hashBytes ?? (await hashBytesDeArchivo(entrada.archivo));
       if (bytes) {
         const hitHistorico = (await indiceEnviadasDe()).find(
           (h) => h.hashBytes === bytes,
@@ -583,6 +616,118 @@ async function cadenaDedup(lote: { id: string; archivo: File }[]): Promise<void>
   }
 }
 
+/** e71 (Opt-1) — DEDUP EXACTO INSTANTÁNEO en la ingesta (kit e71-
+ *  consolidación, benchmark aprobado): corre DESPUÉS del swap temp→id y
+ *  ANTES de rearrancarTrasEncolar — el runner JAMÁS ve un duplicado exacto
+ *  como PENDIENTE: no paga precalor, ni qr-capa0, ni OCR (~20 s de ahorro
+ *  por duplicado exacto, kit literal). El SHA-256 ya nació calculado en la
+ *  ingesta (hashBytes en el PRIMER write) → el pase cuesta un lookup en
+ *  memoria + (solo con match) 1-2 lecturas de registro (~ms).
+ *  · Match contra el ÍNDICE de enviadas (ledger + cola viva enviada —
+ *    D-e65-3; respeta COLA_PERSISTENTE: en modo pruebas el ledger NO
+ *    marca — C-3 intacto) → YA-ENVIADA vía marcarYaEnviada (maquinaria
+ *    e65 EXACTA, via "bytes").
+ *  · Match contra la cola viva (filas previas + anteriores del MISMO
+ *    lote) → DUPLICADA instantánea con dupOf (kit Opt-1 literal); el
+ *    desenlace lo resuelve reutilizarResultado en el runner (con P2.1:
+ *    original rechazada → la copia nace RECHAZADA).
+ *  Conservador: hash null → la fila procesa normal; guard anti-zombi
+ *  (fila viva + PENDIENTE) igual que cadenaDedup; un fallo JAMÁS tumba
+ *  el encolado (kit carga-masiva §3). */
+async function dedupExactoIngesta(
+  entradas: { id: string; hashBytes: string | null }[],
+): Promise<void> {
+  if (!entradas.length) return;
+  try {
+    // (a) seed: filas VIVAS PREVIAS a este lote que traen hashBytes — la
+    // primera FIFO gana (mismo criterio de original que cadenaDedup).
+    // Los registros pre-e71 sin hashBytes no matchean (conservador — igual
+    // que hoy: la capa dhash de cadenaDedup los cubre).
+    const idsLote = new Set(entradas.map((e) => e.id));
+    const originales = new Map<string, string>(); // hashBytes → id original
+    for (const f of useMasivaStore.getState().filas) {
+      if (idsLote.has(f.id) || !f.hashBytes || f.estado === "ERROR") continue;
+      if (!originales.has(f.hashBytes)) originales.set(f.hashBytes, f.id);
+    }
+    // (b) índice de enviadas (ledger + cola — D-e65-3) — una sola carga
+    // (cacheado por indiceEnviadasDe; ledger caído → conservador).
+    let indice: EntradaHistorica[] = [];
+    let indiceListo = false;
+    for (const e of entradas) {
+      if (!e.hashBytes) continue;
+      // La fila viva ya trae su llave (el informe/seed de futuros lotes la
+      // ven SIN esperar a cadenaDedup — mismo gesto del patch L549).
+      patchFila(e.id, { hashBytes: e.hashBytes });
+      if (!indiceListo) {
+        try {
+          indice = await indiceEnviadasDe();
+        } catch {
+          indice = []; // ledger caído → solo cola viva (RL-e65b-3)
+        }
+        indiceListo = true;
+      }
+      const hitHistorico = indice.find((h) => h.hashBytes === e.hashBytes);
+      if (hitHistorico) {
+        // El índice SOLO contiene enviadas → YA-ENVIADA por construcción.
+        if (await marcarYaEnviada(e.id, hitHistorico.id, "bytes", e.hashBytes)) {
+          console.info(
+            `[e14] dedup fila=${e.id} instantanea ya-enviada-historico dupOf=${hitHistorico.id}`,
+          );
+          continue;
+        }
+      }
+      const dupOf = originales.get(e.hashBytes);
+      if (dupOf && dupOf !== e.id) {
+        // ¿La original matcheada ya fue ENVIADA? (mismo criterio D-e65-5:
+        // verificar con leerRegistro antes de marcar YA-ENVIADA; lectura
+        // que falla → DUPLICADA conservadora como hoy).
+        let enviadaDeId: string | null = null;
+        try {
+          const regOriginal = await leerRegistro(dupOf);
+          if (
+            regOriginal.acta?.status === "ENVIADA" ||
+            regOriginal.estado === "YA-ENVIADA"
+          ) {
+            enviadaDeId = dupOf;
+          }
+        } catch {
+          enviadaDeId = null; // conservador → DUPLICADA
+        }
+        if (enviadaDeId) {
+          if (await marcarYaEnviada(e.id, enviadaDeId, "bytes", e.hashBytes)) {
+            console.info(
+              `[e14] dedup fila=${e.id} instantanea ya-enviada dupOf=${enviadaDeId}`,
+            );
+            continue;
+          }
+        }
+        // DUPLICADA instantánea (kit Opt-1) — guard anti-zombi + write IDB
+        // + patch de la fila viva, MISMO patrón de cadenaDedup.
+        const filaViva = useMasivaStore
+          .getState()
+          .filas.find((f) => f.id === e.id);
+        if (filaViva && filaViva.estado === "PENDIENTE") {
+          try {
+            const reg = await leerRegistro(e.id);
+            await guardarRegistro({ ...reg, estado: "DUPLICADA", dupOf });
+            patchFila(e.id, { estado: "DUPLICADA", dupOf });
+            console.info(
+              `[e14] dedup fila=${e.id} instantanea sha256 dupOf=${dupOf}`,
+            );
+          } catch {
+            /* IDB caída — la fila procesa normal (conservador) */
+          }
+        }
+      }
+      // (c) esta fila pasa a candidata para las SIGUIENTES del lote (el
+      // MISMO archivo 2× en UNA carga — la segunda nace DUPLICADA aquí).
+      if (!originales.has(e.hashBytes)) originales.set(e.hashBytes, e.id);
+    }
+  } catch {
+    /* un fallo del pase JAMÁS tumba el encolado — la fila procesa normal */
+  }
+}
+
 /** KIT e14-masiva-ux-v1 (T3.2): al reactivar la conexión la cola offline del
  *  flujo se drena (alternarConexion del store principal — INTACTO, fuera de
  *  la whitelist §1). Aquí se refrescan las filas MASIVA que quedaron «EN
@@ -631,6 +776,28 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
 
   cargarFilas: async () => {
     try {
+      // e64p (C-1 — MODO PRUEBAS): la cola arranca VACÍA — cero restauración
+      // (sin filas fantasma ni Maps reconstruidos). Higiene: la persistencia
+      // vieja muere AQUÍ (cola IDB + ledger del histórico) para que la pasada
+      // siguiente sea de cero (QA doble pasada del kit). Con
+      // COLA_PERSISTENTE=true este bloque entero no existe y el comportamiento
+      // es el de siempre (restauración completa — reversibilidad).
+      if (!COLA_PERSISTENTE) {
+        try {
+          await vaciarCola();
+        } catch {
+          /* la cola muere igual en la bandeja (IDB caída — kit §3) */
+        }
+        try {
+          await borrarHistorico();
+        } catch {
+          /* conservador — el ledger se re-borra en el próximo vaciar/carga */
+        }
+        mapaQrPayload.clear();
+        indiceEnviadas = null;
+        set({ filas: [], colaDisponible: true, avisoCola: null });
+        return;
+      }
       await recuperarCola(); // PROCESANDO zombi → PENDIENTE (caída a mitad de OCR)
       // FIX C6: mapper DENTRO del cursor — los registros completos (acta con
       // dataURLs) viven un instante; la bandeja solo retiene filas livianas.
@@ -726,9 +893,28 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
       filas: [...get().filas, ...temps, ...filasError],
       guardando: get().guardando + imagenes.length,
     });
+    // e71 (Opt-1) — SHA-256 PRE-SCAN en la ingesta (kit e71-consolidación,
+    // benchmark aprobado ~68 ms por archivo): SECUENCIAL (RAM — un
+    // arrayBuffer de 12 MP a la vez) y ANTES de abrir la transacción de IDB
+    // (una tx de IndexedDB auto-commitea si el control vuelve al event loop
+    // con awaits ajenos — el hash JAMÁS corre dentro de la tx). Las filas
+    // ya están visibles (temps «GUARDANDO N…» — cero regresión UX); el
+    // coste del hash vive en esa misma fase y a cambio TODO duplicado
+    // exacto nace resuelto: nunca paga precalor, ni qr-capa0, ni OCR.
+    const hashesBytes: (string | null)[] = [];
+    for (const file of imagenes) {
+      const tSha = Date.now();
+      const hash = await hashBytesDeArchivo(file);
+      hashesBytes.push(hash);
+      if (hash) {
+        console.info(
+          `[e14] ingesta sha256 nombre=${(file.name || "FOTO").slice(0, 24)} ms=${Date.now() - tSha} hash=${hash.slice(0, 8)}…`,
+        );
+      }
+    }
     try {
       if (imagenes.length) {
-        const ids = await agregarLote(imagenes, paginasPdf); // D63-A2 (T1): viaPdf nace en el PRIMER write
+        const ids = await agregarLote(imagenes, paginasPdf, hashesBytes); // D63-A2 (T1): viaPdf nace en el PRIMER write · e71 (Opt-1): hashBytes ídem
         // FIX M13 (auditoría 2-c): el swap respeta la decisión del dueño TOMADA
         // DURANTE la copia (QUITAR de una fila temp, VACIAR, o recarga de la
         // vista que re-monta cargarFilas): las temps que YA NO están en filas
@@ -747,6 +933,15 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
           colaDisponible: true,
           avisoCola: null, // un lote que SÍ entró despeja el aviso de quota
         });
+        // e71 (Opt-1) — DEDUP EXACTO INSTANTÁNEO: con los hashes ya en el
+        // primer write, el pase marca DUPLICADA/YA-ENVIADA al instante y
+        // ANTES de rearrancar el runner (el duplicado jamás llega al
+        // pipeline). Fuera los huérfanos (M13 — jamás marcar muertos).
+        await dedupExactoIngesta(
+          imagenes
+            .map((file, i) => ({ id: ids[i], hashBytes: hashesBytes[i] ?? null }))
+            .filter((e) => e.id !== undefined && !huerfanos.includes(e.id)),
+        );
         // e63g — PLAN e63g-e63h-ruta-unica (E1/FASE 1): el swap acaba de
         // crear filas PENDIENTE con id real — si el bucle murió mientras la
         // copia a IDB estaba en vuelo (siguientePendiente solo veía temps y
@@ -770,7 +965,13 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
         // lote deja fuera a los huérfanos borrados (no hashear en balde).
         void cadenaDedup(
           imagenes
-            .map((file, i) => ({ id: ids[i], archivo: file }))
+            .map((file, i) => ({
+              id: ids[i],
+              archivo: file,
+              // e71 (Opt-1): el hash de la INGESTA viaja pre-computado —
+              // la cadena de fondo no re-hashea (68 ms/file ahorrados).
+              hashBytes: hashesBytes[i] ?? undefined,
+            }))
             .filter((e) => e.id !== undefined && !huerfanos.includes(e.id)),
         );
       } else {
@@ -985,6 +1186,20 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     // nace YA-ENVIADA igualmente (la prueba exacta del dueño: vaciar +
     // re-subir los 46). `borrarHistorico()` existe pero JAMÁS se cablea aquí
     // (RL-e65b-5). La cola es el taller; el envío es el hecho.
+    // e64p (C-2 — MODO PRUEBAS): con COLA_PERSISTENTE=false el ciclo de vida
+    // COMPLETO muere aquí (reversa declarada del RL-e65b-5 SOLO en modo
+    // pruebas): mapaQrPayload (capa 0 QR — hoy sobrevivía a vaciar en la
+    // misma sesión) + ledger del histórico + índice → limpiar y re-subir el
+    // MISMO lote procesa completo de cero (QA del kit). En producción
+    // (true) este bloque no existe y D-e65b-1 queda byte a byte.
+    if (!COLA_PERSISTENTE) {
+      mapaQrPayload.clear();
+      try {
+        await borrarHistorico();
+      } catch {
+        /* conservador — el índice ya no lo verá en esta sesión */
+      }
+    }
     indiceEnviadas = null;
     set({ filas: [], progreso: null, origenAbierto: null, avisoCola: null });
   },

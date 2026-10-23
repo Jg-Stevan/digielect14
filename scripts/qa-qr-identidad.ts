@@ -51,10 +51,12 @@ import {
   QR_INTENTOS_BASE,
   QR_LADO_LARGO,
   QR_LADO_LARGO_RESCATE,
+  QR_RECORTE_LADO,
   QR_ROTACIONES,
   barridoQrDePixeles,
   binarizadaQrDePixeles,
   decodificarQrDePixeles,
+  decodificarQrDeRecorte,
   estadoZxingQr,
   esperarDesenlaceQr,
   ladderBaseDePixeles,
@@ -408,9 +410,11 @@ ok(
 );
 
 // El payload viaja al registro (aditivo al final — contrato D57) y a las
-// rutas ERROR/DUPLICADA-e63k (post-mortem).
+// rutas ERROR/DUPLICADA-e63k/DUPLICADA-e72 (post-mortem). ADENDA e72: la
+// 4.ª ruta es el desenlace-contenido (P2.1-v2) — misma naturaleza de write
+// controlado (llave opaca export-only; sin parse/invertir/prefijos).
 const spreadQr = (srcRunner.match(/\.\.\.\(qrPayload \? \{ qrPayload \} : \{\}\)/g) ?? []).length;
-ok(spreadQr === 3, `qrPayload se estampa en EXACTAMENTE 3 writes de registro (LISTA/DUPLICADA-e63k/ERROR) — hallados ${spreadQr}`);
+ok(spreadQr === 4, `qrPayload se estampa en EXACTAMENTE 4 writes de registro (LISTA/DUPLICADA-e63k/DUPLICADA-e72/ERROR) — hallados ${spreadQr}`);
 
 // Llave OPACA: cero parse/inversión/prefijos en módulo + wiring.
 ok(
@@ -462,9 +466,12 @@ const filasCapas = [
   filaLiviana(regFabricado({ id: "masiva-qa-4", dedup: "sin-match" })),
 ];
 const capas = resumenDedup(filasCapas);
+// ADENDA e66 (M-e66-2): matches pasó a ser MULTI-CAPA (v2+identidad+qr+
+// ya-enviada — plan P3) — aquí 3 (qr+v2+identidad); el desglose aditivo v2
+// preserva la cuenta que matches era antes (1).
 ok(
-  capas.qr === 1 && capas.matches === 1 && capas.identidad === 1 && capas.activo,
-  "post-mortem §1.3 · resumenDedup cuenta las 3 capas (qr / v2-marcada / identidad)",
+  capas.qr === 1 && capas.matches === 3 && capas.v2 === 1 && capas.identidad === 1 && capas.activo,
+  "post-mortem §1.3 · resumenDedup cuenta las 3 capas — e66: matches multi-capa=3 (qr/v2/identidad) con desglose aditivo v2=1",
 );
 
 const txt = renderTxt(
@@ -819,6 +826,43 @@ ok(
 ok(
   (await readFile(new URL("../package.json", import.meta.url), "utf8")).includes('"zxing-wasm": "3.1.6"'),
   "tier zxing · dependencia declarada zxing-wasm@3.1.6 (doc hermano §1 — literal)",
+);
+
+// ─── e71 (Opt-2) — tier RECORTE (esquina estándar 600×600, SIN barrido) ──
+console.log("\n── e71 Opt-2 · tier recorte-600 ──");
+ok(
+  QR_RECORTE_LADO === 600,
+  "Opt-2 · QR_RECORTE_LADO = 600 (literal del kit: «aprox 600x600 px»)",
+);
+// (a) QR DENTRO de la esquina estándar: (400,400)-(585,585) sobre 900×700 —
+// completamente dentro del recorte 600×600 top-left. NOTA honesta: un QR
+// nítido también lo lee la banda A (imagen completa) — el caso EXERCITA el
+// tier (payload EXACTO por la vía del recorte); la GANANCIA del kit es de
+// rendimiento: los barridos (~15 s) ya no corren cuando el QR está aquí.
+const fRec = lienzoConQr(MATRIZ_A, 5, 4, 900, 700, 400, 400);
+const tRec = Date.now();
+const rRec = await decodificarQrDeRecorte(fRec);
+ok(
+  rRec === PAYLOAD_A && Date.now() - tRec < 2_000,
+  `Opt-2 · QR en la esquina estándar → recorte-600 decodifica EXACTO en ${Date.now() - tRec} ms (una pasada jsQR sobre el recorte, sin barrido)`,
+);
+// (b) QR FUERA del recorte (abajo-derecha) → el tier es HONESTO (null): el
+// rescate de esos casos sigue vivo en el barrido completo de siempre.
+const fFuera = lienzoConQr(MATRIZ_A, 5, 4, 900, 700, 700, 500);
+const rFuera = await decodificarQrDeRecorte(fFuera);
+ok(
+  rFuera === null,
+  "Opt-2 · QR fuera de la esquina estándar → recorte-600 null (honesto — el barrido completo de siempre queda detrás como fallback sagrado)",
+);
+// (c) orden de la cadena: recorte ANTES de cualquier barrido completo (los
+// barridos ~15 s JAMÁS corren si el QR vive en la esquina estándar).
+const iRecorte = srcQr.indexOf("const recorte = await decodificarQrDeRecorte(pix);");
+ok(
+  iRecorte > 0 &&
+    iRecorte < srcQr.indexOf("const barrido = barridoQrDePixeles(pix);") &&
+    srcQr.includes('trazaQr("recorte-600"') &&
+    srcQr.includes("export const QR_RECORTE_LADO = 600;"),
+  "Opt-2 · orden de la cadena: base → recorte-600 → barrido → NITIDEZ → BINARIZADA → zxing → rotación (traza nueva tier=recorte-600)",
 );
 
 // ───────────────────────────── resultado ────────────────────────────────────
