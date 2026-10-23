@@ -23,6 +23,8 @@ import { PUESTO_SIMULADO } from "@/lib/e14/seed";
 import { SegmentedBar } from "../primitives";
 // KIT e14-observabilidad-v1 (agente 2 · C1): puerta del modo de diagnóstico.
 import { TuercaResumen } from "../dev/TuercaResumen";
+// KIT e14-observabilidad-v1 (agente 2 · C4): panel completo del modo dev.
+import { PanelDev } from "../dev/PanelDev";
 
 function badgeEstado(estado: HistorialRow["estado"]) {
   switch (estado) {
@@ -56,6 +58,9 @@ export function ResumenView() {
 
   const reiniciarJornada = useE14Store((s) => s.reiniciarJornada);
   const [reiniciarArmado, setReiniciarArmado] = useState(false);
+  // KIT e14-observabilidad-v1 (agente 2 · C4): el panel SOLO se abre desde
+  // la tuerca (sin ruta ni query param).
+  const [panelAbierto, setPanelAbierto] = useState(false);
   useEffect(() => {
     if (!reiniciarArmado) return;
     const t = window.setTimeout(() => setReiniciarArmado(false), 4000);
@@ -97,7 +102,7 @@ export function ResumenView() {
             arriba-izquierda del header; el contenido se corre a la derecha
             (pl) para despejar su blanco táctil de 44px. */}
         <div className="absolute left-2 top-1/2 -translate-y-1/2 z-50">
-          <TuercaResumen />
+          <TuercaResumen onAbrirPanel={() => setPanelAbierto(true)} />
         </div>
         {/* Task 3: el contenido de la barra se alinea al ancho del contenedor
             de la vista (en lg+ ya no queda pegado al borde del viewport). */}
@@ -248,6 +253,10 @@ export function ResumenView() {
           </div>
         </div>
       </div>
+
+      {/* KIT e14-observabilidad-v1 (agente 2 · C4): panel de diagnóstico —
+          overlay fijo (z-[70]) montado desde la tuerca. */}
+      {panelAbierto && <PanelDev onClose={() => setPanelAbierto(false)} />}
     </div>
   );
 }
