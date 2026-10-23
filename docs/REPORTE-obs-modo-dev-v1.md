@@ -178,3 +178,104 @@ scrollable en 360 y 390.
 - Para el agente 1: los formatos de escritura de `e14-obs-politica` y
   `e14-flags-overrides` ya están en uso (JSON con los shapes de §4.2) — leer/escribir
   esas claves con sus helpers es compatible sin migración.
+
+---
+
+# FASE 1 — PUENTE DELEGADO EN EL NÚCLEO REAL (obs-nucleo-v1 existe)
+
+> Rama recreada: `git checkout -b feat/obs-modo-dev-v1 origin/feat/obs-nucleo-v1`
+> (8 commits del núcleo, head 7475625) + cherry-pick limpio de los 6 commits
+> C1-C6 de la FASE 0 (único conflicto: `docs/worklog.md`, resuelto
+> «conservar ambos bloques») + 1 commit de cableado FASE 1.
+> **La UI no cambió**: firmas del puente, JSX y consumidores intactos — solo
+> los CUERPOS del puente pasaron de stubs honestos a delegación.
+
+## F1 · Qué cambió (commit `feat(dev): FASE 1 — el puente delega en obs/* real`)
+
+| Función del puente | FASE 0 (stub) | FASE 1 (real) |
+|---|---|---|
+| `leer/guardarModoDev` | localStorage directo | delega en `obs/politica.ts` (claves pinned §4.1) |
+| `leer/guardarPolitica` | spread local sobre default | delega en `obs/politica.ts` — defaults D4 + saneo de corruptos (→ defaults + warn `PoliticaCorrupta`) del núcleo |
+| `leerFlags` | defaults + overrides locales | delega en `lib/e14/flags.ts` — cadena REAL: DEFAULTS ← `public/flags.json` (cacheado 24 h, offline-safe) ← overrides (máxima prioridad) |
+| `refrescarFlags` | siempre `"sin-endpoint"` | delega — fetch real de `/flags.json` con reintentos exponenciales; hoy 404 → `"sin-endpoint"` honesto |
+| `obtenerDispositivo` | `null` | delega en `obs/dispositivo.ts` — snapshot REAL (RAM/núcleos/batería/red/storage/memoriaJS + tier); try/catch del puente conserva la firma `\| null` (SSR/navegador sin APIs → "—") |
+| `iniciar/detenerMuestreoSalud` | no-op | delega — timer 5 min del NÚCLEO (idempotente, re-verifica modo dev + saludEnVivo + telemetriaSalud CADA tick y se auto-detiene) |
+| `contarEventos/eventosPorDigest/purgarBuffer` | `0 / [] / no-op` | delega en `obs/buffer.ts` — IndexedDB `e14-obs` REAL (tope 500 + TTL 30d) |
+| `idDispositivo/idSesion/appVersion` | lectura de clave / `null` / `"0.1.0"` espejo | delega en `obs/identidad.ts` — appVersion de `package.json` importado; idSesion UUID por sesión; idDispositivo crea el UUID persistente en la 1.ª lectura (diseño lazy del núcleo) |
+| `descargarReporte` | `throw` honesto | delega en `obs/export.ts` — `construirReporte` + ZIP fflate/JSON reales |
+| `dev/contrato.ts` | tipos §4.2 verbatim | **ELIMINADO** — la UI importa de `@/lib/e14/obs/tipos` (PanelDev, VistaErrores); `POLITICA_DEFAULT` desde `obs/politica` |
+
+Reactividad PRESERVADA: los setters del núcleo no notifican, así que el
+puente sigue emitiendo su evento DOM intra-pestaña `e14-obs:cambio` (+`storage`
+cross-pestaña) tras delegar — CERO timers/polling en la UI.
+
+## F2 · DESVIACIÓN (la única de la FASE 1): overrides con semántica REPLACE
+
+`obs/politica.guardarOverridesFlags` del núcleo hace **MERGE**
+(`{...actual, ...o}`) — no existe forma de BORRAR una clave. El kill switch
+del panel necesita APAGAR un override (la UI construye el objeto final y
+hace `delete` de la clave apagada): bajo merge, el override sobreviviría
+pegado en storage y el switch jamás apagaría (fallos verificados mentalmente
+contra `toggleOverride` de PanelDev L292-305).
+
+Resolución (zona del agente 2 respetada — `lib/**` intacto): el puente
+`guardarOverridesFlags` escribe el objeto FINAL directo en la clave PINNED
+`e14-flags-overrides` (§4.1 — exportada por el núcleo como `CLAVE_OVERRIDES`).
+La LECTURA y el saneo siguen siendo 100 % del núcleo
+(`leerOverridesFlags` → `sanearFlags` dentro de `leerFlags`). El contrato
+§4.3 fija la FIRMA, no la semántica merge/replace; el resto de setters
+sí delegan. Verificación en vivo: ON → `{"poolWorkers":1}` + tabla
+«poolWorkers override 1»; OFF → storage `{}` + tabla «poolWorkers 2» sin chip.
+
+## F3 · Verificación manual FASE 1 (build standalone de producción :3001 + agent-browser)
+
+- Panel abierto con núcleo real: VERSIÓN `0.1.0` (package.json) · DISPOSITIVO
+  `d78f4f0d…2270` (UUID persistente `e14-obs-device-id` creado por el núcleo) ·
+  SESIÓN `9a27ed0b…aab4` · política D4 en texto.
+- Salud REAL en vivo: TIER BAJO · RAM 4 GB · NÚCLEOS 2 · BATERÍA 100 % ⚡ ·
+  RED 4g · STORAGE 10240 MB · MEMORIA JS 26 MB (FASE 0 mostraba «—»).
+- Error REAL inyectado por consola → captura del núcleo → `2 EN BUFFER` →
+  card con digest `6129e389` + «VER BREADCRUMBS (6)»: timeline vertical con
+  los 6 rastros reales («hace 58 s · clic · …», «vista · resumen») — «cómo
+  surgió el error» del kit, funcionando de punta a punta.
+- Export JSON con buffer poblado → descarga real (`construirReporte` +
+  `descargarBlob`) + buffer purgado por `vaciarDespues` → «0 EN BUFFER» +
+  export deshabilitado con motivo. Sin MOTIVO de error (cero excepciones).
+- Kill switch: ON → storage `{"poolWorkers":1}` + chip `override` + valor
+  efectivo `1` en la tabla; OFF → storage `{}` + valor `2` sin chip (F2).
+- REFRESCAR FLAGS → fetch real 404 → «SIN ENDPOINT DE FLAGS (default
+  null — D1)» (estado correcto del repo hoy).
+- Privacidad: activar TEXTO OCR → confirmación inline «¿Activar el guardado
+  del texto OCR? … SÍ/NO» → `e14-obs-politica` persistido con `textoOcr:true`
+  + sección 1 reactiva («OCR: sí»).
+- DESACTIVAR MODO (armado 4 s) → `e14-dev-mode: off` + panel cerrado.
+- **0 errores de página · 0 errores/warnings de consola** (el único error
+  fue el `humo-fase1` inyectado adrede para poblar el buffer).
+
+## F4 · Gate FASE 1 (check-quality.sh, árbol commiteado)
+
+- `tsc --noEmit` **0** · `lint` **0 err/0 warnings** · `build` exit 0
+- vitest **153/153** (70 base + 83 obs/flags del núcleo — los tests del
+  núcleo prueban AHORA los mismos módulos que consume el puente)
+- QA 7/7: 33+50+24+49+32+72+34 = **294/294**
+- knip: **25 → 19 unused exports vs el núcleo** — 6 exports del contrato
+  obs GANARON su primer consumidor real (`descargarReporte`,
+  `guardarPolitica`, `guardarModoDev`, `detenerMuestreoSalud`,
+  `CLAVE_OVERRIDES`, `POLITICA_DEFAULT`); 0 nuevos unused (diff completo
+  contra `origin/feat/obs-nucleo-v1` vacío salvo esas 6 mejoras).
+- Diff de la FASE 1: `dev/puente.ts` (cuerpos) · `dev/contrato.ts` (borrado)
+  · `dev/PanelDev.tsx` + `dev/VistaErrores.tsx` (SOLO línea de import de
+  tipos) · `dev/useSaludVivo.ts` (comentario) · docs. **Cero diff en
+  `screens/`, `TopBar`, `lib/**`, `obs/**`.**
+
+## F5 · Continuidad FASE 1
+
+- Branch `feat/obs-modo-dev-v1` (head FASE 1) pushed — STACKED sobre
+  `origin/feat/obs-nucleo-v1` (aún sin merge). El PR apunta a `main` y
+  mostrará los commits del núcleo hasta que el dueño lo integre (orden §1:
+  1.º núcleo → 2/3).
+- Al agente 1: nada que pedir — el núcleo cumplió el contrato §4.3 al
+  pie de la letra (firmas idénticas 1:1; la única fricción fue la
+  semántica merge del override, resuelta en F2 sin tocar su zona).
+- Al agente 3 (transporte): `estadoTransporte` sigue sin consumir desde la
+  UI (fuera del kit del agente 2) — su stub permanece.
