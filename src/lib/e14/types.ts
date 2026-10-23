@@ -26,14 +26,17 @@ export type ActaStatus =
   | "ENVIADA" // verde   tras envío (auto o manual)
   | "EN_REVISION_HUMANA"; // ámbar   contingencia al AGOTAR intentos (C4 automática) o SUGERIDA/MANUAL «repetir-primero»
 
-export interface ActaUbicacion {
+/** Ubicación del acta (jerarquía DIVIPOL + mesa). Consumida internamente
+ *  por ActaEscrutinio.ubicacion — ya sin uso externo (knip, overnight 3B-B1b). */
+interface ActaUbicacion {
   departamento: string;
   municipio: string;
   zona: string;
   puesto: string;
   mesa: string;
 }
-export interface ActaCandidato {
+
+interface ActaCandidato {
   codigo: string;
   votos: number;
 } // "101": 25 …
@@ -274,8 +277,8 @@ export interface Acta {
 }
 
 // ---------- Control de mesas (vista ACTAS) ----------
-export type MesaEstado = "COMPLETADA" | "EN_PROCESO" | "PENDIENTE";
-export type PaginaEstado = "OK" | "RESCANEO" | "EN_PROCESO" | "PENDIENTE";
+type MesaEstado = "COMPLETADA" | "EN_PROCESO" | "PENDIENTE";
+type PaginaEstado = "OK" | "RESCANEO" | "EN_PROCESO" | "PENDIENTE";
 export type TipoPagina = "DELEGADOS" | "TRANSMISIÓN";
 
 export interface MesaPagina {
