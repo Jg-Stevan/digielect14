@@ -99,9 +99,7 @@ export function rapidOcrPrecalentar(): Promise<boolean> {
   prewarmHecho = (async () => {
     try {
       const rt = await rapidOcrInit(); // MISMO singleton — el calor queda
-      const c = document.createElement("canvas");
-      c.width = 640;
-      c.height = 480;
+      const c = canvasCon(640, 480); // SPRINT-A A3 — factory
       const ctx = ctxDe(c);
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, 640, 480);
@@ -113,13 +111,13 @@ export function rapidOcrPrecalentar(): Promise<boolean> {
       ctx.fillText("TRANSMISION 98.7% 15:30:22", 40, 340);
       const dataUrl = c.toDataURL("image/png");
       const r = await rapidOcrReconocer(rt, dataUrl); // resultado DESCARTADO
-      console.info(
+      logger.info(
         `[e14-prowarm] listo det=${r.msDet}ms cls=${r.msCls}ms rec=${r.msRec}ms · ${r.nBoxes} cajas · ${r.lineas.length} líneas`,
       );
       return true;
     } catch (e) {
       // Frío como hoy: el pipeline NO depende de esto (fallback honesto).
-      console.info(
+      logger.info(
         `[e14-prowarm] fallo (continua como hoy): ${e instanceof Error ? e.message : String(e)}`,
       );
       return false;
@@ -196,19 +194,20 @@ async function initReal(): Promise<RapidRuntime> {
 
 // ─── Utilidades de imagen ───────────────────────────────────────────────────
 
-function loadImage(dataUrl: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("loadImage: decodificación fallida"));
-    img.src = dataUrl;
-  });
-}
+// SPRINT-A (perf/decode-once-v1) A2: el loadImage privado (decode <img> sin
+// memo — usos en reconocerRapidOcr y rapidOcrCropsOrientacion) se SUSTITUYE
+// por loadImageMemo del repo: el probe de orientación y la pasada-1 del
+// escalonado consumen la MISMA dataUrl → decode UNA vez (el det ya hacía HIT
+// por D62 — ahora también el decode). Verificado contra la eviction tope 2:
+// entre probe → pasada-1 → pasada-2 del escalonado solo viven fotoOriginal y
+// fotoProcesada en la memo → la imagen del acta en vuelo NO se desaloja
+// (máx 2 entradas en la ruta del OCR); el re-OCR de la banda corre DESPUÉS
+// de la elección, sin dependencia con la entrada viva.
+import { canvasCon, loadImageMemo } from "../image-utils";
+import { logger } from "../../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 function canvasDe(img: HTMLImageElement | HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
+  const c = canvasCon(w, h); // SPRINT-A A3 — factory
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
@@ -296,9 +295,7 @@ function preDet(
   if (h <= minHeight || w / h > widthHeightRatio) {
     const newH = Math.max(Math.floor(w / widthHeightRatio), minHeight) * 2;
     padTop = Math.floor(Math.abs(newH - h) / 2);
-    const padded = document.createElement("canvas");
-    padded.width = w;
-    padded.height = h + padTop * 2;
+    const padded = canvasCon(w, h + padTop * 2); // SPRINT-A A3 — factory
     const pctx = ctxDe(padded);
     pctx.fillStyle = "#000000";
     pctx.fillRect(0, 0, padded.width, padded.height);
@@ -544,9 +541,7 @@ function cropLinea(
   const theta = Math.atan2(p1.y - p0.y, p1.x - p0.x);
   const cos = Math.cos(theta);
   const sin = Math.sin(theta);
-  const canvas = document.createElement("canvas");
-  canvas.width = cropW;
-  canvas.height = cropH;
+  const canvas = canvasCon(cropW, cropH); // SPRINT-A A3 — factory
   const ctx = ctxDe(canvas);
   // get_rotate_crop_image equivalente: la matriz del contexto transforma
   // coords de la FUENTE → coords del CANVAS (inversa de [R|p0]): rotación
@@ -721,9 +716,9 @@ async function inferDet(
     data[2 * w * h + px] = (img.data[i] / 255 - 0.5) / 0.5; // R
   }
   const tensor = new rt.ort.Tensor("float32", data, [1, 3, h, w]);
-  console.info(`[e14-rapidocr] det run [1,3,${h},${w}]...`);
+  logger.info(`[e14-rapidocr] det run [1,3,${h},${w}]...`);
   const res = await rt.det.run({ [rt.det.inputNames[0]]: tensor });
-  console.info(`[e14-rapidocr] det run OK (${Math.round(performance.now() - t0)}ms)`);
+  logger.info(`[e14-rapidocr] det run OK (${Math.round(performance.now() - t0)}ms)`);
   const out = res[rt.det.outputNames[0]];
   const pred = out.data as Float32Array;
   const pw = out.dims[3];
@@ -842,7 +837,7 @@ export async function rapidOcrReconocer(
   opts?: { detCap?: number },
 ): Promise<RapidOcrResultado> {
   const tTotal = performance.now();
-  const src = await loadImage(dataUrl);
+  const src = await loadImageMemo(dataUrl); // SPRINT-A A2 — decode memoizado del repo
   // D62 T2 — claveOrigen: el memo del det (probe 1280 ↔ pasada-1 1280 sobre el
   // MISMO bitmap ⇒ HIT; aplicado=1 cambia el string ⇒ miss natural).
   const { boxesFuente, msDet, memoMsAhorrado } = await inferDet(rt, src, opts?.detCap ?? DET_CAP_PROD, dataUrl);
@@ -863,9 +858,7 @@ export async function rapidOcrReconocer(
       // cls: h=48, w=min(192, ceil(48·ratio)) con pad a 192
       const ratio = cv.width / cv.height;
       const wObj = Math.min(192, Math.max(1, Math.ceil(48 * ratio)));
-      const tmp = document.createElement("canvas");
-      tmp.width = wObj;
-      tmp.height = 48;
+      const tmp = canvasCon(wObj, 48); // SPRINT-A A3 — factory
       ctxDe(tmp).drawImage(cv, 0, 0, wObj, 48);
       return tmp;
     });
@@ -884,9 +877,7 @@ export async function rapidOcrReconocer(
   const cropsFinales = crops.map((c, i) => {
     if (!rotar[i]) return c.canvas;
     const cv = c.canvas;
-    const tmp = document.createElement("canvas");
-    tmp.width = cv.width;
-    tmp.height = cv.height;
+    const tmp = canvasCon(cv.width, cv.height); // SPRINT-A A3 — factory
     const ctx = ctxDe(tmp);
     ctx.translate(cv.width, cv.height);
     ctx.rotate(Math.PI);
@@ -932,7 +923,7 @@ export async function rapidOcrReconocer(
   const texto = aceptadas.map((l) => l.texto).join("\n");
   const confMedia =
     aceptadas.length === 0 ? 0 : aceptadas.reduce((s, l) => s + l.conf, 0) / aceptadas.length;
-  console.info(
+  logger.info(
     `[e14-rapidocr] celda: det=${msDet}ms cls=${msCls}ms rec=${msRec}ms · ${boxesFuente.length} cajas · ${aceptadas.length} líneas · conf ${(confMedia * 100).toFixed(1)}% · ${Math.round(performance.now() - tTotal)}ms detMemo=${memoMsAhorrado != null ? `hit msAhorrado=${memoMsAhorrado}` : "miss"}`,
   );
   return {
@@ -968,7 +959,7 @@ export async function rapidOcrCropsOrientacion(
   dataUrl: string,
   k: number,
 ): Promise<{ crops: HTMLCanvasElement[]; w: number; h: number; msDet: number }> {
-  const src = await loadImage(dataUrl);
+  const src = await loadImageMemo(dataUrl); // SPRINT-A A2 — decode memoizado del repo
   // D56 §3 T2: det del probe a DET_CAP_RAPIDO (banco B3 GO: −56%, 0 cajas
   // perdidas) — el probe no necesita det de producción, sí caber en presupuesto.
   // D62 T2 — claveOrigen: este det ALIMENTA el memo (mismo bitmap + cap 1280

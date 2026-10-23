@@ -60,6 +60,8 @@
 import jsQR from "./vendor/jsQR.js";
 import type { Binarizer, ReaderOptions } from "zxing-wasm/reader";
 import type { EstadoEntrada } from "./tipos";
+import { canvasCon, decodeImagenLru } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
+import { logger } from "../../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 // ─── Constantes NUEVAS del kit e63m §1.1 (separadas de las existentes) ──────
 /** Lado largo MÁXIMO del canvas de trabajo (kit §1.1 — igual que el banco:
@@ -105,17 +107,17 @@ export const QR_ESPERA_INTENTOS = 10;
 export const BARRIDO_VENTANAS: readonly number[] = [0.08, 0.11, 0.14, 0.19, 0.25, 0.32];
 /** Presupuesto de reló del barrido zxing (doc hermano §1: 4 000 ms — el
  *  barrido jsQR NO tiene reló: es puro y acotado por nº de ventanas). */
-export const ZXING_BARRIDO_PRESUPUESTO_MS = 4_000;
+const ZXING_BARRIDO_PRESUPUESTO_MS = 4_000; // SPRINT-A A5: de-export (vivo solo aquí)
 /** Binarizadores del barrido zxing en orden (doc hermano §1:
  *  GlobalHistogram→LocalAverage — el banco #77 midió GlobalHistogram ganando
  *  en blur y LocalAverage en nítidas). */
-export const ZXING_BINARIZADORES: readonly Binarizer[] = [
+const ZXING_BINARIZADORES: readonly Binarizer[] = [ // SPRINT-A A5: de-export (vivo solo aquí)
   "GlobalHistogram",
   "LocalAverage",
 ];
 /** El E-14 usa QR — restringir el simbolismo acelera cada ventana del
  *  barrido (micro-decisión declarada: el formato es dato del dominio). */
-export const ZXING_FORMATO = "QRCode" as const;
+const ZXING_FORMATO = "QRCode" as const; // SPRINT-A A5: de-export (vivo solo aquí)
 
 // ─── e71 (Opt-2) — RECORTE de la esquina estándar (kit e71-consolidación) ───
 /** Lado del RECORTE de la esquina estándar del QR (kit: «aprox 600x600 px»):
@@ -292,7 +294,7 @@ function limitesDeCuadrante(
  *  filo del cuadrante de T-1.0): clampea origen y lado, JAMÁS inventa
  *  píxeles (copia fila a fila del buffer fuente). null si el lado pedido
  *  excede la imagen (nada que decodificar ahí). */
-export function ventanaDePixeles(
+function ventanaDePixeles( // SPRINT-A A5: de-export (vivo solo aquí)
   pix: PixelesQr,
   x: number,
   y: number,
@@ -316,7 +318,8 @@ export function ventanaDePixeles(
 
 /** UN intento jsQR sobre UNA ventana (attemptBoth — la inversión la cubre
  *  aquí, no en el tier zxing). Jamás throw (red line e64 §7-4). */
-export function jsQrDeVentana(win: PixelesQr): string | null {
+// SPRINT-A A5: de-export (vivo solo aquí — barrido de ventanas y filo)
+function jsQrDeVentana(win: PixelesQr): string | null {
   try {
     const res = jsQR(win.data, win.width, win.height, {
       inversionAttempts: "attemptBoth",
@@ -473,7 +476,7 @@ async function moduloZxingDe(): Promise<ModZxing | null> {
     // H-3): sin esta traza era imposible distinguir «QR ilegible» de
     // «wasm no cargó» (deploy sin BUILD_STATIC=1, basePath equivocado,
     // red bloqueada). El pipeline NO se rompe: degrada a solo-jsQR.
-    console.warn(
+    logger.warn(
       `[e14] qr-capa0 zxing INDISPONIBLE (wasm/glue no cargó) — rescate degrada a solo-jsQR`,
     );
     modZxing = null;
@@ -578,7 +581,7 @@ export async function barridoQrZxingDePixeles(
 /** Traza EXACTA del formato e63n: `[e14] qr-capa0 tier=<tier> ms=<ms>
  *  payload=<8 chars…>`. Solo-observabilidad: jamás decide nada. */
 function trazaQr(tier: string, payload: string, t0: number): void {
-  console.info(
+  logger.info(
     `[e14] qr-capa0 tier=${tier} ms=${Date.now() - t0} payload=${qrCorto(payload)}`,
   );
 }
@@ -668,7 +671,7 @@ export async function decodificarQrDePixeles(
       return payload;
     }
   }
-  console.info(`[e14] qr-capa0 tier=null ms=${Date.now() - t0}`);
+  logger.info(`[e14] qr-capa0 tier=null ms=${Date.now() - t0}`);
   return null;
 }
 
@@ -678,27 +681,35 @@ export async function decodificarQrDePixeles(
  *  canvasDeTrabajo del banco, byte-idéntico en semántica; e64-qr T-1.4 le
  *  añade el segundo parámetro OPCIONAL para el rescate — la firma existente
  *  no cambia para los callers actuales). null/jamás-throw: un fallo de
- *  render es sin-payload (fallback limpio). */
+ *  render es sin-payload (fallback limpio).
+ *  SPRINT-A (perf/decode-once-v1) A1: el decode pega al LRU compartido del
+ *  pipeline (`decodeImagenLru` con maxDim = MISMA escala min(1,
+ *  ladoLargo/ladoMayor) — el canvas pre-escalado se deriva del MISMO decode
+ *  que luego reusan origen/preProceso/OCR); antes decodificaba la dataURL
+ *  en un <img> privado (y OTRA vez para el rescate 4096). */
 async function pixelesDeCapture(
   dataUrl: string,
   ladoLargo: number = QR_LADO_LARGO,
 ): Promise<PixelesQr | null> {
-  const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("QR_NO_DECODE_IMAGEN"));
-    img.src = dataUrl;
-  });
-  const ladoMayor = Math.max(img.naturalWidth, img.naturalHeight) || 1;
-  const escala = Math.min(1, ladoLargo / ladoMayor);
-  const cv = document.createElement("canvas");
-  cv.width = Math.max(1, Math.round(img.naturalWidth * escala));
-  cv.height = Math.max(1, Math.round(img.naturalHeight * escala));
-  const ctx = cv.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
-  ctx.drawImage(img, 0, 0, cv.width, cv.height);
-  const imgData = ctx.getImageData(0, 0, cv.width, cv.height);
-  return { data: imgData.data, width: cv.width, height: cv.height };
+  try {
+    const fuente = await decodeImagenLru(dataUrl, { maxDim: ladoLargo });
+    let cv: HTMLCanvasElement;
+    if (fuente instanceof HTMLCanvasElement) {
+      cv = fuente; // canvas pre-escalado del LRU (maxDim aplicado)
+    } else {
+      const img = fuente as HTMLImageElement;
+      cv = canvasCon(img.naturalWidth, img.naturalHeight); // SPRINT-A A3 — factory
+      const ctx0 = cv.getContext("2d");
+      if (!ctx0) return null;
+      ctx0.drawImage(img, 0, 0);
+    }
+    const ctx = cv.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    const imgData = ctx.getImageData(0, 0, cv.width, cv.height);
+    return { data: imgData.data, width: cv.width, height: cv.height };
+  } catch {
+    return null; // QR_NO_DECODE_IMAGEN → sin-payload (fallback limpio, igual que antes)
+  }
 }
 
 /** e64-qr T-1.4 — lado largo del RESCATE (SOLO si la cadena a 2048 falla):

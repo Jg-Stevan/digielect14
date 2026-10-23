@@ -17,6 +17,7 @@
  * null → la fila NUNCA se marca (procesa normal — jamás inventar).
  */
 import { fileToCaptureDataUrl } from "@jg-stevan/scanner-core/image-processor";
+import { canvasCon } from "../image-utils"; // SPRINT-A A3 — factory de canvas
 
 /** D65 (T2.2) — umbral del kit, documentado: DEDUP_HAMMING_MAX = 6 (de 64
  *  bits). Distancia ≤ umbral → reutilizarResultado EXACTAMENTE como hoy
@@ -70,9 +71,7 @@ function dhashDeBitmap(fuente: FuenteBitmap): string | null {
   try {
     const W = 9;
     const H = 8;
-    const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
+    const canvas = canvasCon(W, H); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     ctx.drawImage(fuente as CanvasImageSource, 0, 0, W, H);
