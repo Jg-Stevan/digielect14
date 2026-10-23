@@ -637,6 +637,11 @@ export function MasivaView() {
               const enColaVida = f.estado === "PENDIENTE" || f.estado === "DUPLICADA";
               const posCola = enColaVida ? colaVida.indexOf(f.id) + 1 : 0;
               const pctProceso = porcentajeProcesoActa(f, Boolean(esActiva), progreso);
+              // % SOLO si es dato REAL (OCR del reconocedor) — kit T3 honestidad.
+              const ocrPct =
+                esActiva && progreso?.etapa === "ocr" && progreso.ocrFraccion != null
+                  ? Math.min(100, Math.max(0, Math.round(progreso.ocrFraccion * 100)))
+                  : null;
               return (
                 <li
                   key={f.id}
@@ -871,6 +876,53 @@ export function MasivaView() {
                   </div>
                   </div>
 
+                  {/* D65 (T3.3) — BARRA DE VIDA (h-1, tipografía discreta — no
+                      compite con los chips): EN COLA → vacía + «#N de M»;
+                      PROCESANDO preparando/detección/verificación → animada
+                      SIN número; OCR con fracción REAL → determinada + %;
+                      LISTA → 100% verde un instante (transitorio); ERROR →
+                      roja. aria-live SOLO en el texto de etapa (los cambios
+                      de % van en un hermano sin aria-live — kit T3.5).
+                      SPRINT-B (B2): re-cableada del bloque original D65
+                      (perdido en el zip 4f9c871 — AUDITORIA-REGRESION
+                      #1/#2). Plomería intacta: recienListas/enColaVida/
+                      posCola/colaVida + ocrPct (honesto, solo dato real). */}
+                  {(enColaVida || esActiva || f.estado === "ERROR" || (f.estado === "LISTA" && recienListas.has(f.id))) && (
+                    <div className="mt-2">
+                      {esActiva && ocrPct != null ? (
+                        <div
+                          role="progressbar"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={ocrPct}
+                          aria-label={`OCR ${ocrPct}%`}
+                          className="h-1 rounded-full bg-white/10 overflow-hidden"
+                        >
+                          <div className="h-full bg-brand-green" style={{ width: `${ocrPct}%` }} />
+                        </div>
+                      ) : esActiva ? (
+                        <div className="h-1 rounded-full bg-brand-green/40 animate-pulse" aria-hidden />
+                      ) : f.estado === "ERROR" ? (
+                        <div className="h-1 rounded-full bg-red-500/40" aria-hidden />
+                      ) : f.estado === "LISTA" ? (
+                        <div className="h-1 rounded-full bg-brand-green" aria-hidden />
+                      ) : (
+                        <div className="h-1 rounded-full bg-white/5" aria-hidden />
+                      )}
+                      {(enColaVida || (esActiva && progreso)) && (
+                        <p className="mt-1 font-mono text-[11px] tabular-nums tracking-wider text-gray-500 uppercase truncate">
+                          <span aria-live="polite">
+                            {enColaVida
+                              ? `EN COLA #${posCola} DE ${colaVida.length}`
+                              : progreso
+                                ? etiquetaVida({ etapa: progreso.etapa })
+                                : ""}
+                          </span>
+                          {ocrPct != null && <span> {ocrPct}%</span>}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
 

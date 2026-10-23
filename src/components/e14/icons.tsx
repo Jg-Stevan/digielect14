@@ -257,21 +257,11 @@ export const StitchGridIcon = ({ className = "w-4 h-4" }: IconProps) => (
   </svg>
 );
 
-/** Encuadre del botón amarillo de modo (mock 1, strokeWidth 2.2). */
-export const StitchFrameIcon = ({ className = "w-5 h-5" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current fill-none`}
-    strokeWidth="2.2"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path
-      d="M3 7V5a2 2 0 012-2h2m10 0h2a2 2 0 012 2v2m0 10v2a2 2 0 01-2 2h-2m-10 0H5a2 2 0 01-2-2v-2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
+/** SPRINT-B (B3): StitchFrameIcon BORRADO — su único consumidor era el botón
+ *  amarillo del menú §6.3 perdido en el zip 4f9c871 (audit #7: derivado).
+ *  grep src/ scripts/ = solo esta definición; el import muerto ya se había
+ *  quitado en 2c011a2 (bucket A). El dueño confirma el abandono del menú
+ *  (el segmented CÁMARA/SIM/SUBIR es la UI vigente). */
 
 /** Importar del dock (mock 1: documento con flecha descendente). */
 export const StitchImportIcon = ({ className = "w-6 h-6" }: IconProps) => (
