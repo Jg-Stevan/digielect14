@@ -403,3 +403,13 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] T-5 — `vaciar()` NO toca el histórico (REVERSA de D-e65-8 → **D-e65b-1**: la cola es el taller, el envío es el hecho); `cola.ts vaciar` y `borrarHistorico` INTACTOS (cero código nuevo — comentario + declaración).
 - [x] T-6 — docs: REPORTE-e65b + ROADMAP + worklog; adenda honesta del QA e65 (scan del índice LIVIANO — la llave se amplió con `qrPayload` por el propio kit T-2b).
 - [x] QA — `scripts/qa-historico-enviadas.ts` **49/49** (source-scan F1-F8 + red lines RL-e65b-1..8 + D57 + M-e65b-*) · regresión TOTAL 7 suites: dedup-enviadas 42/42 · qr-identidad 68/68 · autoenvío 33/33 · escaneo-ya-recortado 24/24 · identidad-acta 30/30 · watchdog-relectura 34/34 · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
+
+## AUDIT OVERNIGHT 2026-10-22 — pasada de calidad autónoma (rama `audit/overnight-20261022`, base `quality-pass-1`) — dead code 3B + suite Vitest + logger
+
+- [x] PLAN-overnight.md con clasificación 🟢/🟡/🔒 (commit 233600f) — límites 20 commits/6h, gate por commit.
+- [x] 3B-B1a..B3c dead code con protocolo §2.2-proto (8 commits): 7 iconos borrados; de-exports con uso interno en types/primitives/deskew/cola/informe/orientacion/divipol; 🔒 StitchFrameIcon/borrarHistorico/dhash64DeDataUrl documentados. knip 72→37.
+- [x] Suite unitaria Vitest: vitest@5 + 53 casos (clasificador 23 · completitud 10 · divipol 20) — cero cambios de lógica; script `npm run test`.
+- [x] logger.ts (política debug/info gated, warn/error siempre) + divipol migrado.
+- [x] scripts/check-quality.sh — gate único (tsc+lint+build+vitest+7QA+knip).
+- [x] AUDIT.md §6 + MORNING-REPORT.md + worklog + PR (sin merge).
+- [ ] Fase 4 (dueño): decisiones D65 B1/B2, módulos grandes (identidad-qr/store/precalor/rapidocr), migración console grandes, Playwright smoke.
