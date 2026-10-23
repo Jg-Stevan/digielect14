@@ -24,7 +24,7 @@ import {
   TTL_MS,
 } from "./buffer";
 import { calcularTier, osDeUA } from "./dispositivo";
-import type { EventoObs } from "./tipos";
+import type { EventoObs, SaludSnapshot } from "./tipos";
 
 /** Evento error/warn de utilidad para las pruebas de agrupación. */
 function eventoError(
@@ -856,6 +856,215 @@ describe("politica · defaults / corrupto / overrides (C5-C6)", () => {
       window.localStorage.setItem("e14-flags-overrides", "###");
       expect(p.leerOverridesFlags()).toEqual({});
     } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+});
+
+// ─── C6 · export (percentiles, merge de uso, reporte) ──────────────────────
+
+/** El export importa ../store estáticamente (grafo del core no resoluble
+ *  en node) — mock ligero para TODOS los tests de export. */
+async function importarExport(): Promise<typeof import("./export")> {
+  vi.doMock("../store", () => ({
+    useE14Store: { getState: () => ({ actaActual: null }), subscribe: () => () => {} },
+  }));
+  vi.doMock("../masiva/cola", () => ({
+    listarMapeados: async () => {},
+  }));
+  return import("./export");
+}
+
+function limpiarExport(): void {
+  vi.doUnmock("../store");
+  vi.doUnmock("../masiva/cola");
+  vi.resetModules();
+}
+
+describe("export · helpers puros (C6)", () => {
+  it("percentilDe: nearest-rank sobre lista ascendente (y vacío → null)", async () => {
+    const { percentilDe } = await importarExport();
+    try {
+      expect(percentilDe([], 50)).toBeNull();
+      expect(percentilDe([10], 50)).toBe(10);
+      expect(percentilDe([10, 20, 30, 40], 50)).toBe(20); // ceil(0.5*4)=2 → idx 1
+      expect(percentilDe([10, 20, 30, 40], 95)).toBe(40); // ceil(0.95*4)=4 → idx 3
+      expect(percentilDe([1, 2], 50)).toBe(1); // ceil(1)=1 → idx 0
+    } finally {
+      limpiarExport();
+    }
+  });
+
+  it("selloDe: YYYYMMDD-HHmm hora local con padding", async () => {
+    const { selloDe } = await importarExport();
+    try {
+      expect(selloDe(new Date(2026, 9, 23, 9, 5))).toBe("20261023-0905");
+      expect(selloDe(new Date(2026, 11, 31, 23, 59))).toBe("20261231-2359");
+    } finally {
+      limpiarExport();
+    }
+  });
+
+  it("agregarUso: merge por dia|vista|accion sumando n; ignora basura", async () => {
+    const { agregarUso } = await importarExport();
+    try {
+      const ev = (datos: unknown): EventoObs => ({
+        id: "x",
+        ts: 1,
+        tipo: "uso",
+        sesion: "s",
+        dispositivo: "d",
+        appVersion: "0.1.0",
+        datos: datos as EventoObs["datos"],
+      });
+      const salida = agregarUso([
+        ev({ dia: "2026-10-23", vista: "masiva", accion: "fila→LISTA", n: 2 }),
+        ev({ dia: "2026-10-23", vista: "masiva", accion: "fila→LISTA", n: 3 }),
+        ev({ dia: "2026-10-24", vista: "masiva", accion: "fila→LISTA", n: 1 }),
+        ev({ foo: "no-es-contador" }),
+        ev({ vista: 42, accion: null }),
+      ]);
+      expect(salida).toHaveLength(2);
+      expect(salida).toContainEqual({ dia: "2026-10-23", vista: "masiva", accion: "fila→LISTA", n: 5 });
+      expect(salida).toContainEqual({ dia: "2026-10-24", vista: "masiva", accion: "fila→LISTA", n: 1 });
+    } finally {
+      limpiarExport();
+    }
+  });
+});
+
+describe("export · perfDeDiags (agrega de ACTAS/diagnósticos, no de eventos — C6)", () => {
+  function fragDiag(ocrMs: number, completa: boolean): { tiempos: { ocrMs: number; procesoMs: number; calidadMs: number; totalMs: number }; gate: { completa: boolean } } {
+    return {
+      tiempos: { ocrMs, procesoMs: 1, calidadMs: 1, totalMs: ocrMs + 2 },
+      gate: { completa },
+    };
+  }
+
+  it("p50/p95 de ocrMs, fallosGate y memoriaPico desde saludMuestras", async () => {
+    const { perfDeDiags } = await importarExport();
+    try {
+      const diags = [
+        fragDiag(100, true),
+        fragDiag(200, true),
+        fragDiag(300, false),
+        fragDiag(0, true), // copia DUPLICADA sin OCR real → excluida del percentil
+      ];
+      const resumen = perfDeDiags(diags, [
+        { memoriaMB: 12.5 },
+        { memoriaMB: 88.2 },
+        { memoriaMB: null },
+      ] as SaludSnapshot[]);
+      expect(resumen.actas).toBe(4); // TODAS cuentan (la copia es acta)
+      expect(resumen.p50OcrMs).toBe(200); // [100,200,300] → idx 1
+      expect(resumen.p95OcrMs).toBe(300);
+      expect(resumen.fallosGate).toBe(1);
+      expect(resumen.memoriaPicoMB).toBe(88.2);
+    } finally {
+      limpiarExport();
+    }
+  });
+
+  it("sin actas ni muestras → nulls honestos", async () => {
+    const { perfDeDiags } = await importarExport();
+    try {
+      const resumen = perfDeDiags([], []);
+      expect(resumen).toEqual({ actas: 0, p50OcrMs: null, p95OcrMs: null, fallosGate: 0, memoriaPicoMB: null });
+    } finally {
+      limpiarExport();
+    }
+  });
+});
+
+describe("export · construirReporte (C6)", () => {
+  it("monta el ReporteSesion del contrato: meta+dispositivo+errores+perf+salud+uso", async () => {
+    // buffer con: 2 salud, 3 uso, 1 error con digest
+    vi.doMock("../store", () => ({
+      useE14Store: {
+        getState: () => ({
+          actaActual: { id: "a-1", status: "RECHAZADA", diagnostico: { tiempos: { ocrMs: 250, procesoMs: 1, calidadMs: 1, totalMs: 252 }, gate: { completa: false } } },
+        }),
+        subscribe: () => () => {},
+      },
+    }));
+    vi.doMock("../masiva/cola", () => ({
+      listarMapeados: async (mapper: (r: unknown) => unknown) => {
+        void mapper; // el mapper corre; extrae los diag que quiera
+        const registros = [
+          { id: "f1", acta: { id: "a-2", status: "LISTA", diagnostico: { tiempos: { ocrMs: 750, procesoMs: 1, calidadMs: 1, totalMs: 752 }, gate: { completa: true } } } },
+          { id: "f2", acta: null },
+        ];
+        for (const r of registros) mapper(r);
+      },
+    }));
+    vi.doMock("./buffer", async () => ({
+      eventosPorDigest: async () => [{ digest: "dd000001", severidad: "error", veces: 1, breadcrumbsRecientes: [] }],
+      leerEventos: async (f?: (e: EventoObs) => boolean) => {
+        const eventos: EventoObs[] = [
+          { id: "1", ts: 1, tipo: "salud", sesion: "s", dispositivo: "d", appVersion: "0.1.0", datos: { memoriaMB: 10, tier: "ALTO", tierInferido: false, nucleos: 8, memoriaGB: 8, bateria: { nivel: null, cargando: null }, red: { tipo: null, downlinkMbps: null, saveData: false }, storageLibreMB: null } },
+          { id: "2", ts: 2, tipo: "salud", sesion: "s", dispositivo: "d", appVersion: "0.1.0", datos: { memoriaMB: 20, tier: "ALTO", tierInferido: false, nucleos: 8, memoriaGB: 8, bateria: { nivel: null, cargando: null }, red: { tipo: null, downlinkMbps: null, saveData: false }, storageLibreMB: null } },
+          { id: "3", ts: 3, tipo: "uso", sesion: "s", dispositivo: "d", appVersion: "0.1.0", datos: { dia: "2026-10-23", vista: "resumen", accion: "abrir-vista", n: 4 } },
+          { id: "4", ts: 4, tipo: "uso", sesion: "s", dispositivo: "d", appVersion: "0.1.0", datos: { dia: "2026-10-23", vista: "resumen", accion: "abrir-vista", n: 1 } },
+          { id: "5", ts: 5, tipo: "error", sesion: "s", dispositivo: "d", appVersion: "0.1.0", datos: { digest: "dd000001" } },
+        ];
+        return f ? eventos.filter(f) : eventos;
+      },
+      purgarBuffer: async () => {},
+    }));
+    vi.doMock("./dispositivo", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      obtenerDispositivo: async () => ({
+        memoriaMB: 15, nucleos: 8, memoriaGB: 8,
+        bateria: { nivel: null, cargando: null },
+        red: { tipo: "4g", downlinkMbps: 10, saveData: false },
+        storageLibreMB: 12000, tier: "ALTO", tierInferido: false,
+        os: "Android", ua: "UA-TEST",
+      }),
+    }));
+    vi.doMock("../store", () => ({
+      useE14Store: {
+        getState: () => ({
+          actaActual: { id: "a-1", status: "RECHAZADA", diagnostico: { tiempos: { ocrMs: 250, procesoMs: 1, calidadMs: 1, totalMs: 252 }, gate: { completa: false } } },
+        }),
+        subscribe: () => () => {},
+      },
+    }));
+    vi.doMock("../masiva/cola", () => ({
+      listarMapeados: async (mapper: (r: unknown) => unknown) => {
+        void mapper; // el mapper corre; extrae los diag que quiera
+        const registros = [
+          { id: "f1", acta: { id: "a-2", status: "LISTA", diagnostico: { tiempos: { ocrMs: 750, procesoMs: 1, calidadMs: 1, totalMs: 752 }, gate: { completa: true } } } },
+          { id: "f2", acta: null },
+        ];
+        for (const r of registros) mapper(r);
+      },
+    }));
+    vi.stubGlobal("window", {
+      localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    try {
+      const ex = await import("./export");
+      const reporte = await ex.construirReporte();
+      expect(reporte.meta.appVersion).toBe("0.1.0");
+      expect(reporte.meta.politica).toEqual({ metadatos: true, textoOcr: false, miniaturas: false, saludEnVivo: true });
+      expect(reporte.meta.generado).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(reporte.dispositivo.os).toBe("Android");
+      expect(reporte.erroresAgrupados).toEqual([{ digest: "dd000001", severidad: "error", veces: 1, breadcrumbsRecientes: [] }]);
+      expect(reporte.perfResumen.actas).toBe(2); // actaActual + fila f1
+      expect(reporte.perfResumen.p50OcrMs).toBe(250); // [250, 750]
+      expect(reporte.perfResumen.p95OcrMs).toBe(750);
+      expect(reporte.perfResumen.fallosGate).toBe(1);
+      expect(reporte.perfResumen.memoriaPicoMB).toBe(20); // máx de las 2 muestras
+      expect(reporte.saludMuestras).toHaveLength(2);
+      expect(reporte.uso).toEqual([{ dia: "2026-10-23", vista: "resumen", accion: "abrir-vista", n: 5 }]);
+    } finally {
+      vi.doUnmock("./buffer");
+      vi.doUnmock("./dispositivo");
+      vi.doUnmock("../store");
+      vi.doUnmock("../masiva/cola");
       vi.unstubAllGlobals();
       vi.resetModules();
     }
