@@ -10,14 +10,16 @@
  * KIT e14-observabilidad-v1 (agente 2 · C1): tuerca del modo de
  * diagnóstico SIEMPRE visible arriba-izquierda del header (dev/
  * TuercaResumen) — activación armada, panel desde C4.
+ * KIT e14-observabilidad-v1 (agente 2 · C3): el botón INFORME ZIP sale de
+ * Resumen — el flujo (lazy import generarInformeZip + downloadBlob,
+ * chequeo de cola vacía, mensajes) MIGRA a la sección Exportar del
+ * PanelDev (C4). Resumen queda con: barra segmentada, tarjetas,
+ * historial, reiniciar jornada y tuerca.
  */
 import { useEffect, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import type { HistorialRow } from "@/lib/e14/types";
 import { PUESTO_SIMULADO } from "@/lib/e14/seed";
-// KIT e14-informe-analisis-v1 (T2): chequeo barato de la cola masiva al
-// montar — decide el disabled del botón INFORME ↓ (cola.ts INTOCABLE).
-import { contarRegistros } from "@/lib/e14/masiva/cola";
 import { SegmentedBar } from "../primitives";
 // KIT e14-observabilidad-v1 (agente 2 · C1): puerta del modo de diagnóstico.
 import { TuercaResumen } from "../dev/TuercaResumen";
@@ -52,11 +54,6 @@ export function ResumenView() {
   const modoSimulacion = useE14Store((s) => s.modoSimulacion);
   const puestoMostrado = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
 
-  const [colaVacia, setColaVacia] = useState(true);
-  const [generando, setGenerando] = useState(false);
-  const [listo, setListo] = useState(false);
-  const [motivo, setMotivo] = useState<string | null>(null);
-
   const reiniciarJornada = useE14Store((s) => s.reiniciarJornada);
   const [reiniciarArmado, setReiniciarArmado] = useState(false);
   useEffect(() => {
@@ -64,43 +61,6 @@ export function ResumenView() {
     const t = window.setTimeout(() => setReiniciarArmado(false), 4000);
     return () => window.clearTimeout(t);
   }, [reiniciarArmado]);
-
-  useEffect(() => {
-    let vivo = true;
-    contarRegistros()
-      .then((total) => {
-        if (vivo) setColaVacia(total === 0);
-      })
-      .catch(() => {
-        if (vivo) setColaVacia(true);
-      });
-    return () => {
-      vivo = false;
-    };
-  }, []);
-
-  const generarInforme = async () => {
-    if (generando || colaVacia) return;
-    setGenerando(true);
-    setListo(false);
-    setMotivo(null);
-    try {
-      const [{ generarInformeZip }, { downloadBlob }] = await Promise.all([
-        import("@/lib/e14/informe"),
-        import("@jg-stevan/scanner-core/pdf-export"),
-      ]);
-      const { blob, nombre } = await generarInformeZip();
-      downloadBlob(blob, nombre);
-      setListo(true);
-      window.setTimeout(() => setListo(false), 1500);
-    } catch (err) {
-      const crudo = err instanceof Error ? err.message : String(err);
-      const corto = crudo.replace(/\s+/g, " ").trim().slice(0, 48);
-      setMotivo((corto || "NO SE PUDO GENERAR").toUpperCase());
-    } finally {
-      setGenerando(false);
-    }
-  };
 
   const totalPaginas = mesas.reduce((n, m) => n + m.paginas.length, 0);
   const paginasOk = mesas.reduce(
@@ -215,46 +175,9 @@ export function ResumenView() {
           </div>
         </div>
 
-        {/* Acciones de informe y fin de jornada */}
+        {/* Fin de jornada — el INFORME ZIP salió de aquí en C3 (migró al
+            PanelDev, sección Exportar) */}
         <section className="flex flex-col items-center gap-2.5 pt-1">
-          <button
-            type="button"
-            onClick={() => {
-              void generarInforme();
-            }}
-            disabled={colaVacia || generando || listo}
-            aria-label="Generar informe de análisis (ZIP)"
-            className="w-full lg:max-w-sm min-h-[44px] px-6 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-xs font-black uppercase tracking-wider shadow-lg shadow-[#10b981]/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
-          >
-            <span>↓</span>
-            <span>
-              {listo
-                ? "INFORME GENERADO ✓"
-                : generando
-                  ? "GENERANDO ZIP…"
-                  : colaVacia
-                    ? "INFORME ZIP (COLA VACÍA)"
-                    : "DESCARGAR INFORME ZIP"}
-            </span>
-          </button>
-          {generando && (
-            <p
-              role="status"
-              aria-live="polite"
-              className="inline-block rounded-full border border-slate-800 bg-[#10161f] px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-slate-300"
-            >
-              EMPAQUETANDO ARCHIVOS DE AUDITORÍA…
-            </p>
-          )}
-          {motivo && (
-            <p
-              role="alert"
-              className="rounded-xl border border-amber-400/60 bg-amber-400/10 px-3.5 py-2 font-mono text-[11px] font-bold uppercase tracking-wider text-amber-400"
-            >
-              {motivo}
-            </p>
-          )}
-
           <button
             type="button"
             onClick={() => {
