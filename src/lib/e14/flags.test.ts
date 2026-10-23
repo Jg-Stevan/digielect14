@@ -47,6 +47,7 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       ocrThreadsTope: 4,
       telemetriaSalud: true,
       endpointReportes: null,
+      colaPersistente: true,
     });
   });
 
@@ -119,6 +120,45 @@ describe("flags · poolWorkers wiring (poolworkers-wiring-v1)", () => {
       },
     });
     expect(leerFlags().poolWorkers).toBe(2);
+  });
+});
+
+describe("flags · colaPersistente wiring (cola-persistente-v1)", () => {
+  it("sin override → colaPersistente default = true (la masiva SOLO muere con vaciar() del dueño)", () => {
+    stubWindow();
+    expect(leerFlags().colaPersistente).toBe(true);
+  });
+
+  it("override false → se respeta (MODO PRUEBAS e64p: auto-borrado al cargar)", () => {
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ colaPersistente: false }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().colaPersistente).toBe(false);
+  });
+
+  it("override no-booleano (0, \"x\", null) → saneo lo descarta y cae al default seguro true (nunca borrar por accidente)", () => {
+    expect(sanearFlags({ colaPersistente: 0 })).toEqual({});
+    expect(sanearFlags({ colaPersistente: "x" })).toEqual({});
+    expect(sanearFlags({ colaPersistente: null })).toEqual({});
+    // Con un override hostil el efectivo sigue siendo el default:
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ colaPersistente: 0 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().colaPersistente).toBe(true);
   });
 });
 
