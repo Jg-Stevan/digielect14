@@ -20,7 +20,7 @@
  * `new URL(..., import.meta.url)` — NADA en `public/**` ni `src/assets/**`.
  */
 
-import { decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1 — decode-once LRU compartido
+import { canvasCon, decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
 
 /** Entradas de comprimido que son imágenes (por extensión — kit T2.2). */
 const EXT_IMAGEN = /\.(jpe?g|png|webp|bmp|gif|avif|heic|heif)$/i;
@@ -97,9 +97,7 @@ async function bitmapAMaestro(
     const escala = Math.min(1, MAESTRO_LADO_MAYOR / lado);
     const ancho = Math.max(1, Math.round(fuente.naturalWidth * escala));
     const alto = Math.max(1, Math.round(fuente.naturalHeight * escala));
-    const canvas = document.createElement("canvas");
-    canvas.width = ancho;
-    canvas.height = alto;
+    const canvas = canvasCon(ancho, alto); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(fuente, 0, 0, ancho, alto);
@@ -314,9 +312,9 @@ export async function extraerPdf(archivo: File): Promise<ResultadoExtraccion> {
         PDF_ESCALA_MAX
       );
       const viewport = page.getViewport({ scale: escala });
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(viewport.width);
-      canvas.height = Math.round(viewport.height);
+      // Firma v6 (RenderParameters.canvas requerido): canvasCon da el lienzo;
+      // willReadFrequently NO aplica — render, no lectura (D60 §T2.8).
+      const canvas = canvasCon(Math.round(viewport.width), Math.round(viewport.height)); // SPRINT-A A3 — factory
       // Firma v6 (RenderParameters.canvas requerido — ctx interno de pdf.js;
       // willReadFrequently NO aplica: render, no lectura — D60 §T2.8).
       await page.render({ canvas, viewport }).promise;

@@ -28,7 +28,7 @@
 /** Origen del archivo. null = sin veredicto (duda honesta — jamás inventar). */
 export type OrigenActa = "escaneo" | "foto" | null;
 
-import { decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1 — decode-once LRU compartido
+import { canvasCon, decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
 
 /** Veredicto del detector + señales auditables (traza de POR QUÉ decidió). */
 export interface OrigenVeredicto {
@@ -370,12 +370,10 @@ async function bitmapDeArchivo(archivo: Blob): Promise<OrigenBitmap | null> {
   try {
     const fuente = await decodeImagenLruDeBlob(archivo);
     const img = fuente as HTMLImageElement;
-    const canvas = document.createElement("canvas");
-    canvas.width = BITMAP_LADO;
-    canvas.height = Math.max(
-      1,
-      Math.round((img.naturalHeight * BITMAP_LADO) / (img.naturalWidth || 1)),
-    );
+    const canvas = canvasCon(
+      BITMAP_LADO,
+      Math.max(1, Math.round((img.naturalHeight * BITMAP_LADO) / (img.naturalWidth || 1))),
+    ); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) {
       return null;
