@@ -41,11 +41,13 @@ async function leerFuente(rel: string): Promise<string | null> {
   }
 }
 
-/** Lista recursiva de archivos .ts/.tsx (sin .test.ts) bajo dirRel. */
+/** Lista recursiva de archivos .ts/.tsx (sin .test.ts) bajo dirRel.
+ *  dirRel es RELATIVO A LA RAÍZ del repo (prefijo `../` obligatorio — ver
+ *  nota en qa-obs-contract.ts; bug de FASE 0 corregido en la calibración). */
 async function listarTs(dirRel: string): Promise<string[]> {
   const out: string[] = [];
   async function walk(dir: string): Promise<void> {
-    const entradas = await readdir(new URL(dir, import.meta.url), { withFileTypes: true }).catch(
+    const entradas = await readdir(new URL(`../${dir}`, import.meta.url), { withFileTypes: true }).catch(
       () => null,
     );
     if (entradas === null) return; // dir ausente — FASE 0
@@ -134,16 +136,18 @@ ok(
   "buffer.ts y transporte.ts sin blob/File/dataURL (jamás viaja contenido de actas)",
 );
 
-// La ruta de miniaturas (si existe) en export.ts va SIEMPRE tras un chequeo
-// de política (leerPolitica/politica.) — default OFF, D4.
+// La ÚNICA ruta de muestras de miniaturas vive en export.ts y queda gated
+// por el chequeo de política (miniaturas default OFF — D4).
+// CALIBRADO (FASE 1, núcleo real del agente 1): la heurística «toda mención
+// de la palabra miniaturas cerca de politica» marcaba el NOMBRE del helper
+// (miniaturasDeFallidas) — el ancla ahora verifica la RUTA: la llamada al
+// productor de muestras ocurre DENTRO del if de política.
 const expSinCom = quitarComentarios(srcExport);
-const ventanasMiniaturas = [...expSinCom.matchAll(/miniaturas/g)].map((m) => {
-  const i = m.index ?? 0;
-  return expSinCom.slice(Math.max(0, i - 600), i + 200);
-});
+const idxGate = expSinCom.search(/if\s*\([^)]*politica\.miniaturas/);
+const idxLlamadaMuestras = idxGate >= 0 ? expSinCom.indexOf("miniaturasDeFallidas()", idxGate) : -1;
 ok(
-  ventanasMiniaturas.every((v) => /politica/i.test(v)),
-  `toda mención de miniaturas en export.ts (${ventanasMiniaturas.length}) va junto al chequeo de política (0 = sin ruta de miniaturas — D4)`,
+  idxGate >= 0 && idxLlamadaMuestras > idxGate && idxLlamadaMuestras - idxGate < 300,
+  "la única ruta de muestras (miniaturasDeFallidas) se invoca DENTRO de `if (…politica.miniaturas…)` — muestras solo con el toggle ON (D4)",
 );
 
 // ---------- Bloque d · actaId plano JAMÁS fuera de captura.ts ----------
@@ -159,8 +163,8 @@ ok(
     .filter((p) => !p.ruta.endsWith("obs/captura.ts"))
     .filter((p) => /actaId(?!Hash)/.test(quitarComentarios(p.src)));
   ok(
-    conActaIdPlano.length === 0,
-    `actaId plano SOLO en captura.ts (firma §4.3 que lo recibe y hashea) — fuera de ella: ${conActaIdPlano.length} archivos`,
+    srcCaptura !== null && conActaIdPlano.length === 0,
+    `actaId plano SOLO en captura.ts (firma §4.3 que lo recibe y hashea — captura.ts presente: ${srcCaptura !== null}) — fuera de ella: ${conActaIdPlano.length} archivos`,
   );
 }
 
@@ -168,11 +172,13 @@ ok(
 
 console.log("— Bloque e · export.ts re-verifica la política (defensa en profundidad) —");
 
+// CALIBRADO (FASE 1): el scrub de textoOcr es ESTRUCTURAL (el ReporteSesion
+// del contrato §4.2 no tiene campo de texto — doc de export.ts) y el de
+// miniaturas es el gate del bloque c. El ancla verifica la lectura real de
+// la política (leerPolitica()) + el gate de muestras.
 ok(
-  /leerPolitica\s*\(/.test(expSinCom) &&
-    expSinCom.includes("textoOcr") &&
-    expSinCom.includes("miniaturas"),
-  "export.ts construye el reporte vía leerPolitica y respeta textoOcr/miniaturas (D4)",
+  /leerPolitica\s*\(/.test(expSinCom) && idxGate >= 0,
+  "export.ts construye el reporte vía leerPolitica() y las muestras quedan gated por politica.miniaturas (textoOcr es estructural: ReporteSesion sin campo de texto — D4)",
 );
 
 // ---------- resultado ----------

@@ -46,11 +46,13 @@ async function leerFuente(rel: string): Promise<string | null> {
   }
 }
 
-/** Lista recursiva de archivos .ts/.tsx (sin .test.ts) bajo dirRel. */
+/** Lista recursiva de archivos .ts/.tsx (sin .test.ts) bajo dirRel.
+ *  dirRel es RELATIVO A LA RAÍZ del repo (prefijo `../` obligatorio — ver
+ *  nota en qa-obs-contract.ts; bug de FASE 0 corregido en la calibración). */
 async function listarTs(dirRel: string): Promise<string[]> {
   const out: string[] = [];
   async function walk(dir: string): Promise<void> {
-    const entradas = await readdir(new URL(dir, import.meta.url), { withFileTypes: true }).catch(
+    const entradas = await readdir(new URL(`../${dir}`, import.meta.url), { withFileTypes: true }).catch(
       () => null,
     );
     if (entradas === null) return; // dir ausente — FASE 0
@@ -62,6 +64,15 @@ async function listarTs(dirRel: string): Promise<string[]> {
   }
   await walk(dirRel);
   return out;
+}
+
+/** Quita comentarios de línea y bloque (los greps negativos no deben
+ *  dispararse por menciones en documentación del propio código — patrón
+ *  qa-obs-privacidad.ts). */
+function quitarComentarios(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
 }
 
 // ---------- Objetivos ----------
@@ -96,18 +107,30 @@ if (!devExiste) {
 
 console.log("— Bloque a · ResumenView sin INFORME ZIP (migró al panel dev) —");
 
+// CALIBRADO (FASE 1, UI real del agente 2): la cabecera de ResumenView
+// documenta la migración y menciona `INFORME ZIP`/`generarInformeZip` en
+// COMENTARIO — el grep negativo corre sobre el código (sin comentarios).
+// Evidencia: screens/ResumenView.tsx L13-15 (doc) vs código limpio.
+const resumenSinCom = quitarComentarios(srcResumen);
+
 ok(
-  !srcResumen.includes("INFORME ZIP") && !srcResumen.includes("generarInformeZip"),
-  "ResumenView.tsx SIN `INFORME ZIP` ni `generarInformeZip` (grep negativo — kit A3-C4 a)",
+  !resumenSinCom.includes("INFORME ZIP") && !resumenSinCom.includes("generarInformeZip"),
+  "ResumenView.tsx SIN `INFORME ZIP` ni `generarInformeZip` en CÓDIGO (grep negativo sin comentarios — kit A3-C4 a; el flujo migró a PanelDev §C3)",
 );
 
 // ---------- Bloque b · puerta del modo dev ----------
 
 console.log("— Bloque b · aria-label de la puerta del modo diagnóstico —");
 
+// CALIBRADO (FASE 1, UI real del agente 2): TuercaResumen.tsx L88 usa un
+// ternario — aria-label={modoDev ? "Abrir modo de diagnóstico" :
+// "Activar modo de diagnóstico"} — el binding + el nombre accesible
+// existen; el ancla exige ambos en lugar del literal concatenado.
 ok(
-  todoUi.includes('aria-label="Abrir modo de diagnóstico"'),
-  'aria-label="Abrir modo de diagnóstico" existe (kit A3-C4 b)',
+  /aria-label=\{?/.test(srcDev) &&
+    srcDev.includes('"Abrir modo de diagnóstico"') &&
+    srcDev.includes('"Activar modo de diagnóstico"'),
+  'la puerta del modo diagnóstico tiene aria-label con nombre accesible ("Abrir/Activar modo de diagnóstico" — TuercaResumen; kit A3-C4 b calibrado al ternario)',
 );
 
 // ---------- Bloque c · e14-dev-mode SOLO vía helpers del contrato ----------
