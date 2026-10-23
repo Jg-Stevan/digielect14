@@ -30,6 +30,8 @@ import {
 } from "./historico";
 // SPLIT C1 (refactor/runner-logger-v1): hacerThumb vive en runner-thumbs.ts
 import { logger } from "../../logger";
+// KIT e14-observabilidad-v1 (A1-C7): kill switch de thumbs (flags del dueño).
+import { leerFlags } from "../flags";
 // (responsabilidad de render — movimiento puro del runner).
 import { hacerThumb } from "./runner-thumbs";
 import { iniciarRunner, pausarRunner, rearrancarTrasEncolar } from "./runner";
@@ -1122,9 +1124,13 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
       const actaNueva = acta;
       // Thumb FRESCO si la foto cambió (recorte/filtro/rotación hornean
       // fotoProcesada) — la bandeja no debe mentir.
-      const thumb =
-        (await hacerThumb(actaNueva.fotoProcesada ?? actaNueva.fotoOriginal)) ??
-        registro.thumb;
+      // KIT e14-observabilidad-v1 (A1-C7): kill switch MANUAL del dueño
+      // (flags.thumbsOn, default true → idéntico sin overrides; D6: la app
+      // nunca se auto-configura). OFF → conserva el thumb del registro.
+      const thumb = leerFlags().thumbsOn
+        ? ((await hacerThumb(actaNueva.fotoProcesada ?? actaNueva.fotoOriginal)) ??
+          registro.thumb)
+        : registro.thumb;
       await guardarRegistro({ ...registro, acta: actaNueva, thumb });
       // e65b (T-3c): envío MANUAL desde REVISIÓN — si el dueño envió a mano
       // el acta de esta fila masiva, el desenlace ENVIADO también alimenta

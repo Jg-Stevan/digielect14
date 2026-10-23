@@ -9,9 +9,9 @@
  *  · Con modo dev OFF el panel no existe → CERO timers/listeners de salud
  *    (criterio de aceptación 1 del agente 2).
  *
- * FASE 0: `obtenerDispositivo()` del puente responde `null` honesto (el
- * núcleo obs/ no existe aún); FASE 1 delega en obs/dispositivo.ts sin
- * cambiar a los consumidores.
+ * FASE 1: `obtenerDispositivo()` del puente delega en obs/dispositivo.ts —
+ * snapshot REAL (RAM, núcleos, batería, red, storage, tier); `null` solo si
+ * SSR o el navegador no da APIs (la UI muestra "—", jamás inventa).
  */
 import { useCallback, useEffect, useState } from "react";
 import { obtenerDispositivo, type SnapshotDispositivo } from "./puente";

@@ -19,6 +19,11 @@
  * se usa.
  */
 
+// KIT e14-observabilidad-v1 (A1-C7): tope de threads OCR = flag del dueño
+// (kill switch MANUAL — leerFlags().ocrThreadsTope, default 4 = el literal
+// que vivía aquí). La app NUNCA se auto-configura (D6).
+import { leerFlags } from "../flags";
+
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 // ─── Tipos ORT mínimos (el módulo se importa dinámicamente) ─────────────────
@@ -162,7 +167,9 @@ async function initReal(): Promise<RapidRuntime> {
   ort.env.wasm.wasmPaths = `${PUBLIC_BASE}/vendor/onnxruntime/`;
   ort.env.wasm.numThreads =
     typeof SharedArrayBuffer !== "undefined" && self.crossOriginIsolated
-      ? Math.min(4, navigator.hardwareConcurrency || 1)
+      ? // A1-C7: el `4` era el literal histórico — ahora flag del dueño
+        // (default 4 → comportamiento idéntico sin overrides).
+        Math.min(leerFlags().ocrThreadsTope, navigator.hardwareConcurrency || 1)
       : 1;
   ort.env.wasm.simd = true;
   // KIT e14-optimizacion-v1 (T2, hallazgo #2 de AUDITORIA-e14-v1): proxy=true
