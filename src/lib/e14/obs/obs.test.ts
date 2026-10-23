@@ -14,7 +14,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { agregarErrores, archivoDeStack, digestDe, normalizarMensaje } from "./digest";
 import { appVersion, fnv1a8, idSesion } from "./identidad";
 import {
-  abrirBuffer,
   appendEvento,
   contarEventos,
   eventosPorDigest,
@@ -235,6 +234,13 @@ describe("buffer · mantenimientoBuffer (retención PURA)", () => {
     expect(conservar[0].id).toBe("id-25");
   });
 
+  it("borde TTL: justo dentro queda, un ms fuera se va", () => {
+    const dentro = mantenimientoBuffer([ev(ahora - TTL_MS)], ahora);
+    expect(dentro.borrar).toHaveLength(0);
+    const fuera = mantenimientoBuffer([ev(ahora - TTL_MS - 1)], ahora);
+    expect(fuera.borrar).toHaveLength(1);
+  });
+
   it("lista vacía → nada que hacer", () => {
     const { conservar, borrar } = mantenimientoBuffer([], ahora);
     expect(conservar).toHaveLength(0);
@@ -436,6 +442,97 @@ describe("buffer · IDB (fake mínimo — roundtrip, tope, TTL, digest)", () => 
       await expect(buffer.abrirBuffer()).rejects.toThrow();
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+});
+
+// ─── C3 · logger → transporte obs ──────────────────────────────────────────
+
+describe("logger · transporte obs (C3)", () => {
+  it("logger.error transporta ErrorEvento completo (lazy, no bloquea)", async () => {
+    const capturados: Array<{ tipo: string; datos: Record<string, unknown> }> = [];
+    vi.doMock("./buffer", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      appendEvento: async (e: { tipo: string; datos: Record<string, unknown> }) => {
+        capturados.push(e);
+      },
+    }));
+    vi.doMock("./breadcrumbs", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      obtenerBreadcrumbs: () => [{ t: 7, tipo: "click" as const, detalle: "btn-sim" }],
+    }));
+    try {
+      const { logger } = await import("../../logger");
+      logger.error("boom", 42, { a: 1 });
+      await vi.waitFor(() => expect(capturados.length).toBe(1));
+      const ev = capturados[0];
+      expect(ev.tipo).toBe("error");
+      expect(ev.datos.tipo).toBe("LoggerError");
+      expect(String(ev.datos.mensaje)).toContain("42");
+      expect(String(ev.datos.mensaje)).toContain(String.raw`{"a":1}`);
+      expect(String(ev.datos.stack)).toContain("logger.ts"); // stack real del caller
+      expect(ev.datos.digest).toMatch(/^[0-9a-f]{8}$/);
+      expect(ev.datos.breadcrumbs).toEqual([{ t: 7, tipo: "click", detalle: "btn-sim" }]);
+    } finally {
+      vi.doUnmock("./buffer");
+      vi.doUnmock("./breadcrumbs");
+      vi.resetModules();
+    }
+  });
+
+  it("logger.warn transporta con tipo LoggerWarn", async () => {
+    const capturados: Array<{ tipo: string; datos: { tipo: string } }> = [];
+    vi.doMock("./buffer", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      appendEvento: async (e: { tipo: string; datos: { tipo: string } }) => {
+        capturados.push(e);
+      },
+    }));
+    try {
+      const { logger } = await import("../../logger");
+      logger.warn("degradación");
+      await vi.waitFor(() => expect(capturados.length).toBe(1));
+      expect(capturados[0].tipo).toBe("warn");
+      expect(capturados[0].datos.tipo).toBe("LoggerWarn");
+    } finally {
+      vi.doUnmock("./buffer");
+      vi.resetModules();
+    }
+  });
+
+  it("trunca mensaje a 500 y stack a 2000 (contrato ErrorEvento)", async () => {
+    const capturados: Array<{ datos: { mensaje: string; stack: string } }> = [];
+    vi.doMock("./buffer", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      appendEvento: async (e: { datos: { mensaje: string; stack: string } }) => {
+        capturados.push(e);
+      },
+    }));
+    try {
+      const { logger } = await import("../../logger");
+      logger.error("x".repeat(600));
+      await vi.waitFor(() => expect(capturados.length).toBe(1));
+      expect(capturados[0].datos.mensaje).toHaveLength(500);
+      expect(String(capturados[0].datos.stack).length).toBeLessThanOrEqual(2000);
+    } finally {
+      vi.doUnmock("./buffer");
+      vi.resetModules();
+    }
+  });
+
+  it("si el import del buffer falla (SSR/edge), el logger NO lanza y sigue", async () => {
+    vi.doMock("./buffer", () => {
+      throw new Error("SSR sin obs");
+    });
+    try {
+      const { logger } = await import("../../logger");
+      expect(() => logger.error("sin transporte")).not.toThrow();
+      expect(() => logger.warn("sin transporte")).not.toThrow();
+      // y la consola nativa sigue llamándose (la política del logger intacta)
+      await new Promise((r) => setTimeout(r, 10)); // deja morir el Promise.all en .catch
+    } finally {
+      vi.doUnmock("./buffer");
+      vi.resetModules();
     }
   });
 });
