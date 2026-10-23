@@ -196,14 +196,16 @@ async function initReal(): Promise<RapidRuntime> {
 
 // ─── Utilidades de imagen ───────────────────────────────────────────────────
 
-function loadImage(dataUrl: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("loadImage: decodificación fallida"));
-    img.src = dataUrl;
-  });
-}
+// SPRINT-A (perf/decode-once-v1) A2: el loadImage privado (decode <img> sin
+// memo — usos en reconocerRapidOcr y rapidOcrCropsOrientacion) se SUSTITUYE
+// por loadImageMemo del repo: el probe de orientación y la pasada-1 del
+// escalonado consumen la MISMA dataUrl → decode UNA vez (el det ya hacía HIT
+// por D62 — ahora también el decode). Verificado contra la eviction tope 2:
+// entre probe → pasada-1 → pasada-2 del escalonado solo viven fotoOriginal y
+// fotoProcesada en la memo → la imagen del acta en vuelo NO se desaloja
+// (máx 2 entradas en la ruta del OCR); el re-OCR de la banda corre DESPUÉS
+// de la elección, sin dependencia con la entrada viva.
+import { loadImageMemo } from "../image-utils";
 
 function canvasDe(img: HTMLImageElement | HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {
   const c = document.createElement("canvas");
@@ -842,7 +844,7 @@ export async function rapidOcrReconocer(
   opts?: { detCap?: number },
 ): Promise<RapidOcrResultado> {
   const tTotal = performance.now();
-  const src = await loadImage(dataUrl);
+  const src = await loadImageMemo(dataUrl); // SPRINT-A A2 — decode memoizado del repo
   // D62 T2 — claveOrigen: el memo del det (probe 1280 ↔ pasada-1 1280 sobre el
   // MISMO bitmap ⇒ HIT; aplicado=1 cambia el string ⇒ miss natural).
   const { boxesFuente, msDet, memoMsAhorrado } = await inferDet(rt, src, opts?.detCap ?? DET_CAP_PROD, dataUrl);
@@ -968,7 +970,7 @@ export async function rapidOcrCropsOrientacion(
   dataUrl: string,
   k: number,
 ): Promise<{ crops: HTMLCanvasElement[]; w: number; h: number; msDet: number }> {
-  const src = await loadImage(dataUrl);
+  const src = await loadImageMemo(dataUrl); // SPRINT-A A2 — decode memoizado del repo
   // D56 §3 T2: det del probe a DET_CAP_RAPIDO (banco B3 GO: −56%, 0 cajas
   // perdidas) — el probe no necesita det de producción, sí caber en presupuesto.
   // D62 T2 — claveOrigen: este det ALIMENTA el memo (mismo bitmap + cap 1280
