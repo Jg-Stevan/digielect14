@@ -37,9 +37,6 @@ const nextConfig: NextConfig = {
     "127.0.0.1",
   ],
   images: { unoptimized: true },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   reactStrictMode: false,
 };
 

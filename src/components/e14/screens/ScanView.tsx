@@ -97,7 +97,6 @@ import {
   FolderImportIcon,
   SparklesIcon,
   StitchBoltIcon,
-  StitchFrameIcon,
   StitchGridIcon,
   StitchImportIcon,
   StitchShutterDocIcon,
@@ -1612,6 +1611,7 @@ export function ScanView() {
       procesandoRef.current = false;
       cooldownRef.current = 0;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- las 4 ausentes son estables: setFramePendiente (acción Zustand), mostrarAviso/profileActiveSensor (useCallback []) y aplicarLinternaGuardada (useCallback ← ponerLinterna, que es useCallback []); el arranque SOLO debe correr al cambiar fuente/reintentoCamara
   }, [fuente, reintentoCamara]);
 
   /** Re-asigna el stream al <video> (lab L1255-1261) por si el elemento se
@@ -1635,6 +1635,7 @@ export function ScanView() {
     };
     video.addEventListener("playing", alReproducir);
     return () => video.removeEventListener("playing", alReproducir);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- aplicarLinternaGuardada es estable (useCallback ← ponerLinterna, que es useCallback []); re-suscribir «playing» solo al alternar camaraViva
   }, [camaraViva]);
 
   /** Tamaño del visor (ResizeObserver — mapeo object-cover del overlay). */
@@ -1687,6 +1688,7 @@ export function ScanView() {
       // F-ZSL: libera el Best-Shot ring al cerrar la sesión de cámara.
       liberarAnillo();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- las 3 ausentes son estables: alimentarAnillo (useCallback ← empujarAnillo []), liberarAnillo ([]) y mostrarAviso (useCallback []); el loop usa refs deliberadamente para evitar staleness
   }, [camaraViva]);
 
   /** Linterna — botón SIEMPRE activo con cámara; la verdad al pulsar (lab
