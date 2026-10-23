@@ -47,6 +47,7 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       ocrThreadsTope: 4,
       telemetriaSalud: true,
       endpointReportes: null,
+      colaPersistente: true,
     });
   });
 
@@ -65,6 +66,99 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
     expect(f.ocrThreadsTope).toBe(2);
     expect(f.thumbsOn).toBe(false);
     expect(f.poolWorkers).toBe(2); // lo no-overridden queda en default
+  });
+});
+
+describe("flags · poolWorkers wiring (poolworkers-wiring-v1)", () => {
+  it("sin override → poolWorkers default = 2 (kill switch apagado)", () => {
+    stubWindow();
+    expect(leerFlags().poolWorkers).toBe(2);
+  });
+
+  it("override válido 1 → se respeta (modo secuencial, RAM justa)", () => {
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ poolWorkers: 1 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().poolWorkers).toBe(1);
+  });
+
+  it("override válido 2 → se respeta", () => {
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ poolWorkers: 2 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().poolWorkers).toBe(2);
+  });
+
+  it("override fuera de rango (0, 3, \"x\") → saneo lo descarta y cae al default seguro 2", () => {
+    // Validación defensiva en flags.ts (sanearFlags), NO en el runner (kit §3).
+    expect(sanearFlags({ poolWorkers: 0 })).toEqual({});
+    expect(sanearFlags({ poolWorkers: 3 })).toEqual({});
+    expect(sanearFlags({ poolWorkers: "x" })).toEqual({});
+    // Con un override hostil el efectivo sigue siendo el default:
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ poolWorkers: 0 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().poolWorkers).toBe(2);
+  });
+});
+
+describe("flags · colaPersistente wiring (cola-persistente-v1)", () => {
+  it("sin override → colaPersistente default = true (la masiva SOLO muere con vaciar() del dueño)", () => {
+    stubWindow();
+    expect(leerFlags().colaPersistente).toBe(true);
+  });
+
+  it("override false → se respeta (MODO PRUEBAS e64p: auto-borrado al cargar)", () => {
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ colaPersistente: false }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().colaPersistente).toBe(false);
+  });
+
+  it("override no-booleano (0, \"x\", null) → saneo lo descarta y cae al default seguro true (nunca borrar por accidente)", () => {
+    expect(sanearFlags({ colaPersistente: 0 })).toEqual({});
+    expect(sanearFlags({ colaPersistente: "x" })).toEqual({});
+    expect(sanearFlags({ colaPersistente: null })).toEqual({});
+    // Con un override hostil el efectivo sigue siendo el default:
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ colaPersistente: 0 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().colaPersistente).toBe(true);
   });
 });
 

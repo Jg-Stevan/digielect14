@@ -96,6 +96,7 @@ export interface FlagsApp {
   ocrThreadsTope: number; // default 4
   telemetriaSalud: boolean; // default true
   endpointReportes: string | null; // default null — sin backend, D1
+  colaPersistente: boolean; // default true (cola-persistente-v1) — la masiva SOLO muere con vaciar() del dueño; false = MODO PRUEBAS e64p
 }
 
 export interface ReporteSesion {
