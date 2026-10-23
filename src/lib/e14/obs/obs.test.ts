@@ -23,6 +23,7 @@ import {
   TOPE_EVENTOS,
   TTL_MS,
 } from "./buffer";
+import { calcularTier, osDeUA } from "./dispositivo";
 import type { EventoObs } from "./tipos";
 
 /** Evento error/warn de utilidad para las pruebas de agrupación. */
@@ -658,6 +659,205 @@ describe("uso · contadores (C4)", () => {
       expect(capturados).toHaveLength(1);
     } finally {
       limpiarMocks();
+    }
+  });
+});
+
+// ─── C5 · dispositivo (tier D6) + política ─────────────────────────────────
+
+describe("dispositivo · calcularTier (tabla §4.4 — D6 solo detecta)", () => {
+  const base = {
+    memoriaGB: 4 as number | null,
+    nucleos: 8,
+    saveData: false,
+    bateriaNivel: 0.9 as number | null,
+    bateriaCargando: false as boolean | null,
+    storageLibreMB: 5000 as number | null,
+    redTipo: "4g" as string | null,
+    redWifi: false,
+    heapLimitMB: 2048 as number | null,
+  };
+
+  it("BAJO por deviceMemory < 2", () => {
+    expect(calcularTier({ ...base, memoriaGB: 1.5 })).toEqual({ tier: "BAJO", tierInferido: false });
+  });
+  it("BAJO por núcleos <= 2", () => {
+    expect(calcularTier({ ...base, nucleos: 2 })).toEqual({ tier: "BAJO", tierInferido: false });
+  });
+  it("BAJO por saveData", () => {
+    expect(calcularTier({ ...base, saveData: true })).toEqual({ tier: "BAJO", tierInferido: false });
+  });
+  it("BAJO por batería < 20% SIN cargar (cargando NO condena)", () => {
+    expect(calcularTier({ ...base, bateriaNivel: 0.15, bateriaCargando: false }).tier).toBe("BAJO");
+    expect(calcularTier({ ...base, bateriaNivel: 0.15, bateriaCargando: true }).tier).toBe("ALTO");
+  });
+  it("BAJO por storage libre < 500 MB", () => {
+    expect(calcularTier({ ...base, storageLibreMB: 400 })).toEqual({ tier: "BAJO", tierInferido: false });
+  });
+  it("ALTO exacto: mem>=4 Y nucleos>=6 Y 4g Y !saveData", () => {
+    expect(calcularTier(base)).toEqual({ tier: "ALTO", tierInferido: false });
+  });
+  it("ALTO también con red wifi", () => {
+    expect(calcularTier({ ...base, redTipo: "3g", redWifi: true }).tier).toBe("ALTO");
+  });
+  it("MEDIO: falla UNA pierna del ALTO (3g con deviceMemory real)", () => {
+    expect(calcularTier({ ...base, redTipo: "3g", redWifi: false })).toEqual({ tier: "MEDIO", tierInferido: false });
+  });
+  it("MEDIO: memoria 3 (entre 2 y 4)", () => {
+    expect(calcularTier({ ...base, memoriaGB: 3 })).toEqual({ tier: "MEDIO", tierInferido: false });
+  });
+  it("sin deviceMemory (iOS): nucleos>=6 + heap>=2048 → ALTO INFERIDO", () => {
+    expect(calcularTier({ ...base, memoriaGB: null })).toEqual({ tier: "ALTO", tierInferido: true });
+  });
+  it("sin deviceMemory (iOS): nucleos 4 → MEDIO INFERIDO", () => {
+    expect(calcularTier({ ...base, memoriaGB: null, nucleos: 4 })).toEqual({ tier: "MEDIO", tierInferido: true });
+  });
+  it("sin deviceMemory: núcleos <= 2 sigue condenando BAJO (regla REAL, no inferida)", () => {
+    expect(calcularTier({ ...base, memoriaGB: null, nucleos: 2 })).toEqual({ tier: "BAJO", tierInferido: false });
+  });
+  it("nulls honestos no condenan el BAJO (batería/storage desconocidos); red desconocida solo bloquea ALTO→MEDIO", () => {
+    expect(
+      calcularTier({ ...base, bateriaNivel: null, bateriaCargando: null, storageLibreMB: null }),
+    ).toEqual({ tier: "ALTO", tierInferido: false });
+    // sin señal de red el ALTO no puede confirmarse (regla §4.4 exige 4g/wifi)
+    expect(
+      calcularTier({ ...base, bateriaNivel: null, bateriaCargando: null, storageLibreMB: null, redTipo: null, redWifi: false }),
+    ).toEqual({ tier: "MEDIO", tierInferido: false });
+  });
+});
+
+describe("dispositivo · osDeUA", () => {
+  it("Android antes que Linux (el UA de Android contiene 'Linux')", () => {
+    expect(osDeUA("Mozilla/5.0 (Linux; Android 14; SM-A536E) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")).toBe("Android");
+  });
+  it("iOS", () => {
+    expect(osDeUA("Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15")).toBe("iOS");
+  });
+  it("Windows / macOS / Linux / desconocido", () => {
+    expect(osDeUA("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe("Windows");
+    expect(osDeUA("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")).toBe("macOS");
+    expect(osDeUA("Mozilla/5.0 (X11; Linux x86_64)")).toBe("Linux");
+    expect(osDeUA("robot")).toBe("desconocido");
+  });
+});
+
+describe("politica · defaults / corrupto / overrides (C5-C6)", () => {
+  /** localStorage en memoria para window (node no tiene). */
+  function stubWindow(): Map<string, string> {
+    const store = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+        setItem: (k: string, v: string) => void store.set(k, v),
+        removeItem: (k: string) => void store.delete(k),
+      },
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    return store;
+  }
+
+  it("sin clave → defaults D4 (metadatos ON, textoOcr OFF, miniaturas OFF, salud ON)", async () => {
+    const capturados: unknown[] = [];
+    vi.doMock("./buffer", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      appendEvento: async (e: unknown) => void capturados.push(e),
+    }));
+    const store = stubWindow();
+    try {
+      const p = await import("./politica");
+      expect(p.leerPolitica()).toEqual({
+        metadatos: true,
+        textoOcr: false,
+        miniaturas: false,
+        saludEnVivo: true,
+      });
+      expect(store.size).toBe(0);
+      expect(capturados).toHaveLength(0); // ausente NO avisa (estado de fábrica)
+    } finally {
+      vi.doUnmock("./buffer");
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it("JSON corrupto → defaults + evento warn PoliticaCorrupta", async () => {
+    const capturados: Array<{ tipo: string; datos: { tipo: string } }> = [];
+    vi.doMock("./buffer", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      appendEvento: async (e: { tipo: string; datos: { tipo: string } }) => {
+        capturados.push(e);
+      },
+    }));
+    const store = stubWindow();
+    store.set("e14-obs-politica", "{esto-no-es-json");
+    try {
+      const p = await import("./politica");
+      expect(p.leerPolitica()).toEqual({
+        metadatos: true,
+        textoOcr: false,
+        miniaturas: false,
+        saludEnVivo: true,
+      });
+      await vi.waitFor(() => expect(capturados.length).toBe(1));
+      expect(capturados[0].tipo).toBe("warn");
+      expect(capturados[0].datos.tipo).toBe("PoliticaCorrupta");
+    } finally {
+      vi.doUnmock("./buffer");
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it("guardar/leer roundtrip y parciales → defaults en lo ausente", async () => {
+    stubWindow();
+    try {
+      const p = await import("./politica");
+      p.guardarPolitica({ metadatos: false, textoOcr: true, miniaturas: true, saludEnVivo: false });
+      expect(p.leerPolitica()).toEqual({ metadatos: false, textoOcr: true, miniaturas: true, saludEnVivo: false });
+      // JSON parcial (solo un toggle) → el resto vuelve a defaults
+      window.localStorage.setItem("e14-obs-politica", JSON.stringify({ textoOcr: true }));
+      const leida = p.leerPolitica();
+      expect(leida).toEqual({ metadatos: true, textoOcr: true, miniaturas: false, saludEnVivo: true });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it("modo dev: default off / guardar on-off", async () => {
+    stubWindow();
+    try {
+      const p = await import("./politica");
+      expect(p.leerModoDev()).toBe(false);
+      p.guardarModoDev(true);
+      expect(p.leerModoDev()).toBe(true);
+      p.guardarModoDev(false);
+      expect(p.leerModoDev()).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it("overrides de flags: sanea tipos y clampa ocrThreadsTope (1..8)", async () => {
+    stubWindow();
+    try {
+      const p = await import("./politica");
+      expect(p.leerOverridesFlags()).toEqual({});
+      p.guardarOverridesFlags({ ocrThreadsTope: 99, thumbsOn: false, poolWorkers: 1 });
+      expect(p.leerOverridesFlags()).toEqual({ ocrThreadsTope: 8, thumbsOn: false, poolWorkers: 1 });
+      // merge sobre lo existente (guardarOverrides conserva claves previas)
+      p.guardarOverridesFlags({ telemetriaSalud: false });
+      const o = p.leerOverridesFlags();
+      expect(o.telemetriaSalud).toBe(false);
+      expect(o.thumbsOn).toBe(false);
+      // JSON corrupto → {} silencioso
+      window.localStorage.setItem("e14-flags-overrides", "###");
+      expect(p.leerOverridesFlags()).toEqual({});
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
     }
   });
 });
