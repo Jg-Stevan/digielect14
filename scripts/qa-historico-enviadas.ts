@@ -281,9 +281,13 @@ ok(
   runner.includes("if (!originalQr) {") &&
     runner.indexOf("const enviadaHist = await enviadaPorPayload(qrPayload);") >
       runner.indexOf("if (!originalQr) {") &&
-    runner.indexOf("registrarQrPayload(qrPayload, fila.id);") >
+    // ADENDA e71 (Opt-3): el registro pasó DENTRO de la sección crítica
+    // (conExclusionMutua) y la closure usa la acotación qrPayloadSeguro —
+    // el ORDEN del intent (lookup del ledger ANTES del registro, mapa e63m
+    // manda primero — F7) queda intacto.
+    runner.indexOf("registrarQrPayload(qrPayloadSeguro, fila.id);") >
       runner.indexOf("const enviadaHist = await enviadaPorPayload(qrPayload);"),
-  "T-4/F4: el lookup del ledger corre en la rama SIN original de sesión y ANTES de registrarQrPayload (el mapa e63m manda primero — F7)",
+  "T-4/F4: el lookup del ledger corre en la rama SIN original de sesión y ANTES de registrarQrPayload (el mapa e63m manda primero — F7) [e71: registro en sección crítica con qrPayloadSeguro]",
 );
 
 ok(
