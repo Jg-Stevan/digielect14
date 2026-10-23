@@ -15,7 +15,7 @@ Naturaleza: kill switch, no optimización. El flag `poolWorkers: 1|2` ya existí
 | §3 | Test de saneo del flag (4 casos) + saneo en `flags.ts` si faltara | **HECHO EL TEST** (4 casos, §4 abajo). **El saneo YA EXISTÍA** en `flags.ts:43` (`if (p.poolWorkers === 1 || p.poolWorkers === 2)`) — el kit dice «si… no existe aún, añádelo»: existía, no se tocó flags.ts |
 | §4 | PROHIBIDO: orientacion/scanner-core-bridge/informe/obs/**, 3+ workers, cambiar default, debilitar tests | **RESPECTADO** — `git diff main..HEAD` = 3 archivos de mi territorio + docs |
 | §5 | Gate completo 100 % verde | **VERDE** (§3 abajo) |
-| §6 | Smoke 1-worker / 2-workers | **VERIFICACIÓN ESTÁTICA documentada honestamente** (§4 abajo) — el flujo completo de cola con actas reales no es ejecutable en este entorno |
+| §6 | Smoke 1-worker / 2-workers | **HECHO lo verificable: ESTÁTICA + RUNTIME en navegador** (§4) — la cola con actas reales queda para campo (no ejecutable en este entorno) |
 | §7 | Commits pequeños en español · push | **HECHO** (§2 abajo) |
 
 **Desviaciones menores (documentadas, ninguna funcional):**
@@ -62,9 +62,23 @@ Push: `origin/feat/poolworkers-wiring-v1` (branch único, sin merge — el dueñ
 
 ---
 
-## 4. Smoke (kit §6) — verificación estática + unitaria (honesto)
+## 4. Smoke (kit §6) — estático + RUNTIME en navegador (producción real)
 
-El kit permite documentar verificación estática si el flujo completo no es ejecutable en el entorno. **No se ejecutó una cola real de actas** (requiere modelos OCR + fotos + navegador con el flujo MASIVA completo). Lo verificado:
+El kit permite documentar verificación estática si el flujo completo no es ejecutable en el entorno. La **cadena del flag quedó verificada en RUNTIME** (build de producción standalone :3001, navegador real): la cola con actas reales queda para campo.
+
+### 4.a Runtime (browser, producción standalone)
+
+Ciclo completo del kill switch verificado en el PanelDev (sección «7 · Flags activas», que renderiza `leerFlags()` — la MISMA función que alimenta `PROCESAMIENTO_CONCURRENTE` al cargar el módulo):
+
+| Estado | Tras reload | Veredicto |
+|---|---|---|
+| Sin override | `poolWorkers 2` sin chip | default correcto ✅ |
+| `e14-flags-overrides = {"poolWorkers":1}` | `poolWorkers` **1** **con chip «override»** + tarjeta kill switch «UN SOLO WORKER — poolWorkers 2 → 1» bajo encabezado «(overrides)» | el dueño baja a 1 → cola secuencial ✅ |
+| Override vaciado `{}` | `poolWorkers 2` sin chip | vuelta al default limpia ✅ |
+
+Flujo real ejecutado: tuerca → «¿ACTIVAR EL MODO DE DIAGNÓSTICO?» SÍ → panel abierto (PANEL DEV · ACTIVO, identidad real: TIER BAJO · RAM 4 GB · device-id creado) → override en localStorage → **reload** → tabla con chip → vaciado → **reload** → sin chip. **0 errores de página / 0 errores de consola.** El valor 1 de la tabla es exactamente al que liga la constante del pool en esa carga (kit §0: «el override aplica al recargar la página» — verificado en vivo).
+
+### 4.b Estático + unitario
 
 1. **Cadena de prioridad (unitaria, 4 tests nuevos):** sin override → `poolWorkers = 2` · override `1` → `1` · override `2` → `2` · override `0/3/"x"` → el saneo de `flags.ts` lo descarta y el efectivo es `2`. Cubre el kill switch de punta a punta a nivel `leerFlags()`.
 2. **Wiring estático:** la constante del pool es la ÚNICA fuente del límite de vuelo (`while (enVuelo.size >= PROCESAMIENTO_CONCURRENTE)` L~1335; sin otros hardcodes de pool — grep en `src/` confirma que el resto de referencias usan la constante). Con override `1` el ciclo toma 1 acta por pasada → secuencial; con default `2` → 2 en vuelo (comportamiento e71 intacto).
