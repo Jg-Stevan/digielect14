@@ -2,7 +2,7 @@
  * KIT e14-observabilidad-v1 — contratos del módulo obs.
  * SOLO tipos: cero lógica runtime. Fuente de verdad: README-KITS.md §4.
  */
-export type TipoEvento = "error" | "warn" | "perf" | "salud" | "uso";
+export type TipoEvento = "error" | "warn" | "perf" | "salud" | "uso" | "hang"; // ANEXO Agente C: "hang" NUEVO AL FINAL (contrato D57: append-only)
 export type Tier = "ALTO" | "MEDIO" | "BAJO";
 
 export interface Breadcrumb {
@@ -49,6 +49,17 @@ export interface UsoContador {
   n: number;
 }
 
+/** ANEXO AGENTE C (REPARTE-3-AGENTES-v1, Pieza 2) — evento de CONGELÓN del
+ *  main thread. PRIVACIDAD dura (qa-obs-privacidad): solo DURACIONES y
+ *  momentos — jamás contenido de actas. breadcrumbs = los últimos 30 al
+ *  momento del congelón (Breadcrumb ya es sin-contenido por contrato). */
+export interface HangEvento {
+  fuente: "drift" | "longtask"; // drift = gap del intervalo 500 ms · longtask = PerformanceObserver
+  duracionMs: number; // gap REAL medido (kit: captura el gap real) o duración de la task
+  umbralMs: number; // umbral que disparó el registro (3 000 drift · 50 longtask)
+  breadcrumbs: Breadcrumb[]; // contexto de navegación alrededor (sin contenido)
+}
+
 export interface PoliticaDatos {
   metadatos: boolean; // default TRUE
   textoOcr: boolean; // default FALSE
@@ -63,7 +74,7 @@ export interface EventoObs {
   sesion: string; // UUID por sesión
   dispositivo: string; // UUID persistente
   appVersion: string;
-  datos: ErrorEvento | PerfActa | SaludSnapshot | UsoContador | Record<string, unknown>;
+  datos: ErrorEvento | PerfActa | SaludSnapshot | UsoContador | HangEvento | Record<string, unknown>;
 }
 
 export interface ErroresAgrupados {
@@ -106,4 +117,12 @@ export interface ReporteSesion {
   };
   saludMuestras: SaludSnapshot[];
   uso: UsoContador[];
+  /** ANEXO Agente C (Pieza 2) — agregación de hangs de la sesión (ADITIVA,
+   *  opcional: informes previos no cambian de forma). fuente: eventos "hang"
+   *  del buffer filtrados por esta sesión — resumenHangsDe (hang.ts, PURO). */
+  hangResumen?: {
+    cuenta: number;
+    mayorMs: number | null;
+    totalMs: number | null;
+  };
 }
