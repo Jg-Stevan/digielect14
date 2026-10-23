@@ -15,6 +15,10 @@
 import { useE14Store } from "@/lib/e14/store";
 import type { Acta, ActaStatus } from "@/lib/e14/types";
 import { StitchArrowLeftIcon, StitchCloudCheckIcon } from "./icons";
+// KIT e14-observabilidad-v1 (agente 2 · C2): badge DEV — chip no intrusivo
+// que recuerda que el modo de diagnóstico está activo. Re-render barato:
+// evento DOM intra-pestaña + storage cross-pestaña (CERO timers — dev/puente).
+import { useModoDev } from "./dev/puente";
 
 /** D1: estilo por estado — palabra + colores del mock vinculante. */
 function estiloTopBar(status: ActaStatus, score: number) {
@@ -113,6 +117,8 @@ export function TopBar() {
   const alternarConexion = useE14Store((s) => s.alternarConexion);
   const navegar = useE14Store((s) => s.navegar);
   const acta = useE14Store((s) => s.actaActual);
+  // KIT e14-observabilidad-v1 (agente 2 · C2): modo dev reactivo.
+  const modoDev = useModoDev();
 
   const nube = acta ? nubeTransmision(acta.status, online) : null;
 
@@ -127,13 +133,25 @@ export function TopBar() {
         >
           <StitchArrowLeftIcon />
         </button>
-        {acta ? (
-          <PillEstado acta={acta} />
-        ) : (
-          <h1 className="font-mono font-bold text-[11px] uppercase tracking-wider text-brand-green text-center">
-            REVISIÓN DE ACTA
-          </h1>
-        )}
+        {/* KIT e14-observabilidad-v1 (agente 2 · C2): badge DEV en la esquina
+            del contenido central — jamás intrusivo, solo recuerda el modo. */}
+        <div className="relative min-w-0">
+          {acta ? (
+            <PillEstado acta={acta} />
+          ) : (
+            <h1 className="font-mono font-bold text-[11px] uppercase tracking-wider text-brand-green text-center">
+              REVISIÓN DE ACTA
+            </h1>
+          )}
+          {modoDev && (
+            <span
+              title="Modo de diagnóstico activo"
+              className="absolute -top-2 -right-2 pointer-events-none font-mono text-[8px] font-black tracking-widest px-1.5 py-px rounded-md border border-[#10b981]/60 bg-[#090d12] text-[#10b981] shadow-sm"
+            >
+              DEV
+            </span>
+          )}
+        </div>
         {nube ? (
           <button
             type="button"
