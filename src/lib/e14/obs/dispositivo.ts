@@ -19,6 +19,7 @@
 import { appendEvento } from "./buffer";
 import { idDispositivo, idSesion, appVersion } from "./identidad";
 import { leerModoDev, leerPolitica } from "./politica";
+import { leerFlags } from "../flags";
 import type { SaludSnapshot, Tier } from "./tipos";
 
 const INTERVALO_SALUD_MS = 5 * 60 * 1000;
@@ -180,8 +181,9 @@ let timerSalud: number | null = null;
 
 function condicionesOk(): boolean {
   try {
-    // C7 añade aquí `&& leerFlags().telemetriaSalud` (flags.ts es del C7).
-    return leerModoDev() && leerPolitica().saludEnVivo;
+    // A1-C7: el flag telemetriaSalud del dueño completa el guard del C5
+    // (default true → idéntico sin overrides; D6: nunca se auto-configura).
+    return leerModoDev() && leerPolitica().saludEnVivo && leerFlags().telemetriaSalud;
   } catch {
     return false;
   }

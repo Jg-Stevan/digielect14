@@ -1880,6 +1880,30 @@ export class RealCoreBridge implements E14Bridge {
     if (diag) {
       diag.actaId = acta.id;
       acta.diagnostico = diag;
+      // KIT e14-observabilidad-v1 (A1-C7, cambio QUIRÚRGICO): emisión perf
+      // del desenlace — lazy import + catch total (el rastreo jamás rompe
+      // el pipeline, §2.4), mapea SOLO campos ya en scope (§9.10: tiempos/
+      // gate/ocrValido leídos de diag — nada re-evaluado). El actaId sale
+      // SIEMPRE hasheado (FNV-1a dentro de emitirPerfDeActa, §2.5).
+      void import("./obs/captura")
+        .then((m) =>
+          m.emitirPerfDeActa({
+            actaId: acta.id,
+            status: acta.status,
+            intento: acta.intento,
+            tiempos: {
+              procesoMs: diag.tiempos.procesoMs,
+              calidadMs: diag.tiempos.calidadMs,
+              ocrMs: diag.tiempos.ocrMs,
+              totalMs: diag.tiempos.totalMs,
+            },
+            scoreVisual,
+            scoreFinal: score,
+            gate: gate.status,
+            ocrValido: diag.ocrValido,
+          }),
+        )
+        .catch(() => {});
     }
     return acta;
   }

@@ -1070,3 +1070,43 @@ describe("export · construirReporte (C6)", () => {
     }
   });
 });
+
+// ─── C7 · captura (eventoDeError) ──────────────────────────────────────────
+
+describe("captura · eventoDeError (C7)", () => {
+  it("Error real → mensaje/constructor/stack/digest/archivo/breadcrumbs", async () => {
+    const { eventoDeError } = await import("./captura");
+    const bc = await import("./breadcrumbs");
+    bc.registrarBreadcrumb({ tipo: "click", detalle: "btn-enviar" });
+    const err = new TypeError("lectura de null");
+    const { tipo, datos } = eventoDeError(err, "WindowError");
+    expect(tipo).toBe("error");
+    expect(datos.mensaje).toBe("TypeError: lectura de null");
+    expect(datos.tipo).toBe("TypeError");
+    expect(datos.stack).toContain("obs.test.ts"); // frame del test (node)
+    expect(datos.archivo).toContain("obs.test.ts"); // primer frame src/
+    expect(datos.digest).toMatch(/^[0-9a-f]{8}$/);
+    expect(datos.breadcrumbs[datos.breadcrumbs.length - 1]).toMatchObject({ detalle: "btn-enviar" });
+  });
+
+  it("valor NO-Error (string/objeto) → tipo = origen (WindowError/…)", async () => {
+    const { eventoDeError } = await import("./captura");
+    const { tipo, datos } = eventoDeError("fallo raro", "UnhandledRejection");
+    expect(tipo).toBe("error");
+    expect(datos.mensaje).toBe("fallo raro");
+    expect(datos.tipo).toBe("UnhandledRejection");
+  });
+
+  it("null/undefined → 'desconocido' honesto, JAMÁS lanza", async () => {
+    const { eventoDeError } = await import("./captura");
+    expect(() => eventoDeError(null, "WindowError")).not.toThrow();
+    const { datos } = eventoDeError(undefined, "ErrorBoundary");
+    expect(datos.mensaje).toBe("desconocido");
+  });
+
+  it("mensaje se trunca a 500 (contrato)", async () => {
+    const { eventoDeError } = await import("./captura");
+    const { datos } = eventoDeError(new Error("x".repeat(900)), "WindowError");
+    expect(datos.mensaje.length).toBeLessThanOrEqual(500);
+  });
+});
