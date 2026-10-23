@@ -159,3 +159,14 @@ export function trazaEsquinas(e: EsquinasActa | null): string {
   const faltan = (["tl", "tr", "bl", "br"] as const).filter((k) => !e[k]);
   return faltan.length === 0 ? "OK" : `FALTA_${faltan.join("+")}`;
 }
+
+/** e71 (P10) — ¿fallaron LAS 4 esquinas fiduciales? (`esquinas=FALTA_tl+tr+
+ *  bl+br` de la traza de arriba). Kit e71-consolidación: cuando la medición
+ *  de integridad encuentra las 4 marcas ausentes el papel NO está demostrado
+ *  entero → el gate NO puede reportar `completa: true`. Puro (sin DOM) —
+ *  consumido por AMBOS pipelines del bridge (escaneo + recorte, pitfall
+ *  §9.9: mismo criterio). null (no medible) → false — jamás condena a
+ *  ciegas (la ausencia de medición no es evidencia). */
+export function cuatroEsquinasFaltan(e: EsquinasActa | null | undefined): boolean {
+  return !!e && !e.tl && !e.tr && !e.bl && !e.br;
+}

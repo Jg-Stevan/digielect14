@@ -440,9 +440,21 @@ async function reutilizarResultado(fila: FilaMasiva, t0: number): Promise<boolea
     //   porStatusActa, los conteos de envío y el historial.
     // · diagnostico.status DUPLICADA + enviadoAutomaticamente null (plan P2
     //   literal) — el informe nunca la contará como envío exitoso.
-    actaCopia.status = "DUPLICADA";
+    // e71 (P2.1) — la copia HEREDA el desenlace del ORIGINAL (kit e71:
+    // «duplicado de una rechazada → RECHAZADA, no DUPLICADA» — el informe
+    // debe mostrar RECHAZADA: 2, no DUPLICADA):
+    // · original ENVIADA/OPTIMA (desenlace de envío) → DUPLICADA (regla e66
+    //   intacta — la copia es un doble del enviado).
+    // · original RECHAZADA o CON rechazo → RECHAZADA heredada: el rechazo y
+    //   el score ya viajan en el spread de actaOrigen — aquí solo el status
+    //   (el informe la cuenta en su rechazo real, jamás como «duplicada»).
+    // · resto (ADVERTENCIA / EN_REVISION_HUMANA sin rechazo) → DUPLICADA:
+    //   copia de un desenlace final propio (doctrina e66 — sin envío heredado).
+    const originalEnviada = actaCopia.status === "ENVIADA" || actaCopia.status === "OPTIMA";
+    const copiaRechazada = !originalEnviada && !!actaCopia.rechazo;
+    actaCopia.status = copiaRechazada ? "RECHAZADA" : "DUPLICADA";
     if (actaCopia.diagnostico) {
-      actaCopia.diagnostico.status = "DUPLICADA";
+      actaCopia.diagnostico.status = actaCopia.status;
       // e66 (P3.4) — esperaMs PROPIO de la fila duplicada (t0 − agregadaEn),
       // NO el heredado de la original: la media de espera del informe ya no
       // cuenta la espera de la original DOS veces. ≥ 0 defensivo (D57 T1).
