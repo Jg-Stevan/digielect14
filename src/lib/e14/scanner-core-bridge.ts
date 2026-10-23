@@ -135,6 +135,7 @@ import { anclasDe, elegirMejor, necesitaSegunda } from "./ocr-escalonado";
 // KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado justo
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
+import { canvasCon } from "./image-utils"; // SPRINT-A A3 — factory de canvas
 
 /** KIT e14-masiva-tiempos-v1 (PR-2, prefetch): memo de decode POR INSTANCIA
  *  de File (WeakMap — GC-friendly, no retiene blobs). El mismo File JAMÁS
@@ -271,9 +272,7 @@ const QUAD_IDENTITY: Quad = [
  */
 function capturarFrame(video: HTMLVideoElement): string | null {
   try {
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const canvas = canvasCon(video.videoWidth, video.videoHeight); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d");
     if (!ctx || !canvas.width || !canvas.height) return null;
     ctx.drawImage(video, 0, 0);
@@ -516,9 +515,7 @@ function senalHiResDeCanvas(
     const escala = Math.min(1, HI_RES_LADO / lado);
     const w = Math.max(1, Math.round(wSrc * escala));
     const h = Math.max(1, Math.round(hSrc * escala));
-    const cv = document.createElement("canvas");
-    cv.width = w;
-    cv.height = h;
+    const cv = canvasCon(w, h); // SPRINT-A A3 — factory
     const ctx = cv.getContext("2d", { willReadFrequently: true });
     if (!ctx) return { sharpnessHi: 0, contrastPapel: 0 };
     ctx.drawImage(origen, 0, 0, w, h);
@@ -655,9 +652,7 @@ async function calidadDeActa(
     const escala = Math.min(1, CROP_LADO_MAX / Math.max(bbox.sw, bbox.sh));
     const cw = Math.max(1, Math.round(bbox.sw * escala));
     const ch = Math.max(1, Math.round(bbox.sh * escala));
-    const canvas = document.createElement("canvas");
-    canvas.width = cw;
-    canvas.height = ch;
+    const canvas = canvasCon(cw, ch); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) throw new Error("sin ctx");
     ctx.drawImage(img, bbox.sx, bbox.sy, bbox.sw, bbox.sh, 0, 0, cw, ch);
@@ -701,9 +696,7 @@ async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | 
   if (!foto) return null;
   try {
     const img = await loadImageMemo(foto);
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    const canvas = canvasCon(img.naturalWidth, img.naturalHeight); // SPRINT-A A3 — factory
     if (!canvas.width || !canvas.height) return null;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
@@ -868,9 +861,7 @@ async function ocrBanda(fotoProcesada: string): Promise<string> {
     const y0 = Math.round(H * 0.03);
     const w = Math.max(1, Math.round(W * 0.88) - x0);
     const h = Math.max(1, Math.round(H * 0.13) - y0);
-    const canvas = document.createElement("canvas");
-    canvas.width = w * 2; // escala ×2 (§5)
-    canvas.height = h * 2;
+    const canvas = canvasCon(w * 2, h * 2); // escala ×2 (§5) — SPRINT-A A3 factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return "";
     ctx.drawImage(img, x0, y0, w, h, 0, 0, w * 2, h * 2);
