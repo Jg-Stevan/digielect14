@@ -257,7 +257,11 @@ const mapaQrPayload = new Map<string, string>();
 // Con TRUE (producción): byte a byte el comportamiento de siempre —
 // restauración tras recarga/crash + dedup inter-lote + ledger e65b que
 // sobrevive vaciar() (D-e65b-1). Cero código borrado — solo ciclo de vida.
-const COLA_PERSISTENTE = false;
+/** e64p (C-1/C-2 — MODO PRUEBAS). Desde cola-persistente-v1: kill switch del
+ *  dueño — el override `colaPersistente: false` (e14-flags-overrides) activa
+ *  el modo pruebas (auto-borrado al cargar). Default TRUE: la masiva SOLO se
+ *  elimina con vaciar() del dueño — petición literal 2026-10-24. */
+const COLA_PERSISTENTE = leerFlags().colaPersistente ?? true;
 
 /** Registra el payload de UNA fila como original del lote. Solo se llama
  *  cuando el payload es NUEVO en el mapa o su entrada apuntaba a una fila

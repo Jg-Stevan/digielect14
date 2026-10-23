@@ -115,6 +115,10 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     const limpio: Partial<FlagsApp> = {};
     if (o.poolWorkers === 1 || o.poolWorkers === 2) limpio.poolWorkers = o.poolWorkers;
     if (typeof o.thumbsOn === "boolean") limpio.thumbsOn = o.thumbsOn;
+    // cola-persistente-v1 (ANEXO Agente B): el override del dueño pasa por
+    // ESTE whitelist — sin esta línea el MODO PRUEBAS (colaPersistente:false)
+    // sería inalcanzable vía e14-flags-overrides.
+    if (typeof o.colaPersistente === "boolean") limpio.colaPersistente = o.colaPersistente;
     if (typeof o.ocrThreadsTope === "number" && Number.isFinite(o.ocrThreadsTope)) {
       limpio.ocrThreadsTope = Math.max(1, Math.min(8, Math.round(o.ocrThreadsTope)));
     }
