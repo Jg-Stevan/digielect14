@@ -28,12 +28,10 @@ import {
   registrarEntradaHistorico,
   type EntradaHistorica,
 } from "./historico";
-import {
-  hacerThumb,
-  iniciarRunner,
-  pausarRunner,
-  rearrancarTrasEncolar,
-} from "./runner";
+// SPLIT C1 (refactor/runner-logger-v1): hacerThumb vive en runner-thumbs.ts
+// (responsabilidad de render — movimiento puro del runner).
+import { hacerThumb } from "./runner-thumbs";
+import { iniciarRunner, pausarRunner, rearrancarTrasEncolar } from "./runner";
 // D66 — KIT e14-decode-unico-precalor-v1: cableado del PRECALOR (T3) — la
 // suscripción al mini-store vive aquí (zona del kit: «flag transitorio
 // precalentada + cola de precalor») DESPUÉS de crear el store: precalor.ts

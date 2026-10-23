@@ -12,10 +12,7 @@
  * actaActual, nunca navega vistas, NUNCA simula. La orquestación vive aquí;
  * el store del flujo normal solo ve las 3 acciones de integración (T3).
  */
-import { getScannerWorker, warmUpScannerWorker } from "@jg-stevan/scanner-core/detector-client";
 import { getBridge } from "../get-bridge";
-// D65 (T1): soltar el runtime OCR al matar los workers del intento vencido.
-import { rapidOcrReiniciar } from "../ocr/rapidocr";
 // KIT e14-masiva-ux-v1 (T4): tipo con el presupuesto de timeout opcional
 // (intersección LOCAL en el bridge — kit §1 prohíbe tocar bridge.ts).
 // D66 — KIT e14-decode-unico-precalor-v1: el prefetch (D61) se RE-APUNTA —
@@ -38,11 +35,26 @@ import {
 } from "./store";
 import { clasificarOrigenDeArchivo, type OrigenVeredicto } from "./origen"; // D63-A — detector de origen (kit e63a-origen-escaneo-v1)
 import { preProcesoEscaneo, type PreProcesoEscaneo } from "./deskew"; // D63-B — pre-proceso de escaneos (kit e63b-deskew-escaneo-v1)
-// D65 (T1.3): semilla para el acta de timeout del watchdog — la MISMA que el
-// bridge usa en SU acta de timeout (solo lectura de la forma; cero criterios).
-import { ACTA_MOCK } from "../seed";
 import { paginaDeActa, tituloDeActa, type FilaMasiva, type RegistroMasiva } from "./tipos";
-import type { Acta, EtapaAnalisis, ProgresoAnalisis } from "../types";
+import type { Acta, EtapaAnalisis } from "../types";
+// SPLIT C1 (refactor/runner-logger-v1 — movimiento puro): la infra del
+// orquestador vive en runner-*.ts (imports UNIDIRECCIONALES — los
+// runner-*.ts no se importan entre sí; detalle en
+// docs/REPORTE-runner-logger-v1.md). Las líneas ANCLADAS por QA
+// (WATCHDOG_*_MS, RELECTURA_TOPE_MS, mutexDedup/conExclusionMutua,
+// reutilizarResultado*, bloque capa-0, relectura conTope, bucle del pool,
+// iniciar/pausar/rearrancar) permanecen AQUÍ — los harnesses
+// scripts/qa-*.ts grepean este archivo.
+import { hacerThumb } from "./runner-thumbs";
+import { esperarDesenlaceOriginal } from "./runner-dedup";
+import {
+  actaTimeoutWatchdog,
+  correrIntento,
+  esVeredictoTimeout,
+  etapaDeSenal,
+  matarYRecrearWorkers,
+} from "./runner-watchdog";
+import { marcarFila, marcarVida, vidaDe, vidas } from "./runner-vida";
 // e63f — KIT e63f-autoenvio-v1 (F2): re-lectura interna pre-«repetir-primero».
 // Lógica pura en masiva/relectura.ts (testeable headless); aquí solo la
 // orquestación: re-OCR del MISMO bitmap (reconocerTexto — cap fino) +
@@ -78,10 +90,6 @@ import {
 const WATCHDOG_MS = 75_000;
 const WATCHDOG_INTENTOS = 2;
 const WATCHDOG_GRACIA_MS = 5_000;
-/** Espejo del DETALLE_TIMEOUT del bridge (constante PRIVADA allí): el string
- *  ES el veredicto visible de siempre y SOLO sale de sus rutas de timeout —
- *  el watchdog lo usa para detectar el vencimiento del intento. */
-const DETALLE_TIMEOUT = "TIEMPO DE PROCESADO EXCEDIDO";
 // · WATCHDOG_MS (75 s) — presupuesto de CADA intento: el pipeline real mide
 //   ~21 s total (OCR 12.5-22.6 s domina); 75 s ≈ 3× el peor caso real — un
 //   intento que lo vence ya no es lentitud, es un colgaje. El flujo
@@ -106,10 +114,6 @@ const DETALLE_TIMEOUT = "TIEMPO DE PROCESADO EXCEDIDO";
 // colgaje. Vencido: workers muertos y re-creados (misma infraestructura
 // del watchdog), veredicto de la 1.ª lectura INTACTO y CERO reintentos.
 const RELECTURA_TOPE_MS = 45_000;
-
-/** Throttle del progreso (250 ms — kit D65 T3.1 literal): el OCR emite decenas
- *  de eventos por etapa; la bandeja solo necesita el último. */
-const PROGRESO_MS = 250;
 
 let corriendoFlag = false;
 let stopFlag = false;
@@ -150,295 +154,6 @@ async function conExclusionMutua<T>(seccion: () => Promise<T>): Promise<T> {
     return await seccion();
   } finally {
     liberar();
-  }
-}
-
-// ─── % ÚNICO DEL PROCESO COMPLETO POR ACTA (cambio pedido por el dueño) ───
-// Antes: el chip de la fila saltaba por tramos fijos por FASE (25→50→OCR
-// 50-95→98) y, con el OCR ESCALONADO (1.ª pasada 1280 → re-OCR 1920), el
-// número RETROCEDÍA (la 2.ª pasada re-emite su fracción 0→1: 95→50→95).
-// Ahora cada señal del bridge mapea a un TRAMO del total del proceso y el
-// valor es MONOTÓNICO (Math.max por señal — jamás baja dentro de la misma
-// acta). Pesos según la duración REAL del pipeline (~21 s: OCR ~13 s domina
-// → ~60% del arco; decode+detección ~2 s; recorte/realce ~2 s; calidad <1 s;
-// el 5% final = clasificación/gate/guardado → LISTA pinta 100%).
-const FRAC_DECODE_HASTA = 0.15; // DETECTANDO 0→1 (decode + detección de quad)
-const FRAC_RECORTE_HASTA = 0.3; // RECORTANDO/REALZANDO (emite 0.2→1)
-const FRAC_CALIDAD_HASTA = 0.35; // CALIDAD 0→1
-const FRAC_OCR_P1_HASTA = 0.68; // OCR 1.ª pasada (fracción REAL por lotes)
-const FRAC_OCR_TOPE = 0.95; // 2.ª pasada (1920) y banda dirigida: tope
-
-/** Estado del % global de UNA fila (se resetea al empezar cada acta).
- *  e71 (Opt-3): POR-FILA (Map) — con 2 actas EN VUELO (pool del kit) cada
- *  una lleva SU estado: el global del secuencial corrompería la detección
- *  de pasada OCR entre filas (la caída fuerte de la fracción de UNA fila
- *  contaría como 2.ª pasada de la OTRA). `ocrPasada` detecta una NUEVA
- *  pasada del escalonado por caída fuerte de la fracción OCR (dentro de una
- *  pasada la fracción solo sube — es real, por lotes de rec). */
-interface VidaFila {
-  frac: number;
-  ocrPasada: number;
-  ocrFracPrev: number;
-  ultimoEn: number; // throttle 250 ms POR-FILA (antes global)
-}
-const vidas = new Map<string, VidaFila>();
-
-function vidaDe(id: string): VidaFila {
-  let v = vidas.get(id);
-  if (!v) {
-    v = { frac: 0, ocrPasada: 1, ocrFracPrev: 0, ultimoEn: 0 };
-    vidas.set(id, v);
-  }
-  return v;
-}
-
-/** Tramo del TOTAL (0..1) que representa una señal del bridge — la suma de
- *  todas las fases = el proceso COMPLETO del acta. Etapa desconocida →
- *  conserva el máximo alcanzado (jamás inventa). */
-function fracGlobalDe(id: string, p: ProgresoAnalisis): number {
-  const vida = vidaDe(id);
-  const f = Math.min(1, Math.max(0, p.progreso));
-  switch (p.etapa) {
-    case "DETECTANDO":
-      return f * FRAC_DECODE_HASTA;
-    case "RECORTANDO":
-    case "REALZANDO": {
-      // el bridge compone este tramo como 0.2→1 (recorte + realce)
-      const t = Math.min(1, Math.max(0, (f - 0.2) / 0.8));
-      return FRAC_DECODE_HASTA + t * (FRAC_RECORTE_HASTA - FRAC_DECODE_HASTA);
-    }
-    case "CALIDAD":
-      return FRAC_RECORTE_HASTA + f * (FRAC_CALIDAD_HASTA - FRAC_RECORTE_HASTA);
-    case "OCR": {
-      // ¿2.ª pasada del escalonado? caída fuerte de la fracción REAL
-      if (f < vida.ocrFracPrev - 0.15) vida.ocrPasada += 1;
-      vida.ocrFracPrev = f;
-      if (vida.ocrPasada <= 1) {
-        return FRAC_CALIDAD_HASTA + f * (FRAC_OCR_P1_HASTA - FRAC_CALIDAD_HASTA);
-      }
-      // 2.ª pasada (re-OCR 1920) y siguientes (banda dirigida): tope 0.95
-      return Math.min(
-        FRAC_OCR_TOPE,
-        FRAC_OCR_P1_HASTA + f * (FRAC_OCR_TOPE - FRAC_OCR_P1_HASTA),
-      );
-    }
-    default:
-      return vida.frac;
-  }
-}
-
-/** Patch INMUTABLE de UNA fila (la bandeja pinta filas livianas). */
-function marcarFila(id: string, patch: Partial<FilaMasiva>): void {
-  const filas = useMasivaStore.getState().filas;
-  useMasivaStore.setState({
-    filas: filas.map((f) => (f.id === id ? { ...f, ...patch } : f)),
-  });
-}
-
-/** D65 (T3) — vocabulario del kit para la señal de vida (marcarProgreso). */
-type EtapaVidaKit = "preparando" | "deteccion" | "ocr" | "verificacion";
-
-/** D65 (T3) — bucket del kit para una señal ProgresoAnalisis del bridge:
- *  · DETECTANDO con fracción ≤ 0.5 → "preparando" (rampa del decode).
- *  · DETECTANDO > 0.5, RECORTANDO, REALZANDO → "deteccion" (quad detectado
- *    + recorte/realce — cola de la fase de encuadre).
- *  · CALIDAD → "verificacion" · OCR → "ocr".
- *  La fracción del OCR es REAL (reconocedor por lotes de rec — §2-C4 del kit
- *  ocr-escalonado, consume el MISMO emit del bridge); las rampas del bridge
- *  son interpolación → SIN número (kit T3: barra animada, jamás inventar %). */
-function bucketDeVida(
-  p: ProgresoAnalisis,
-): { etapa: EtapaVidaKit; ocrFraccion?: number } {
-  switch (p.etapa) {
-    case "OCR":
-      return { etapa: "ocr", ocrFraccion: Math.min(1, Math.max(0, p.progreso)) };
-    case "CALIDAD":
-      return { etapa: "verificacion" };
-    case "DETECTANDO":
-      return p.progreso <= 0.5 ? { etapa: "preparando" } : { etapa: "deteccion" };
-    default:
-      return { etapa: "deteccion" }; // RECORTANDO / REALZANDO
-  }
-}
-
-/** D65 (T3.1) — emisión de vida vía el action NUEVO del store (throttle).
- *  El % global se computa ANTES del throttle: la detección de pasada OCR
- *  necesita ver TODAS las señales (con 250 ms de muestreo la caída de la
- *  fracción sigue siendo evidente — de ~1.0 a ~0.0). */
-function marcarVida(id: string, p: ProgresoAnalisis): void {
-  const vida = vidaDe(id);
-  const bruto = fracGlobalDe(id, p);
-  if (bruto > vida.frac) vida.frac = bruto; // MONOTÓNICO
-  const ahora = Date.now();
-  if (ahora - vida.ultimoEn < PROGRESO_MS) return;
-  vida.ultimoEn = ahora;
-  useMasivaStore
-    .getState()
-    .marcarProgreso(id, { ...bucketDeVida(p), fracGlobal: vida.frac });
-}
-
-/** D65 (T1.4) — etapaAlMorir: vocabulario del kit para la TRAZA (aquí la
- *  primera etapa se llama "decodificando", no "preparando"; mismo bucket).
- *  Sin señal → null (jamás inventar). */
-function etapaDeSenal(
-  senal: { etapa: EtapaAnalisis; fraccion: number } | null,
-): string | null {
-  if (!senal) return null;
-  switch (senal.etapa) {
-    case "OCR":
-      return "ocr";
-    case "CALIDAD":
-      return "verificacion";
-    case "DETECTANDO":
-      return senal.fraccion <= 0.5 ? "decodificando" : "deteccion";
-    default:
-      return "deteccion"; // RECORTANDO / REALZANDO — cola del encuadre
-  }
-}
-
-/** D65 (T1) — desenlace del INTENTO clasificado por la carrera: "acta"
- *  (el bridge resolvió), "error" (el bridge rechazó — fila ERROR de siempre)
- *  o "tope" (venció el watchdog — el pipeline sigue en vuelo y se ABANDONA:
- *  sus workers ya van a ser muertos y re-creados). NUNCA inventa acta. */
-type DesenlaceIntento =
-  | { tipo: "acta"; acta: Acta }
-  | { tipo: "error"; error: unknown }
-  | { tipo: "tope" };
-
-function correrIntento(
-  pipeline: Promise<Acta>,
-  topeMs: number,
-): Promise<DesenlaceIntento> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve({ tipo: "tope" }), topeMs);
-    pipeline.then(
-      (acta) => {
-        clearTimeout(timer);
-        resolve({ tipo: "acta", acta });
-      },
-      (error) => {
-        clearTimeout(timer);
-        resolve({ tipo: "error", error });
-      },
-    );
-  });
-}
-
-/** D65 (T1) — ¿el acta es el veredicto-timeout del bridge? (score 0 +
- *  ILEGIBLE/TIEMPO DE PROCESADO EXCEDIDO — el detalle SOLO sale de sus
- *  rutas de timeout; un rechazo REAL del gate jamás lo lleva). */
-function esVeredictoTimeout(acta: Acta): boolean {
-  return (
-    acta.rechazo?.tipo === "ILEGIBLE" && acta.rechazo.detalle === DETALLE_TIMEOUT
-  );
-}
-
-/** D65 (T1.2) — matar y re-crear los workers del intento vencido:
- *  · DETECCIÓN (OpenCV del core): dispose() rechaza lo en vuelo y termina el
- *    worker → getScannerWorker() lo sustituye por uno fresco (self-healing
- *    público del core); warmUpScannerWorker() arranca la recarga de OpenCV.
- *    El intento ABANDONADO muere rápido (sus promesas en vuelo rechazan) —
- *    deja de competir por CPU con el reintento.
- *  · OCR (RapidOCR/ONNX): soltar sesiones + singleton fuera → el reintento
- *    re-crea el runtime (rapidOcrReiniciar — best-effort, jamás lanza).
- *  Nada de esto toca criterios/score del veredicto: es infraestructura. */
-async function matarYRecrearWorkers(): Promise<void> {
-  try {
-    getScannerWorker()?.dispose();
-  } catch {
-    /* worker ya muerto — el self-healing lo re-crea */
-  }
-  try {
-    warmUpScannerWorker();
-  } catch {
-    /* la detección del reintento lo crea on-demand */
-  }
-  try {
-    await rapidOcrReiniciar();
-  } catch {
-    /* jamás lanza — cinturón */
-  }
-}
-
-/** D65 (T1.3) — veredicto del watchdog agotado SIN acta del bridge (colgaje
- *  FUERA del bridge — origen/pre-proceso, que su timeout no ve): la MISMA
- *  forma del acta de timeout del bridge (score 0, ILEGBILE/TIEMPO DE
- *  PROCESADO EXCEDIDO — nada inventado: es el veredicto de «murió el
- *  procesado» de siempre). Sin esto la cola se congelaba para siempre. */
-function actaTimeoutWatchdog(filaId: string): Acta {
-  return {
-    id: `acta-watchdog-${filaId}`,
-    titulo: ACTA_MOCK.titulo,
-    // MISMA forma de ubicación del bridge (ACTA_MOCK plano + mesa seed 001 —
-    // ver construirActa del bridge: numeroMesa "001" sin objetivo).
-    ubicacion: {
-      departamento: ACTA_MOCK.departamento,
-      municipio: ACTA_MOCK.municipio,
-      zona: ACTA_MOCK.zona,
-      puesto: ACTA_MOCK.puesto,
-      mesa: "001",
-    },
-    tipo: ACTA_MOCK.tipo,
-    pagina: { index: 1, total: 2 },
-    candidatos: ACTA_MOCK.candidatos.map((c) => ({ ...c })),
-    firmas: [
-      {
-        nombre: ACTA_MOCK.firmas[0].nombre,
-        jurado: ACTA_MOCK.firmas[0].jurado,
-        estado: "OK",
-      },
-      {
-        nombre: ACTA_MOCK.firmas[1].nombre,
-        jurado: ACTA_MOCK.firmas[1].jurado,
-        estado: "NO_DETECTADO", // RECHAZADA — misma regla de firmas del bridge
-      },
-      {
-        nombre: ACTA_MOCK.firmas[2].nombre,
-        jurado: ACTA_MOCK.firmas[2].jurado,
-        estado: "OK",
-      },
-    ],
-    codigoBarras: ACTA_MOCK.codigoBarras,
-    score: 0,
-    status: "RECHAZADA",
-    rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_TIMEOUT },
-    intento: 1, // semántica de PRIMERA captura (el watchdog NO es re-captura)
-    maxIntentos: 4,
-    fuente: "ARCHIVO",
-    motor: "canvas",
-    rotation: 0,
-    filtro: "bw",
-    recortada: false,
-    recorteLado: null,
-  };
-}
-
-/** Thumb de la bandeja: canvas 2d, lado mayor 320, JPEG 0.7 (kit §4 regla 4).
- *  Con loadImageMemo NO (el thumb es una foto distinta; decode directo y
- *  fuera — la RAM muere con el canvas). También lo usa el mini-store al
- *  re-sincronizar un acta editada en REVISIÓN (thumb fresco tras recorte). */
-export async function hacerThumb(
-  dataUrl: string | null | undefined,
-): Promise<string | undefined> {
-  if (!dataUrl) return undefined;
-  try {
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error("THUMB_NO_DECODE"));
-      img.src = dataUrl;
-    });
-    const ladoMayor = Math.max(img.naturalWidth, img.naturalHeight) || 1;
-    const escala = Math.min(1, 320 / ladoMayor);
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(img.naturalWidth * escala));
-    canvas.height = Math.max(1, Math.round(img.naturalHeight * escala));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return undefined;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.7);
-  } catch {
-    return undefined; // thumb es cosmético — nunca tumba el desenlace
   }
 }
 
@@ -590,62 +305,6 @@ async function reutilizarResultadoCritica(fila: FilaMasiva, t0: number): Promise
   } catch {
     return false; // original fuera de la cola / IDB caído → reprocesa completo
   }
-}
-
-// ─── e72 — ESPERA ACOTADA por el desenlace de la original (guard de
-// ingesta × pool) ─── La rama DUPLICADA de procesarUno caía al REPROCESO
-// COMPLETO cuando la original aún no tenía desenlace (race Opt-1×Opt-3 del
-// smoke del dueño — imagen10 pagó 32 s de OCR por ser gemela exacta de
-// imagen9). Sondeo SOLO-LECTURA cada INTERVALO hasta que el registro de la
-// original traiga acta (→ reutilizar copia al instante) o la espera muera:
-// original QUITADA/ERROR/YA-ENVIADA (sin acta propia — jamás habrá copia),
-// ESTA fila QUITADA (la voluntad del dueño manda) o TECHO (10 min ≈ 4× el
-// peor caso del watchdog D65 con reintentos — el slot del pool queda libre
-// y el fallback honesto de SIEMPRE corre: el dueño nunca pierde la foto).
-// PENDIENTE/PROCESANDO ESPERAN (la original siempre va delante en la FIFO
-// — el otro slot del pool la alcanza; sin deadlock por construcción).
-// Sin timers globales — mismo patrón de esperarDesenlaceQr (e63m), techo a
-// escala OCR (15 s del QR no cubren un pipeline completo).
-const ESPERA_ORIGINAL_INTERVALO_MS = 400;
-const ESPERA_ORIGINAL_TECHO_MS = 600_000;
-async function esperarDesenlaceOriginal(
-  estaFilaId: string,
-  originalId: string,
-): Promise<boolean> {
-  const tEspera = Date.now();
-  console.info(
-    `[e14] dedup fila=${estaFilaId} espera-original dupOf=${originalId}`,
-  );
-  while (Date.now() - tEspera < ESPERA_ORIGINAL_TECHO_MS) {
-    await new Promise((r) => setTimeout(r, ESPERA_ORIGINAL_INTERVALO_MS));
-    if (!useMasivaStore.getState().filas.some((f) => f.id === estaFilaId)) {
-      return false; // esta fila QUITADA/VACIADA en la espera — nada que copiar
-    }
-    const original = useMasivaStore
-      .getState()
-      .filas.find((f) => f.id === originalId);
-    // Whitelist COPIABLE (T-5 e65: la literal YA-ENVIADA jamás se escribe en
-    // el runner — el QA la veta; AUSENTE/ERROR/ya-enviada quedan fuera por
-    // construcción: sin acta propia no hay copia posible).
-    const copiable =
-      original != null &&
-      (original.estado === "PENDIENTE" ||
-        original.estado === "PROCESANDO" ||
-        original.estado === "LISTA" ||
-        original.estado === "DUPLICADA");
-    if (!copiable) {
-      return false; // sin desenlace copiable — fallback honesto de siempre
-    }
-    try {
-      if ((await leerRegistro(originalId)).acta) return true;
-    } catch {
-      /* IDB caída — seguir sondeando (el techo manda) */
-    }
-  }
-  console.info(
-    `[e14] dedup fila=${estaFilaId} espera-original techo=${ESPERA_ORIGINAL_TECHO_MS}ms → reprocesa-completo`,
-  );
-  return false;
 }
 
 /** Desenlace de UNA foto — byte a byte el pipeline real (kit §6-C: el
