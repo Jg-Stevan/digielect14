@@ -68,6 +68,60 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
   });
 });
 
+describe("flags · poolWorkers wiring (poolworkers-wiring-v1)", () => {
+  it("sin override → poolWorkers default = 2 (kill switch apagado)", () => {
+    stubWindow();
+    expect(leerFlags().poolWorkers).toBe(2);
+  });
+
+  it("override válido 1 → se respeta (modo secuencial, RAM justa)", () => {
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ poolWorkers: 1 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().poolWorkers).toBe(1);
+  });
+
+  it("override válido 2 → se respeta", () => {
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ poolWorkers: 2 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().poolWorkers).toBe(2);
+  });
+
+  it("override fuera de rango (0, 3, \"x\") → saneo lo descarta y cae al default seguro 2", () => {
+    // Validación defensiva en flags.ts (sanearFlags), NO en el runner (kit §3).
+    expect(sanearFlags({ poolWorkers: 0 })).toEqual({});
+    expect(sanearFlags({ poolWorkers: 3 })).toEqual({});
+    expect(sanearFlags({ poolWorkers: "x" })).toEqual({});
+    // Con un override hostil el efectivo sigue siendo el default:
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ poolWorkers: 0 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().poolWorkers).toBe(2);
+  });
+});
+
 describe("flags · refrescarFlags (fetch mockeado)", () => {
   it("flags.json bueno → 'ok' y leerFlags lo aplica (bajo los overrides)", async () => {
     stubWindow();
