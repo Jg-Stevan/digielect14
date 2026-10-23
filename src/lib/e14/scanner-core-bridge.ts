@@ -136,6 +136,7 @@ import { anclasDe, elegirMejor, necesitaSegunda } from "./ocr-escalonado";
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
 import { canvasCon } from "./image-utils"; // SPRINT-A A3 — factory de canvas
+import { logger } from "../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 /** KIT e14-masiva-tiempos-v1 (PR-2, prefetch): memo de decode POR INSTANCIA
  *  de File (WeakMap — GC-friendly, no retiene blobs). El mismo File JAMÁS
@@ -822,7 +823,7 @@ async function reconocerRapidOcrEscalonado(
     elegido = ganadora; // MISMA referencia — la ganadora trae sus métricas
   }
   // Traza propia (§2.5 — línea PROPIA, append-only; SIN línea en SIM).
-  console.info(
+  logger.info(
     `[e14] ocr-escalonado pasada1=${DET_CAP_RAPIDO} lectura=${senal1.nivel} ` +
       `reocr=${ms2 != null ? 1 : 0} elegido=${elegido.cap} anclas1=${anclasDe(r1.texto)}` +
       (ms2 != null
@@ -1097,7 +1098,7 @@ export class RealCoreBridge implements E14Bridge {
           if (vencido) {
             // e67: el pipeline TARDÍO falló — traza honesta; el acta
             // queda RECHAZADA por tiempo (correcto, caso C del kit).
-            console.info("[e14] pipeline falló tras timeout", {
+            logger.info("[e14] pipeline falló tras timeout", {
               mensaje: error instanceof Error ? error.message : String(error),
             });
             return;
@@ -1819,7 +1820,7 @@ export class RealCoreBridge implements E14Bridge {
     if (diag != null && probeMsOrientacion != null) {
       diag.orientacionProbeMs = probeMsOrientacion;
     }
-    console.info(
+    logger.info(
       `[e14] pipeline ${opciones.fuente}/${"archivo" in entrada ? "file" : "video-grab"} ` +
         `total=${Math.round(ms.total)}ms ` +
         `(decode=${Math.round(ms.decode)} detect=${Math.round(ms.detect)} ` +
@@ -2425,7 +2426,7 @@ export class RealCoreBridge implements E14Bridge {
     if (diag != null && probeMsOrientacion != null) {
       diag.orientacionProbeMs = probeMsOrientacion;
     }
-    console.info(
+    logger.info(
       `[e14] recorte ${acta.fuente} total=${Math.round(ms.total)}ms ` +
         `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +

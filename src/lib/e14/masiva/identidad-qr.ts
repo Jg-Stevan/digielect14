@@ -61,6 +61,7 @@ import jsQR from "./vendor/jsQR.js";
 import type { Binarizer, ReaderOptions } from "zxing-wasm/reader";
 import type { EstadoEntrada } from "./tipos";
 import { canvasCon, decodeImagenLru } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
+import { logger } from "../../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 // ─── Constantes NUEVAS del kit e63m §1.1 (separadas de las existentes) ──────
 /** Lado largo MÁXIMO del canvas de trabajo (kit §1.1 — igual que el banco:
@@ -475,7 +476,7 @@ async function moduloZxingDe(): Promise<ModZxing | null> {
     // H-3): sin esta traza era imposible distinguir «QR ilegible» de
     // «wasm no cargó» (deploy sin BUILD_STATIC=1, basePath equivocado,
     // red bloqueada). El pipeline NO se rompe: degrada a solo-jsQR.
-    console.warn(
+    logger.warn(
       `[e14] qr-capa0 zxing INDISPONIBLE (wasm/glue no cargó) — rescate degrada a solo-jsQR`,
     );
     modZxing = null;
@@ -580,7 +581,7 @@ export async function barridoQrZxingDePixeles(
 /** Traza EXACTA del formato e63n: `[e14] qr-capa0 tier=<tier> ms=<ms>
  *  payload=<8 chars…>`. Solo-observabilidad: jamás decide nada. */
 function trazaQr(tier: string, payload: string, t0: number): void {
-  console.info(
+  logger.info(
     `[e14] qr-capa0 tier=${tier} ms=${Date.now() - t0} payload=${qrCorto(payload)}`,
   );
 }
@@ -670,7 +671,7 @@ export async function decodificarQrDePixeles(
       return payload;
     }
   }
-  console.info(`[e14] qr-capa0 tier=null ms=${Date.now() - t0}`);
+  logger.info(`[e14] qr-capa0 tier=null ms=${Date.now() - t0}`);
   return null;
 }
 
