@@ -262,8 +262,8 @@ ok(
 
 ok(
   informe.includes("| \"ya-enviada\" | null;") &&
-    informe.includes("yaEnviadas: filas.filter((f) => f.estado === \"YA-ENVIADA\").length,"),
-  "T-8: informe export-only — unión dedup con 'ya-enviada' + contador yaEnviadas en totales",
+    informe.includes('yaEnviadas: filas.filter((f) => f.statusActa === "ENVIADA").length,'),
+  "T-8 + e71/P3.1: informe export-only — unión dedup con 'ya-enviada' intacta; contador yaEnviadas ahora cuenta statusActa === ENVIADA (kit e71: reportaba 0 porque YA-ENVIADA solo nace en re-subidas de la misma sesión)",
 );
 
 ok(!informe.includes("hashBytes"),
