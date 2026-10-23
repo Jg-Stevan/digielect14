@@ -139,9 +139,10 @@ export async function decodeImagenLru(
   const hitCv = lruCanvasEscalado.get(clave);
   if (hitCv) return hitCv;
   const escala = Math.min(1, maxDim / (Math.max(img.naturalWidth, img.naturalHeight) || 1));
-  const cv = document.createElement("canvas");
-  cv.width = Math.max(1, Math.round(img.naturalWidth * escala));
-  cv.height = Math.max(1, Math.round(img.naturalHeight * escala));
+  const cv = canvasCon(
+    Math.max(1, Math.round(img.naturalWidth * escala)),
+    Math.max(1, Math.round(img.naturalHeight * escala)),
+  ); // SPRINT-A A3 — factory
   const ctx = cv.getContext("2d");
   if (ctx) {
     // SIN imageSmoothingQuality explícito: el default del navegador es la
