@@ -37,6 +37,8 @@
  *  recorta margen muerto) → NUNCA bloquea. "cortado" queda RESERVADO para
  *  el caso real: lados dentro del inset Y la lectura no rescata (F0.2 del
  *  bridge) — el escáner cortó DENTRO del área de contenido. */
+import { canvasCon } from "./image-utils"; // SPRINT-A A3 — factory de canvas
+
 export type MarcoImpreso = "completo" | "ceñido" | "cortado" | "no-encontrado";
 
 /** Resultado del detector: veredicto + rect del formulario en FRACCIONES del
@@ -177,9 +179,7 @@ async function bitmapDeDataUrl(dataUrl: string): Promise<{ ancho: number; alto: 
     const escala = Math.min(1, ANALISIS_MARCO_ANCHO / img.naturalWidth);
     const w = Math.max(1, Math.round(img.naturalWidth * escala));
     const h = Math.max(1, Math.round(img.naturalHeight * escala));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
+    const canvas = canvasCon(w, h); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     ctx.drawImage(img, 0, 0, w, h);
