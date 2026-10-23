@@ -60,9 +60,9 @@ import {
   rapidOcrRecLote,
 } from "./ocr/rapidocr";
 
-export type Rotacion = 0 | 90 | 180 | 270;
+type Rotacion = 0 | 90 | 180 | 270;
 
-export interface ProbeOrientacion {
+interface ProbeOrientacion {
   rot: Rotacion; // ganadora (aplicada o 0 si no rota)
   aplicado: boolean;
   scores: Partial<Record<Rotacion, number>>;
@@ -77,11 +77,11 @@ export interface ProbeOrientacion {
  *  Con det del probe a DET_CAP_RAPIDO (T2) el caso roto cabe: det ~1.2 s +
  *  rec0 ~3 s + rec90 ~3 s + rec270 ~3 s ≈ 10.2 s < 12 s. Solo lo pagan actas
  *  con lectura DEBIL a 0° (las sanas salen por el atajo T1 en ~4 s). */
-export const PROBE_BUDGET_MS = 12000;
+const PROBE_BUDGET_MS = 12000;
 /** §2.1 paso 3 — margen mínimo sobre score(0) para aplicar la rotación. */
-export const MARGEN_ORIENTACION = 1.5;
+const MARGEN_ORIENTACION = 1.5;
 /** §2.1 paso 1 — K crops repartidos por el acta. */
-export const PROBE_K_CROPS = 8;
+const PROBE_K_CROPS = 8;
 /** Tope del score por rotación (§2.1 «con tope por rotación»: 5 anclas ya
  *  saturan la señal; el MARGEN compara igual en 0..10). */
 const TOPE_SCORE = 10;
