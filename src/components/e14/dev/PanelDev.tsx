@@ -17,8 +17,9 @@
  *  6 · Kill switch (overrides MANUALES de flags — D6: la app nunca sola)
  *  7 · Flags activas (valor efectivo + refrescar)
  *
- * FASE 0: datos vía dev/puente.ts (claves pinned §4.1 + stubs honestos del
- * núcleo obs/ que aún no existe); FASE 1: solo cambia el puente.
+ * FASE 1: datos REALES vía dev/puente.ts → obs/* (buffer IDB, salud,
+ * identidad, export) + lib/e14/flags.ts — el núcleo ya existe y el puente
+ * delega; consumidores y JSX sin cambios.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -40,7 +41,7 @@ import {
   useOverridesFlags,
   usePolitica,
 } from "./puente";
-import type { ErroresAgrupados, PoliticaDatos } from "./contrato";
+import type { ErroresAgrupados, PoliticaDatos } from "@/lib/e14/obs/tipos";
 // KIT e14-observabilidad-v1 (agente 2 · C5): detalle de errores + breadcrumbs.
 import { VistaErrores } from "./VistaErrores";
 // KIT e14-observabilidad-v1 (agente 2 · C6): salud en vivo (30 s, solo panel abierto).
@@ -270,7 +271,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
     }
   };
 
-  /** JSON = ReporteSesion del contrato (obs/export.ts en FASE 1). */
+  /** JSON = ReporteSesion del contrato (delegado a obs/export.ts — real). */
   const exportarJson = async () => {
     if (exportando || bufferVacio) return;
     setExportando("json");

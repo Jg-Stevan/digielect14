@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { eventosPorDigest, purgarBuffer } from "./puente";
-import type { Breadcrumb, ErroresAgrupados } from "./contrato";
+import type { Breadcrumb, ErroresAgrupados } from "@/lib/e14/obs/tipos";
 
 /** Timeout del armado — el MISMO patrón de «reiniciar jornada» (4 s). */
 const ARMADO_MS = 4000;
