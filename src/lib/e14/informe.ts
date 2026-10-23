@@ -272,7 +272,13 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
           (((acta?.fotoOriginal?.length ?? 0) +
             (acta?.fotoProcesada?.length ?? 0)) *
             3) /
-            4,
+            4 +
+            // e68-blob-idb-v1: las fotos del acta duermen como Blobs en el
+            // registro (migración base64 → Blob) — sus bytes REALES suman a
+            // la estimación (registros previos a e68 traen dataURLs → rama
+            // ×3/4; ambos mundos conviven sin doble conteo).
+            (reg.fotoOriginalBlob?.size ?? 0) +
+            (reg.fotoProcesadaBlob?.size ?? 0),
         );
   return {
     id: reg.id,
@@ -413,36 +419,55 @@ function resumenColgadas(filas: FilaInforme[]): {
 }
 
 /** D65 (T4.3) — resumen de DEDUP v2 (PURO — humo bun). activo = hay trazas
- *  del dedup (el instrumento corrió en esta cola). matches = filas marcadas
- *  gemela por contenido — incluye las que el dueño luego reprocesó con
- *  PROCESAR IGUAL (el match SÍ ocurrió); distancia media SOLO sobre matches
- *  con distancia (sin datos → null — jamás inventar). e63k (F1.5):
- *  "identidad" cuenta la capa 2 (serie impresa repetida) y NO como match
- *  v2; "visual-aplazada" NO es match (resolución pendiente — activo true
- *  igualmente porque dedup != null). */
+ *  del dedup (el instrumento corrió en esta cola).
+ *  e66 (P3, revoca el criterio e63k F1.5): matches = TODAS las capas que
+ *  detectaron duplicado — "v2" + "identidad" + "qr" + "ya-enviada" — no solo
+ *  la capa visual v2. "visual-aplazada" NO es match (resolución pendiente —
+ *  activo true igualmente porque dedup != null) y "sin-match" tampoco.
+ *  Desglose aditivo: v2 (la cuenta que matches era antes), qr, identidad,
+ *  yaEnviada. distanciaMedia SOLO sobre filas con distancia presente
+ *  (v2/identidad — sin datos → null, jamás inventar). */
 export function resumenDedup(filas: FilaInforme[]): {
   activo: boolean;
   matches: number;
+  /** e66 (P3) — desglose aditivo: matches de la capa visual v2 (lo que
+   *  matches significaba antes del kit; los parsers viejos lo pierden, los
+   *  nuevos lo tienen explícito). */
+  v2: number;
   distanciaMedia: number | null;
   sinMatch: number;
   identidad: number;
   /** e63m (F3): gemelas atrapadas por la CAPA 0 (dedup "qr" — identidad-QR
    *  pre-OCR, el OCR jamás se pagó). 0 = la capa no atrapó nada (dato real). */
   qr: number;
+  /** e66 (P3): filas nacidas YA-ENVIADA (dedup "ya-enviada" — match contra
+   *  registro enviado del histórico). Aditivo al final. */
+  yaEnviada: number;
 } {
-  const matches = filas.filter((f) => f.dedup === "v2");
-  const distancias = matches
+  const conMatch = filas.filter(
+    (f) =>
+      f.dedup === "v2" ||
+      f.dedup === "identidad" ||
+      f.dedup === "qr" ||
+      f.dedup === "ya-enviada",
+  );
+  // e66 (P3): distancia SOLO de las capas que la traen (v2/identidad) y con
+  // el dato presente (typeof excluye null/undefined — jamás inventar).
+  const distancias = conMatch
+    .filter((f) => f.dedup === "v2" || f.dedup === "identidad")
     .map((f) => f.dedupDistancia)
     .filter((v): v is number => typeof v === "number");
   return {
     activo: filas.some((f) => f.dedup != null),
-    matches: matches.length,
+    matches: conMatch.length,
+    v2: filas.filter((f) => f.dedup === "v2").length,
     distanciaMedia: distancias.length
       ? Math.round(distancias.reduce((a, b) => a + b, 0) / distancias.length)
       : null,
     sinMatch: filas.filter((f) => f.dedup === "sin-match").length,
     identidad: filas.filter((f) => f.dedup === "identidad").length,
     qr: filas.filter((f) => f.dedup === "qr").length,
+    yaEnviada: filas.filter((f) => f.dedup === "ya-enviada").length,
   };
 }
 
@@ -747,7 +772,9 @@ export function renderTxt(
   const escaneos = filas.filter((f) => f.origen === "escaneo");
   const escPorStatus = conteo(
     escaneos.map((f) => f.statusActa),
-    ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA"],
+    // e66 (P2): "DUPLICADA" al final — una gemela de un ESCANEO hereda el
+    // diagnóstico (con origen escaneo) del original y cae en este conteo.
+    ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA", "DUPLICADA"],
   );
   const motivosEscaneos = [
     ...new Set(escaneos.filter((f) => f.rechazo).map((f) => f.rechazo?.tipo)),
@@ -806,7 +833,11 @@ export function renderTxt(
   const resumenCapas = resumenDedup(filas);
   if (resumenCapas.activo) {
     linea(
-      `DEDUP-CAPAS: capa0-qr ${resumenCapas.qr} - capa1-dhash-marcada ${resumenCapas.matches} - capa2-identidad ${resumenCapas.identidad}`,
+      // e66 (P3): capa1-dhash-marcada ahora lee `v2` (matches pasó a ser
+      // MULTI-CAPA: v2+identidad+qr+ya-enviada — M-e66-2); los tokens previos
+      // no cambian de forma y `capa3-ya-enviada` se AÑADE AL FINAL (contrato
+      // D51: solo añadir — los parsers del dueño por prefijo intactos).
+      `DEDUP-CAPAS: capa0-qr ${resumenCapas.qr} - capa1-dhash-marcada ${resumenCapas.v2} - capa2-identidad ${resumenCapas.identidad} - capa3-ya-enviada ${resumenCapas.yaEnviada}`,
     );
   }
   linea();
@@ -876,6 +907,33 @@ export function renderTxt(
  * downloadBlob (core) — aquí SOLO se construye. Lanza COLA_VACIA si la cola
  * no tiene registros (la UI la trata con el botón deshabilitado).
  */
+/** e68-blob-idb-v1 (Paso 4): uso REAL de IndexedDB reportado por el
+ *  navegador (navigator.storage.estimate) en MB con 1 decimal. null cuando
+ *  el navegador no lo expone (Safari viejo, contexto no seguro) — jamás
+ *  inventar. Best-effort: cualquier fallo → null.
+ *  e71 (P9): fórmula en forma LITERAL del kit — bytes / 1e6 = MB, redondeo a
+ *  1 decimal. AUDITORÍA honesta: la forma previa (Math.round(idb / 1e5) / 10)
+ *  ya era matemáticamente idéntica (idb/1e6) — el 330 MB observado por el
+ *  dueño NO era un multiplicador erróneo sino el uso REAL que Chrome reporta
+ *  en usageDetails.indexedDB (LevelDB nunca encoge: páginas muertas de los
+ *  re-writes de registros — migración e68 reescribe cada registro — hasta la
+ *  próxima compactación). La fórmula queda explícita para auditoría a la
+ *  vista; el número que reporta es el uso EN DISCO del origen, no el dato
+ *  vivo (nota para el dueño en REPORTE-e71 §P9). */
+async function almacenamientoIdbMb(): Promise<number | null> {
+  try {
+    const estimacion = await navigator.storage?.estimate?.();
+    // usageDetails NO está en el lib.dom de este TS — acceso tipado local
+    // (Record<string, number>; la llave indexedDB es la de Chrome/Edge).
+    const detalles = (estimacion as { usageDetails?: Record<string, number> })
+      ?.usageDetails;
+    const idb = detalles?.indexedDB;
+    return typeof idb === "number" ? Math.round((idb / 1e6) * 10) / 10 : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function generarInformeZip(
   onProgreso?: (p: ProgresoInforme) => void,
 ): Promise<InformeZip> {
@@ -910,7 +968,9 @@ export async function generarInformeZip(
   );
   const porStatusActa = conteo(
     filas.map((f) => f.statusActa),
-    ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA"],
+    // e66 (P2): "DUPLICADA" AL FINAL (JSON estable — claves fijas a 0) — las
+    // gemelas reutilizadas ya no inflan ENVIADA (D-e66-1).
+    ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA", "DUPLICADA"],
   );
   const tiemposMedios = mediosTiempos(filas);
   const informe = {
@@ -922,9 +982,19 @@ export async function generarInformeZip(
       porEstadoFila,
       porStatusActa,
       tiemposMediosMs: tiemposMedios,
-      // e65-dedup-enviadas-v1 (T-8, opcional del kit): filas que nacieron
-      // YA-ENVIADA (match bytes/dhash contra el histórico) — cero pipeline.
-      yaEnviadas: filas.filter((f) => f.estado === "YA-ENVIADA").length,
+      // e71 (P3.1) — yaEnviadas ahora cuenta las actas con desenlace ENVIADA
+      // (auto OPTIMA o envío manual) de ESTA cola — el dueño la lee como
+      // «actas enviadas» y reportaba 0: el estado YA-ENVIADA (dedup contra
+      // el ledger, e65) solo existe en re-subidas de la misma sesión y NO es
+      // el significado que el reporte necesita. porStatusActa.ENVIADA sigue
+      // siendo el censo completo por status (intacto); este contador queda
+      // como atajo honesto = porStatusActa.ENVIADA.
+      yaEnviadas: filas.filter((f) => f.statusActa === "ENVIADA").length,
+      // e68-blob-idb-v1 (Paso 4 — observabilidad, ADITIVO AL FINAL): uso
+      // REAL de IndexedDB en MB (navegador — estimate). null = no expuesto
+      // (jamás inventar). Base de comparación del criterio «IDB ~40 % menos»
+      // del kit (antes/después con el MISMO lote).
+      almacenamientoMB: await almacenamientoIdbMb(),
     },
     rechazos: {
       porTipo: conteo(
@@ -954,11 +1024,13 @@ export async function generarInformeZip(
       return {
         version: "v2" as const,
         activo: r.activo,
-        matches: r.matches,
+        matches: r.matches, // e66 (P3): TODAS las capas (v2+identidad+qr+ya-enviada)
+        v2: r.v2, // e66 — desglose aditivo (lo que matches era antes)
         sinMatch: r.sinMatch,
         distanciaMedia: r.distanciaMedia,
         identidad: r.identidad, // e63k — capa 2 por identidad (aditivo al final)
         qr: r.qr, // e63m — capa 0 identidad-QR pre-OCR (aditivo al final)
+        yaEnviada: r.yaEnviada, // e66 — capa e65 contra el histórico (aditivo al final)
       };
     })(),
     actas: filas.map(actaLivianaJson),

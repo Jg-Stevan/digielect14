@@ -9,10 +9,14 @@
  *    archivadas (huecos por mesa), puestoActual, historial (tope 200),
  *    contadores y motivosNoEnvio. SIN fotos, SIN actas completas.
  *  · store «acta» (registro «en-revision»): el actaActual CON sus fotos
- *    (dataURLs ~7-14 MB — IDB lo aguanta, localStorage NO) para restaurar
- *    un crash a mitad de REVISIÓN. Solo actas reales (fuente CAMARA/
- *    ARCHIVO); SIMULACIÓN y origen MASIVA jamás ocupan el slot (la cola
- *    masiva ya persiste las suyas).
+ *    para restaurar un crash a mitad de REVISIÓN. Solo actas reales
+ *    (fuente CAMARA/ARCHIVO); SIMULACIÓN y origen MASIVA jamás ocupan el
+ *    slot (la cola masiva ya persiste las suyas). KIT e69: las fotos ya NO
+ *    duermen como dataURLs base64 (+33 % de inflación sobre los bytes
+ *    reales, 2.4–16.9 MB por acta) sino como Blobs NATIVOS — mismo patrón
+ *    e68 de masiva/cola.ts: compactar al escribir, materializar al leer;
+ *    el contrato Acta en RAM queda INTACTO (consumidores con dataURLs).
+ *    Desenlace ENVIADA → fotoOriginal fuera (liberada — §3 del plan e68).
  *
  * Qué NO persiste (documentado):
  *  · `mesas` — DERIVADA: se reconstruye de archivadas+puestoActual con
@@ -132,12 +136,161 @@ export async function guardarJornada(estado: EstadoJornada): Promise<void> {
   }
 }
 
-/** Slot del acta en REVISIÓN (null = limpiar el slot). */
+// ─── e69-blob-jornada-v1 — MIGRACIÓN base64 → Blob (fotos del slot) ───
+// Mismo patrón e68 de masiva/cola.ts (compactar al escribir, materializar
+// al leer) — helpers DUPLICADOS a propósito: extraerlos tocaría cola.ts y
+// los QA del repo escanean literales de código ahí (jamás romper suites
+// por una refactorización). El contrato Acta NO cambia (consumidores con
+// dataURLs en RAM) — la transformación vive SOLO en la frontera IDB.
+
+/** e69 — envoltorio del slot: el acta DUERME sin dataURLs (salen del
+ *  structured clone) y las fotos al lado como Blobs nativos. Los registros
+ *  previos a e69 guardaban el Acta CRUDO con Strings base64 — se detectan
+ *  por ausencia de la llave «acta» (Acta jamás tiene un campo `acta`). */
+interface SlotActa {
+  acta: Acta;
+  fotoOriginalBlob?: Blob;
+  fotoProcesadaBlob?: Blob;
+}
+
+function esSlotActa(registro: unknown): registro is SlotActa {
+  if (typeof registro !== "object" || registro === null) return false;
+  const conActa = registro as { acta?: unknown };
+  return typeof conActa.acta === "object" && conActa.acta !== null;
+}
+
+/** dataURL → Blob: los bytes EXACTOS del base64 (Uint8Array → Blob con su
+ *  MIME). null si no parsea (el caller CONSERVA el string — jamás perder
+ *  una foto por un parseo). Gemelo de cola.ts (comentario arriba). */
+function dataUrlABlob(dataUrl: string): Blob | null {
+  // Sin flag `s` (target < es2018): el base64 de canvas/FileReader jamás
+  // trae saltos de línea.
+  const m = /^data:([^;,]+);base64,(.*)$/.exec(dataUrl);
+  if (!m) return null;
+  try {
+    const bin = atob(m[2]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: m[1] });
+  } catch {
+    return null;
+  }
+}
+
+/** Blob → dataURL (FileReader del navegador — determinista: mismos bytes +
+ *  MIME ⇒ mismo string; null si falla — el caller sigue sin foto y los
+ *  guards existentes degradan honesto). Gemelo de cola.ts. */
+function blobADataUrl(blob: Blob): Promise<string | null> {
+  return new Promise((resolve) => {
+    try {
+      const lector = new FileReader();
+      lector.onload = () =>
+        resolve(typeof lector.result === "string" ? lector.result : null);
+      lector.onerror = () => resolve(null);
+      lector.readAsDataURL(blob);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/** e69 §3 — ¿el desenlace ya NO necesita la foto original? ENVIADA (el
+ *  envío realizó — reintento/recorte manual son raros, plan §3 del e68) o
+ *  DUPLICADA (gemela copiada — su foto ES la de la original). HOY solo
+ *  ENVIADA es alcanzable en este slot: DUPLICADA es concepto del runner
+ *  MASIVA y el suscriptor del store ya excluye `masivaOrigen` (guard
+ *  L1448-1452) — se deja por simetría con el plan (defensiva, un status
+ *  futuro no rompería el cleanup). */
+function desenlaceSinOriginal(acta: Acta): boolean {
+  return acta.status === "ENVIADA" || acta.status === "DUPLICADA";
+}
+
+/** e69 §2 — COMPACTAR para IDB: las dataURLs del acta (base64, +33 % en el
+ *  structured clone) se HOISTEAN a Blobs nativos del slot y salen de la
+ *  copia persistida del acta. Reglas:
+ *  · String presente → se convierte; fallo de parseo → el string SE QUEDA
+ *    (jamás perder la foto) — salvo cleanup (abajo), que manda sobre todo.
+ *  · Cleanup (§3): ENVIADA/DUPLICADA → fotoOriginal FUERA (blob Y string —
+ *    «fotoOriginal = null» literal del plan; libera 2.4–16.9 MB/acta).
+ *    fotoProcesada SE CONSERVA (REVISIÓN muestra la enviada).
+ *  · Actas sin fotos (PENDIENTE de análisis, RECHAZADA temprana) → slot
+ *    sin Blobs, sin cambios de forma. */
+function compactarActa(acta: Acta): SlotActa {
+  let fotoOriginalBlob: Blob | undefined;
+  let fotoProcesadaBlob: Blob | undefined;
+  let fotoOriginal: string | undefined = acta.fotoOriginal;
+  let fotoProcesada: string | undefined = acta.fotoProcesada;
+  if (fotoOriginal) {
+    const blob = dataUrlABlob(fotoOriginal);
+    if (blob) {
+      fotoOriginalBlob = blob;
+      fotoOriginal = undefined; // sale del acta — duerme como Blob
+    }
+  }
+  if (fotoProcesada) {
+    const blob = dataUrlABlob(fotoProcesada);
+    if (blob) {
+      fotoProcesadaBlob = blob;
+      fotoProcesada = undefined; // ídem
+    }
+  }
+  if (desenlaceSinOriginal(acta)) {
+    // Cleanup §3: el desenlace ya no necesita la ORIGINAL (blob o string
+    // que fuera — «fotoOriginal = null» del plan). Masiva solo baja el
+    // Blob (M-e68-2); aquí el string también sale porque el cleanup es el
+    // ÚNICO punto donde soltarlo es seguro y explícito.
+    fotoOriginalBlob = undefined;
+    fotoOriginal = undefined;
+  }
+  const actaCompacta: Acta = { ...acta };
+  if (fotoOriginal) actaCompacta.fotoOriginal = fotoOriginal;
+  else delete actaCompacta.fotoOriginal;
+  if (fotoProcesada) actaCompacta.fotoProcesada = fotoProcesada;
+  else delete actaCompacta.fotoProcesada;
+  const slot: SlotActa = { acta: actaCompacta };
+  if (fotoOriginalBlob) slot.fotoOriginalBlob = fotoOriginalBlob;
+  if (fotoProcesadaBlob) slot.fotoProcesadaBlob = fotoProcesadaBlob;
+  // §4 — observabilidad: bytes REALES que duermen en IDB (Blob.size = el
+  // monitor de IDB deja de reportar len×4/3 del base64). Solo con foto.
+  if (slot.fotoOriginalBlob || slot.fotoProcesadaBlob || fotoOriginal || fotoProcesada) {
+    console.info("[e14] memoria acta", {
+      statusActa: acta.status,
+      fuente: acta.fuente ?? null,
+      fotoOriginalBytes: slot.fotoOriginalBlob?.size ?? 0,
+      fotoProcesadaBytes: slot.fotoProcesadaBlob?.size ?? 0,
+      originalLiberada: !slot.fotoOriginalBlob && !fotoOriginal && desenlaceSinOriginal(acta),
+    });
+  }
+  return slot;
+}
+
+/** e69 — MATERIALIZAR al leer: reconstruye las dataURLs del acta desde los
+ *  Blobs (contrato Acta en RAM INTACTO — REVISIÓN/recorte/UI las consumen
+ *  como siempre). Fallo del FileReader → el campo queda ausente (guards
+ *  existentes degradan honesto — jamás inventar). */
+async function materializarActa(slot: SlotActa): Promise<Acta> {
+  const acta = slot.acta;
+  const necesitaOriginal = !acta.fotoOriginal && slot.fotoOriginalBlob;
+  const necesitaProcesada = !acta.fotoProcesada && slot.fotoProcesadaBlob;
+  if (!necesitaOriginal && !necesitaProcesada) return acta;
+  const [fotoOriginal, fotoProcesada] = await Promise.all([
+    necesitaOriginal ? blobADataUrl(slot.fotoOriginalBlob as Blob) : Promise.resolve(null),
+    necesitaProcesada ? blobADataUrl(slot.fotoProcesadaBlob as Blob) : Promise.resolve(null),
+  ]);
+  return {
+    ...acta,
+    ...(fotoOriginal ? { fotoOriginal } : {}),
+    ...(fotoProcesada ? { fotoProcesada } : {}),
+  };
+}
+
+/** Slot del acta en REVISIÓN (null = limpiar el slot). e69: el acta real
+ *  se compacta ANTES del put (dataURLs → Blobs — ver compactarActa). */
 export async function guardarActaEnRevision(acta: Acta | null): Promise<void> {
   try {
     const db = await abrirJornada();
     const tx = db.transaction(STORE_ACTA, "readwrite");
-    tx.objectStore(STORE_ACTA).put(acta, KEY_ACTA);
+    tx.objectStore(STORE_ACTA).put(acta ? compactarActa(acta) : null, KEY_ACTA);
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error ?? new Error("IDB_ACTA_GUARDAR"));
@@ -151,11 +304,17 @@ export async function guardarActaEnRevision(acta: Acta | null): Promise<void> {
 export async function leerActaEnRevision(): Promise<Acta | null> {
   try {
     const db = await abrirJornada();
-    const acta = await pedir<Acta | null>(
+    const registro = await pedir<SlotActa | Acta | null>(
       db.transaction(STORE_ACTA, "readonly").objectStore(STORE_ACTA).get(KEY_ACTA),
       "IDB_ACTA_LEER",
     );
-    return acta ?? null;
+    if (!registro) return null;
+    // Compat pre-e69: registro con dataURLs String dentro del acta (formato
+    // anterior) pasa TAL CUAL — el suscriptor del store re-persiste por
+    // referencia y su próximo write lo compacta (mismo criterio §2.1 del
+    // plan e68: normalizar solo al leer, migración en caliente aparte).
+    if (esSlotActa(registro)) return await materializarActa(registro);
+    return registro;
   } catch {
     return null;
   }
