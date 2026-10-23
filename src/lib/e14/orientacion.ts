@@ -68,6 +68,7 @@
  * después (escudo-fondo, recortada, sin-votos — §2.2).
  */
 
+import { canvasCon } from "./image-utils"; // SPRINT-A A3 — factory de canvas
 import { ANCLAS_LECTURA, norm, senalDeLectura } from "./senal-lectura";
 import {
   rapidOcrCropsOrientacion,
@@ -219,25 +220,21 @@ function girarFuente(
   if (rot === 0) {
     // Normaliza a canvas (el caller trabaja SIEMPRE con canvases).
     const { w, h } = dimsDe(src);
-    const mismo = document.createElement("canvas");
-    mismo.width = w;
-    mismo.height = h;
+    const mismo = canvasCon(w, h); // SPRINT-A A3 — factory
     mismo.getContext("2d")!.drawImage(src, 0, 0);
     return mismo;
   }
   const { w, h } = dimsDe(src);
-  const tmp = document.createElement("canvas");
+  // SPRINT-A A3 — factory (mismo estado final: lienzo limpio del tamaño
+  // correcto — 180: w×h; 90/270 intercambian dimensiones — antes de girar).
+  const tmp = canvasCon(rot === 180 ? w : h, rot === 180 ? h : w);
   const ctx = tmp.getContext("2d")!;
   if (rot === 180) {
-    tmp.width = w;
-    tmp.height = h;
     ctx.translate(w, h);
     ctx.rotate(Math.PI);
     ctx.drawImage(src, 0, 0);
     return tmp;
   }
-  tmp.width = h; // 90/270 intercambian dimensiones
-  tmp.height = w;
   if (rot === 90) {
     ctx.translate(tmp.width, 0);
     ctx.rotate(Math.PI / 2);

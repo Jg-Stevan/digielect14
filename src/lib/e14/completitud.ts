@@ -46,7 +46,7 @@
 import type { Quad } from "@jg-stevan/scanner-core/types";
 // KIT e14-optimizacion-v1 (T1): decode memoizado — loadImage del package pasa
 // por el memo FIFO tope 2 de image-utils (misma firma, mismo decode).
-import { loadImageMemo } from "./image-utils";
+import { canvasCon, loadImageMemo } from "./image-utils";
 // KIT consenso-frankfurt-v1 (FASE 2, §3): las esquinas fiduciales del kit
 // identificacion-codigo-v1 perdonan la sospecha geométrica. Mismo paquete
 // src — SIN ciclo: integridad no importa completitud.
@@ -177,9 +177,7 @@ export async function motorTinta(fotoProcesada: string): Promise<MotorTinta> {
     if (cw < LADO_UTILIZABLE_MIN || ch < LADO_UTILIZABLE_MIN) {
       return noUtilizable; // warp degenerado (§7)
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = cw;
-    canvas.height = ch;
+    const canvas = canvasCon(cw, ch); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return noUtilizable;
     ctx.drawImage(img, 0, 0, cw, ch);
