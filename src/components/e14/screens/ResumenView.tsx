@@ -6,6 +6,10 @@
  * historial de envíos con barra de acento por estado. Reactivo en vivo.
  * Responsive 360→1280 (max-w-2xl en lg). La sección "ANÁLISIS DE LA
  * JORNADA" (donut + barras recharts) fue ELIMINADA a pedido del dueño.
+ *
+ * KIT e14-observabilidad-v1 (agente 2 · C1): tuerca del modo de
+ * diagnóstico SIEMPRE visible arriba-izquierda del header (dev/
+ * TuercaResumen) — activación armada, panel desde C4.
  */
 import { useEffect, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
@@ -15,6 +19,8 @@ import { PUESTO_SIMULADO } from "@/lib/e14/seed";
 // montar — decide el disabled del botón INFORME ↓ (cola.ts INTOCABLE).
 import { contarRegistros } from "@/lib/e14/masiva/cola";
 import { SegmentedBar } from "../primitives";
+// KIT e14-observabilidad-v1 (agente 2 · C1): puerta del modo de diagnóstico.
+import { TuercaResumen } from "../dev/TuercaResumen";
 
 function badgeEstado(estado: HistorialRow["estado"]) {
   switch (estado) {
@@ -127,17 +133,23 @@ export function ResumenView() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-[#090d12] flex flex-col">
       <header className="sticky top-0 z-40 w-full bg-[#090d12]/92 backdrop-blur-xl border-b border-slate-800/80 px-4 h-14 shrink-0 shadow-xs">
+        {/* KIT e14-observabilidad-v1 (agente 2 · C1): tuerca SIEMPRE visible
+            arriba-izquierda del header; el contenido se corre a la derecha
+            (pl) para despejar su blanco táctil de 44px. */}
+        <div className="absolute left-2 top-1/2 -translate-y-1/2 z-50">
+          <TuercaResumen />
+        </div>
         {/* Task 3: el contenido de la barra se alinea al ancho del contenedor
             de la vista (en lg+ ya no queda pegado al borde del viewport). */}
-        <div className="max-w-md lg:max-w-2xl mx-auto w-full h-full flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#10b981]" />
-            <h1 className="font-mono text-sm font-bold tracking-widest text-[#10b981] uppercase">
+        <div className="max-w-md lg:max-w-2xl mx-auto w-full h-full flex items-center justify-between pl-[56px]">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-[#10b981] shrink-0" />
+            <h1 className="font-mono text-sm font-bold tracking-widest text-[#10b981] uppercase truncate">
               RESUMEN DE TRABAJO
             </h1>
           </div>
-          <span className="font-mono text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/60">
-            {pct}% TRANSMITIDO
+          <span className="font-mono text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/60 whitespace-nowrap shrink-0">
+            {pct}% <span className="hidden min-[400px]:inline">TRANSMITIDO</span>
           </span>
         </div>
       </header>
