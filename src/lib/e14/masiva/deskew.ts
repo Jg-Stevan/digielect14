@@ -31,7 +31,7 @@
  *  escaneos. */
 
 import type { OrigenActa } from "./origen";
-import { decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1 — decode-once LRU compartido
+import { canvasCon, decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
 
 // ---------- Constantes (nombradas y comentadas — kit §2) ----------
 
@@ -219,9 +219,7 @@ async function decodeMaster(archivo: Blob): Promise<{ canvas: HTMLCanvasElement;
   try {
     const fuente = await decodeImagenLruDeBlob(archivo);
     const img = fuente as HTMLImageElement;
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    const canvas = canvasCon(img.naturalWidth, img.naturalHeight); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) {
       return null;
@@ -240,9 +238,7 @@ function bitmapDeAnalisis(canvas: HTMLCanvasElement): { ancho: number; alto: num
     const escala = Math.min(1, ANALISIS_ANCHO / canvas.width);
     const w = Math.max(1, Math.round(canvas.width * escala));
     const h = Math.max(1, Math.round(canvas.height * escala));
-    const c = document.createElement("canvas");
-    c.width = w;
-    c.height = h;
+    const c = canvasCon(w, h); // SPRINT-A A3 — factory
     const ctx = c.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     ctx.drawImage(canvas, 0, 0, w, h);
@@ -260,9 +256,7 @@ function rotarCanvas(canvas: HTMLCanvasElement, grados: number): HTMLCanvasEleme
   const sin = Math.abs(Math.sin(rad));
   const w2 = Math.ceil(canvas.width * cos + canvas.height * sin);
   const h2 = Math.ceil(canvas.width * sin + canvas.height * cos);
-  const salida = document.createElement("canvas");
-  salida.width = w2;
-  salida.height = h2;
+  const salida = canvasCon(w2, h2); // SPRINT-A A3 — factory
   const ctx = salida.getContext("2d", { willReadFrequently: true });
   if (!ctx) return canvas; // sin ctx → sin rotación (honesto)
   ctx.imageSmoothingEnabled = true;
