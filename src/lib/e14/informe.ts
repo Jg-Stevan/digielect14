@@ -43,7 +43,7 @@ const ESTADOS_CARPETA: readonly string[] = [
 // ---------- Tipos públicos ----------
 
 /** Entorno donde nació el informe (T1.2) — datos reales para calibrar. */
-export interface EntornoInforme {
+interface EntornoInforme {
   userAgent: string;
   idioma: string;
   nucleos: number | null;
@@ -183,7 +183,7 @@ export interface FilaInforme {
 }
 
 /** Resumen para la UI (T2) — espejo de lo importante del informe.json. */
-export interface ResumenInforme {
+interface ResumenInforme {
   generado: string;
   totalActas: number;
   carpetas: number;
@@ -212,13 +212,13 @@ export interface ResumenInforme {
 }
 
 /** Progreso opcional (T1.5: el código puede reportar; la UI hoy no lo pinta). */
-export interface ProgresoInforme {
+interface ProgresoInforme {
   fase: "LEYENDO" | "EMPAQUETANDO";
   actual: number;
   total: number;
 }
 
-export interface InformeZip {
+interface InformeZip {
   blob: Blob;
   nombre: string;
   resumen: ResumenInforme;
@@ -392,7 +392,7 @@ function qrCortoInforme(payload: string): string {
  *  desenlace final NO es el rechazo-timeout (el reintento las rescató);
  *  porEtapa = conteo de etapaAlMorir (buckets fijos a 0 + "sin-senal").
  *  Registros pre-D65 (watchdog null) no cuentan — el instrumento no existía. */
-export function resumenColgadas(filas: FilaInforme[]): {
+function resumenColgadas(filas: FilaInforme[]): {
   total: number;
   salvadas: number;
   porEtapa: Record<string, number>;
