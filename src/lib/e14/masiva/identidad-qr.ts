@@ -117,6 +117,14 @@ export const ZXING_BINARIZADORES: readonly Binarizer[] = [
  *  barrido (micro-decisión declarada: el formato es dato del dominio). */
 export const ZXING_FORMATO = "QRCode" as const;
 
+// ─── e71 (Opt-2) — RECORTE de la esquina estándar (kit e71-consolidación) ───
+/** Lado del RECORTE de la esquina estándar del QR (kit: «aprox 600x600 px»):
+ *  el QR del E-14 vive en la esquina superior-izquierda (las bandas B/C del
+ *  ladder lo apuntan) — un recorte cuadrado de ESA esquina lo contiene con
+ *  contexto de sobra y se lee en UNA pasada. El kit midió los barridos
+ *  completos hasta ~15 s; sobre el recorte el tier completo es <500 ms. */
+export const QR_RECORTE_LADO = 600;
+
 /** Fuente de píxeles RGBA — la MISMA forma que devuelve getImageData
  *  (canal a canal, 4 bytes por píxel, fila por fila). */
 export interface PixelesQr {
@@ -575,6 +583,29 @@ function trazaQr(tier: string, payload: string, t0: number): void {
   );
 }
 
+// ─── e71 (Opt-2) — tier RECORTE (esquina estándar, SIN barrido) ─────────────
+/** Decodifica el QR de la esquina estándar en UNA pasada (kit Opt-2: «en
+ *  lugar de barrer la imagen completa, recortar la esquina del QR… y pasarle
+ *  ese recorte»): recorte superior-izquierda de QR_RECORTE_LADO px (clampado
+ *  — imágenes menores devuelven la imagen COMPLETA; ventanaDePixeles jamás
+ *  inventa píxeles) → jsQR (attemptBoth) → zxing (los DOS binarizadores,
+ *  MISMO contrato del barrido: QRCode-only, tryHarder/rotate/invert false).
+ *  null si nada lee. Jamás throw (red line e64 §7-4). El wrapper DOM
+ *  (decodificarQrDeCapture) consume el tier vía decodificarQrDePixeles. */
+export async function decodificarQrDeRecorte(
+  pix: PixelesQr,
+): Promise<string | null> {
+  const recorte = ventanaDePixeles(pix, 0, 0, QR_RECORTE_LADO);
+  if (!recorte) return null;
+  const js = jsQrDeVentana(recorte);
+  if (js != null) return js;
+  for (const binarizador of ZXING_BINARIZADORES) {
+    const payload = await zxingDeVentana(recorte, binarizador);
+    if (payload != null) return payload;
+  }
+  return null;
+}
+
 /**
  * CADENA COMPLETA de decode sobre píxeles (doc hermano §1 + e64 Fase 1 —
  * el orden REAL): ladderBase → barrido jsQR → barrido NITIDEZ (T-1.1) →
@@ -592,6 +623,17 @@ export async function decodificarQrDePixeles(
   if (base != null) {
     trazaQr("base", base, t0);
     return base;
+  }
+  // e71 (Opt-2) — tier RECORTE (ANTES de cualquier barrido completo): UNA
+  // lectura jsQR + zxing sobre la esquina estándar del E-14 (<500 ms). Si el
+  // QR vive donde el formulario lo pone (el caso de campo), los barridos
+  // completos (~15 s) JAMÁS corren. Fallback sagrado: el barrido de SIEMPRE
+  // sigue detrás — los QR fuera de la esquina estándar (actas rotadas u
+  // encuadres raros) conservan SU rescate, cero pérdida de cobertura.
+  const recorte = await decodificarQrDeRecorte(pix);
+  if (recorte != null) {
+    trazaQr("recorte-600", recorte, t0);
+    return recorte;
   }
   const barrido = barridoQrDePixeles(pix);
   if (barrido != null) {
