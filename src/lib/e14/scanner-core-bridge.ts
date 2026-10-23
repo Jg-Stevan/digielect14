@@ -719,17 +719,11 @@ async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | 
  * se descarta igual). NO re-OCR del acta completa. Fallo → "" (sin banda
  * nueva: la cascada sigue con el d9 del consenso — nunca condena).
  */
-// KIT e14-motor-rapidocr-v1 (PROD-2 §3/§4-C5): trazas del motor de producción
-// — conf/det/rec de la ÚLTIMA llamada reconocerRapidOcr. La banda del sello
-// y el re-OCR del editor también pasan por aquí: los pipelines capturan sus
-// valores justo tras su OCR PRINCIPAL (antes de la banda) para la traza.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- traza §4.2 PROD-2 (TODO(fase-4): emitir a observabilidad)
-let ultimoOcrConf: number | null = null;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- traza §4.2 PROD-2 (TODO(fase-4): emitir a observabilidad)
-let ultimoOcrDet = 0;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- traza §4.2 PROD-2 (TODO(fase-4): emitir a observabilidad)
-let ultimoOcrRec = 0;
-
+// SPRINT-A (perf/decode-once-v1) A4: las dead stores ultimoOcrConf/Det/Rec
+// (PROD-2 §4-C5) fueron eliminadas — se escribían 9× y NUNCA se leían
+// (knip + review 23-oct; sin anclas en scripts/qa-*.ts). La traza real del
+// motor vive en las líneas ocr=rapidocr de los pipelines, que capturan
+// conf/det/rec de ocrEsc directamente (confOcr/detOcr/recOcr — vivas).
 /** Motor de producción (PROD-2): RapidOCR PP-OCRv4 sobre el recorte original.
  *  Mismo contrato que requestOcr: texto + progreso 0→1. Sin fallback de motor
  *  (pitfall §9.3): el fallo sigue el mismo camino controlado de hoy (§5 del
@@ -740,9 +734,6 @@ async function reconocerRapidOcr(
 ): Promise<string> {
   const rt = await rapidOcrInit(); // singleton de sesión (pre-warm en bg)
   const r = await rapidOcrReconocer(rt, dataUrl, onProgress);
-  ultimoOcrConf = r.confMedia; // para la traza (§4-C5)
-  ultimoOcrDet = r.msDet;
-  ultimoOcrRec = r.msRec;
   return r.texto;
 }
 
@@ -761,11 +752,10 @@ async function reconocerRapidOcr(
  *    (sin línea en SIM):
  *      [e14] ocr-escalonado pasada1=1280 lectura=DEBIL reocr=1 elegido=1920 anclas1=2 anclas2=9 ms1=8200 ms2=14100
  *      [e14] ocr-escalonado pasada1=1280 lectura=FUERTE reocr=0 elegido=1280 anclas1=7 ms1=8200
- *  · ultimoOcr* (§4.2 PROD-2): quedan con la pasada ELEGIDA — la traza
- *    ocr=rapidocr del pipeline describe el texto que el downstream consume.
- *  El downstream (banda condicional, clasificación, gate, diagnostico,
- *  ultimoOcr*) consume SOLO el texto elegido (§2.4) — el caller recibe el
- *  texto ya resuelto y las métricas de la pasada elegida. */
+ *  El downstream (banda condicional, clasificación, gate, diagnostico)
+ *  consume SOLO el texto elegido (§2.4) — el caller recibe el texto ya
+ *  resuelto y las métricas de la pasada elegida (SPRINT-A A4: la referencia
+ *  a ultimoOcr* fue removida con sus dead stores). */
 interface OcrEscalonadoSalida {
   texto: string;
   conf: number | null;
@@ -774,7 +764,7 @@ interface OcrEscalonadoSalida {
 }
 
 /** Pasada con métricas para elegirMejor (§2.4) — el ganador viaja por
- *  REFERENCIA con su cap (1280|1920) para la traza elegido= y ultimoOcr*. */
+ *  REFERENCIA con su cap (1280|1920) para la traza elegido=. */
 interface PasadaEscalonada {
   texto: string;
   conf: number;
@@ -799,9 +789,6 @@ async function reconocerRapidOcrEscalonado(
   if (escalonado.simular) {
     // SIM: EXACTAMENTE el flujo de hoy (det 1920, una pasada, 0 trazas).
     const r = await rapidOcrReconocer(rt, fotoOcr, onProgress);
-    ultimoOcrConf = r.confMedia;
-    ultimoOcrDet = r.msDet;
-    ultimoOcrRec = r.msRec;
     return { texto: r.texto, conf: r.confMedia, detMs: r.msDet, recMs: r.msRec };
   }
   // 1.ª pasada — det cap RÁPIDO (1280) → cls → rec (igual que hoy, §2.2).
@@ -836,10 +823,6 @@ async function reconocerRapidOcrEscalonado(
     );
     elegido = ganadora; // MISMA referencia — la ganadora trae sus métricas
   }
-  // ultimoOcr* = la pasada ELEGIDA (§2.4 — el downstream la describe).
-  ultimoOcrConf = elegido.conf;
-  ultimoOcrDet = elegido.detMs;
-  ultimoOcrRec = elegido.recMs;
   // Traza propia (§2.5 — línea PROPIA, append-only; SIN línea en SIM).
   console.info(
     `[e14] ocr-escalonado pasada1=${DET_CAP_RAPIDO} lectura=${senal1.nivel} ` +
@@ -1490,8 +1473,8 @@ export class RealCoreBridge implements E14Bridge {
     );
     let texto = ocrEsc.texto;
     ms.ocr = performance.now() - tOcr;
-    // PROD-2 (§4.2): conf/det/rec de la pasada ELEGIDA — capturados ANTES de
-    // la banda (también corre RapidOCR y pisaría ultimoOcr* en la traza).
+    // PROD-2 (§4.2): conf/det/rec de la pasada ELEGIDA (SPRINT-A A4: la
+    // captura vive aquí — la dead store ultimoOcr* fue eliminada).
     const confOcr = ocrEsc.conf;
     const detOcr = ocrEsc.detMs;
     const recOcr = ocrEsc.recMs;
