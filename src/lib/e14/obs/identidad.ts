@@ -22,8 +22,10 @@ let sesionMemo: string | null = null;
 
 /** UUID v4: crypto.randomUUID (secure context) con fallback honesto a
  *  getRandomValues — la identidad es un UUID sin relación con el operador
- *  (no es PII), pero jamás inventamos entropía si el navegador no la da. */
-function uuidNuevo(): string {
+ *  (no es PII), pero jamás inventamos entropía si el navegador no la da.
+ *  (infra interna compartida: buffer.ts la usa para el id de cada evento —
+ *  el contrato §4.3 pinnea las 4 firmas públicas; este helper es plumbing). */
+export function nuevoUuid(): string {
   const c = globalThis.crypto;
   if (c && typeof c.randomUUID === "function") return c.randomUUID();
   if (c && typeof c.getRandomValues === "function") {
@@ -55,7 +57,7 @@ function uuidNuevo(): string {
 /** UUID por sesión de página — estable dentro de la sesión (memo), distinto
  *  entre pestañas/cargas. Idempotente por diseño. */
 export function idSesion(): string {
-  if (!sesionMemo) sesionMemo = uuidNuevo();
+  if (!sesionMemo) sesionMemo = nuevoUuid();
   return sesionMemo;
 }
 
@@ -66,11 +68,11 @@ export function idDispositivo(): string {
   try {
     const actual = window.localStorage.getItem(CLAVE_DISPOSITIVO);
     if (actual) return actual;
-    const nuevo = uuidNuevo();
+    const nuevo = nuevoUuid();
     window.localStorage.setItem(CLAVE_DISPOSITIVO, nuevo);
     return nuevo;
   } catch {
-    return uuidNuevo();
+    return nuevoUuid();
   }
 }
 

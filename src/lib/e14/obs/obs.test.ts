@@ -6,11 +6,24 @@
  *
  * C1: digest (estabilidad, normalización, archivoDeStack, agregarErrores)
  *     + identidad (fnv1a8 con vectores FNV-1a 32 fijados, sesión/dispositivo).
+ * C2: buffer — lógica pura de retención (mantenimientoBuffer: TTL 30d +
+ *     tope 500 FIFO) + roundtrip IDB con fake mínimo de indexedDB.
  */
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { agregarErrores, archivoDeStack, digestDe, normalizarMensaje } from "./digest";
 import { appVersion, fnv1a8, idSesion } from "./identidad";
+import {
+  abrirBuffer,
+  appendEvento,
+  contarEventos,
+  eventosPorDigest,
+  leerEventos,
+  mantenimientoBuffer,
+  purgarBuffer,
+  TOPE_EVENTOS,
+  TTL_MS,
+} from "./buffer";
 import type { EventoObs } from "./tipos";
 
 /** Evento error/warn de utilidad para las pruebas de agrupación. */
@@ -179,5 +192,250 @@ describe("digest · agregarErrores", () => {
     const b = { ...eventoError("aaaa1111", 200), appVersion: "0.2.0" };
     const [g] = agregarErrores([a, b]);
     expect(g.versiones).toEqual(["0.1.0", "0.2.0"]);
+  });
+});
+
+// ─── C2 · buffer (lógica pura + IDB con fake mínimo) ───────────────────────
+
+describe("buffer · mantenimientoBuffer (retención PURA)", () => {
+  const DIA = 24 * 60 * 60 * 1000;
+  const ahora = 1_800_000_000_000;
+
+  function ev(ts: number, id = `e-${ts}`): EventoObs {
+    return {
+      id,
+      ts,
+      tipo: "uso",
+      sesion: "s",
+      dispositivo: "d",
+      appVersion: "0.1.0",
+      datos: {},
+    };
+  }
+
+  it("TTL: borra los eventos con ts < ahora − 30 días", () => {
+    const vivos = [ev(ahora - DIA), ev(ahora - 5 * DIA)];
+    const vencidos = [ev(ahora - 31 * DIA), ev(ahora - 40 * DIA)];
+    const { conservar, borrar } = mantenimientoBuffer([...vivos, ...vencidos], ahora);
+    expect(conservar).toHaveLength(2);
+    expect(borrar).toHaveLength(2);
+    expect(borrar.map((b) => b.ts)).toEqual([ahora - 40 * DIA, ahora - 31 * DIA]);
+  });
+
+  it("tope 500: FIFO — borra los MÁS VIEJOS por ts", () => {
+    const eventos = Array.from({ length: TOPE_EVENTOS + 25 }, (_, i) =>
+      ev(ahora - (TOPE_EVENTOS + 25 - i) * 1000, `id-${i}`),
+    );
+    const { conservar, borrar } = mantenimientoBuffer(eventos, ahora);
+    expect(conservar).toHaveLength(TOPE_EVENTOS);
+    expect(borrar).toHaveLength(25);
+    // los borrados son los 25 más viejos (id-0..id-24) — comparación NUMÉRICA
+    expect(borrar.every((b) => Number(b.id.slice(3)) < 25)).toBe(true);
+    // el conservado más viejo es el 26º
+    expect(conservar[0].id).toBe("id-25");
+  });
+
+  it("lista vacía → nada que hacer", () => {
+    const { conservar, borrar } = mantenimientoBuffer([], ahora);
+    expect(conservar).toHaveLength(0);
+    expect(borrar).toHaveLength(0);
+  });
+});
+
+// ─── Fake mínimo de indexedDB (put/delete/clear/count/getAll + tx) ─────────
+
+/** Request IDB falso: muta `result` directamente (el tipo DOM lo declara
+ *  readonly — el fake lo maneja como campo propio) y dispara callbacks. */
+class FakeRequest<T> {
+  result: T;
+  onsuccess: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onupgradeneeded: (() => void) | null = null;
+  constructor(result: T) {
+    this.result = result;
+  }
+}
+
+/** Fake mínimo de indexedDB: open (con upgrade + result disponible ANTES de
+ *  onupgradeneeded, como IDB real), objectStoreNames, createObjectStore y
+ *  transaction → objectStore con put/delete/clear/count/getAll. La tx dispara
+ *  oncomplete cuando el número de requests pendientes llega a cero. */
+function crearFakeIndexedDB(): IDBFactory {
+  const dbs = new Map<string, Map<string, Map<string, unknown>>>();
+  const fab = {
+    open(nombre: string, _version?: number): IDBOpenDBRequest {
+      let stores = dbs.get(nombre);
+      if (!stores) {
+        stores = new Map();
+        dbs.set(nombre, stores);
+      }
+      const reqInt = new FakeRequest<unknown>(null);
+      const req = reqInt as unknown as IDBOpenDBRequest;
+      queueMicrotask(() => {
+        const dbFake = {
+          objectStoreNames: { contains: (n: string) => stores.has(n) },
+          createObjectStore: (n: string) => {
+            stores.set(n, new Map());
+            return { createIndex: () => {} };
+          },
+          transaction: (_modo: string) => {
+            const txInt = {
+              oncomplete: null as (() => void) | null,
+              onerror: null as (() => void) | null,
+              onabort: null as (() => void) | null,
+              pendientes: 0,
+            };
+            const quizasCompletar = () => {
+              if (txInt.pendientes === 0) queueMicrotask(() => {
+                if (txInt.pendientes === 0) txInt.oncomplete?.();
+              });
+            };
+            return {
+              objectStore: (n: string) => {
+                const datos = stores.get(n)!;
+                const reqDe = <T>(resultado: T, mutar?: () => void): IDBRequest<T> => {
+                  const r = new FakeRequest(resultado) as unknown as IDBRequest<T>;
+                  const rInt = r as unknown as FakeRequest<T>;
+                  txInt.pendientes++;
+                  queueMicrotask(() => {
+                    mutar?.();
+                    rInt.onsuccess?.();
+                    txInt.pendientes--;
+                    quizasCompletar();
+                  });
+                  return r;
+                };
+                return {
+                  transaction: txInt,
+                  put: (v: { id: string }) => reqDe(undefined, () => datos.set(v.id, v)),
+                  delete: (k: string) => reqDe(undefined, () => datos.delete(k)),
+                  clear: () => reqDe(undefined, () => datos.clear()),
+                  count: () => reqDe(datos.size),
+                  getAll: () => reqDe([...datos.values()]),
+                } as unknown as IDBObjectStore;
+              },
+            };
+          },
+          onclose: null,
+        };
+        reqInt.result = dbFake;
+        reqInt.onupgradeneeded?.();
+        reqInt.onsuccess?.();
+      });
+      return req;
+    },
+    deleteDatabase: () => new FakeRequest(undefined) as unknown as IDBOpenDBRequest,
+    cmp: () => 0,
+    databases: () => Promise.resolve([] as IDBDatabaseInfo[]),
+  };
+  return fab as unknown as IDBFactory;
+}
+
+/** Evento base para los tests de buffer (datos mínimos por tipo). */
+function evtBase(tipo: EventoObs["tipo"], ts: number, datos: Record<string, unknown> = {}): Omit<EventoObs, "id"> {
+  return {
+    ts,
+    tipo,
+    sesion: "s-test",
+    dispositivo: "d-test",
+    appVersion: "0.1.0",
+    datos,
+  };
+}
+
+describe("buffer · IDB (fake mínimo — roundtrip, tope, TTL, digest)", () => {
+  beforeAll(() => {
+    vi.stubGlobal("indexedDB", crearFakeIndexedDB());
+  });
+
+  /** Aislamiento: cada test arranca con el buffer VACÍO (los tests previos
+   *  dejan filas — el tope FIFO es real y arrastraría aserciones). */
+  async function bufferLimpio() {
+    await purgarBuffer();
+  }
+
+  it("append + leer roundtrip ordenado por ts ASC, con identidad completada", async () => {
+    await bufferLimpio();
+    const t = Date.now();
+    await appendEvento(evtBase("uso", t + 300, { foo: 1 }));
+    await appendEvento(evtBase("uso", t + 100, { foo: 2 }));
+    await appendEvento(evtBase("uso", t + 200, { foo: 3 }));
+    const eventos = await leerEventos();
+    expect(eventos.map((e) => e.ts)).toEqual([t + 100, t + 200, t + 300]);
+    expect(eventos[0].id).toBeTruthy();
+    expect(eventos[0].sesion).toBe("s-test");
+    expect(await contarEventos()).toBe(3);
+  });
+
+  it("leerEventos aplica el filtro", async () => {
+    await bufferLimpio();
+    await appendEvento(evtBase("error", Date.now() + 400, { digest: "abcd1234" }));
+    const errores = await leerEventos((e) => e.tipo === "error");
+    expect(errores).toHaveLength(1);
+    expect(errores[0].ts).toBeGreaterThan(Date.now());
+  });
+
+  it("tope 500 en vivo: 505 appends → 500 conservados, los más viejos fuera", async () => {
+    await bufferLimpio();
+    const base = Date.now();
+    const tsDe = (i: number) => base - (505 - i) * 1000;
+    for (let i = 0; i < 505; i++) {
+      await appendEvento(evtBase("uso", tsDe(i)));
+    }
+    const eventos = await leerEventos();
+    expect(await contarEventos()).toBe(TOPE_EVENTOS);
+    expect(eventos[0].ts).toBe(tsDe(5)); // los 5 más viejos purgados
+    expect(eventos[eventos.length - 1].ts).toBe(tsDe(504));
+  });
+
+  it("TTL en vivo: un append fresco purga los vencidos (30 días)", async () => {
+    await bufferLimpio();
+    const DIA = 24 * 60 * 60 * 1000;
+    const ahora = Date.now();
+    await appendEvento(evtBase("uso", ahora - 31 * DIA, { viejo: true }));
+    await appendEvento(evtBase("uso", ahora - 5 * DIA, { fresco: true }));
+    const eventos = await leerEventos();
+    expect(eventos.some((e) => "viejo" in e.datos)).toBe(false);
+    expect(eventos.some((e) => "fresco" in e.datos)).toBe(true);
+  });
+
+  it("eventosPorDigest agrega solo error/warn del contenido real", async () => {
+    await bufferLimpio();
+    await appendEvento({
+      ...evtBase("error", Date.now() + 10),
+      datos: { mensaje: "fallo X", stack: "at a (src/lib/x.ts:1:1)", tipo: "TypeError", archivo: "src/lib/x.ts:1:1", digest: "digestx1", breadcrumbs: [] },
+    });
+    await appendEvento({
+      ...evtBase("error", Date.now() + 20),
+      datos: { mensaje: "fallo X", stack: "at a (src/lib/x.ts:1:1)", tipo: "TypeError", archivo: "src/lib/x.ts:1:1", digest: "digestx1", breadcrumbs: [] },
+    });
+    await appendEvento(evtBase("uso", 30, { n: 1 }));
+    const grupos = await eventosPorDigest();
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].digest).toBe("digestx1");
+    expect(grupos[0].veces).toBe(2);
+  });
+
+  it("purgarBuffer vacía TODO", async () => {
+    await bufferLimpio();
+    await appendEvento(evtBase("uso", Date.now()));
+    await purgarBuffer();
+    expect(await contarEventos()).toBe(0);
+    expect(await leerEventos()).toHaveLength(0);
+  });
+
+  it("sin IDB (entorno sin indexedDB): append resuelve SILENCIOSO y leer → []", async () => {
+    vi.resetModules();
+    vi.stubGlobal("indexedDB", undefined);
+    try {
+      const buffer = await import("./buffer");
+      await expect(buffer.appendEvento(evtBase("uso", 1))).resolves.toBeUndefined();
+      expect(await contarEventos()).toBe(0);
+      expect(await buffer.leerEventos()).toEqual([]);
+      await expect(eventosPorDigest()).resolves.toEqual([]);
+      await expect(buffer.abrirBuffer()).rejects.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
