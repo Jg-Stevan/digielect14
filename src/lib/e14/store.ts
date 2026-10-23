@@ -30,6 +30,7 @@ import {
   type ClasificacionE14,
 } from "./clasificador";
 import { cargarDivipol, mesasDePuesto } from "./divipol";
+import { logger } from "../logger";
 // KIT L6: persistencia de la jornada (IDB vanilla — mismo patrón de la cola
 // masiva) + derivación del guion real (fix M10).
 import {
@@ -83,7 +84,8 @@ export type BandaSim = "optima" | "medio" | "baja";
  *  8.2 + AUTO → piso 10.0 (ÓPTIMA enviada) · 7.0 con AUTO → ADVERTENCIA
  *  (el chip manda — el piso solo re-aplica con score ≥ 8) · 4.3 →
  *  RECHAZADA. Los mismos números viven pintados en NIVELES_CALIDAD. */
-export const SCORE_SIMULADO: Record<BandaSim, number> = {
+// knip C3: de-export — uso SOLO interno (avanzarSimulacion).
+const SCORE_SIMULADO: Record<BandaSim, number> = {
   optima: 8.2,
   medio: 7.0,
   baja: 4.3,
@@ -91,7 +93,8 @@ export const SCORE_SIMULADO: Record<BandaSim, number> = {
 
 /** §D3: opciones de simulación por chips — SOLO store↔dispararEscaneo; el
  *  bridge las recibe como `simular`/`scoreSimulado` (OpcionesEscaneo). */
-export interface OpcionesSimEscaneo {
+// knip C3: de-export — uso SOLO interno (dispararEscaneo).
+interface OpcionesSimEscaneo {
   simular: boolean;
   scoreSimulado: number;
 }
@@ -333,7 +336,8 @@ function marcarPaginaOK(mesas: Mesa[], objetivo: PaginaObjetivo): Mesa[] {
  *  RESCANEO (la captura archivada llegó ADVERTENCIA: ⚠ en ACTAS, cuenta
  *  como no-OK y deja la mesa EN PROCESO invitando al re-escaneo; el
  *  re-archivo del mismo hueco lo sube a OK — la más reciente manda). */
-export interface HuecoArchivado {
+// knip C3: de-export — uso SOLO interno (estado.huecos/archivarHueco).
+interface HuecoArchivado {
   tipo: TipoPagina;
   pagina: 1 | 2;
   estado: "OK" | "RESCANEO";
@@ -840,7 +844,7 @@ export const useE14Store = create<E14Store>((set, get) => {
         // consola. La UI vuelve al visor (los guards de entrada ya cubren
         // lo previsible; esto cubre lo imprevisto: asset SIM caído, decode
         // de archivo corrupto, video no listo).
-        console.error("[e14] dispararEscaneo falló:", err);
+        logger.error("[e14] dispararEscaneo falló:", err);
         set({ vista: "escanear", progresoAnalisis: null, analisisResuelto: false });
       }
     },
@@ -852,7 +856,7 @@ export const useE14Store = create<E14Store>((set, get) => {
       // el acta que el watchdog rechazó → el rescate se descarta (jamás
       // pisa una captura nueva).
       if (get().actaActual !== vencida) {
-        console.info("[e14] rescate post-timeout omitido (la vista ya avanzó)", {
+        logger.info("[e14] rescate post-timeout omitido (la vista ya avanzó)", {
           actaId: real.id,
         });
         return;
@@ -861,7 +865,7 @@ export const useE14Store = create<E14Store>((set, get) => {
       // pipeline): RECHAZADA/EN_REVISION_HUMANA tardíos quedan como están
       // (correcto — caso C del kit: no se rescata lo inválido).
       if (real.status !== "OPTIMA" && real.status !== "ADVERTENCIA") {
-        console.info("[e14] pipeline terminó inválido tras timeout", {
+        logger.info("[e14] pipeline terminó inválido tras timeout", {
           actaId: real.id,
           status: real.status,
           score: real.score,
@@ -877,7 +881,7 @@ export const useE14Store = create<E14Store>((set, get) => {
         scoreRescatadoPor: "post-timeout",
         tiempoRealMs,
       };
-      console.info("[e14] RESCATE post-timeout", {
+      logger.info("[e14] RESCATE post-timeout", {
         actaId: rescatada.id,
         score: rescatada.score,
         tiempoRealMs,
@@ -1121,7 +1125,7 @@ export const useE14Store = create<E14Store>((set, get) => {
         // (sin toasts — redesign-stitch D2 los retiró): píldora en REVISIÓN.
         // El editor NO se cierra (onAplicar cierra solo con `true`) — el
         // dueño reintenta SIN perder su quad. El gate/score no cambian.
-        console.error("[e14] aplicarRecorte falló:", err);
+        logger.error("[e14] aplicarRecorte falló:", err);
         set({ progresoAnalisis: null, errorRecorte: MSG_RECORTE_FALLIDO });
         // Auto-limpieza ~6 s (guard por mensaje: no borra un error MÁS NUEVO).
         setTimeout(() => {

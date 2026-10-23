@@ -20,7 +20,8 @@
  *  · Módulo PURO: sin DOM, sin red, sin estado global — testeable
  *    headless por `scripts/qa-watchdog-relectura.ts`.
  */
-export type ResultadoTope<T> =
+// knip C3: de-export — uso SOLO interno (retorno de conTope).
+type ResultadoTope<T> =
   | { vencido: true }
   | { vencido: false; valor: T }
   | { vencido: false; error: unknown };

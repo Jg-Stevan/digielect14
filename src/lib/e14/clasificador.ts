@@ -23,7 +23,8 @@ import { kitEnRegistro, REGISTRO_KITS } from "./kits";
 
 // ---------- Tipos (§3.4) ----------
 
-export type NivelClasificacion = "AUTO" | "SUGERIDA" | "MANUAL";
+// knip C3: de-export — uso SOLO interno (ClasificacionE14.nivel, fmtClasif).
+type NivelClasificacion = "AUTO" | "SUGERIDA" | "MANUAL";
 
 /** Tipo de copia leído de la BANDA (§D.1 — sin tilde: es el literal OCR). */
 export type TipoCopia = "TRANSMISION" | "DELEGADOS";
@@ -122,7 +123,9 @@ const MAPA_CONFUSION_OCR: Record<string, string> = {
 /** Códigos: MAYÚSCULAS + mapa de confusión (la evidencia OCR actual lee los
  *  dígitos limpios — p. ej. «CONSULADO: 88 - CONSULADOS», «MESA: 012» — el
  *  mapa queda aplicado defensivamente para lecturas futuras con letras). */
-export function normalizarCodigo(s: string): string {
+// knip C3 (refactor/runner-logger-v1): de-export — uso SOLO interno
+// (5 llamadas en este archivo; cero consumidores externos, cero anclas QA).
+function normalizarCodigo(s: string): string {
   return s
     .toUpperCase()
     .trim()
@@ -187,7 +190,9 @@ const ANCLA_CODIGO_1D = /\b(\d{15})\b/g;
 // «710003993010102» → el MISMO kit 399, TRANSMISION (misma mesa, otra copia).
 // ---------------------------------------------------------------------------
 
-export interface CodigoUnicoE14 {
+// knip C3: de-export — uso SOLO interno (codigoUnicoE14/consenso viajan
+// estructuralmente; nadie importa el tipo por nombre).
+interface CodigoUnicoE14 {
   crudo: string;
   kit: number;
   tipoDigito: "2" | "3";
