@@ -6,15 +6,25 @@
  * historial de envíos con barra de acento por estado. Reactivo en vivo.
  * Responsive 360→1280 (max-w-2xl en lg). La sección "ANÁLISIS DE LA
  * JORNADA" (donut + barras recharts) fue ELIMINADA a pedido del dueño.
+ *
+ * KIT e14-observabilidad-v1 (agente 2 · C1): tuerca del modo de
+ * diagnóstico SIEMPRE visible arriba-izquierda del header (dev/
+ * TuercaResumen) — activación armada, panel desde C4.
+ * KIT e14-observabilidad-v1 (agente 2 · C3): el botón INFORME ZIP sale de
+ * Resumen — el flujo (lazy import generarInformeZip + downloadBlob,
+ * chequeo de cola vacía, mensajes) MIGRA a la sección Exportar del
+ * PanelDev (C4). Resumen queda con: barra segmentada, tarjetas,
+ * historial, reiniciar jornada y tuerca.
  */
 import { useEffect, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import type { HistorialRow } from "@/lib/e14/types";
 import { PUESTO_SIMULADO } from "@/lib/e14/seed";
-// KIT e14-informe-analisis-v1 (T2): chequeo barato de la cola masiva al
-// montar — decide el disabled del botón INFORME ↓ (cola.ts INTOCABLE).
-import { contarRegistros } from "@/lib/e14/masiva/cola";
 import { SegmentedBar } from "../primitives";
+// KIT e14-observabilidad-v1 (agente 2 · C1): puerta del modo de diagnóstico.
+import { TuercaResumen } from "../dev/TuercaResumen";
+// KIT e14-observabilidad-v1 (agente 2 · C4): panel completo del modo dev.
+import { PanelDev } from "../dev/PanelDev";
 
 function badgeEstado(estado: HistorialRow["estado"]) {
   switch (estado) {
@@ -46,55 +56,16 @@ export function ResumenView() {
   const modoSimulacion = useE14Store((s) => s.modoSimulacion);
   const puestoMostrado = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
 
-  const [colaVacia, setColaVacia] = useState(true);
-  const [generando, setGenerando] = useState(false);
-  const [listo, setListo] = useState(false);
-  const [motivo, setMotivo] = useState<string | null>(null);
-
   const reiniciarJornada = useE14Store((s) => s.reiniciarJornada);
   const [reiniciarArmado, setReiniciarArmado] = useState(false);
+  // KIT e14-observabilidad-v1 (agente 2 · C4): el panel SOLO se abre desde
+  // la tuerca (sin ruta ni query param).
+  const [panelAbierto, setPanelAbierto] = useState(false);
   useEffect(() => {
     if (!reiniciarArmado) return;
     const t = window.setTimeout(() => setReiniciarArmado(false), 4000);
     return () => window.clearTimeout(t);
   }, [reiniciarArmado]);
-
-  useEffect(() => {
-    let vivo = true;
-    contarRegistros()
-      .then((total) => {
-        if (vivo) setColaVacia(total === 0);
-      })
-      .catch(() => {
-        if (vivo) setColaVacia(true);
-      });
-    return () => {
-      vivo = false;
-    };
-  }, []);
-
-  const generarInforme = async () => {
-    if (generando || colaVacia) return;
-    setGenerando(true);
-    setListo(false);
-    setMotivo(null);
-    try {
-      const [{ generarInformeZip }, { downloadBlob }] = await Promise.all([
-        import("@/lib/e14/informe"),
-        import("@jg-stevan/scanner-core/pdf-export"),
-      ]);
-      const { blob, nombre } = await generarInformeZip();
-      downloadBlob(blob, nombre);
-      setListo(true);
-      window.setTimeout(() => setListo(false), 1500);
-    } catch (err) {
-      const crudo = err instanceof Error ? err.message : String(err);
-      const corto = crudo.replace(/\s+/g, " ").trim().slice(0, 48);
-      setMotivo((corto || "NO SE PUDO GENERAR").toUpperCase());
-    } finally {
-      setGenerando(false);
-    }
-  };
 
   const totalPaginas = mesas.reduce((n, m) => n + m.paginas.length, 0);
   const paginasOk = mesas.reduce(
@@ -127,17 +98,23 @@ export function ResumenView() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-[#090d12] flex flex-col">
       <header className="sticky top-0 z-40 w-full bg-[#090d12]/92 backdrop-blur-xl border-b border-slate-800/80 px-4 h-14 shrink-0 shadow-xs">
+        {/* KIT e14-observabilidad-v1 (agente 2 · C1): tuerca SIEMPRE visible
+            arriba-izquierda del header; el contenido se corre a la derecha
+            (pl) para despejar su blanco táctil de 44px. */}
+        <div className="absolute left-2 top-1/2 -translate-y-1/2 z-50">
+          <TuercaResumen onAbrirPanel={() => setPanelAbierto(true)} />
+        </div>
         {/* Task 3: el contenido de la barra se alinea al ancho del contenedor
             de la vista (en lg+ ya no queda pegado al borde del viewport). */}
-        <div className="max-w-md lg:max-w-2xl mx-auto w-full h-full flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#10b981]" />
-            <h1 className="font-mono text-sm font-bold tracking-widest text-[#10b981] uppercase">
+        <div className="max-w-md lg:max-w-2xl mx-auto w-full h-full flex items-center justify-between pl-[56px]">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-[#10b981] shrink-0" />
+            <h1 className="font-mono text-sm font-bold tracking-widest text-[#10b981] uppercase truncate">
               RESUMEN DE TRABAJO
             </h1>
           </div>
-          <span className="font-mono text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/60">
-            {pct}% TRANSMITIDO
+          <span className="font-mono text-[11px] text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/60 whitespace-nowrap shrink-0">
+            {pct}% <span className="hidden min-[400px]:inline">TRANSMITIDO</span>
           </span>
         </div>
       </header>
@@ -203,46 +180,9 @@ export function ResumenView() {
           </div>
         </div>
 
-        {/* Acciones de informe y fin de jornada */}
+        {/* Fin de jornada — el INFORME ZIP salió de aquí en C3 (migró al
+            PanelDev, sección Exportar) */}
         <section className="flex flex-col items-center gap-2.5 pt-1">
-          <button
-            type="button"
-            onClick={() => {
-              void generarInforme();
-            }}
-            disabled={colaVacia || generando || listo}
-            aria-label="Generar informe de análisis (ZIP)"
-            className="w-full lg:max-w-sm min-h-[44px] px-6 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-xs font-black uppercase tracking-wider shadow-lg shadow-[#10b981]/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
-          >
-            <span>↓</span>
-            <span>
-              {listo
-                ? "INFORME GENERADO ✓"
-                : generando
-                  ? "GENERANDO ZIP…"
-                  : colaVacia
-                    ? "INFORME ZIP (COLA VACÍA)"
-                    : "DESCARGAR INFORME ZIP"}
-            </span>
-          </button>
-          {generando && (
-            <p
-              role="status"
-              aria-live="polite"
-              className="inline-block rounded-full border border-slate-800 bg-[#10161f] px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-slate-300"
-            >
-              EMPAQUETANDO ARCHIVOS DE AUDITORÍA…
-            </p>
-          )}
-          {motivo && (
-            <p
-              role="alert"
-              className="rounded-xl border border-amber-400/60 bg-amber-400/10 px-3.5 py-2 font-mono text-[11px] font-bold uppercase tracking-wider text-amber-400"
-            >
-              {motivo}
-            </p>
-          )}
-
           <button
             type="button"
             onClick={() => {
@@ -313,6 +253,10 @@ export function ResumenView() {
           </div>
         </div>
       </div>
+
+      {/* KIT e14-observabilidad-v1 (agente 2 · C4): panel de diagnóstico —
+          overlay fijo (z-[70]) montado desde la tuerca. */}
+      {panelAbierto && <PanelDev onClose={() => setPanelAbierto(false)} />}
     </div>
   );
 }
