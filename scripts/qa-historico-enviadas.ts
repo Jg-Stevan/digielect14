@@ -13,6 +13,9 @@
  *   F2 (sobrevive VACIAR — la prueba EXACTA del dueño: 46 re-subidos) →
  *       Bloque 5 (vaciar NO toca el ledger: cola.clear() solo «archivos»,
  *       store sin borrarHistorico; el índice reconstruye fusionando ledger).
+ *       ADENDA e64p (kit C-2): con COLA_PERSISTENTE=false (MODO PRUEBAS) el
+ *       ledger SÍ muere con vaciar()/carga — reversa declarada; el scan
+ *       verifica el cableo CONDICIONAL (producción intacta).
  *   F3 (sobrevive RECARGA) → Bloque 2/5 (indiceEnviadasDe fusiona
  *       listarHistorico + cola; DB separada e14-masiva-historico-v1).
  *   F4 (re-foto sin OCR: bytes distintos, MISMO payload QR) → Bloque 4 (capa
@@ -29,8 +32,8 @@
  *       e63m manda primero; reutilizarViaQr intacto).
  *   F8 (invariantes) → Bloque 6 (YA-ENVIADA sobrevive recarga · píldora
  *       esmeralda · informe yaEnviadas · llaves AUSENTES del informe de
- *       contenido y del envío · package.json sin dependencias nuevas ·
- *       vaciar() NO llama borrarHistorico · DB separada — cero migración).
+ *       contenido y del envío · vaciar() llama borrarHistorico SOLO bajo
+ *       !COLA_PERSISTENTE (e64p) · DB separada — cero migración).
  *
  * Nota honesta: el ledger vive en IndexedDB (browser-only) y NO corre
  * headless — su SEMÁNTICA se verifica aquí por source-scan por SÍMBOLO
@@ -126,10 +129,10 @@ ok(
 ok(
   historico.includes("export async function borrarHistorico") &&
     historico.includes("store.clear();") &&
-    !/import\s*\{[^}]*borrarHistorico/.test(store) &&
+    /import\s*\{[^}]*borrarHistorico/.test(store) && // e64p (C-1/C-2): importado — cableado SOLO bajo !COLA_PERSISTENTE
     !/import\s*\{[^}]*borrarHistorico/.test(runner) &&
     !/from "\.\/historico"/.test(cola),
-  "RL-e65b-5: borrarHistorico existe SIN cablear — cola.ts ni lo conoce; store/runner no lo importan",
+  "RL-e65b-5 + e64p C-2: borrarHistorico importado SOLO por store (cableo condicional modo pruebas); runner/cola jamás lo conocen",
 );
 
 // ---------- Bloque 2 — T-2: índice fusionado + helpers (store.ts) ----------
@@ -137,8 +140,8 @@ ok(
 console.log("\n── Bloque 2 · T-2 store — índice fusionado ledger+cola ──");
 
 ok(
-  store.includes('import {\n  listarHistorico,\n  registrarEntradaHistorico,\n  type EntradaHistorica,\n} from "./historico";'),
-  "T-2a: EntradaHistorica UNIFICADA — importada del módulo (tipo local {id,hashBytes,hashDedup} retirado)",
+  store.includes('import {\n  borrarHistorico,\n  listarHistorico,\n  registrarEntradaHistorico,\n  type EntradaHistorica,\n} from "./historico";'),
+  "T-2a + e64p: EntradaHistorica UNIFICADA — importada del módulo (bloque ampliado con borrarHistorico por el kit e64p)",
 );
 
 ok(
@@ -162,9 +165,9 @@ ok(
 );
 
 ok(
-  store.includes("try {\n    deLedger = await listarHistorico();") &&
-    store.includes("} catch {\n    deLedger = [];\n  }"),
-  "M-e65b-2: ledger NO fatal — si cae, el índice se construye SOLO con la cola viva (conservador, RL-e65b-3)",
+  store.includes("if (COLA_PERSISTENTE) {\n    try {\n      deLedger = await listarHistorico();") &&
+    store.includes("} catch {\n      deLedger = [];\n    }\n  }"),
+  "M-e65b-2 + e64p C-3: ledger NO fatal (try/catch → cola viva) — lectura bajo COLA_PERSISTENTE; modo pruebas NO lo lee (cero memoria entre lotes)",
 );
 
 ok(
@@ -232,10 +235,26 @@ ok(
   "T-3a: el hook vive DESPUÉS del desenlace ENVIADO (enviadaAuto = true — jamás alimenta con no-enviados)",
 );
 
+// ADENDA e66 (M-e66-1 — reversa documentada): la gemela REUTILIZADA ya NO
+// alimenta el ledger (mandato P2 del plan e66: el historial registra SOLO
+// envíos reales — antes la copia heredaba ENVIADA y entraba por T-3b).
+// La protección de re-encolado de la gemela sobrevive vía la ENTRADA de la
+// ORIGINAL en el ledger (payload-QR exacto + dhash cinta cierta ≤ 6).
+// ADENDA e71 (P2.1 — kit e71-consolidación): la copia HEREDA el desenlace
+// del original — ENVIADA/OPTIMA → DUPLICADA (regla e66 intacta); con
+// rechazo → RECHAZADA heredada (el informe muestra RECHAZADA: 2, no
+// DUPLICADA). El literal `actaCopia.status = "DUPLICADA";` pasó a la
+// asignación condicional `actaCopia.status = copiaRechazada ?
+// "RECHAZADA" : "DUPLICADA";` — misma invariancia (JAMÁS hereda el envío
+// de la original; enviadoAutomaticamente null en AMBAS ramas).
 ok(
-  runner.includes('if (actaCopia.status === "ENVIADA") {') &&
-    runner.includes("hashBytes: registro.hashBytes,\n        hashDedup: registro.hashDedup,\n        payloadQr: registro.qrPayload,\n        serie: serieCopia ?? undefined,"),
-  "T-3b: gemela REUTILIZADA con desenlace ENVIADO también alimenta el ledger — llaves del REGISTRO DE LA GEMELA (sus bytes son otros)",
+  !runner.includes('if (actaCopia.status === "ENVIADA") {') &&
+    runner.includes(
+      'actaCopia.status = copiaRechazada ? "RECHAZADA" : "DUPLICADA";',
+    ) &&
+    runner.includes('const originalEnviada = actaCopia.status === "ENVIADA" || actaCopia.status === "OPTIMA";') &&
+    runner.includes("actaCopia.enviadoAutomaticamente = null;"),
+  "e66/M-e66-1 + e71/P2.1: la gemela JAMÁS hereda el envío (ENVIADA/OPTIMA → DUPLICADA; con rechazo → RECHAZADA heredada — informe RECHAZADA: 2), enviadoAutomaticamente null en ambas ramas",
 );
 
 ok(
@@ -245,10 +264,13 @@ ok(
   "T-3c/M-e65b-4: envíos MANUALES cableados — REVISIÓN (sincronizarAlVolver) y LOTE ADVERTENCIA (enviarLote) — mismos guards ENVIADA",
 );
 
+// ADENDA e66: el conteo baja de ≥2 a ≥1 — el hook T-3b de la gemela fue
+// REVERSADO (M-e66-1); queda el hook de envío propio (T-3a), único punto
+// fire-and-forget que queda en el runner.
 ok(
-  (runner.match(/\.catch\(\(\) => \{\}\)/g)?.length ?? 0) >= 2 &&
+  (runner.match(/\.catch\(\(\) => \{\}\)/g)?.length ?? 0) >= 1 &&
     !runner.includes("await registrarEnviadaHistorico"),
-  "RL-e65b-2/3: TODOS los hooks fire-and-forget (void + catch) — jamás await: el envío JAMÁS espera al ledger",
+  "RL-e65b-2/3 + M-e66-1: TODOS los hooks restantes fire-and-forget (void + catch) — jamás await: el envío JAMÁS espera al ledger",
 );
 
 // ---------- Bloque 4 — T-4: capa 0 payload contra el histórico ----------
@@ -259,9 +281,13 @@ ok(
   runner.includes("if (!originalQr) {") &&
     runner.indexOf("const enviadaHist = await enviadaPorPayload(qrPayload);") >
       runner.indexOf("if (!originalQr) {") &&
-    runner.indexOf("registrarQrPayload(qrPayload, fila.id);") >
+    // ADENDA e71 (Opt-3): el registro pasó DENTRO de la sección crítica
+    // (conExclusionMutua) y la closure usa la acotación qrPayloadSeguro —
+    // el ORDEN del intent (lookup del ledger ANTES del registro, mapa e63m
+    // manda primero — F7) queda intacto.
+    runner.indexOf("registrarQrPayload(qrPayloadSeguro, fila.id);") >
       runner.indexOf("const enviadaHist = await enviadaPorPayload(qrPayload);"),
-  "T-4/F4: el lookup del ledger corre en la rama SIN original de sesión y ANTES de registrarQrPayload (el mapa e63m manda primero — F7)",
+  "T-4/F4: el lookup del ledger corre en la rama SIN original de sesión y ANTES de registrarQrPayload (el mapa e63m manda primero — F7) [e71: registro en sección crítica con qrPayloadSeguro]",
 );
 
 ok(
@@ -308,9 +334,12 @@ ok(
   "T-5/F2: vaciar() invalida SOLO el cache de sesión — la REVERSA D-e65b-1 está declarada en el código",
 );
 
+const cuerpoVaciar = store.slice(store.indexOf("vaciar: async () => {"));
+
 ok(
-  !store.includes("borrarHistorico()") || !/await\s+borrarHistorico/.test(store),
-  "RL-e65b-5: vaciar() JAMÁS llama borrarHistorico (source-scan del cuerpo de vaciar + imports)",
+  /if \(!COLA_PERSISTENTE\) \{[\s\S]*?await borrarHistorico\(\)/.test(cuerpoVaciar) &&
+    store.includes("indiceEnviadas = null;"),
+  "RL-e65b-5 + e64p C-2: vaciar() llama borrarHistorico SOLO bajo !COLA_PERSISTENTE (reversa declarada en modo pruebas; producción D-e65b-1 intacta)",
 );
 
 ok(
@@ -364,10 +393,10 @@ ok(
 );
 
 ok(
-  informe.includes('yaEnviadas: filas.filter((f) => f.estado === "YA-ENVIADA").length,') &&
+  informe.includes('yaEnviadas: filas.filter((f) => f.statusActa === "ENVIADA").length,') &&
     !informe.includes("hashBytes") &&
     !/EntradaHistorica|listarHistorico|registrarEnviadaHistorico/.test(informe),
-  "F8/RL-e65b-8: informe intacto — yaEnviadas correcto y hashBytes/ledger AUSENTES del informe (el hashDedup/qrPayload de la sección dedup es la decisión D65/e63m previa, intocada)",
+  "F8/RL-e65b-8 + e71/P3.1: informe sin hashBytes/ledger — yaEnviadas ahora cuenta statusActa === ENVIADA (kit e71: el dueño la lee como «actas enviadas»; el estado YA-ENVIADA solo existe en re-subidas de la misma sesión y reportaba 0)",
 );
 
 ok(
@@ -389,8 +418,8 @@ ok(
 );
 
 ok(
-  historico.includes("JAMÁS cablear a vaciar()") && historico.includes("RL-e65b-5"),
-  "RL-e65b-5: la docstring del módulo declara la prohibición (reversa documentada D-e65b-1)",
+  historico.includes("SOLO bajo !COLA_PERSISTENTE") && historico.includes("RL-e65b-5"),
+  "RL-e65b-5 + e64p: la docstring del módulo declara el cableo CONDICIONAL (producción sin cablear · modo pruebas resetea — adenda honesta)",
 );
 
 // ---------- Resumen ----------

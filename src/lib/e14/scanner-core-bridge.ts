@@ -76,6 +76,7 @@ import { loadImageMemo, procesadaVaciaDataUrl } from "./image-utils";
 // recortes SUPERIORES que faltaSeccionInferior (kit 118, solo inferior) no ve.
 import {
   ESQUINAS_OK,
+  cuatroEsquinasFaltan,
   ladoEsquinaFaltante,
   marcasEsquina,
   trazaEsquinas,
@@ -164,8 +165,17 @@ export function precargarDecodeArchivo(file: File): Promise<string> {
   return decodeArchivoMemo(file);
 }
 
-/** Timeout de seguridad global §5 (worker colgado en gama baja). */
-const TIMEOUT_MS = 15_000;
+/** Timeout de seguridad global §5 (worker colgado en gama baja).
+ *  KIT e67-watchdog-rescate-v1 (M-e67-0 / cambio A): 15_000 → 120_000 — el
+ *  plan del dueño pedía subirlo (asumía 30 s; el default REAL era 15 s desde
+ *  el split del repo — desviación documentada en el REPORTE). Evidencia:
+ *  un ARCHIVO real terminó VÁLIDO a los ~53.5 s y el watchdog de 15 s ya lo
+ *  había rechazado (resultado descartado en silencio). 120 s da colchón
+ *  frente al peor caso observado (53.5 s + 36 líneas OCR) sin esperar de
+ *  más a un colgaje real. MASIVA no cambia: pasa su propio presupuesto
+ *  (OpcionesEscaneoConTimeout.timeoutMs — WATCHDOG_MS del runner). El
+ *  RECORTE manual conserva su RECORTE_TIMEOUT_MS propio (ruta distinta). */
+const TIMEOUT_MS = 120_000;
 /** KIT e14-recorte-manual-v1 (T1): presupuesto del RECORTE manual — el warp
  *  del editor mide 14–17.4 s en el equipo del dueño (OCR solo: 9.8–14.3 s),
  *  al borde del límite de 15 s del escaneo. El timeout SIGUE RECHAZANDO
@@ -907,11 +917,24 @@ async function esperarWorkerCaliente(topeMs: number): Promise<boolean> {
  *  OpcionesEscaneo): el default 15_000 sigue mandando (escaneo individual
  *  INTACTO) y MASIVA pasa 120_000. La bivariance de métodos TS admite el
  *  método con el parámetro más ancho (class implements E14Bridge sigue
- *  compilando; los callers pasan la variable tipada — sin excess-check). */
+ *  compilando; los callers pasan la variable tipada — sin excess-check).
+ *  e67 (M-e67-0): el default real era 15_000 — ahora TIMEOUT_MS = 120_000
+ *  (cambio A del kit; el comentario T4 conservaba el valor histórico). */
 export type OpcionesEscaneoConTimeout = OpcionesEscaneo & {
   /** Presupuesto total del pipeline para ESTA llamada (ms). Ausente =
-   *  TIMEOUT_MS (15_000) — comportamiento actual byte a byte. */
+   *  TIMEOUT_MS (120_000 desde e67 — 15_000 antes). */
   timeoutMs?: number;
+  /** e67-watchdog-rescate-v1 (cambio B — RESCATE post-timeout): el pipeline
+   *  NO se cancela al vencer el presupuesto — sigue vivo y su desenlace
+   *  llega DESPUÉS del acta RECHAZADA de timeout. Antes ese resultado
+   *  válido se DESCARTABA en silencio (`if (vencido) return`). Ahora viaja
+   *  por ESTE callback (SOLO se dispara tras un vencimiento — idempotente:
+   *  si el pipeline gana la carrera jamás se llama). El receptor decide:
+   *  el store individual rescata actas válidas (OPTIMA/ADVERTENCIA) y
+   *  revierte el rechazo; MASIVA no lo pasa (undefined → no-op byte a
+   *  byte — el watchdog D65 del runner manda igual). Firmas intactas.
+   *  `tiempoRealMs` = ms reales del pipeline completo (dato, jamás inventado). */
+  onRescateTardio?: (acta: Acta, tiempoRealMs: number) => void;
 };
 
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
@@ -1060,6 +1083,9 @@ export class RealCoreBridge implements E14Bridge {
       if (!vencido) opciones.onProgreso?.(p);
     };
 
+    // e67 (cambio B): reloj del rescate — ms REALES del pipeline completo
+    // (el callback de rescate viaja con este dato, jamás inventado).
+    const tInicioEscaneo = performance.now();
     return new Promise<Acta>((resolve, reject) => {
       const timer = setTimeout(() => {
         vencido = true;
@@ -1073,21 +1099,37 @@ export class RealCoreBridge implements E14Bridge {
           }),
         );
         // KIT e14-masiva-ux-v1 (T4): presupuesto OPCIONAL por llamada —
-        // default 15_000 (escaneo individual INTACTO, kit §3-T4.1); MASIVA
-        // pasa 120_000 (cola de fondo: con multihilo el pipeline real tarda
-        // ~21 s y el vencimiento a 15 s falsamente RECHAZADA cada acta con
-        // el resultado real descartándose — §2 del kit). El timeout REAL
-        // (>120 s) sigue resolviendo RECHAZADA con el mismo texto.
+        // MASIVA pasa su presupuesto del watchdog (WATCHDOG_MS del runner);
+        // el default manda en el flujo individual (120_000 desde e67).
       }, opciones.timeoutMs ?? TIMEOUT_MS);
 
       this.pipeline(opciones, entrada, parcial, emitir).then(
         (acta) => {
-          if (vencido) return; // ya resolvió el timeout: el resultado se descarta
+          if (vencido) {
+            // e67 (cambio B) — RESCATE post-timeout: el pipeline siguió
+            // vivo tras el vencimiento y terminó con un desenlace REAL
+            // (gate/score del pipeline, no del watchdog). Ya no se
+            // descarta en silencio: viaja por onRescateTardio para que el
+            // receptor valide y revierta el rechazo si es válido. Sin
+            // callback (MASIVA) → no-op, comportamiento de siempre.
+            opciones.onRescateTardio?.(
+              acta,
+              Math.round(performance.now() - tInicioEscaneo),
+            );
+            return;
+          }
           clearTimeout(timer);
           resolve(acta);
         },
         (error) => {
-          if (vencido) return;
+          if (vencido) {
+            // e67: el pipeline TARDÍO falló — traza honesta; el acta
+            // queda RECHAZADA por tiempo (correcto, caso C del kit).
+            console.info("[e14] pipeline falló tras timeout", {
+              mensaje: error instanceof Error ? error.message : String(error),
+            });
+            return;
+          }
           clearTimeout(timer);
           reject(error instanceof Error ? error : new Error("ERROR DE PIPELINE"));
         },
@@ -1349,7 +1391,31 @@ export class RealCoreBridge implements E14Bridge {
     // en el diagnóstico (aditivo — la traza de consola D51 ya existe; esto la
     // vuelve permanente en la ficha). null si el probe no corrió (SIM o error).
     let probeMsOrientacion: number | null = null;
-    if (!opciones.simular) {
+    // e66 (P4) → e70 (P4.1) — REVERSA PARCIAL del skip ciego por EXIF: el
+    // EXIF de cámara dice cómo estaba el TELÉFONO, no cómo quedó el acta
+    // (evidencia del dueño: 3 fotos landscape CON EXIF rechazadas score 4.9,
+    // anclas 0 y cabeceraE14 false — el core horneó la orientación del
+    // sensor, el acta física estaba de lado). La omisión del sondeo ahora
+    // exige CONFIRMACIÓN de la detección previa (modo confirmar del probe):
+    // quad del WORKER (el fallback sobel fabricó la geometría — «el quad se
+    // detectó mal» del criterio) + lectura a 0° con anclas >= 3 Y conf >=
+    // 0.7 (la pasada 0° del probe ES la primera pasada rápida del criterio:
+    // det cap rápido + rec — las sanas pagan det+rec0 y se saltan las
+    // challengers 90/180/270; las dudosas sondean 0/90/180/270 completas y
+    // el MARGEN decide la rotación antes del OCR principal). SIM jamás
+    // sondea (mismo guard §2.2 de siempre — SIM nunca trae origenSenales).
+    // Flujos individual/video sin la señal → rama de abajo (probe de
+    // siempre); recorte manual (pipelineRecorte) INTACTO (sin señal ahí).
+    if (!opciones.simular && opciones.origenSenales === "exif-camara") {
+      const probe = await probeOrientacion(fotoOcr, {
+        confirmar: { quadWorker: quadOrigen === "worker" },
+      });
+      if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
+      if (probe?.aplicado) {
+        fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
+        fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
+      }
+    } else if (!opciones.simular) {
       const probe = await probeOrientacion(fotoOcr);
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
       if (probe?.aplicado) {
@@ -1567,6 +1633,16 @@ export class RealCoreBridge implements E14Bridge {
         marcoEscaneo.veredicto === "cortado"
           ? marcoPerdonadoPorLectura(marcoEscaneo.veredicto, senal.nivel, faltaSeccion)
           : true;
+    }
+    // e71 (P10) — VETO 4/4 FIDUCIALES (kit e71-consolidación): la medición
+    // de integridad encontró LAS 4 esquinas ausentes (traza
+    // `esquinas=FALTA_tl+tr+bl+br`) → el papel NO está demostrado entero y
+    // el gate NO puede ser completa. Va DESPUÉS del perdón del marco (la
+    // lectura perdona al marco impreso, pero NUNCA a la ausencia total de
+    // fiduciales — evidencia física manda). En SIM esquinas=ESQUINAS_OK →
+    // el veto es inalcanzable (guard explícito, chips 8.2/7.0/4.3 intactos).
+    if (!opciones.simular && cuatroEsquinasFaltan(esquinas)) {
+      completa = false;
     }
     // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) — marcador OBLIGATORIO de
     // votos, FUERA de evaluarGate (MISMO patrón del veto INCOMPLETA: D6/
@@ -2131,7 +2207,15 @@ export class RealCoreBridge implements E14Bridge {
     const ladoEsquina = esquinas ? ladoEsquinaFaltante(esquinas) : null;
     const trazaEsq = trazaEsquinas(esquinas);
     const verificacion = await verificarCompletitud(quad, fotoProcesada, esquinas);
-    const completa = verificacion.completa;
+    // e71 (P10) — VETO 4/4 FIDUCIALES (mismo criterio del escaneo — helper
+    // ÚNICO cuatroEsquinasFaltan, pitfall §9.9): las 4 marcas ausentes →
+    // `completa` false. En el RECORTE MANUAL el veto NO rechaza (doctrina
+    // Q2 del kit esquinas-suaves: el operador VIO el papel) — degrada al
+    // escudo-manual (techo 7.9) vía vetoIncompleta/escudoManual de abajo;
+    // diag.gate.completa SÍ reporta false (kit P10 — coherencia del
+    // informe con la medición física).
+    const completa =
+      verificacion.completa && !cuatroEsquinasFaltan(esquinas);
     // KIT e14-esquinas-suaves-v1 (Q2): ESCUDO-MANUAL — `!completa` en un recorte
     // MANUAL no rechaza: techo 7.9 (patrón del escudo D10). El operador VIO el
     // papel; a lo sumo su crop cortó un poco de impresión y lo decide mirando.

@@ -14,6 +14,10 @@ import { ocrTextIsValid } from "@jg-stevan/scanner-core/ocr";
 import type { PageFilter } from "@jg-stevan/scanner-core/types";
 import type { PaginaObjetivo } from "./bridge";
 import type { Acta, FuenteCaptura, HistorialRow, Mesa, ProgresoAnalisis, TipoPagina } from "./types";
+// e67-watchdog-rescate-v1 (cambio B): el tipo de opciones con presupuesto y
+// rescate post-timeout — MISMO patrón del runner MASIVA (variable tipada →
+// sin excess-check en la llamada al bridge).
+import { type OpcionesEscaneoConTimeout } from "./scanner-core-bridge";
 // KIT e14-carga-masiva-v1 (T3.4): solo la capa de DATOS de la cola (sin
 // dependencia del mini-store — cero ciclos de import).
 import { leerRegistro } from "./masiva/cola";
@@ -185,6 +189,17 @@ interface E14Store {
    *  de intentos/contingencia es el mismo de las capturas reales (AC5). */
   simularScore: (banda: BandaSim) => void;
   analisisCompletado: () => void;
+  /** e67-watchdog-rescate-v1 (cambio B): rescate post-timeout del flujo
+   *  INDIVIDUAL — el pipeline siguió vivo tras vencer el watchdog y terminó
+   *  con un desenlace REAL (el bridge lo entrega vía onRescateTardio). Si
+   *  es válido (OPTIMA/ADVERTENCIA — el gate ya decidió dentro del
+   *  pipeline) y la vista sigue en EL MISMO acta rechazada (guarda de
+   *  identidad por referencia — espejo mejorarFotoActa), revierte el
+   *  rechazo: actaActual ← rescatada, deshace el RESCANEO_REQUERIDO que
+   *  analisisCompletado estampó y corre el desenlace POR LA MISMA RUTA del
+   *  flujo normal (analisisCompletado — D4 auto-envío incluido). Casos
+   *  inválidos/tardíos quedan RECHAZADA (correcto — kit §criterios C). */
+  rescatarActaPostTimeout: (vencida: Acta, real: Acta, tiempoRealMs: number) => void;
   enviarActa: () => void;
   repetirFoto: () => void;
   /** D6-bis (SPEC-rediseno-chrome-3-estados Rev. 3): escalación MANUAL a
@@ -762,7 +777,16 @@ export const useE14Store = create<E14Store>((set, get) => {
           /* módulo no cargado → no hay runner vivo */
         });
       try {
-        const acta = await bridge.escanearActa({
+        // e67-watchdog-rescate-v1 (cambio B): variable tipada — MISMO patrón
+        // del runner MASIVA (OpcionesEscaneoConTimeout; sin excess-check).
+        // · actaVencida captura el acta RECHAZADA por tiempo al resolver la
+        //   promesa; el rescate SIEMPRE llega después (microtareas FIFO:
+        //   la continuación del await corre antes que cualquier
+        //   .then tardío del pipeline) — la referencia está lista.
+        // · SIM JAMÁS rescata (§9.2 espejo — desenlace inyectado, nada
+        //   tardío que valga la pena; el callback ni se pasa).
+        let actaVencida: Acta | null = null;
+        const opcionesEscaneo: OpcionesEscaneoConTimeout = {
           objetivo,
           intento,
           maxIntentos: 4,
@@ -774,7 +798,21 @@ export const useE14Store = create<E14Store>((set, get) => {
           simular: simActiva ? true : undefined,
           scoreSimulado: simActiva ? sim!.scoreSimulado : undefined,
           onProgreso: (p) => set({ progresoAnalisis: p }),
-        });
+          // e67 (cambio B): rescate post-timeout — SOLO flujos reales. Si el
+          // pipeline terminó VÁLIDO después del rechazo por tiempo, el
+          // desenlace real (score/gate del pipeline) revierte el rechazo.
+          ...(simActiva
+            ? {}
+            : {
+                onRescateTardio: (real: Acta, tiempoRealMs: number) => {
+                  if (actaVencida) {
+                    get().rescatarActaPostTimeout(actaVencida, real, tiempoRealMs);
+                  }
+                },
+              }),
+        };
+        const acta = await bridge.escanearActa(opcionesEscaneo);
+        actaVencida = acta;
         set({
           actaActual: acta,
           paginaObjetivo: objetivo,
@@ -805,6 +843,71 @@ export const useE14Store = create<E14Store>((set, get) => {
         console.error("[e14] dispararEscaneo falló:", err);
         set({ vista: "escanear", progresoAnalisis: null, analisisResuelto: false });
       }
+    },
+
+    // ─── e67-watchdog-rescate-v1 (cambio B): RESCATE POST-TIMEOUT ───
+    rescatarActaPostTimeout: (vencida, real, tiempoRealMs) => {
+      // Guarda de identidad POR REFERENCIA (espejo mejorarFotoActa): si el
+      // usuario re-disparó, limpió o abrió otra acta, actaActual ya NO es
+      // el acta que el watchdog rechazó → el rescate se descarta (jamás
+      // pisa una captura nueva).
+      if (get().actaActual !== vencida) {
+        console.info("[e14] rescate post-timeout omitido (la vista ya avanzó)", {
+          actaId: real.id,
+        });
+        return;
+      }
+      // Solo desenlaces VÁLIDOS rescatan (el gate ya decidió dentro del
+      // pipeline): RECHAZADA/EN_REVISION_HUMANA tardíos quedan como están
+      // (correcto — caso C del kit: no se rescata lo inválido).
+      if (real.status !== "OPTIMA" && real.status !== "ADVERTENCIA") {
+        console.info("[e14] pipeline terminó inválido tras timeout", {
+          actaId: real.id,
+          status: real.status,
+          score: real.score,
+        });
+        return;
+      }
+      // Provenance honesto: el acta viaja marcada (scoreRescatadoPor/
+      // tiempoRealMs — campos aditivos e67) y SIN rechazo (el rechazo era
+      // del watchdog, no del gate).
+      const rescatada: Acta = {
+        ...real,
+        rechazo: null,
+        scoreRescatadoPor: "post-timeout",
+        tiempoRealMs,
+      };
+      console.info("[e14] RESCATE post-timeout", {
+        actaId: rescatada.id,
+        score: rescatada.score,
+        tiempoRealMs,
+      });
+      // Deshacer el RESCANEO_REQUERIDO que analisisCompletado estampó para
+      // el rechazo (350 ms tras resolver el watchdog) — SOLO si la ÚLTIMA
+      // fila del historial sigue siendo ese rechazo de ESTA página (el
+      // usuario no avanzó); si no matchea, se conserva (jamás borrar de más).
+      const historial = [...get().historial];
+      const primera = historial[0];
+      const deshaceFila =
+        !!primera &&
+        primera.estado === "RESCANEO_REQUERIDO" &&
+        primera.titulo === tituloPaginaActual();
+      if (deshaceFila) historial.shift();
+      set({
+        actaActual: rescatada,
+        ...(deshaceFila
+          ? {
+              historial,
+              solicitudesRescaneo: Math.max(0, get().solicitudesRescaneo - 1),
+            }
+          : {}),
+      });
+      // Desenlace POR LA MISMA RUTA del flujo normal (analisisCompletado):
+      // OPTIMA → auto-envío D4 (registrarEnvio + ENVIADA); ADVERTENCIA →
+      // motivo no-envío + REVISIÓN. En "analizando" NO se llama: el propio
+      // AnalyzingView dispara analisisCompletado leyendo actaActual YA
+      // rescatada (doble llamada = doble registrarEnvio — jamás).
+      if (get().vista !== "analizando") get().analisisCompletado();
     },
 
     analisisCompletado: () => {

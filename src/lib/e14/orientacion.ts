@@ -47,6 +47,21 @@
  * Sin línea si el probe ni siquiera corrió (SIM o error duro de det/init —
  * catch general: el probe JAMÁS tumba el pipeline, §5).
  *
+ * KIT e70-orientacion-condicional-v1 (P4.1 del dueño): el EXIF de cámara YA
+ * NO omite el sondeo por sí solo — dice cómo estaba el TELÉFONO, no cómo
+ * quedó el acta (evidencia: 3 fotos landscape con EXIF rechazadas score 4.9,
+ * anclas 0, cabeceraE14 false). El bridge entra en MODO CONFIRMACIÓN
+ * (opciones.confirmar): la pasada 0° de este probe (det cap rápido + rec
+ * sobre los crops) ES la «primera pasada de OCR rápido» del criterio — quad
+ * del WORKER (no del fallback sobel) + anclas >= 3 Y conf >= 0.7 a 0° ⇒
+ * orientación CONFIRMADA ⇒ cortes=confirmada (sin challengers). Cualquier
+ * condición fallida (anclas 0, conf 0.3, quad de fallback) ⇒ sondeo completo
+ * 0/90/180/270 y el MARGEN decide. En este modo el atajo T1 sana NO aplica
+ * (su MEDIA por chars>=150 perdonaba lecturas basura de actas de lado — el
+ * criterio del dueño es EL gate). Sin opciones → comportamiento de hoy byte
+ * a byte (recorte manual y flujos sin EXIF). Traza: exif=0|1 ADITIVO AL
+ * FINAL (1 = el caller pidió modo confirmación).
+ *
  * PURO orquestación sobre rapidocr.ts (sin sesión nueva, sin descargas —
  * MISMO singleton ORT, §2.2). La rotación JAMÁS cambia el score por sí misma:
  * solo habilita que el OCR lea de verdad; los caps/gate existentes mandan
@@ -69,6 +84,16 @@ interface ProbeOrientacion {
   anclas: Partial<Record<Rotacion, number>>;
   conf: Partial<Record<Rotacion, number>>;
   ms: number;
+}
+
+/** e70 (P4.1) — opciones del probe. Su PRESENCIA activa el MODO
+ *  CONFIRMACIÓN (solo el branch exif-camara del bridge): el criterio del
+ *  dueño reemplaza al atajo T1 sana como ÚNICO gate a 0°. quadWorker=false
+ *  → sin atajo («el quad se detectó mal» — fallback sobel fabricó la
+ *  geometría → sondeo completo). Ausente → comportamiento de hoy byte a
+ *  byte (recorte manual, flujos sin EXIF). */
+export interface OpcionesProbeOrientacion {
+  confirmar?: { quadWorker: boolean };
 }
 
 /** §2.2 — tope duro del probe: a mitad, abortar y seguir con 0° (hoy).
@@ -252,6 +277,7 @@ export async function rotarDataUrl(
  *  NUNCA se alimenta a rec un lote vacío). */
 export async function probeOrientacion(
   fotoOcr: string,
+  opciones?: OpcionesProbeOrientacion,
 ): Promise<ProbeOrientacion | null> {
   const t0 = performance.now();
   try {
@@ -281,7 +307,9 @@ export async function probeOrientacion(
         : [0, gan, ...base.filter((r) => r !== 0 && r !== gan)];
     let mejor: Rotacion | null = null;
     // D56 §3 T4 — por qué terminó el sondeo (solo para la traza, aditivo).
-    let corte: "sana" | "presupuesto" | "completo" = "completo";
+    // e70: + "confirmada" (criterio del dueño — valor ADITIVO, los previos
+    // no cambian de forma; D51).
+    let corte: "sana" | "presupuesto" | "completo" | "confirmada" = "completo";
     for (const rot of orden) {
       // §2.2 presupuesto: a mitad de probe, abortar y seguir con 0° (hoy).
       if (rot !== 0 && performance.now() - t0 > PROBE_BUDGET_MS) {
@@ -302,6 +330,23 @@ export async function probeOrientacion(
       anclas[rot] = nAnclas;
       conf[rot] = confMedia;
       if (rot === 0) {
+        // e70 — MODO CONFIRMACIÓN (P4.1): el criterio del dueño es EL gate —
+        // quad del WORKER + anclas >= 3 Y conf >= 0.7 a 0° ⇒ la primera
+        // pasada rápida CONFIRMÓ la orientación ⇒ sin challengers. En este
+        // modo T1 sana NO aplica (su MEDIA por chars>=150 perdonaba lecturas
+        // basura de actas fotografiadas de lado — el falso positivo exacto
+        // del skip por EXIF).
+        if (opciones?.confirmar) {
+          if (
+            opciones.confirmar.quadWorker &&
+            nAnclas >= 3 &&
+            confMedia >= 0.7
+          ) {
+            corte = "confirmada";
+            break;
+          }
+          continue;
+        }
         // D56 §3 T1 — atajo de lectura-sana: si el texto a 0° YA se lee,
         // ninguna rotación puede necesitar aplicarse y ninguna debe arriesgar
         // la lectura (rotar es riesgo puro). El acta sana sale en ~4 s sin
@@ -335,7 +380,7 @@ export async function probeOrientacion(
       .map((r) => `${r}:${(scores[r] ?? 0).toFixed(2)}`)
       .join(",");
     console.info(
-      `[e14] orientacion crop=${w}x${h} rot=${rot} probe={${probeTxt}} anclas${rot}=${anclas[rot] ?? 0} conf${rot}=${(conf[rot] ?? 0).toFixed(2)} aplicado=${aplicado ? 1 : 0} ms=${ms} cortes=${corte} orden=${orden.join(",")} gan=${gan ?? "-"}`,
+      `[e14] orientacion crop=${w}x${h} rot=${rot} probe={${probeTxt}} anclas${rot}=${anclas[rot] ?? 0} conf${rot}=${(conf[rot] ?? 0).toFixed(2)} aplicado=${aplicado ? 1 : 0} ms=${ms} cortes=${corte} orden=${orden.join(",")} gan=${gan ?? "-"} exif=${opciones?.confirmar ? 1 : 0}`,
     );
     return { rot, aplicado, scores, anclas, conf, ms };
   } catch {

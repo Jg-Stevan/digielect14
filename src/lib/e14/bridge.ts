@@ -54,6 +54,14 @@ export interface OpcionesEscaneo {
    *  "escaneo" activa el quad página-completa (T1) y el gate del marco
    *  impreso (T2) del kit D63-C; fotos/SIM/ausente = pipeline de siempre. */
   origenActa?: OrigenActa;
+  /** e66 (P4) — señal AUDITABLE del detector (veredictoOrigen.senales — el
+   *  runner ya la tenía en la traza y en el diagnóstico; ahora también viaja
+   *  al pipeline). "exif-camara" = EXIF de cámara presente (el core ya horneó
+   *  la orientación al decodificar) → el probe de rotaciones se OMITE
+   *  (evidencia del dueño: aplicado=0 SIEMPRE en exif-camara, 4-10 s c/u).
+   *  SOLO MASIVA lo llena (mismo criterio de origenActa); los flujos
+   *  individual/video/recorte-manual corren el probe de siempre. */
+  origenSenales?: string | null;
   onProgreso?: (p: ProgresoAnalisis) => void;
 }
 
