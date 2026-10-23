@@ -372,7 +372,7 @@ ok(
 console.log("\n── Bloque 6 · e71 Opt-3 — pool + mutex (source-scan) ──");
 
 ok(
-  runner.includes("const PROCESAMIENTO_CONCURRENTE = 2;") &&
+  runner.includes("const PROCESAMIENTO_CONCURRENTE = leerFlags().poolWorkers ?? 2;") &&
     runner.includes("const reservadas = new Set<string>();") &&
     runner.includes("!reservadas.has(f.id)"),
   "Opt-3: pool de 2 workers con RESERVA de fila (siguientePendiente jamás toma una fila reservada — sin doble-proceso)",

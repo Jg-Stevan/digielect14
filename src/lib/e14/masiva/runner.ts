@@ -13,6 +13,10 @@
  * el store del flujo normal solo ve las 3 acciones de integración (T3).
  */
 import { getBridge } from "../get-bridge";
+// poolworkers-wiring-v1 (Agente B): kill switch del dueño — el pool de actas
+// en vuelo lee el flag `poolWorkers` (override e14-flags-overrides en reload;
+// default 2 — el saneo defensivo vive en flags.ts, no aquí).
+import { leerFlags } from "../flags";
 // KIT e14-masiva-ux-v1 (T4): tipo con el presupuesto de timeout opcional
 // (intersección LOCAL en el bridge — kit §1 prohíbe tocar bridge.ts).
 // D66 — KIT e14-decode-unico-precalor-v1: el prefetch (D61) se RE-APUNTA —
@@ -126,10 +130,11 @@ let stopFlag = false;
 let colaSesionIniciada = false;
 
 // ─── e71 (Opt-3) — PARALELISMO + EXCLUSIÓN MUTUA (kit e71-consolidación) ───
-/** Actas EN VUELO simultáneas (kit Opt-3: 2 workers — benchmark aprobado,
- *  «el hardware ya demostró soportar»). Constante única: revertir a 1 =
- *  comportamiento secuencial byte-idéntico al pre-e71. */
-const PROCESAMIENTO_CONCURRENTE = 2;
+/** Actas EN VUELO simultáneas (kit Opt-3: 2 workers — benchmark aprobado).
+ *  Desde poolworkers-wiring-v1: kill switch del modo dev — el override
+ *  `poolWorkers` del dueño (e14-flags-overrides) baja a 1 para RAM justa
+ *  (comportamiento secuencial byte-idéntico al pre-e71). Default 2. */
+const PROCESAMIENTO_CONCURRENTE = leerFlags().poolWorkers ?? 2;
 
 /** Filas RESERVADAS por el pool: nace ANTES de disparar el pipeline y
  *  muere en el finally del vuelo — cierra la ventana entre
