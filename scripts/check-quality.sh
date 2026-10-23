@@ -3,15 +3,28 @@
 # del PLAN-overnight.md). Corre TODO lo que un commit debe pasar:
 #
 #   1. bunx tsc --noEmit        → 0 errores
-#   2. bun run lint             → 0 errores (los 3 warnings deliberados de
-#                                  §2.1 siguen permitidos: recienListas/
-#                                  posCola/modoMenuMontado — decisiones D65)
+#   2. bun run lint             → 0 errores / 0 warnings (desde PR #93 NO
+#                                  hay warnings deliberados: recienListas/
+#                                  posCola/modoMenuMontado quedaron resueltos
+#                                  en ui-hooks-v1, y la única preexistente
+#                                  de logger.ts la eliminó el núcleo del
+#                                  agente 1 — obs-flags-qa FASE 1)
 #   3. bun run build            → exit 0 (Next 16 Turbopack)
-#   4. bun run test             → vitest 53/53 (suite unitaria overnight)
-#   5. bun scripts/qa-*.ts      → los 7 harnesses de regresión (280/280)
-#   6. bunx knip                → inventario de dead code (baseline tras
-#                                  overnight: 37 ítems — solo informativo,
-#                                  no rompe el gate)
+#   4. bun run test             → vitest verde (162: base overnight 70 +
+#                                  núcleo obs/flags 83 + transporte 9)
+#   5. bun scripts/qa-*.ts      → los 11 harnesses: 7 de regresión
+#                                  (294 checks — anclas byte-idénticas de
+#                                  runner/cola/historico) + 4 de contrato
+#                                  obs del kit e14-observabilidad-v1
+#                                  (contract 38 · privacidad 7 · transporte
+#                                  8 · ui 8 — la de ui nace PENDIENTE en la
+#                                  base feat/obs-nucleo-v1 y pasa a ESTRICTO
+#                                  al integrar feat/obs-modo-dev-v1)
+#   6. bunx knip                → inventario de dead code (informativo —
+#                                  no rompe el gate; baseline 40 ítems =
+#                                  25 exports + 17 types tras FASE 1,
+#                                  superficie de contrato obs incluida —
+#                                  ver docs/REPORTE-obs-flags-qa-v1.md)
 #
 # Uso:    bash scripts/check-quality.sh
 # Sale:   exit 0 si TODO verde; primer fallo corta con contexto.
@@ -32,7 +45,7 @@ bunx tsc --noEmit || fail "tsc — ver salida arriba"
 ok "tsc 0 errores"
 
 paso "2/6 · ESLint"
-if bun run lint; then ok "lint 0 errores"; else fail "lint"; fi
+if bun run lint; then ok "lint 0 errores / 0 warnings"; else fail "lint"; fi
 
 paso "3/6 · Build de producción"
 bun run build > /tmp/check-quality-build.log 2>&1 || { tail -15 /tmp/check-quality-build.log; fail "build"; }
@@ -42,8 +55,11 @@ paso "4/6 · Vitest (suite unitaria)"
 bun run test || fail "vitest"
 ok "vitest verde"
 
-paso "5/6 · Los 7 harnesses de regresión (QA)"
-declare -a NOMBRES=(autoenvío dedup-enviadas escaneo-ya-recortado historico-enviadas identidad-acta qr-identidad watchdog-relectura)
+paso "5/6 · Los 11 harnesses de regresión + contrato obs (QA)"
+# Orden ALFABÉTICO EXACTO del glob scripts/qa-*.ts (los 4 obs-* entran
+# entre identidad-acta y qr-identidad) — NOMBRES[i-1] debe corresponder 1:1
+# con el i-ésimo archivo del glob (kit A3-C5).
+declare -a NOMBRES=(autoenvío dedup-enviadas escaneo-ya-recortado historico-enviadas identidad-acta obs-contract obs-privacidad obs-transporte obs-ui qr-identidad watchdog-relectura)
 i=0
 for f in scripts/qa-*.ts; do
   i=$((i+1))
@@ -57,12 +73,12 @@ for f in scripts/qa-*.ts; do
   ok "$nombre — $linea"
 done
 
-paso "6/6 · knip (informativo — baseline overnight: 37 ítems)"
+paso "6/6 · knip (informativo — baseline FASE 1: 40 ítems = 25 exports + 17 types)"
 knip_out="$(bunx knip 2>/dev/null || true)"
 exports_=$(echo "$knip_out" | grep -A100 "Unused exports" | grep -cE "^[a-zA-Z]" || echo 0)
 types_=$(echo "$knip_out" | grep -A100 "exported types" | grep -cE "^[a-zA-Z]" || echo 0)
-ok "knip: ~${exports_} exports + ~${types_} types sin uso (NO rompe el gate — comparar contra AUDIT.md §6)"
+ok "knip: ~${exports_} exports + ~${types_} types sin uso (NO rompe el gate — comparar contra docs/REPORTE-obs-flags-qa-v1.md §FASE 1)"
 
 printf '\n\033[1;32m══════════════════════════════════════════════\033[0m\n'
-printf '\033[1;32m TODO VERDE — tsc · lint · build · vitest · QA 7/7\033[0m\n'
+printf '\033[1;32m TODO VERDE — tsc · lint · build · vitest · QA 11/11\033[0m\n'
 printf '\033[1;32m══════════════════════════════════════════════\033[0m\n'
