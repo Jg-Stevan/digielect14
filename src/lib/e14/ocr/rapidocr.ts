@@ -99,9 +99,7 @@ export function rapidOcrPrecalentar(): Promise<boolean> {
   prewarmHecho = (async () => {
     try {
       const rt = await rapidOcrInit(); // MISMO singleton — el calor queda
-      const c = document.createElement("canvas");
-      c.width = 640;
-      c.height = 480;
+      const c = canvasCon(640, 480); // SPRINT-A A3 — factory
       const ctx = ctxDe(c);
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, 640, 480);
@@ -205,12 +203,10 @@ async function initReal(): Promise<RapidRuntime> {
 // fotoProcesada en la memo → la imagen del acta en vuelo NO se desaloja
 // (máx 2 entradas en la ruta del OCR); el re-OCR de la banda corre DESPUÉS
 // de la elección, sin dependencia con la entrada viva.
-import { loadImageMemo } from "../image-utils";
+import { canvasCon, loadImageMemo } from "../image-utils";
 
 function canvasDe(img: HTMLImageElement | HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
+  const c = canvasCon(w, h); // SPRINT-A A3 — factory
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
@@ -298,9 +294,7 @@ function preDet(
   if (h <= minHeight || w / h > widthHeightRatio) {
     const newH = Math.max(Math.floor(w / widthHeightRatio), minHeight) * 2;
     padTop = Math.floor(Math.abs(newH - h) / 2);
-    const padded = document.createElement("canvas");
-    padded.width = w;
-    padded.height = h + padTop * 2;
+    const padded = canvasCon(w, h + padTop * 2); // SPRINT-A A3 — factory
     const pctx = ctxDe(padded);
     pctx.fillStyle = "#000000";
     pctx.fillRect(0, 0, padded.width, padded.height);
@@ -546,9 +540,7 @@ function cropLinea(
   const theta = Math.atan2(p1.y - p0.y, p1.x - p0.x);
   const cos = Math.cos(theta);
   const sin = Math.sin(theta);
-  const canvas = document.createElement("canvas");
-  canvas.width = cropW;
-  canvas.height = cropH;
+  const canvas = canvasCon(cropW, cropH); // SPRINT-A A3 — factory
   const ctx = ctxDe(canvas);
   // get_rotate_crop_image equivalente: la matriz del contexto transforma
   // coords de la FUENTE → coords del CANVAS (inversa de [R|p0]): rotación
@@ -865,9 +857,7 @@ export async function rapidOcrReconocer(
       // cls: h=48, w=min(192, ceil(48·ratio)) con pad a 192
       const ratio = cv.width / cv.height;
       const wObj = Math.min(192, Math.max(1, Math.ceil(48 * ratio)));
-      const tmp = document.createElement("canvas");
-      tmp.width = wObj;
-      tmp.height = 48;
+      const tmp = canvasCon(wObj, 48); // SPRINT-A A3 — factory
       ctxDe(tmp).drawImage(cv, 0, 0, wObj, 48);
       return tmp;
     });
@@ -886,9 +876,7 @@ export async function rapidOcrReconocer(
   const cropsFinales = crops.map((c, i) => {
     if (!rotar[i]) return c.canvas;
     const cv = c.canvas;
-    const tmp = document.createElement("canvas");
-    tmp.width = cv.width;
-    tmp.height = cv.height;
+    const tmp = canvasCon(cv.width, cv.height); // SPRINT-A A3 — factory
     const ctx = ctxDe(tmp);
     ctx.translate(cv.width, cv.height);
     ctx.rotate(Math.PI);
