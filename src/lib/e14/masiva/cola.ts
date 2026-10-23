@@ -73,6 +73,12 @@ let contadorId = 0;
 export async function agregarLote(
   files: File[],
   pdfPages?: Set<File>,
+  // e71 (Opt-1) — hashes SHA-256 PRE-CALCULADOS por el store (ingesta, kit
+  // e71-consolidación): nacen EN EL PRIMER write del registro — el marcado
+  // instantáneo de duplicados exactos no paga lecturas y cadenaDedup los
+  // reutiliza sin re-hashear. null/ausente = hash falló (conservador — la
+  // fila procesa normal, igual que hoy).
+  hashesBytes?: (string | null)[],
 ): Promise<string[]> {
   const db = await abrirCola();
   const store = transaccion(db, "readwrite");
@@ -80,12 +86,17 @@ export async function agregarLote(
   const ids: string[] = [];
   files.forEach((file, i) => {
     const id = `masiva-${ahora}-${contadorId++}`;
+    const hash = hashesBytes?.[i] ?? null;
     const registro: RegistroMasiva = {
       id,
       nombre: file.name || `FOTO_${i + 1}`,
       agregadaEn: ahora + i, // FIFO estable DENTRO del lote (orden de suelta)
       estado: "PENDIENTE",
       archivo: file,
+      // e71 (Opt-1): la llave exacta de dedup (SHA-256 hex 64 — hashBytes)
+      // viaja en el PRIMER write (kit: «guardar como hashSha256 en el
+      // registro» — M-e71: el campo EXISTENTE e65 ya ES ese SHA-256).
+      ...(hash ? { hashBytes: hash } : {}),
       ...(pdfPages?.has(file) ? { viaPdf: true } : {}),
     };
     ids.push(id);
