@@ -216,12 +216,11 @@ export function ScanView() {
   // §3.1.1 (mock 1): botón de cuadrícula de la píldora IA — overlay
   // visual de retícula sobre el visor (toggle decorativo, como el mock).
   const [gridOn, setGridOn] = useState(false);
-  // §6.3 (SPEC): el botón AMARILLO abre el selector de MODO (los 3 modos
-  // actuales como píldoras re-vestidas) — modoMenuMontado es la fase de
-  // entrada (150 ms, opacidad + scale). El menú ⋮ del skin anterior
-  // desaparece (§6.6: oculto por defecto hasta que el dueño asigne función).
-  const [modoMenuAbierto, setModoMenuAbierto] = useState(false);
-  const [modoMenuMontado, setModoMenuMontado] = useState(false);
+  // SPRINT-B (B3, kit): el menú §6.3 del SPEC se ABANDONA — el segmented
+  // CÁMARA/SIM/SUBIR siempre-visible es la UI vigente (runtime 3A.5: 0
+  // dialogs, 0 scale-0.97). Estados modoMenuAbierto/modoMenuMontado + su
+  // efecto Escape + comentarios huérfanos BORRADOS (regresión #3 del
+  // audit 4f9c871; sin anclas QA — grep scripts/ = solo un comentario).
   const [live, setLive] = useState<LiveUi>({ corners: null, score: null });
   const [procesando, setProcesando] = useState(false);
   const [videoDims, setVideoDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -248,38 +247,14 @@ export function ScanView() {
     return () => window.clearTimeout(t);
   }, []);
 
-  // §C → §6.3 (redesign-stitch): Escape cierra el selector de modo;
-  // modoMenuMontado pasa a true un frame tras el montaje para que la
-  // transición de entrada (150 ms, opacidad + scale-0.97→1) corra en CSS
-  // puro (sin framer-motion).
-  useEffect(() => {
-    if (!modoMenuAbierto) {
-      setModoMenuMontado(false);
-      return;
-    }
-    const alTecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setModoMenuAbierto(false);
-    };
-    window.addEventListener("keydown", alTecla);
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setModoMenuMontado(true));
-    });
-    return () => {
-      window.removeEventListener("keydown", alTecla);
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-    };
-  }, [modoMenuAbierto]);
-
   /* ── SPRINT-B (B1): hooks dedicados — MOVIMIENTO PURO ────────────────
-   *  Orden de llamada = orden de registro de efectos, EXACTO al original:
+   *  Orden de llamada = orden de registro de efectos, EXACTO al original
+   *  (salvo el efecto Escape del menú §6.3, eliminado en B3):
    *  anillo (sin efectos) → linterna (sin efectos) → destello (sin
    *  efectos) → selector (sin efectos) → sesión de cámara (ARRANQUE →
-   *  re-asignar → playing → loop). El §9 y el modoMenu de arriba conservan
-   *  su posición original (antes del bloque de sesión); el ResizeObserver
-   *  se declara tras capturarInteligente, como en el original (RO antes
-   *  del loop). */
+   *  re-asignar → playing → loop). El §9 conserva su posición original
+   *  (antes del bloque de sesión); el ResizeObserver se declara tras
+   *  capturarInteligente, como en el original (RO antes del loop). */
 
   // Anillo Best-Shot ZSL (lab L1512-1574): feed ~5 Hz + ganador pre-tap.
   const { alimentarAnillo, liberarAnillo, instantanea, tomarZsl } = useAnilloBestShot({ videoRef });
@@ -707,10 +682,7 @@ export function ScanView() {
               <div className="pointer-events-auto flex items-center p-0.5 lg:p-1 bg-[#10161f]/90 border border-slate-800 rounded-full backdrop-blur-md shadow-md">
                 <button
                   type="button"
-                  onClick={() => {
-                    setFuente("CAMARA");
-                    setModoMenuAbierto(false);
-                  }}
+                  onClick={() => setFuente("CAMARA")}
                   className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
                     fuente === "CAMARA"
                       ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
@@ -722,10 +694,7 @@ export function ScanView() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setFuente("SIMULACION");
-                    setModoMenuAbierto(false);
-                  }}
+                  onClick={() => setFuente("SIMULACION")}
                   className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
                     fuente === "SIMULACION"
                       ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
@@ -737,10 +706,7 @@ export function ScanView() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    inputRef.current?.click();
-                    setModoMenuAbierto(false);
-                  }}
+                  onClick={() => inputRef.current?.click()}
                   className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
                     fuente === "ARCHIVO"
                       ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"

@@ -28,9 +28,13 @@ const useAyudaStore = create<{
   cerrar: () => set({ abierta: false }),
 }));
 
-/** Disparo externo sin hook (SideNav/ScanView/teclado). */
+/** Disparo sin hook — externo (SideNav/ScanView/teclado).
+ *  SPRINT-B (B3): cerrarAyuda BORRADA (desviación documentada) — el kit
+ *  pedía de-export «si no tiene consumidores»; el grep confirma que no
+ *  tiene NI internos (el overlay usa el action `cerrar` del store en
+ *  L117) → código muerto, se elimina (protocolo 3B del overnight:
+ *  «export muerto» ≠ «código muerto»; aquí es muerto del todo). */
 export const abrirAyuda = () => useAyudaStore.getState().abrir();
-export const cerrarAyuda = () => useAyudaStore.getState().cerrar();
 
 const LS_KEY = "e14-ayuda-vista";
 

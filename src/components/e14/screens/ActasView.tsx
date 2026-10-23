@@ -281,7 +281,17 @@ export function ActasView() {
                     : "bg-amber-400/20 border-amber-400 text-amber-400"
                 }`}
               >
-                <SensorsIcon className={`w-3 h-3 ${online ? "text-[#10b981]" : "text-amber-400"}`} />
+                <SensorsIcon
+                  className={`w-3 h-3 ${
+                    online
+                      ? // Regresión #5 (audit 4f9c871) restaurada en B3: el
+                        // pulso del indicador EN LÍNEA (mismo patrón del botón
+                        // SIM de arriba — animate-pulse-sync vive en
+                        // globals.css).
+                        "animate-pulse-sync text-[#10b981]"
+                      : "text-amber-400"
+                  }`}
+                />
                 {online ? "EN LÍNEA" : "OFFLINE"}
               </button>
             </div>
