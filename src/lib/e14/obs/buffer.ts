@@ -115,6 +115,12 @@ function completarEvento(e: Omit<EventoObs, "id">): EventoObs {
   };
 }
 
+/** Flag anti-recursión (kit A1-C3): mientras el rastreo está EMITIENDO un
+ *  evento, cualquier appendEvento anidado (p. ej. un logger.error interno de
+ *  obs disparado durante la emisión, o un evento que nace del propio
+ *  handler de captura) se descarta — el rastreo jamás se auto-rastrea. */
+let capturando = false;
+
 /** Abrir el buffer ANTES de usarlo (idempotente — el bootstrap C7 la llama
  *  una vez; las demás funciones abren por sí solas si no). */
 export async function abrirBuffer(): Promise<void> {
@@ -122,8 +128,12 @@ export async function abrirBuffer(): Promise<void> {
 }
 
 /** Añadir un evento (aplica tope 500 + TTL 30d + purge vencidos). SILENCIOSO
- *  SIEMPRE: cualquier fallo de IDB resuelve sin lanzar (regla de oro §2.4). */
+ *  SIEMPRE: cualquier fallo de IDB resuelve sin lanzar (regla de oro §2.4).
+ *  Anti-recursión: si ya estamos dentro de una emisión (capturando), el
+ *  evento anidado se descarta en silencio. */
 export async function appendEvento(e: Omit<EventoObs, "id">): Promise<void> {
+  if (capturando) return;
+  capturando = true;
   try {
     const db = await abrir();
     const completo = completarEvento(e);
@@ -133,6 +143,8 @@ export async function appendEvento(e: Omit<EventoObs, "id">): Promise<void> {
     await mantener();
   } catch {
     /* el rastreo jamás lanza — el buffer es best-effort por diseño */
+  } finally {
+    capturando = false;
   }
 }
 
