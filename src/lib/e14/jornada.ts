@@ -47,7 +47,8 @@ export const TOPE_HISTORIAL = 200;
 const VERSION_FORMATO = 1;
 
 /** Estado liviano de la jornada (lo que sobrevive a una recarga). */
-export interface EstadoJornada {
+// knip C3: de-export — uso SOLO interno (cargar/guardarJornada).
+interface EstadoJornada {
   version: number;
   archivadas: Record<string, ActaArchivada>;
   puestoActual: PuestoActual | null;

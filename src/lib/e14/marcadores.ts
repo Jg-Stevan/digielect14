@@ -44,7 +44,8 @@ const ZONA_Y1 = 0.95;
 /** Umbral del marcador (kit G1): densidad de la zona < 0.8 % = SIN votos. */
 const UMBRAL_VOTOS_PCT = 0.8;
 
-export interface MarcadoresResult {
+// knip C3: de-export — uso SOLO interno (retorno de medirMarcadores).
+interface MarcadoresResult {
   /** % de píxeles con tinta (luma<128) en la zona de votos. */
   densidadVotosPct: number;
   /** true = el marcador obligatorio CUMPLE (hay tinta de votos). */

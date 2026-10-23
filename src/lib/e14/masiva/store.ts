@@ -92,7 +92,8 @@ export type EtapaVidaKit = "preparando" | "deteccion" | "ocr" | "verificacion";
  *  computa `fracGlobal` (0..1): cada fase del pipeline mapea a un tramo del
  *  TOTAL, las 2 pasadas del OCR reparten sub-tramos y el valor es MONOTÓNICO
  *  (jamás baja dentro de la misma acta — Math.max por señal). */
-export interface ProgresoFila {
+// knip C3: de-export — uso SOLO interno (estado del mini-store).
+interface ProgresoFila {
   id: string;
   etapa: EtapaVidaKit;
   /** 0..1 SOLO cuando etapa === "ocr" — dato REAL del reconocedor. */
@@ -365,6 +366,8 @@ export async function enviadaPorPayload(payload: string): Promise<EntradaHistori
  *  parámetro opcional `qrPayload` estampado en el registro YA-ENVIADA
  *  (aditivo) · al final del éxito ALIMENTA EL LEDGER (registrarEnviada-
  *  Historico — cierra el gap de marcas contra filas enviadas pre-kit). */
+// knip C3: export CONSERVADO — ancla QA (qa-historico-enviadas.ts grepea
+// esta línea byte-idéntica: «payload» es valor NUEVO AL FINAL, D57).
 export type ViaYaEnviada = "bytes" | "dhash" | "payload"; // valor NUEVO AL FINAL (contrato D57)
 
 export async function marcarYaEnviada(
