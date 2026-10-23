@@ -240,12 +240,21 @@ ok(
 // envíos reales — antes la copia heredaba ENVIADA y entraba por T-3b).
 // La protección de re-encolado de la gemela sobrevive vía la ENTRADA de la
 // ORIGINAL en el ledger (payload-QR exacto + dhash cinta cierta ≤ 6).
+// ADENDA e71 (P2.1 — kit e71-consolidación): la copia HEREDA el desenlace
+// del original — ENVIADA/OPTIMA → DUPLICADA (regla e66 intacta); con
+// rechazo → RECHAZADA heredada (el informe muestra RECHAZADA: 2, no
+// DUPLICADA). El literal `actaCopia.status = "DUPLICADA";` pasó a la
+// asignación condicional `actaCopia.status = copiaRechazada ?
+// "RECHAZADA" : "DUPLICADA";` — misma invariancia (JAMÁS hereda el envío
+// de la original; enviadoAutomaticamente null en AMBAS ramas).
 ok(
   !runner.includes('if (actaCopia.status === "ENVIADA") {') &&
-    runner.includes('actaCopia.status = "DUPLICADA";') &&
-    runner.includes("actaCopia.diagnostico.status = \"DUPLICADA\";") &&
+    runner.includes(
+      'actaCopia.status = copiaRechazada ? "RECHAZADA" : "DUPLICADA";',
+    ) &&
+    runner.includes('const originalEnviada = actaCopia.status === "ENVIADA" || actaCopia.status === "OPTIMA";') &&
     runner.includes("actaCopia.enviadoAutomaticamente = null;"),
-  "e66/M-e66-1: REVERSA de T-3b — la gemela DUPLICADA ya no alimenta el ledger (historial = SOLO envíos reales); su re-encolado sigue protegido por la entrada de la original",
+  "e66/M-e66-1 + e71/P2.1: la gemela JAMÁS hereda el envío (ENVIADA/OPTIMA → DUPLICADA; con rechazo → RECHAZADA heredada — informe RECHAZADA: 2), enviadoAutomaticamente null en ambas ramas",
 );
 
 ok(
@@ -272,9 +281,13 @@ ok(
   runner.includes("if (!originalQr) {") &&
     runner.indexOf("const enviadaHist = await enviadaPorPayload(qrPayload);") >
       runner.indexOf("if (!originalQr) {") &&
-    runner.indexOf("registrarQrPayload(qrPayload, fila.id);") >
+    // ADENDA e71 (Opt-3): el registro pasó DENTRO de la sección crítica
+    // (conExclusionMutua) y la closure usa la acotación qrPayloadSeguro —
+    // el ORDEN del intent (lookup del ledger ANTES del registro, mapa e63m
+    // manda primero — F7) queda intacto.
+    runner.indexOf("registrarQrPayload(qrPayloadSeguro, fila.id);") >
       runner.indexOf("const enviadaHist = await enviadaPorPayload(qrPayload);"),
-  "T-4/F4: el lookup del ledger corre en la rama SIN original de sesión y ANTES de registrarQrPayload (el mapa e63m manda primero — F7)",
+  "T-4/F4: el lookup del ledger corre en la rama SIN original de sesión y ANTES de registrarQrPayload (el mapa e63m manda primero — F7) [e71: registro en sección crítica con qrPayloadSeguro]",
 );
 
 ok(
@@ -380,10 +393,10 @@ ok(
 );
 
 ok(
-  informe.includes('yaEnviadas: filas.filter((f) => f.estado === "YA-ENVIADA").length,') &&
+  informe.includes('yaEnviadas: filas.filter((f) => f.statusActa === "ENVIADA").length,') &&
     !informe.includes("hashBytes") &&
     !/EntradaHistorica|listarHistorico|registrarEnviadaHistorico/.test(informe),
-  "F8/RL-e65b-8: informe intacto — yaEnviadas correcto y hashBytes/ledger AUSENTES del informe (el hashDedup/qrPayload de la sección dedup es la decisión D65/e63m previa, intocada)",
+  "F8/RL-e65b-8 + e71/P3.1: informe sin hashBytes/ledger — yaEnviadas ahora cuenta statusActa === ENVIADA (kit e71: el dueño la lee como «actas enviadas»; el estado YA-ENVIADA solo existe en re-subidas de la misma sesión y reportaba 0)",
 );
 
 ok(
