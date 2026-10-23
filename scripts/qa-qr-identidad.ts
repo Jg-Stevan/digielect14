@@ -412,9 +412,11 @@ ok(
 );
 
 // El payload viaja al registro (aditivo al final — contrato D57) y a las
-// rutas ERROR/DUPLICADA-e63k (post-mortem).
+// rutas ERROR/DUPLICADA-e63k/DUPLICADA-e72 (post-mortem). ADENDA e72: la
+// 4.ª ruta es el desenlace-contenido (P2.1-v2) — misma naturaleza de write
+// controlado (llave opaca export-only; sin parse/invertir/prefijos).
 const spreadQr = (srcRunner.match(/\.\.\.\(qrPayload \? \{ qrPayload \} : \{\}\)/g) ?? []).length;
-ok(spreadQr === 3, `qrPayload se estampa en EXACTAMENTE 3 writes de registro (LISTA/DUPLICADA-e63k/ERROR) — hallados ${spreadQr}`);
+ok(spreadQr === 4, `qrPayload se estampa en EXACTAMENTE 4 writes de registro (LISTA/DUPLICADA-e63k/DUPLICADA-e72/ERROR) — hallados ${spreadQr}`);
 
 // Llave OPACA: cero parse/inversión/prefijos en módulo + wiring.
 ok(
