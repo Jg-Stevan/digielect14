@@ -106,17 +106,17 @@ export const QR_ESPERA_INTENTOS = 10;
 export const BARRIDO_VENTANAS: readonly number[] = [0.08, 0.11, 0.14, 0.19, 0.25, 0.32];
 /** Presupuesto de reló del barrido zxing (doc hermano §1: 4 000 ms — el
  *  barrido jsQR NO tiene reló: es puro y acotado por nº de ventanas). */
-export const ZXING_BARRIDO_PRESUPUESTO_MS = 4_000;
+const ZXING_BARRIDO_PRESUPUESTO_MS = 4_000; // SPRINT-A A5: de-export (vivo solo aquí)
 /** Binarizadores del barrido zxing en orden (doc hermano §1:
  *  GlobalHistogram→LocalAverage — el banco #77 midió GlobalHistogram ganando
  *  en blur y LocalAverage en nítidas). */
-export const ZXING_BINARIZADORES: readonly Binarizer[] = [
+const ZXING_BINARIZADORES: readonly Binarizer[] = [ // SPRINT-A A5: de-export (vivo solo aquí)
   "GlobalHistogram",
   "LocalAverage",
 ];
 /** El E-14 usa QR — restringir el simbolismo acelera cada ventana del
  *  barrido (micro-decisión declarada: el formato es dato del dominio). */
-export const ZXING_FORMATO = "QRCode" as const;
+const ZXING_FORMATO = "QRCode" as const; // SPRINT-A A5: de-export (vivo solo aquí)
 
 // ─── e71 (Opt-2) — RECORTE de la esquina estándar (kit e71-consolidación) ───
 /** Lado del RECORTE de la esquina estándar del QR (kit: «aprox 600x600 px»):
@@ -293,7 +293,7 @@ function limitesDeCuadrante(
  *  filo del cuadrante de T-1.0): clampea origen y lado, JAMÁS inventa
  *  píxeles (copia fila a fila del buffer fuente). null si el lado pedido
  *  excede la imagen (nada que decodificar ahí). */
-export function ventanaDePixeles(
+function ventanaDePixeles( // SPRINT-A A5: de-export (vivo solo aquí)
   pix: PixelesQr,
   x: number,
   y: number,
@@ -317,7 +317,8 @@ export function ventanaDePixeles(
 
 /** UN intento jsQR sobre UNA ventana (attemptBoth — la inversión la cubre
  *  aquí, no en el tier zxing). Jamás throw (red line e64 §7-4). */
-export function jsQrDeVentana(win: PixelesQr): string | null {
+// SPRINT-A A5: de-export (vivo solo aquí — barrido de ventanas y filo)
+function jsQrDeVentana(win: PixelesQr): string | null {
   try {
     const res = jsQR(win.data, win.width, win.height, {
       inversionAttempts: "attemptBoth",
