@@ -8,11 +8,11 @@
  * FASE 1 (cuando exista `origin/feat/obs-nucleo-v1`): ESTE ARCHIVO SE ELIMINA
  * y los imports de la UI pasan a `@/lib/e14/obs/tipos` — cero cambios en los
  * componentes (los nombres de tipo son los mismos del contrato).
- * `Tier` y `Breadcrumb` quedan internos (los consumen las interfaces
- * exportadas); cada export de aquí nace con consumidor (gate knip).
+ * `Tier` queda interno (lo consumen las interfaces exportadas); cada export
+ * de aquí nace con consumidor (gate knip).
  */
 
-interface Breadcrumb {
+export interface Breadcrumb {
   t: number; // epoch ms
   tipo: "click" | "vista" | "cola" | "store" | "red";
   detalle: string; // aria-label / data-accion / transición — SIN contenido de actas
