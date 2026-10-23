@@ -34,17 +34,17 @@ import {
   idSesion,
   iniciarMuestreoSalud,
   leerFlags,
-  obtenerDispositivo,
   purgarBuffer,
   refrescarFlags,
   useModoDev,
   useOverridesFlags,
   usePolitica,
-  type SnapshotDispositivo,
 } from "./puente";
 import type { ErroresAgrupados, PoliticaDatos } from "./contrato";
 // KIT e14-observabilidad-v1 (agente 2 · C5): detalle de errores + breadcrumbs.
 import { VistaErrores } from "./VistaErrores";
+// KIT e14-observabilidad-v1 (agente 2 · C6): salud en vivo (30 s, solo panel abierto).
+import { useSaludVivo } from "./useSaludVivo";
 
 /** Timeout del armado — el MISMO patrón de «reiniciar jornada» (4 s). */
 const ARMADO_MS = 4000;
@@ -183,17 +183,9 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
   const overrides = useOverridesFlags();
 
   // ── Sección 2 · salud ──────────────────────────────────────────────────
-  const [snapshot, setSnapshot] = useState<SnapshotDispositivo | null>(null);
-  const refrescarSalud = useCallback(async () => {
-    try {
-      setSnapshot(await obtenerDispositivo());
-    } catch {
-      setSnapshot(null); // el rastreo jamás rompe la app (regla de oro 4)
-    }
-  }, []);
-  useEffect(() => {
-    void refrescarSalud();
-  }, [refrescarSalud]);
+  // (hook C6: 30 s SOLO mientras el panel está abierto — el panel SOLO
+  //  existe montado; al desmontar se limpia el timer. NUNCA timer global.)
+  const { snapshot, refrescar: refrescarSalud } = useSaludVivo({ activo: true });
   const [armadoMuestreo, armarMuestreo, desarmarMuestreo] = useArmado();
 
   // ── Sección 3 · errores ────────────────────────────────────────────────
