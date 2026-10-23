@@ -60,7 +60,7 @@
 import jsQR from "./vendor/jsQR.js";
 import type { Binarizer, ReaderOptions } from "zxing-wasm/reader";
 import type { EstadoEntrada } from "./tipos";
-import { decodeImagenLru } from "../image-utils"; // SPRINT-A A1 — decode-once LRU compartido
+import { canvasCon, decodeImagenLru } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
 
 // ─── Constantes NUEVAS del kit e63m §1.1 (separadas de las existentes) ──────
 /** Lado largo MÁXIMO del canvas de trabajo (kit §1.1 — igual que el banco:
@@ -696,9 +696,7 @@ async function pixelesDeCapture(
       cv = fuente; // canvas pre-escalado del LRU (maxDim aplicado)
     } else {
       const img = fuente as HTMLImageElement;
-      cv = document.createElement("canvas");
-      cv.width = img.naturalWidth;
-      cv.height = img.naturalHeight;
+      cv = canvasCon(img.naturalWidth, img.naturalHeight); // SPRINT-A A3 — factory
       const ctx0 = cv.getContext("2d");
       if (!ctx0) return null;
       ctx0.drawImage(img, 0, 0);
