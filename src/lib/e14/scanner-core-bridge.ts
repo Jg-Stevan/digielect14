@@ -135,6 +135,8 @@ import { anclasDe, elegirMejor, necesitaSegunda } from "./ocr-escalonado";
 // KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado justo
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
+import { canvasCon } from "./image-utils"; // SPRINT-A A3 — factory de canvas
+import { logger } from "../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 /** KIT e14-masiva-tiempos-v1 (PR-2, prefetch): memo de decode POR INSTANCIA
  *  de File (WeakMap — GC-friendly, no retiene blobs). El mismo File JAMÁS
@@ -158,12 +160,10 @@ function decodeArchivoMemo(file: File): Promise<string> {
   return p;
 }
 
-/** KIT e14-masiva-tiempos-v1 (PR-2): precalentar el decode de un archivo
- *  (runner MASIVA — prefetch de 1 slot durante el OCR de la fila N). Misma
- *  memo del pipeline: si la fila llega a procesarse, su decode es HIT. */
-export function precargarDecodeArchivo(file: File): Promise<string> {
-  return decodeArchivoMemo(file);
-}
+// SPRINT-A (perf/decode-once-v1) A5: el export precargarDecodeArchivo fue
+// eliminado — DEAD desde D66 (el prefetch del runner se re-apuntó a
+// asegurarMaestro; 0 anclas en scripts/, 0 usos en src). La memo interna
+// decodeArchivoMemo sigue viva (el pipeline la usa).
 
 /** Timeout de seguridad global §5 (worker colgado en gama baja).
  *  KIT e67-watchdog-rescate-v1 (M-e67-0 / cambio A): 15_000 → 120_000 — el
@@ -271,9 +271,7 @@ const QUAD_IDENTITY: Quad = [
  */
 function capturarFrame(video: HTMLVideoElement): string | null {
   try {
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const canvas = canvasCon(video.videoWidth, video.videoHeight); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d");
     if (!ctx || !canvas.width || !canvas.height) return null;
     ctx.drawImage(video, 0, 0);
@@ -516,9 +514,7 @@ function senalHiResDeCanvas(
     const escala = Math.min(1, HI_RES_LADO / lado);
     const w = Math.max(1, Math.round(wSrc * escala));
     const h = Math.max(1, Math.round(hSrc * escala));
-    const cv = document.createElement("canvas");
-    cv.width = w;
-    cv.height = h;
+    const cv = canvasCon(w, h); // SPRINT-A A3 — factory
     const ctx = cv.getContext("2d", { willReadFrequently: true });
     if (!ctx) return { sharpnessHi: 0, contrastPapel: 0 };
     ctx.drawImage(origen, 0, 0, w, h);
@@ -655,9 +651,7 @@ async function calidadDeActa(
     const escala = Math.min(1, CROP_LADO_MAX / Math.max(bbox.sw, bbox.sh));
     const cw = Math.max(1, Math.round(bbox.sw * escala));
     const ch = Math.max(1, Math.round(bbox.sh * escala));
-    const canvas = document.createElement("canvas");
-    canvas.width = cw;
-    canvas.height = ch;
+    const canvas = canvasCon(cw, ch); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) throw new Error("sin ctx");
     ctx.drawImage(img, bbox.sx, bbox.sy, bbox.sw, bbox.sh, 0, 0, cw, ch);
@@ -701,9 +695,7 @@ async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | 
   if (!foto) return null;
   try {
     const img = await loadImageMemo(foto);
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    const canvas = canvasCon(img.naturalWidth, img.naturalHeight); // SPRINT-A A3 — factory
     if (!canvas.width || !canvas.height) return null;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
@@ -726,17 +718,11 @@ async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | 
  * se descarta igual). NO re-OCR del acta completa. Fallo → "" (sin banda
  * nueva: la cascada sigue con el d9 del consenso — nunca condena).
  */
-// KIT e14-motor-rapidocr-v1 (PROD-2 §3/§4-C5): trazas del motor de producción
-// — conf/det/rec de la ÚLTIMA llamada reconocerRapidOcr. La banda del sello
-// y el re-OCR del editor también pasan por aquí: los pipelines capturan sus
-// valores justo tras su OCR PRINCIPAL (antes de la banda) para la traza.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- traza §4.2 PROD-2 (TODO(fase-4): emitir a observabilidad)
-let ultimoOcrConf: number | null = null;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- traza §4.2 PROD-2 (TODO(fase-4): emitir a observabilidad)
-let ultimoOcrDet = 0;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- traza §4.2 PROD-2 (TODO(fase-4): emitir a observabilidad)
-let ultimoOcrRec = 0;
-
+// SPRINT-A (perf/decode-once-v1) A4: las dead stores ultimoOcrConf/Det/Rec
+// (PROD-2 §4-C5) fueron eliminadas — se escribían 9× y NUNCA se leían
+// (knip + review 23-oct; sin anclas en scripts/qa-*.ts). La traza real del
+// motor vive en las líneas ocr=rapidocr de los pipelines, que capturan
+// conf/det/rec de ocrEsc directamente (confOcr/detOcr/recOcr — vivas).
 /** Motor de producción (PROD-2): RapidOCR PP-OCRv4 sobre el recorte original.
  *  Mismo contrato que requestOcr: texto + progreso 0→1. Sin fallback de motor
  *  (pitfall §9.3): el fallo sigue el mismo camino controlado de hoy (§5 del
@@ -747,9 +733,6 @@ async function reconocerRapidOcr(
 ): Promise<string> {
   const rt = await rapidOcrInit(); // singleton de sesión (pre-warm en bg)
   const r = await rapidOcrReconocer(rt, dataUrl, onProgress);
-  ultimoOcrConf = r.confMedia; // para la traza (§4-C5)
-  ultimoOcrDet = r.msDet;
-  ultimoOcrRec = r.msRec;
   return r.texto;
 }
 
@@ -768,11 +751,10 @@ async function reconocerRapidOcr(
  *    (sin línea en SIM):
  *      [e14] ocr-escalonado pasada1=1280 lectura=DEBIL reocr=1 elegido=1920 anclas1=2 anclas2=9 ms1=8200 ms2=14100
  *      [e14] ocr-escalonado pasada1=1280 lectura=FUERTE reocr=0 elegido=1280 anclas1=7 ms1=8200
- *  · ultimoOcr* (§4.2 PROD-2): quedan con la pasada ELEGIDA — la traza
- *    ocr=rapidocr del pipeline describe el texto que el downstream consume.
- *  El downstream (banda condicional, clasificación, gate, diagnostico,
- *  ultimoOcr*) consume SOLO el texto elegido (§2.4) — el caller recibe el
- *  texto ya resuelto y las métricas de la pasada elegida. */
+ *  El downstream (banda condicional, clasificación, gate, diagnostico)
+ *  consume SOLO el texto elegido (§2.4) — el caller recibe el texto ya
+ *  resuelto y las métricas de la pasada elegida (SPRINT-A A4: la referencia
+ *  a ultimoOcr* fue removida con sus dead stores). */
 interface OcrEscalonadoSalida {
   texto: string;
   conf: number | null;
@@ -781,7 +763,7 @@ interface OcrEscalonadoSalida {
 }
 
 /** Pasada con métricas para elegirMejor (§2.4) — el ganador viaja por
- *  REFERENCIA con su cap (1280|1920) para la traza elegido= y ultimoOcr*. */
+ *  REFERENCIA con su cap (1280|1920) para la traza elegido=. */
 interface PasadaEscalonada {
   texto: string;
   conf: number;
@@ -806,9 +788,6 @@ async function reconocerRapidOcrEscalonado(
   if (escalonado.simular) {
     // SIM: EXACTAMENTE el flujo de hoy (det 1920, una pasada, 0 trazas).
     const r = await rapidOcrReconocer(rt, fotoOcr, onProgress);
-    ultimoOcrConf = r.confMedia;
-    ultimoOcrDet = r.msDet;
-    ultimoOcrRec = r.msRec;
     return { texto: r.texto, conf: r.confMedia, detMs: r.msDet, recMs: r.msRec };
   }
   // 1.ª pasada — det cap RÁPIDO (1280) → cls → rec (igual que hoy, §2.2).
@@ -843,12 +822,8 @@ async function reconocerRapidOcrEscalonado(
     );
     elegido = ganadora; // MISMA referencia — la ganadora trae sus métricas
   }
-  // ultimoOcr* = la pasada ELEGIDA (§2.4 — el downstream la describe).
-  ultimoOcrConf = elegido.conf;
-  ultimoOcrDet = elegido.detMs;
-  ultimoOcrRec = elegido.recMs;
   // Traza propia (§2.5 — línea PROPIA, append-only; SIN línea en SIM).
-  console.info(
+  logger.info(
     `[e14] ocr-escalonado pasada1=${DET_CAP_RAPIDO} lectura=${senal1.nivel} ` +
       `reocr=${ms2 != null ? 1 : 0} elegido=${elegido.cap} anclas1=${anclasDe(r1.texto)}` +
       (ms2 != null
@@ -868,9 +843,7 @@ async function ocrBanda(fotoProcesada: string): Promise<string> {
     const y0 = Math.round(H * 0.03);
     const w = Math.max(1, Math.round(W * 0.88) - x0);
     const h = Math.max(1, Math.round(H * 0.13) - y0);
-    const canvas = document.createElement("canvas");
-    canvas.width = w * 2; // escala ×2 (§5)
-    canvas.height = h * 2;
+    const canvas = canvasCon(w * 2, h * 2); // escala ×2 (§5) — SPRINT-A A3 factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return "";
     ctx.drawImage(img, x0, y0, w, h, 0, 0, w * 2, h * 2);
@@ -1125,7 +1098,7 @@ export class RealCoreBridge implements E14Bridge {
           if (vencido) {
             // e67: el pipeline TARDÍO falló — traza honesta; el acta
             // queda RECHAZADA por tiempo (correcto, caso C del kit).
-            console.info("[e14] pipeline falló tras timeout", {
+            logger.info("[e14] pipeline falló tras timeout", {
               mensaje: error instanceof Error ? error.message : String(error),
             });
             return;
@@ -1499,8 +1472,8 @@ export class RealCoreBridge implements E14Bridge {
     );
     let texto = ocrEsc.texto;
     ms.ocr = performance.now() - tOcr;
-    // PROD-2 (§4.2): conf/det/rec de la pasada ELEGIDA — capturados ANTES de
-    // la banda (también corre RapidOCR y pisaría ultimoOcr* en la traza).
+    // PROD-2 (§4.2): conf/det/rec de la pasada ELEGIDA (SPRINT-A A4: la
+    // captura vive aquí — la dead store ultimoOcr* fue eliminada).
     const confOcr = ocrEsc.conf;
     const detOcr = ocrEsc.detMs;
     const recOcr = ocrEsc.recMs;
@@ -1847,7 +1820,7 @@ export class RealCoreBridge implements E14Bridge {
     if (diag != null && probeMsOrientacion != null) {
       diag.orientacionProbeMs = probeMsOrientacion;
     }
-    console.info(
+    logger.info(
       `[e14] pipeline ${opciones.fuente}/${"archivo" in entrada ? "file" : "video-grab"} ` +
         `total=${Math.round(ms.total)}ms ` +
         `(decode=${Math.round(ms.decode)} detect=${Math.round(ms.detect)} ` +
@@ -2453,7 +2426,7 @@ export class RealCoreBridge implements E14Bridge {
     if (diag != null && probeMsOrientacion != null) {
       diag.orientacionProbeMs = probeMsOrientacion;
     }
-    console.info(
+    logger.info(
       `[e14] recorte ${acta.fuente} total=${Math.round(ms.total)}ms ` +
         `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
         `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +

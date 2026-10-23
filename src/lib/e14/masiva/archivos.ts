@@ -20,6 +20,8 @@
  * `new URL(..., import.meta.url)` — NADA en `public/**` ni `src/assets/**`.
  */
 
+import { canvasCon, decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
+
 /** Entradas de comprimido que son imágenes (por extensión — kit T2.2). */
 const EXT_IMAGEN = /\.(jpe?g|png|webp|bmp|gif|avif|heic|heif)$/i;
 /** Entradas anidadas: NO se extraen (guard ARCHIVO_ANIDADO). */
@@ -75,25 +77,30 @@ function pareceHeic(blob: Blob, nombre?: string): boolean {
   return !!nombre && /\.(heic|heif)$/i.test(nombre);
 }
 
-/** Bitmap → File JPEG del master (canvas fuera — la RAM muere con él).
- *  Falla el encode → null (la fila cae a la ruta de siempre — honesto). */
+/** Fuente decodificada → File JPEG del master (canvas fuera — la RAM muere
+ *  con él). Falla el encode → null (la fila cae a la ruta de siempre —
+ *  honesto).
+ *  SPRINT-A (perf/decode-once-v1) A1: la fuente ahora es el <img> del LRU
+ *  compartido (antes ImageBitmap con close() en finally) — MISMA geometría
+ *  (escala min(1, MAESTRO_LADO_MAYOR/lado), blit 1:1 en el caso común) y el
+ *  suavizado default del navegador (el createImageBitmap sin resizeWidth/Height
+ *  tampoco reescalaba: resizeQuality era inerte). El <img> no se cierra: la
+ *  eviction del LRU (tope 2) lo libera — el GC hace el resto. */
 async function bitmapAMaestro(
-  bm: ImageBitmap,
+  fuente: HTMLImageElement,
   origenDecode: OrigenDecode,
   t0: number,
   nombreBase: string,
 ): Promise<MaestroImagen | null> {
   try {
-    const lado = Math.max(bm.width, bm.height) || 1;
+    const lado = Math.max(fuente.naturalWidth, fuente.naturalHeight) || 1;
     const escala = Math.min(1, MAESTRO_LADO_MAYOR / lado);
-    const ancho = Math.max(1, Math.round(bm.width * escala));
-    const alto = Math.max(1, Math.round(bm.height * escala));
-    const canvas = document.createElement("canvas");
-    canvas.width = ancho;
-    canvas.height = alto;
+    const ancho = Math.max(1, Math.round(fuente.naturalWidth * escala));
+    const alto = Math.max(1, Math.round(fuente.naturalHeight * escala));
+    const canvas = canvasCon(ancho, alto); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(bm, 0, 0, ancho, alto);
+    ctx.drawImage(fuente, 0, 0, ancho, alto);
     const blob = await new Promise<Blob | null>((res) =>
       canvas.toBlob(res, "image/jpeg", MAESTRO_JPEG_CALIDAD),
     );
@@ -106,26 +113,27 @@ async function bitmapAMaestro(
       decodeMs: Math.max(1, Math.round(Date.now() - t0)),
     };
   } finally {
-    try {
-      bm.close();
-    } catch {
-      /* bitmap ya cerrado — noop */
-    }
+    /* <img> del LRU — sin close(): la eviction del decode-once lo libera */
   }
 }
 
 /**
  * D66 (T1.2/T1.5 + T2) — `maestroDeImagen`: UN decodificado a la escala de
- * trabajo (4032 — constante documentada arriba, R4 sin cambio) con
- * `createImageBitmap` + `resizeQuality:"high"` (el decodificador nativo baja
- * escala durante el decode en JPEG grandes — DCT 1/2 — y el bitmap de 12 MP
- * intermedio desaparece). T2: HEIC intenta NATIVO primero (feature-detect
+ * trabajo (4032 — constante documentada arriba, R4 sin cambio) que
+ * alimenta la cola. T2: HEIC intenta NATIVO primero (feature-detect
  * con validación de dimensiones sanas — `origenDecode:"nativo"`); si el
  * navegador no decodifica HEIC → ruta wasm de RESERVA con heic2any
  * (`origenDecode:"wasm"` — import DEFERIDO D47, motor idéntico al F-HEIC
  * del core; el fallback JAMÁS se asume disponible ni se borra). Devuelve
  * null ante CUALQUIER fallo o cancelación — la fila cae a la ruta de
  * SIEMPRE (jamás bloquea el pipeline; honestidad del kit).
+ *
+ * SPRINT-A (perf/decode-once-v1) A1: el decode pega al LRU COMPARTIDO del
+ * pipeline (`decodeImagenLruDeBlob`) — antes eran createImageBitmap privados
+ * {imageOrientation:"from-image", resizeQuality:"high"}. EXIF intacto (el
+ * navegador aplica from-image al <img> por defecto), geometría y calidad
+ * JPEG intactas; el master precalentado + el decode de origen/preProceso del
+ * MISMO File comparten UN decode.
  *
  * `senalCancelacion` (T3.4): el precalor la pasa para abortar entre etapas
  * (fila quitada/cola vaciada → null sin consumir CPU del encode).
@@ -144,24 +152,19 @@ export async function maestroDeImagen(
   const nombreBase = `${(opciones?.nombre ?? "acta").replace(/\.[a-z0-9]{2,5}$/i, "")}.jpg`;
   const esHeic = pareceHeic(entrada, opciones?.nombre);
 
-  // 1) NATIVO primero (T2.1) — para TODO (JPG incluido): una sola llamada
-  //    con resize integrado cuando el navegador la soporta. imageOrientation
-  //    "from-image" = MISMA orientación que el F-IMPORT del core (EXIF).
+  // 1) NATIVO primero (T2.1) — para TODO (JPG incluido): el decode del
+  //    LRU compartido (EXIF from-image vía <img> — misma orientación que
+  //    el F-IMPORT del core).
   try {
-    const bm = await createImageBitmap(entrada, {
-      imageOrientation: "from-image",
-      resizeQuality: "high",
-    });
-    if (bm.width <= 0 || bm.height <= 0) throw new Error("DIMENSIONES_INVALIDAS");
+    const fuente = await decodeImagenLruDeBlob(entrada);
+    const img = fuente as HTMLImageElement;
+    if (img.naturalWidth <= 0 || img.naturalHeight <= 0) {
+      throw new Error("DIMENSIONES_INVALIDAS");
+    }
     if (cancelado()) {
-      try {
-        bm.close();
-      } catch {
-        /* noop */
-      }
       return null;
     }
-    return await bitmapAMaestro(bm, "nativo", t0, nombreBase);
+    return await bitmapAMaestro(img, "nativo", t0, nombreBase);
   } catch {
     /* sin decode nativo (HEIC en Chrome/Windows, blob roto) → reserva */
   }
@@ -182,24 +185,15 @@ export async function maestroDeImagen(
     });
     const jpeg = Array.isArray(convertido) ? convertido[0] : convertido;
     if (!(jpeg instanceof Blob)) return null;
-    const bm = await createImageBitmap(jpeg, { resizeQuality: "high" });
-    if (bm.width <= 0 || bm.height <= 0) {
-      try {
-        bm.close();
-      } catch {
-        /* noop */
-      }
+    const fuente = await decodeImagenLruDeBlob(jpeg);
+    const img = fuente as HTMLImageElement;
+    if (img.naturalWidth <= 0 || img.naturalHeight <= 0) {
       return null;
     }
     if (cancelado()) {
-      try {
-        bm.close();
-      } catch {
-        /* noop */
-      }
       return null;
     }
-    return await bitmapAMaestro(bm, "wasm", t0, nombreBase);
+    return await bitmapAMaestro(img, "wasm", t0, nombreBase);
   } catch {
     return null; // decode imposible — la ruta de siempre lo resolverá (o ERROR)
   }
@@ -318,9 +312,9 @@ export async function extraerPdf(archivo: File): Promise<ResultadoExtraccion> {
         PDF_ESCALA_MAX
       );
       const viewport = page.getViewport({ scale: escala });
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(viewport.width);
-      canvas.height = Math.round(viewport.height);
+      // Firma v6 (RenderParameters.canvas requerido): canvasCon da el lienzo;
+      // willReadFrequently NO aplica — render, no lectura (D60 §T2.8).
+      const canvas = canvasCon(Math.round(viewport.width), Math.round(viewport.height)); // SPRINT-A A3 — factory
       // Firma v6 (RenderParameters.canvas requerido — ctx interno de pdf.js;
       // willReadFrequently NO aplica: render, no lectura — D60 §T2.8).
       await page.render({ canvas, viewport }).promise;
