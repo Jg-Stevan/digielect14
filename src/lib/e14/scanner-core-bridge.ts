@@ -76,6 +76,7 @@ import { loadImageMemo, procesadaVaciaDataUrl } from "./image-utils";
 // recortes SUPERIORES que faltaSeccionInferior (kit 118, solo inferior) no ve.
 import {
   ESQUINAS_OK,
+  cuatroEsquinasFaltan,
   ladoEsquinaFaltante,
   marcasEsquina,
   trazaEsquinas,
@@ -1630,6 +1631,16 @@ export class RealCoreBridge implements E14Bridge {
           ? marcoPerdonadoPorLectura(marcoEscaneo.veredicto, senal.nivel, faltaSeccion)
           : true;
     }
+    // e71 (P10) — VETO 4/4 FIDUCIALES (kit e71-consolidación): la medición
+    // de integridad encontró LAS 4 esquinas ausentes (traza
+    // `esquinas=FALTA_tl+tr+bl+br`) → el papel NO está demostrado entero y
+    // el gate NO puede ser completa. Va DESPUÉS del perdón del marco (la
+    // lectura perdona al marco impreso, pero NUNCA a la ausencia total de
+    // fiduciales — evidencia física manda). En SIM esquinas=ESQUINAS_OK →
+    // el veto es inalcanzable (guard explícito, chips 8.2/7.0/4.3 intactos).
+    if (!opciones.simular && cuatroEsquinasFaltan(esquinas)) {
+      completa = false;
+    }
     // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) — marcador OBLIGATORIO de
     // votos, FUERA de evaluarGate (MISMO patrón del veto INCOMPLETA: D6/
     // AC10). Fallo del 2026-10-16: acta sin votos llegó OPTIMA y se
@@ -2193,7 +2204,15 @@ export class RealCoreBridge implements E14Bridge {
     const ladoEsquina = esquinas ? ladoEsquinaFaltante(esquinas) : null;
     const trazaEsq = trazaEsquinas(esquinas);
     const verificacion = await verificarCompletitud(quad, fotoProcesada, esquinas);
-    const completa = verificacion.completa;
+    // e71 (P10) — VETO 4/4 FIDUCIALES (mismo criterio del escaneo — helper
+    // ÚNICO cuatroEsquinasFaltan, pitfall §9.9): las 4 marcas ausentes →
+    // `completa` false. En el RECORTE MANUAL el veto NO rechaza (doctrina
+    // Q2 del kit esquinas-suaves: el operador VIO el papel) — degrada al
+    // escudo-manual (techo 7.9) vía vetoIncompleta/escudoManual de abajo;
+    // diag.gate.completa SÍ reporta false (kit P10 — coherencia del
+    // informe con la medición física).
+    const completa =
+      verificacion.completa && !cuatroEsquinasFaltan(esquinas);
     // KIT e14-esquinas-suaves-v1 (Q2): ESCUDO-MANUAL — `!completa` en un recorte
     // MANUAL no rechaza: techo 7.9 (patrón del escudo D10). El operador VIO el
     // papel; a lo sumo su crop cortó un poco de impresión y lo decide mirando.
