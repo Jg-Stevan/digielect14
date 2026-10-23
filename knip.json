@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/knip@5.44.1/schema.json",
+  "entry": [
+    "src/app/**/*.{ts,tsx}",
+    "scripts/qa-*.ts",
+    "scripts/gen-divipol.mjs",
+    "tools/**/*.{js,ts}"
+  ],
+  "ignore": [
+    "public/sw.js",
+    "public/vendor/**",
+    "public/scanner/**"
+  ],
+  "ignoreDependencies": ["tailwindcss"]
+}

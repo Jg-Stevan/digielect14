@@ -841,7 +841,6 @@ export async function rapidOcrReconocer(
   // pasada del escalonado pasa DET_CAP_RAPIDO. La sesión/cls/rec NO cambian.
   opts?: { detCap?: number },
 ): Promise<RapidOcrResultado> {
-  const t0 = performance.now();
   const tTotal = performance.now();
   const src = await loadImage(dataUrl);
   // D62 T2 — claveOrigen: el memo del det (probe 1280 ↔ pasada-1 1280 sobre el

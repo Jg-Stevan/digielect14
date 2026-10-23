@@ -730,8 +730,11 @@ async function esquinasDeActa(foto: string | undefined): Promise<EsquinasActa | 
 // — conf/det/rec de la ÚLTIMA llamada reconocerRapidOcr. La banda del sello
 // y el re-OCR del editor también pasan por aquí: los pipelines capturan sus
 // valores justo tras su OCR PRINCIPAL (antes de la banda) para la traza.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- traza §4.2 PROD-2 (TODO(fase-4): emitir a observabilidad)
 let ultimoOcrConf: number | null = null;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- traza §4.2 PROD-2 (TODO(fase-4): emitir a observabilidad)
 let ultimoOcrDet = 0;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- traza §4.2 PROD-2 (TODO(fase-4): emitir a observabilidad)
 let ultimoOcrRec = 0;
 
 /** Motor de producción (PROD-2): RapidOCR PP-OCRv4 sobre el recorte original.
