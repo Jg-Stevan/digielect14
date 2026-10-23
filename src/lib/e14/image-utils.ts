@@ -180,6 +180,44 @@ export function decodeImagenLruDeBlob(
 }
 const blobUrls = new WeakMap<Blob, string>();
 
+// ─── SPRINT-A (perf/decode-once-v1) A3 — factory de canvas + análisis ───────
+
+/** Factory de canvas: `document.createElement("canvas")` con dimensiones en
+ *  una línea. Migración MECÁNICA de los ~26 createElement de la zona
+ *  image/pipeline (regla del kit: cero cambio de algoritmo — los bloques con
+ *  semántica especial, offscreen/willReadFrequently, la conservan con
+ *  comentario; el contexto lo pide cada caller porque sus atributos difieren
+ *  y getContext solo honra el primero). */
+export function canvasCon(ancho: number, alto: number): HTMLCanvasElement {
+  const cv = document.createElement("canvas");
+  cv.width = ancho;
+  cv.height = alto;
+  return cv;
+}
+
+/** Decode (LRU compartido A1) → escala a `maxDim` → getImageData, en un solo
+ *  paso — la receta repetida del QR capa 0 y de los detectores de análisis
+ *  (antes: cada módulo hacía su propio decode → drawImage → getImageData). */
+export async function analizarPixeles(
+  fuente: string,
+  maxDim: number,
+): Promise<{ data: Uint8ClampedArray; ancho: number; alto: number }> {
+  const src = await decodeImagenLru(fuente, { maxDim });
+  let cv: HTMLCanvasElement;
+  if (src instanceof HTMLCanvasElement) {
+    cv = src; // canvas pre-escalado del LRU (maxDim aplicado)
+  } else {
+    const img = src as HTMLImageElement;
+    cv = canvasCon(img.naturalWidth, img.naturalHeight);
+    const c0 = cv.getContext("2d");
+    if (c0) c0.drawImage(img, 0, 0);
+  }
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("sin contexto 2d");
+  const imgData = ctx.getImageData(0, 0, cv.width, cv.height);
+  return { data: imgData.data, ancho: cv.width, alto: cv.height };
+}
+
 /**
  * §D4 (SPEC-e14-score-ocr) — cobertura de TINTA de la foto PROCESADA.
  * El realce por defecto es B/N adaptativo (Bradley-Roth + despeckle del
@@ -204,9 +242,7 @@ export async function procesadaVaciaDataUrl(url: string): Promise<boolean> {
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     if (!w || !h) return false;
-    const canvas = document.createElement("canvas");
-    canvas.width = TINTA_LADO;
-    canvas.height = TINTA_LADO;
+    const canvas = canvasCon(TINTA_LADO, TINTA_LADO); // SPRINT-A A3 — factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return false;
     ctx.imageSmoothingEnabled = false;
@@ -239,9 +275,7 @@ export async function rotateProcessedDataUrl(
   const swapped = deg % 180 !== 0;
   const cw = swapped ? h : w;
   const ch = swapped ? w : h;
-  const canvas = document.createElement("canvas");
-  canvas.width = cw;
-  canvas.height = ch;
+  const canvas = canvasCon(cw, ch); // SPRINT-A A3 — factory
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("sin contexto 2d");
   ctx.imageSmoothingQuality = "high";
@@ -250,9 +284,7 @@ export async function rotateProcessedDataUrl(
   ctx.drawImage(img, -w / 2, -h / 2);
   const tW = 160;
   const tH = Math.max(1, Math.round((ch / cw) * tW));
-  const tCanvas = document.createElement("canvas");
-  tCanvas.width = tW;
-  tCanvas.height = tH;
+  const tCanvas = canvasCon(tW, tH); // SPRINT-A A3 — factory
   const tCtx = tCanvas.getContext("2d");
   if (tCtx) {
     tCtx.imageSmoothingQuality = "high";
