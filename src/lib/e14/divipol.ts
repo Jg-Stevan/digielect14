@@ -17,6 +17,8 @@
  * `clasificador.ts` (§3.3, ~40 líneas).
  */
 
+import { logger } from "../logger";
+
 /** Puesto de votación (stand): nombre + número de mesas (countTable).
  *  Overnight 3B-B3c: de-export (uso interno en la jerarquía; knip). */
 interface DivipolPuesto {
@@ -79,7 +81,7 @@ export function cargarDivipol(): Promise<DivipolBase> {
       estado = "cargada";
       return base;
     } catch (err) {
-      console.warn(
+      logger.warn(
         `[e14] divipol: no se pudo cargar (${err instanceof Error ? err.message : "?"}) ` +
           `— la clasificación degrada a MANUAL`,
       );
