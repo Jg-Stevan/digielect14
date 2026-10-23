@@ -55,6 +55,7 @@ import {
   matarYRecrearWorkers,
 } from "./runner-watchdog";
 import { marcarFila, marcarVida, vidaDe, vidas } from "./runner-vida";
+import { logger } from "../../logger";
 // e63f — KIT e63f-autoenvio-v1 (F2): re-lectura interna pre-«repetir-primero».
 // Lógica pura en masiva/relectura.ts (testeable headless); aquí solo la
 // orquestación: re-OCR del MISMO bitmap (reconocerTexto — cap fino) +
@@ -281,7 +282,7 @@ async function reutilizarResultadoCritica(fila: FilaMasiva, t0: number): Promise
     // dhash cae dentro de la cinta cierta de la ENTRADA ya registrada de la
     // original (≤ 6) → YA-ENVIADA igual, cero re-OCR.
     const ms = Date.now() - t0;
-    console.info(
+    logger.info(
       `[e14] dedup fila=${fila.id} dupOf=${fila.dupOf} reutiliza status=${actaCopia.status} score=${actaCopia.score ?? "-"} ms=${ms}`,
     );
     marcarFila(fila.id, {
@@ -356,7 +357,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     } catch {
       /* IDB caído — la fila ya está PENDIENTE en memoria (honesto) */
     }
-    console.info(`[e14] dedup fila=${fila.id} sin-original reprocesa-completo`);
+    logger.info(`[e14] dedup fila=${fila.id} sin-original reprocesa-completo`);
   }
   // D66 — KIT e14-decode-unico-precalor-v1 (T3.3): consumir el MASTER
   // precalentado ANTES de marcar PROCESANDO (orden crítico: el precalor
@@ -371,7 +372,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
   // scope: el OCR domina con ~13 s por fila).
   let entradaPrecalor = consumirMaestro(fila.id);
   if (entradaPrecalor) {
-    console.info(
+    logger.info(
       `[e14] precalor fila=${fila.id} consumido precalorMs=${entradaPrecalor.precalorMs} origen=${entradaPrecalor.maestro.origenDecode}`,
     );
   }
@@ -471,7 +472,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       .getState()
       .actualizarFila(fila.id, { qrEstado: qrEstadoCapa0 });
     if (!qrPayload) {
-      console.info(`[e14] capa0-qr sin-payload fila=${fila.id} nombre=${fila.nombre}`);
+      logger.info(`[e14] capa0-qr sin-payload fila=${fila.id} nombre=${fila.nombre}`);
     } else {
       const payloadQrCorto = qrCorto(qrPayload);
       const qrPayloadSeguro: string = qrPayload; // acotado (la closure no hereda narrowing)
@@ -501,7 +502,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         } catch {
           /* IDB caído — la fila ya está LISTA con el desenlace (honesto) */
         }
-        console.info(
+        logger.info(
           `[e14] capa0-qr reutiliza ${payloadQrCorto} fila=${fila.id} original=${o.id}`,
         );
         return true;
@@ -528,7 +529,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
               true,
             ))
           ) {
-            console.info(
+            logger.info(
               `[e14] capa0-qr ya-enviada-historico ${payloadQrCorto} fila=${fila.id} hist=${enviadaHist.id}`,
             );
             return; // sin OCR, sin envío — YA-ENVIADA jamás vuelve a siguientePendiente (T-5 e65)
@@ -549,23 +550,23 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
             registrarQrPayload(qrPayloadSeguro, fila.id);
           }
         });
-        console.info(`[e14] capa0-qr original ${payloadQrCorto} fila=${fila.id}`);
+        logger.info(`[e14] capa0-qr original ${payloadQrCorto} fila=${fila.id}`);
       } else if (fila.forzarDedupOff) {
         // El dueño pulsó PROCESAR IGUAL — las capas 0/1/2 lo respetan SIEMPRE
         // (misma doctrina e63k): reproceso completo, nada se reutiliza.
-        console.info(
+        logger.info(
           `[e14] capa0-qr reprocesa-completo ${payloadQrCorto} fila=${fila.id} forzarDedupOff`,
         );
       } else if (originalQr.estado === "LISTA" || originalQr.estado === "DUPLICADA") {
         // Original con desenlace FINAL → reutiliza (el OCR jamás se paga).
         if (await reutilizarViaQr(originalQr)) return;
-        console.info(
+        logger.info(
           `[e14] capa0-qr fallback fila=${fila.id} reprocesa-completo reutilizarResultado=false`,
         );
       } else if (originalQr.estado === "PROCESANDO") {
         // Original EN VUELO → APLAZADA `capa0=qr` (maquinaria aplazada de
         // e63k con motivo NUEVO): espera acotada SOLO-LECTURA del estado.
-        console.info(
+        logger.info(
           `[e14] capa0-qr aplazada ${payloadQrCorto} fila=${fila.id} original=${originalQr.id}`,
         );
         const desenlaceQr = await esperarDesenlaceQr(() =>
@@ -573,20 +574,20 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         );
         if (desenlaceQr === "reutiliza") {
           if (await reutilizarViaQr(originalQr)) return;
-          console.info(
+          logger.info(
             `[e14] capa0-qr fallback fila=${fila.id} reprocesa-completo reutilizarResultado=false`,
           );
         } else {
           // Techo vencido (o el original salió del vuelo por otra puerta):
           // reproceso completo HONESTO — como si no hubiera gemela.
-          console.info(
+          logger.info(
             `[e14] capa0-qr techo-vencido reprocesa-completo fila=${fila.id} original=${originalQr.id}`,
           );
         }
       } else {
         // Original sin desenlace final ni en vuelo (PENDIENTE/ERROR) →
         // reproceso completo honesto (la gemela paga SU OCR, como hoy).
-        console.info(
+        logger.info(
           `[e14] capa0-qr reprocesa-completo ${payloadQrCorto} fila=${fila.id} original=${originalQr.id} estado=${originalQr.estado}`,
         );
       }
@@ -611,7 +612,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         // D65: bloque AJENO byte-idéntico — el REINTENTO lo re-ejecuta (los
         // workers del intento anterior ya fueron muertos y re-creados).
         veredictoOrigen = await clasificarOrigenDeArchivo(archivoIntento);
-        console.info(
+        logger.info(
           `[e14] origen=${veredictoOrigen.origen ?? "null"} senales=${veredictoOrigen.senales ?? "null"}`,
         );
         // ── D63-A2 — KIT e14-d63a2-deskew-pipeline-v1 (T1): calibración por
@@ -627,7 +628,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
             origen: "escaneo",
             senales: `pdf-render+${veredictoOrigen.senales}`,
           };
-          console.info(
+          logger.info(
             `[e14] origen pdf-render → escaneo (señales píxel preservadas: ${veredictoOrigen.senales})`,
           );
         }
@@ -642,7 +643,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         // D65: bloque AJENO byte-idéntico (ídem D63-A — se re-ejecuta).
         preProceso = await preProcesoEscaneo(archivoIntento, veredictoOrigen.origen);
         if (veredictoOrigen.origen === "escaneo") {
-          console.info(
+          logger.info(
             `[e14] preproceso skewGrados=${preProceso.skewGrados ?? "null"} deskewMs=${preProceso.deskewMs ?? "null"} limpiezaMs=${preProceso.limpiezaMs ?? "null"} limpieza=${preProceso.limpieza} aplicado=${preProceso.aplicado} decodeMs=${preProceso.decodeMs ?? "null"}`,
           );
         }
@@ -654,7 +655,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         // beneficio del precalor (doble decode por fila escaneada — coste
         // CONOCIDO y documentado: el OCR domina con ~13 s).
         if (preProceso?.aplicado && entradaPrecalor) {
-          console.info(
+          logger.info(
             `[e14] precalor fila=${fila.id} descartado fuente=corregido precalorMs=${entradaPrecalor.precalorMs}`,
           );
           descartarMaestro(fila.id); // vía del precalor (idempotente — defensa)
@@ -691,7 +692,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
             : Math.max(1, Math.round(Date.now() - tMaestro))
           : null;
         if (maestro) {
-          console.info(
+          logger.info(
             `[e14] decode-maestro fila=${fila.id} intento=${intento} ms=${decodeMsIntento} origen=${maestro.origenDecode} precalentada=${intento === 1 && !!entradaPrecalor} ${maestro.ancho}x${maestro.alto}${preProceso?.aplicado ? " fuente=corregido" : ""}`,
           );
         }
@@ -746,7 +747,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       watchdogUsados = intento;
       etapaAlMorir = etapaDeSenal(senal);
       elapsedMuerteMs = Date.now() - tIntento;
-      console.info(
+      logger.info(
         `[e14] watchdog fila=${fila.id} intento=${intento}/${WATCHDOG_INTENTOS} etapa=${etapaAlMorir ?? "null"} elapsed=${elapsedMuerteMs}ms`,
       );
       if (intento >= WATCHDOG_INTENTOS) break; // kit T1.3: veredicto de siempre
@@ -864,6 +865,8 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         relecturaDesenlace = "sin-cambio";
         relecturaToken = "sin-cambio";
       }
+      // console.info LITERAL — ancla QA (qa-watchdog-relectura.ts Bloque 3:
+      // «traza SIEMPRE» grepea console.info( en este bloque). No migra al logger.
       console.info(
         `[e14] relectura-interna fila=${fila.id} ms=${Math.round(performance.now() - tRelectura)} RelecturaInterna=${relecturaToken}`,
       );
@@ -946,7 +949,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           serie: identidad.serie,
           error: null,
         });
-        console.info(
+        logger.info(
           `[e14] dedup-identidad fila=${fila.id} serie=${identidad.identidadActa} original=${original.id}`,
         );
         return true;
@@ -973,7 +976,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       dedupVisualDeAplazada != null &&
       registro?.dedup === "visual-aplazada";
     if (falsoPositivoEvitado) {
-      console.info(
+      logger.info(
         `[e14] dedup-identidad fila=${fila.id} falso-positivo-visual evitado serie=${identidad!.serie} original-visual=${dedupVisualDeAplazada}`,
       );
     }
@@ -1093,7 +1096,7 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           ...(identidad ? { serie: identidad.serie } : {}),
           error: null,
         });
-        console.info(
+        logger.info(
           `[e14] dedup fila=${fila.id} desenlace-contenido DUPLICADA v2=${registro.dedup === "v2"} gemela=${originalLista?.id ?? originalEnVuelo?.id ?? "sin-original"} (sin envío propio)`,
         );
         return; // NO registrarEnvioMasiva NI contarMotivoNoEnvioActa (patrón capa-2)

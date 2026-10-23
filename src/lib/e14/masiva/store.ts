@@ -29,6 +29,7 @@ import {
   type EntradaHistorica,
 } from "./historico";
 // SPLIT C1 (refactor/runner-logger-v1): hacerThumb vive en runner-thumbs.ts
+import { logger } from "../../logger";
 // (responsabilidad de render — movimiento puro del runner).
 import { hacerThumb } from "./runner-thumbs";
 import { iniciarRunner, pausarRunner, rearrancarTrasEncolar } from "./runner";
@@ -409,7 +410,7 @@ export async function marcarYaEnviada(
       : {}),
     enviadaDe: enviadaDeId,
   });
-  console.info(
+  logger.info(
     `[e14] dedup fila=${id} YA-ENVIADA ${via}${hamming != null ? ` hamming=${hamming}` : ""} dupOf=${enviadaDeId}`,
   );
   // e65b (T-2d): la marca TAMBIÉN alimenta el histórico (ledger) — la
@@ -558,7 +559,7 @@ async function cadenaDedup(
       // serie impresa (kit §1.3 — corrección por la CINTA, no por el umbral).
       if (!original) continue;
       if (hamming > DEDUP_CINTA_CIERTA) {
-        console.info(
+        logger.info(
           `[e14] dedup fila=${entrada.id} visual hamming=${hamming} dupOf=${original.id} APLAZADA cinta=3-6 — identidad post-OCR decide (e63k)`,
         );
         continue;
@@ -605,7 +606,7 @@ async function cadenaDedup(
       const reg = await leerRegistro(entrada.id);
       await guardarRegistro({ ...reg, estado: "DUPLICADA", dupOf: original.id });
       patchFila(entrada.id, { estado: "DUPLICADA", dupOf: original.id });
-      console.info(
+      logger.info(
         `[e14] dedup fila=${entrada.id} marcada hamming=${hamming} dupOf=${original.id} hash=${hash}`,
       );
     } catch {
@@ -668,7 +669,7 @@ async function dedupExactoIngesta(
       if (hitHistorico) {
         // El índice SOLO contiene enviadas → YA-ENVIADA por construcción.
         if (await marcarYaEnviada(e.id, hitHistorico.id, "bytes", e.hashBytes)) {
-          console.info(
+          logger.info(
             `[e14] dedup fila=${e.id} instantanea ya-enviada-historico dupOf=${hitHistorico.id}`,
           );
           continue;
@@ -693,7 +694,7 @@ async function dedupExactoIngesta(
         }
         if (enviadaDeId) {
           if (await marcarYaEnviada(e.id, enviadaDeId, "bytes", e.hashBytes)) {
-            console.info(
+            logger.info(
               `[e14] dedup fila=${e.id} instantanea ya-enviada dupOf=${enviadaDeId}`,
             );
             continue;
@@ -709,7 +710,7 @@ async function dedupExactoIngesta(
             const reg = await leerRegistro(e.id);
             await guardarRegistro({ ...reg, estado: "DUPLICADA", dupOf });
             patchFila(e.id, { estado: "DUPLICADA", dupOf });
-            console.info(
+            logger.info(
               `[e14] dedup fila=${e.id} instantanea sha256 dupOf=${dupOf}`,
             );
           } catch {
@@ -905,7 +906,7 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
       const hash = await hashBytesDeArchivo(file);
       hashesBytes.push(hash);
       if (hash) {
-        console.info(
+        logger.info(
           `[e14] ingesta sha256 nombre=${(file.name || "FOTO").slice(0, 24)} ms=${Date.now() - tSha} hash=${hash.slice(0, 8)}…`,
         );
       }
@@ -1041,7 +1042,7 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
       enviadaDe: null,
       forzarDedupOff: true,
     });
-    console.info(`[e14] dedup fila=${id} procesar-igual`);
+    logger.info(`[e14] dedup fila=${id} procesar-igual`);
     try {
       const registro = await leerRegistro(id);
       await guardarRegistro({
