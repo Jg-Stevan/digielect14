@@ -536,3 +536,128 @@ describe("logger · transporte obs (C3)", () => {
     }
   });
 });
+
+// ─── C4 · breadcrumbs ring + uso de features ───────────────────────────────
+
+describe("breadcrumbs · ring 30 (C4)", () => {
+  it("ring FIFO: conserva los últimos 30 en orden cronológico", async () => {
+    const bc = await import("./breadcrumbs");
+    for (let i = 0; i < 35; i++) {
+      bc.registrarBreadcrumb({ tipo: "click", detalle: `b${i}` });
+    }
+    const snap = bc.obtenerBreadcrumbs();
+    expect(snap).toHaveLength(30);
+    expect(snap[0].detalle).toBe("b5");
+    expect(snap[29].detalle).toBe("b34");
+    // snapshot es copia: mutarlo no toca el ring
+    snap.pop();
+    expect(bc.obtenerBreadcrumbs()).toHaveLength(30);
+  });
+
+  it("registrarVista breadcrumb tipo vista", async () => {
+    const bc = await import("./breadcrumbs");
+    bc.registrarVista("resumen");
+    const snap = bc.obtenerBreadcrumbs();
+    expect(snap[snap.length - 1]).toMatchObject({ tipo: "vista", detalle: "resumen" });
+  });
+
+  it("detalleDeTarget: aria-label > data-accion > null (y nunca lanza)", async () => {
+    const { detalleDeTarget } = await import("./breadcrumbs");
+    expect(
+      detalleDeTarget({
+        closest: () => ({ getAttribute: (n: string) => (n === "aria-label" ? "ENVIAR LOTE" : null) }),
+      }),
+    ).toBe("ENVIAR LOTE");
+    expect(
+      detalleDeTarget({
+        closest: () => ({ getAttribute: (n: string) => (n === "data-accion" ? "abrir-ayuda" : null) }),
+      }),
+    ).toBe("abrir-ayuda");
+    expect(detalleDeTarget({ closest: () => null })).toBeNull();
+    expect(detalleDeTarget(null)).toBeNull();
+    expect(
+      detalleDeTarget({
+        closest: () => {
+          throw new Error("x");
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("iniciarBreadcrumbs en node (sin window) NO lanza", async () => {
+    const { iniciarBreadcrumbs } = await import("./breadcrumbs");
+    expect(() => iniciarBreadcrumbs()).not.toThrow();
+  });
+});
+
+describe("uso · contadores (C4)", () => {
+  /** Mocks ligeros de los stores: uso.ts no debe arrastrar el grafo completo
+   *  (get-bridge/scanner-core) al suite node. */
+  async function importarUso(
+    capturados: Array<{ tipo: string; datos: unknown }>,
+  ): Promise<typeof import("./uso")> {
+    vi.doMock("../store", () => ({
+      useE14Store: { subscribe: () => () => {} },
+    }));
+    vi.doMock("../masiva/store", () => ({
+      useMasivaStore: { subscribe: () => () => {} },
+    }));
+    vi.doMock("./buffer", async (importOriginal) => ({
+      ...(await importOriginal<Record<string, unknown>>()),
+      appendEvento: async (e: { tipo: string; datos: unknown }) => {
+        capturados.push(e);
+      },
+    }));
+    return import("./uso");
+  }
+
+  function limpiarMocks(): void {
+    vi.doUnmock("../store");
+    vi.doUnmock("../masiva/store");
+    vi.doUnmock("./buffer");
+    vi.resetModules();
+  }
+
+  it("diaDe — YYYY-MM-DD en hora local (padding correcto)", async () => {
+    const uso = await importarUso([]);
+    try {
+      expect(uso.diaDe(new Date(2026, 9, 23, 14, 30))).toBe("2026-10-23");
+      expect(uso.diaDe(new Date(2026, 0, 5))).toBe("2026-01-05");
+    } finally {
+      limpiarMocks();
+    }
+  });
+
+  it("mezclar + volcar: merge in-place {dia,vista,accion,n} y limpieza", async () => {
+    const uso = await importarUso([]);
+    try {
+      uso.mezclarContador("2026-10-23", "resumen", "abrir-vista");
+      uso.mezclarContador("2026-10-23", "resumen", "abrir-vista");
+      uso.mezclarContador("2026-10-23", "masiva", "fila→LISTA");
+      const volcado = uso.volcarContadores();
+      expect(volcado).toHaveLength(2);
+      expect(volcado).toContainEqual({ dia: "2026-10-23", vista: "resumen", accion: "abrir-vista", n: 2 });
+      expect(volcado).toContainEqual({ dia: "2026-10-23", vista: "masiva", accion: "fila→LISTA", n: 1 });
+      expect(uso.volcarContadores()).toHaveLength(0); // ya se limpió
+    } finally {
+      limpiarMocks();
+    }
+  });
+
+  it("registrarUso + flushUso: appendea deltas tipo uso y NO duplica", async () => {
+    const capturados: Array<{ tipo: string; datos: unknown }> = [];
+    const uso = await importarUso(capturados);
+    try {
+      await uso.registrarUso("resumen", "abrir-vista");
+      await uso.registrarUso("resumen", "abrir-vista");
+      await uso.flushUso();
+      expect(capturados).toHaveLength(1);
+      expect(capturados[0].tipo).toBe("uso");
+      expect(capturados[0].datos).toMatchObject({ vista: "resumen", accion: "abrir-vista", n: 2 });
+      await uso.flushUso(); // sin acumulados nuevos → nada
+      expect(capturados).toHaveLength(1);
+    } finally {
+      limpiarMocks();
+    }
+  });
+});

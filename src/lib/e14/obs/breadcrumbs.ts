@@ -5,11 +5,12 @@
  * · registrarBreadcrumb(b) — push público (ring FIFO, max 30).
  * · obtenerBreadcrumbs() — snapshot del ring (los últimos 30, en orden
  *   cronológico) — lo consumen logger/captura al construir ErrorEvento.
- * · registrarVista(v) — transición de vista (la engancha uso.ts/C4 vía
+ * · registrarVista(v) — transición de vista (la engancha uso.ts vía
  *   suscripción al store — SIN editar componentes).
- * · iniciarBreadcrumbs() — (C4) listener global `click` en capture+passive
- *   que extrae aria-label/data-accion del target — JAMÁS textContent del
- *   acta (cero PII, README-KITS §2.5).
+ * · iniciarBreadcrumbs() — idempotente: listener global `click` en
+ *   capture+passive que extrae del target el `closest("[aria-label],
+ *   [data-accion]")` → detalle = ese label/acción ("clic" si no hay).
+ *   JAMÁS textContent del acta (cero PII, README-KITS §2.5).
  *
  * Ring en MEMORIA (muere con la sesión): los breadcrumbs solo valen como
  * contexto INMEDIATO de un error — persistirlos aparte no aporta (el error
@@ -42,9 +43,34 @@ export function obtenerBreadcrumbs(): Breadcrumb[] {
   return [...ring];
 }
 
-/** (C4) Listener global de clicks + hook de vista — idempotente. Stub
- *  compilable en C3: la firma es del contrato §4.3 y page.tsx (C7) la
- *  llama; el wiring real llega con uso.ts en C4. */
+/** detalle de un click: aria-label o data-accion del elemento (o su
+ *  ancestro) — PURA y testeable con fakes; null honesto si no hay. */
+export function detalleDeTarget(
+  target: { closest: (sel: string) => { getAttribute(n: string): string | null } | null } | null,
+): string | null {
+  try {
+    const el = target?.closest("[aria-label],[data-accion]") ?? null;
+    if (!el) return null;
+    return el.getAttribute("aria-label") ?? el.getAttribute("data-accion");
+  } catch {
+    return null;
+  }
+}
+
+let clickInstalado = false;
+
+/** Listener global de clicks (idempotente): capture+passive — el detalle
+ *  sale del aria-label/data-accion (clic anónimo si no hay ninguno). */
 export function iniciarBreadcrumbs(): void {
-  /* wiring C4 */
+  try {
+    if (clickInstalado || typeof window === "undefined") return;
+    clickInstalado = true;
+    const onClic = (e: MouseEvent) => {
+      const detalle = detalleDeTarget(e.target as HTMLInputElement | null);
+      registrarBreadcrumb({ tipo: "click", detalle: detalle ?? "clic" });
+    };
+    window.addEventListener("click", onClic, { capture: true, passive: true });
+  } catch {
+    /* silencioso — el rastreo jamás rompe la app */
+  }
 }
