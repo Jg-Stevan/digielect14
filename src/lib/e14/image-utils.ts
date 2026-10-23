@@ -32,26 +32,153 @@ function encodePngDataUrl(canvas: HTMLCanvasElement): Promise<string> {
 
 import { loadImage } from "@jg-stevan/scanner-core/image-processor";
 
-/** KIT e14-optimizacion-v1 (T1): memo de decodificación FIFO tope 2 — la
+/** KIT e14-optimizacion-v1 (T1): memo de decodificación tope 2 — la
  *  MISMA dataURL del acta en vuelo se decodifica UNA vez aunque 4-5 etapas
  *  del pipeline la pidan (tinta/vacía/completitud/banda/calidad). Tope 2 =
  *  solo el acta en vuelo: RAM acotada (lección L7 de hidratación/RAM), el
  *  acta siguiente desaloja a la anterior automáticamente. Determinismo: la
  *  imagen devuelta es el MISMO decode que haría loadImage — cero cambio de
- *  comportamiento. */
-const memoImagenes = new Map<string, HTMLImageElement>();
+ *  comportamiento.
+ *  SPRINT-A (perf/decode-once-v1) A1: DELEGA al LRU compartido
+ *  (`decodeImagenLru`) — MISMO contrato (decode una vez, tope 2, mismo
+ *  <img> de vuelta) pero la caché ahora es UNA para todo el pipeline (QR
+ *  capa 0, origen, preProceso, maestro, OCR, tinta, calidad): la misma
+ *  fuente ya no se decodifica dos veces por vivir en dos memos. */
 export async function loadImageMemo(url: string): Promise<HTMLImageElement> {
-  const hit = memoImagenes.get(url);
-  if (hit) return hit;
-  const img = await loadImage(url);
-  memoImagenes.set(url, img);
-  while (memoImagenes.size > 2) {
-    const masVieja = memoImagenes.keys().next().value;
-    if (masVieja === undefined) break;
-    memoImagenes.delete(masVieja);
-  }
-  return img;
+  return (await decodeImagenLru(url)) as HTMLImageElement;
 }
+
+// ─── SPRINT-A (perf/decode-once-v1) A1 — LRU de decodes COMPARTIDO ───────────
+// El pipeline masivo decodificaba la MISMA imagen 4-7 veces por acta (QR capa
+// 0 → clasificarOrigen → preProcesoEscaneo → maestro → OCR → tinta → thumbs),
+// cada módulo con su propio loadImage → drawImage → getImageData (~30-40% del
+// CPU pre-OCR). `decodeImagenLru` es el decode ÚNICO compartido: MISMO patrón
+// literal de `loadImageMemo` (tope 2 — RAM acotada a la acta en vuelo, lección
+// L7) con dos mejoras documentadas: (1) recencia real (un HIT re-ordena —
+// loadImageMemo era FIFO de inserción) y (2) dedup de decodes EN VUELO para
+// que dos pasos concurrentes del pool (Opt-3, 2 workers) peguen al MISMO
+// decode. La fuente devuelta es HTMLImageElement (NUNCA ImageBitmap: un
+// bitmap desalojado y .close() envenenaría al otro worker del pool — el <img>
+// desalojado sigue válido para quien ya lo sostiene y el GC hace el resto).
+
+/** LRU tope 2: url → imagen decodificada (EXIF respetado: el navegador
+ *  aplica image-orientation:from-image al <img> por defecto). */
+const lruDecodes = new Map<string, HTMLImageElement>();
+/** Dedup de decodes en vuelo: url → promesa compartida (pool 2 workers). */
+const decodesEnVuelo = new Map<string, Promise<HTMLImageElement>>();
+/** Canvases derivados pre-escalados: `${url}|${maxDim}` → canvas (los
+ *  consumidores que piden maxDim — QR capa 0, análisis — comparten SU
+ *  canvas; el full-res base vive solo en lruDecodes). Tope 2, misma RAM
+ *  acotada: el canvas es copia, el img base manda. */
+const lruCanvasEscalado = new Map<string, HTMLCanvasElement>();
+/** URLs blob: creadas por decodeImagenLruDeBlob (para revocar al desalojar —
+ *  sin esto el object URL retiene los bytes del File en RAM indefinidamente). */
+const blobsConUrl = new Map<string, Blob>();
+
+/** Núcleo del LRU: decode único de `url` (dataURL, blob: URL o http(s) —
+ *  MISMO decode que haría `loadImage`, cero cambio de comportamiento). */
+async function decodeLru(url: string): Promise<HTMLImageElement> {
+  const hit = lruDecodes.get(url);
+  if (hit) {
+    // Recencia real: re-insertar al final (loadImageMemo era FIFO — SPRINT-A
+    // A1 lo upgradea; mismo tope 2, misma disciplina de RAM).
+    lruDecodes.delete(url);
+    lruDecodes.set(url, hit);
+    return hit;
+  }
+  const enVuelo = decodesEnVuelo.get(url);
+  if (enVuelo) return enVuelo;
+  const promesa = loadImage(url)
+    .then((img) => {
+      lruDecodes.set(url, img);
+      while (lruDecodes.size > 2) {
+        const masVieja = lruDecodes.keys().next().value;
+        if (masVieja === undefined) break;
+        lruDecodes.delete(masVieja);
+        // Disciplina de RAM (lección L7): los object URL de blob: creados
+        // aquí se revocan al desalojar (el <img> ya decodificado NO se
+        // invalida — revocar solo libera los bytes del File).
+        if (blobsConUrl.has(masVieja)) {
+          try {
+            URL.revokeObjectURL(masVieja);
+          } catch {
+            /* URL ya revocada — noop */
+          }
+          blobsConUrl.delete(masVieja);
+        }
+      }
+      return img;
+    })
+    .finally(() => {
+      decodesEnVuelo.delete(url);
+    });
+  decodesEnVuelo.set(url, promesa);
+  return promesa;
+}
+
+/**
+ * SPRINT-A A1 — decode-once LRU compartido por TODO el pipeline.
+ * Devuelve la imagen decodificada (caché LRU tope 2 + dedup en vuelo) o, si
+ * `opciones.maxDim` se pide y la fuente excede ese lado largo, un canvas
+ * pre-escalado derivado del MISMO decode (escala = min(1, maxDim/ladoMayor)
+ * — idéntica a la receta de `pixelesDeCapture` del QR y `canvasDeTrabajo`
+ * del banco; el canvas derivado también se cachea por `${url}|${maxDim}`).
+ * El formato de la moneda entre módulos NO cambia: los dataURL siguen
+ * viajando igual — el LRU es interno.
+ */
+export async function decodeImagenLru(
+  url: string,
+  opciones?: { maxDim?: number },
+): Promise<CanvasImageSource> {
+  const img = await decodeLru(url);
+  const maxDim = opciones?.maxDim;
+  if (!maxDim || Math.max(img.naturalWidth, img.naturalHeight) <= maxDim) {
+    return img; // sin escala pedida (o la fuente ya es menor) — decode puro
+  }
+  const clave = `${url}|${maxDim}`;
+  const hitCv = lruCanvasEscalado.get(clave);
+  if (hitCv) return hitCv;
+  const escala = Math.min(1, maxDim / (Math.max(img.naturalWidth, img.naturalHeight) || 1));
+  const cv = document.createElement("canvas");
+  cv.width = Math.max(1, Math.round(img.naturalWidth * escala));
+  cv.height = Math.max(1, Math.round(img.naturalHeight * escala));
+  const ctx = cv.getContext("2d");
+  if (ctx) {
+    // SIN imageSmoothingQuality explícito: el default del navegador es la
+    // receta que ya usaban pixelesDeCapture (QR) y bitmapAMaestro — fidelidad
+    // byte-idéntica del reescalado (SPRINT-A A1).
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+  }
+  lruCanvasEscalado.set(clave, cv);
+  while (lruCanvasEscalado.size > 2) {
+    const masViejo = lruCanvasEscalado.keys().next().value;
+    if (masViejo === undefined) break;
+    lruCanvasEscalado.delete(masViejo);
+  }
+  return cv;
+}
+
+/**
+ * SPRINT-A A1 — puente Blob→LRU para los consumidores que reciben el
+ * File/Blob original (maestro de captura, clasificarOrigen, preProceso).
+ * Un object URL POR INSTANCIA de blob (WeakMap — URL.createObjectURL es
+ * barato y SIN decode; el decode real pega al LRU compartido). La misma
+ * instancia de File dentro de un intento (origen → preProceso → maestro)
+ * comparte UN decode; la revocación vive en la eviction del LRU.
+ */
+export function decodeImagenLruDeBlob(
+  blob: Blob,
+  opciones?: { maxDim?: number },
+): Promise<CanvasImageSource> {
+  let url = blobUrls.get(blob);
+  if (!url) {
+    url = URL.createObjectURL(blob);
+    blobUrls.set(blob, url);
+    blobsConUrl.set(url, blob);
+  }
+  return decodeImagenLru(url, opciones);
+}
+const blobUrls = new WeakMap<Blob, string>();
 
 /**
  * §D4 (SPEC-e14-score-ocr) — cobertura de TINTA de la foto PROCESADA.

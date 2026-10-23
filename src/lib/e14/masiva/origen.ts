@@ -28,6 +28,8 @@
 /** Origen del archivo. null = sin veredicto (duda honesta — jamás inventar). */
 export type OrigenActa = "escaneo" | "foto" | null;
 
+import { decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1 — decode-once LRU compartido
+
 /** Veredicto del detector + señales auditables (traza de POR QUÉ decidió). */
 export interface OrigenVeredicto {
   origen: OrigenActa;
@@ -355,22 +357,32 @@ export function clasificarOrigen(
 /** Bitmap de análisis: decode directo del navegador a BITMAP_LADO de ancho
  *  (createImageBitmap reescala en el mismo decode — el alto sale
  *  proporcional). Cualquier fallo (HEIC sin conversión, canvas caído) → null
- *  — el detector es cosmético, jamás tumba el desenlace. */
+ *  — el detector es cosmético, jamás tumba el desenlace.
+ *  SPRINT-A (perf/decode-once-v1) A1: el decode pega al LRU COMPARTIDO del
+ *  pipeline (`decodeImagenLruDeBlob`) — antes era un createImageBitmap
+ *  privado {resizeWidth: BITMAP_LADO}. Geometría replicada: ancho EXACTO
+ *  BITMAP_LADO (resizeWidth no clampea — también upscale), alto proporcional;
+ *  el reescalado ocurre ahora en el drawImage con el suavizado default del
+ *  navegador (mismo que usaba el bitmap nativo por defecto). El análisis es
+ *  cosmético (D63-A: jamás tumba el pipeline) y el decode full-res se
+ *  comparte con preProceso/maestro del MISMO File. */
 async function bitmapDeArchivo(archivo: Blob): Promise<OrigenBitmap | null> {
   try {
-    const bm = await createImageBitmap(archivo, { resizeWidth: BITMAP_LADO });
+    const fuente = await decodeImagenLruDeBlob(archivo);
+    const img = fuente as HTMLImageElement;
     const canvas = document.createElement("canvas");
-    canvas.width = bm.width;
-    canvas.height = bm.height;
+    canvas.width = BITMAP_LADO;
+    canvas.height = Math.max(
+      1,
+      Math.round((img.naturalHeight * BITMAP_LADO) / (img.naturalWidth || 1)),
+    );
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) {
-      bm.close();
       return null;
     }
-    ctx.drawImage(bm, 0, 0);
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    bm.close();
-    return { ancho: canvas.width, alto: canvas.height, rgba: img.data };
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const captura = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    return { ancho: canvas.width, alto: canvas.height, rgba: captura.data };
   } catch {
     return null;
   }

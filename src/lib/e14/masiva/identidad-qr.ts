@@ -60,6 +60,7 @@
 import jsQR from "./vendor/jsQR.js";
 import type { Binarizer, ReaderOptions } from "zxing-wasm/reader";
 import type { EstadoEntrada } from "./tipos";
+import { decodeImagenLru } from "../image-utils"; // SPRINT-A A1 — decode-once LRU compartido
 
 // ─── Constantes NUEVAS del kit e63m §1.1 (separadas de las existentes) ──────
 /** Lado largo MÁXIMO del canvas de trabajo (kit §1.1 — igual que el banco:
@@ -678,27 +679,37 @@ export async function decodificarQrDePixeles(
  *  canvasDeTrabajo del banco, byte-idéntico en semántica; e64-qr T-1.4 le
  *  añade el segundo parámetro OPCIONAL para el rescate — la firma existente
  *  no cambia para los callers actuales). null/jamás-throw: un fallo de
- *  render es sin-payload (fallback limpio). */
+ *  render es sin-payload (fallback limpio).
+ *  SPRINT-A (perf/decode-once-v1) A1: el decode pega al LRU compartido del
+ *  pipeline (`decodeImagenLru` con maxDim = MISMA escala min(1,
+ *  ladoLargo/ladoMayor) — el canvas pre-escalado se deriva del MISMO decode
+ *  que luego reusan origen/preProceso/OCR); antes decodificaba la dataURL
+ *  en un <img> privado (y OTRA vez para el rescate 4096). */
 async function pixelesDeCapture(
   dataUrl: string,
   ladoLargo: number = QR_LADO_LARGO,
 ): Promise<PixelesQr | null> {
-  const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("QR_NO_DECODE_IMAGEN"));
-    img.src = dataUrl;
-  });
-  const ladoMayor = Math.max(img.naturalWidth, img.naturalHeight) || 1;
-  const escala = Math.min(1, ladoLargo / ladoMayor);
-  const cv = document.createElement("canvas");
-  cv.width = Math.max(1, Math.round(img.naturalWidth * escala));
-  cv.height = Math.max(1, Math.round(img.naturalHeight * escala));
-  const ctx = cv.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
-  ctx.drawImage(img, 0, 0, cv.width, cv.height);
-  const imgData = ctx.getImageData(0, 0, cv.width, cv.height);
-  return { data: imgData.data, width: cv.width, height: cv.height };
+  try {
+    const fuente = await decodeImagenLru(dataUrl, { maxDim: ladoLargo });
+    let cv: HTMLCanvasElement;
+    if (fuente instanceof HTMLCanvasElement) {
+      cv = fuente; // canvas pre-escalado del LRU (maxDim aplicado)
+    } else {
+      const img = fuente as HTMLImageElement;
+      cv = document.createElement("canvas");
+      cv.width = img.naturalWidth;
+      cv.height = img.naturalHeight;
+      const ctx0 = cv.getContext("2d");
+      if (!ctx0) return null;
+      ctx0.drawImage(img, 0, 0);
+    }
+    const ctx = cv.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    const imgData = ctx.getImageData(0, 0, cv.width, cv.height);
+    return { data: imgData.data, width: cv.width, height: cv.height };
+  } catch {
+    return null; // QR_NO_DECODE_IMAGEN → sin-payload (fallback limpio, igual que antes)
+  }
 }
 
 /** e64-qr T-1.4 — lado largo del RESCATE (SOLO si la cadena a 2048 falla):

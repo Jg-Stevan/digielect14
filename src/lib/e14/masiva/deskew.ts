@@ -31,6 +31,7 @@
  *  escaneos. */
 
 import type { OrigenActa } from "./origen";
+import { decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1 — decode-once LRU compartido
 
 // ---------- Constantes (nombradas y comentadas — kit §2) ----------
 
@@ -206,21 +207,26 @@ function normalizarPuntoBlanco(rgba: Uint8ClampedArray, wp: { r: number; g: numb
 // ---------- Parte DOM (solo navegador — decode/rotación/encode) ----------
 
 /** Decode del master a escala real (createImageBitmap). null si falla
- *  (formato raro — el pre-proceso jamás tumba el pipeline). */
+ *  (formato raro — el pre-proceso jamás tumba el pipeline).
+ *  SPRINT-A (perf/decode-once-v1) A1: el decode pega al LRU COMPARTIDO del
+ *  pipeline (`decodeImagenLruDeBlob`) — antes era un createImageBitmap
+ *  privado a escala real. El File del intento ya fue decodificado por
+ *  clasificarOrigen (mismo blob, MISMO object URL) → HIT sin re-decode;
+ *  el <img> del LRU se dibuja 1:1 al canvas del master (blit, mismo
+ *  resultado) y la RAM queda acotada por la eviction del LRU (tope 2). */
 async function decodeMaster(archivo: Blob): Promise<{ canvas: HTMLCanvasElement; decodeMs: number } | null> {
   const t0 = Date.now();
   try {
-    const bm = await createImageBitmap(archivo);
+    const fuente = await decodeImagenLruDeBlob(archivo);
+    const img = fuente as HTMLImageElement;
     const canvas = document.createElement("canvas");
-    canvas.width = bm.width;
-    canvas.height = bm.height;
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) {
-      bm.close();
       return null;
     }
-    ctx.drawImage(bm, 0, 0);
-    bm.close();
+    ctx.drawImage(img, 0, 0);
     return { canvas, decodeMs: Date.now() - t0 };
   } catch {
     return null;
