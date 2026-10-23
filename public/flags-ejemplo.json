@@ -1,0 +1,8 @@
+{
+  "_lee-esto": "EJEMPLO DOCUMENTADO de flags del contrato FlagsApp (README-KITS §4.2). Este archivo NO lo lee la app: el flags.json REAL es opcional y debe ser JSON VÁLIDO SIN comentarios (quita las líneas // y renómbralo a public/flags.json). Los overrides manuales en caliente viven en localStorage e14-flags-overrides (kill switch del panel dev) y pisan estos valores. Defaults = decisiones D1-D6 del dueño.",
+  "poolWorkers": 2, // default 2 — workers del pool de OCR en MASIVA. 1|2 (tier BAJO → el dueño puede fijar 1 desde el panel dev; la app NUNCA cambia reglas sola, D6)
+  "thumbsOn": true, // default true — miniaturas en la bandeja de MASIVA. OFF ahorra memoria en dispositivos BAJO (override manual, D6)
+  "ocrThreadsTope": 4, // default 4 — tope de hilos del runtime OCR (onnxruntime-web). Menor = menos CPU concurrente (override manual, D6)
+  "telemetriaSalud": true, // default true — muestreo de salud en vivo (timer 5 min). SOLO corre con el modo dev activado (e14-dev-mode=on) y respeta politica.saludEnVivo (D4)
+  "endpointReportes": null // default null — sin backend el transporte está en NO-OP TOTAL (D1: nada sale del dispositivo sin acción explícita; cero timers, cero requests). Con URL configurada, el transporte batchea cada 10 min hasta 50 eventos (error/warn/perf/salud/uso), con scrub previo por leerPolitica() — jamás envía textoOcr/miniaturas si están OFF ni contenido de actas. Reintentos 1m→5m→30m; tras 3 fallos seguidos se auto-detiene (kill local) y se reactiva desde iniciarTransporte() o al reiniciar la app. Ver docs/ENDPOINT-REPORTES.md
+}
