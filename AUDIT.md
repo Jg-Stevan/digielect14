@@ -160,3 +160,55 @@ recordatorio vivo de §2.2, no ruido.
 - Imports circulares detectados con `bunx madge --circular --extensions ts,tsx` (61 archivos, 5 ciclos reportados; 2 son benignos: 1 type-only, 1 dynamic-import).
 - Durante la revisión se sospechó de un posible error de sintaxis en `ScanView.tsx:718-719` (destructuring incompleto); **descartado con hexdump (`od -c`)**: las líneas están correctas — era artefacto de renderizado de la terminal del auditor, no del repo.
 - Ningún archivo de `src/` fue modificado. Los únicos cambios en el working tree son `package.json` + `bun.lock` (knip devDependency, autorizado) y este `AUDIT.md`.
+
+---
+
+## 6. Overnight 2026-10-22 — `audit/overnight-20261022` (desde `quality-pass-1`)
+
+> Plan: `PLAN-overnight.md` (commit `233600f`, no cuenta en el límite de 20).
+> Gate por commit: `tsc --noEmit` (0 err) + `lint` (0 err) + `build` (exit 0) + **7 QA** (280/280)
+> + `vitest` (53/53, desde el commit de tests). Todos los commits de la noche pasaron el gate.
+> Reporte: `MORNING-REPORT.md` (raíz). Baseline knip 72 → **37 ítems** (−35).
+
+### 6.1 Tareas 3B ejecutadas (dead code con protocolo §2.2-proto)
+
+| Tarea | Commit | Acción | Evidencia clave |
+|---|---|---|---|
+| 3B-B1a icons.tsx | `528b54d` | ✅ BORRADOS 7 iconos base (`ArrowLeftIcon`,`CloudCheckIcon`,`GridIcon`,`CropIcon`,`ImportIcon`,`EyeIcon`,`BoltIcon`) — los componentes usan variantes `Stitch*` | grep: 0 uso en scripts/, 0 uso interno |
+| 3B-B1b types.ts | `1d49bc1` | ✅ DE-EXPORT de `ActaUbicacion`/`ActaCandidato`/`MesaEstado`/`PaginaEstado` — uso INTERNO en el mismo archivo (L184/L189/Mesa/MesaPagina). Primer intento de borrado lo cazó el gate tsc → corregido a de-export **sin commit roto** | tsc del gate; knip |
+| 3B-B1c primitives.tsx | `f0494c6` | ✅ BORRADO `StatusDot` (huérfano real); DE-EXPORT `Tone` (uso interno props). `toneDot`/`toneText` CONSERVADOS (uso interno L102/L203) | grep interno |
+| 3B-B2a deskew.ts | `036d465` | ✅ DE-EXPORT `detectarSkew`/`puntoBlanco`/`normalizarPuntoBlanco` — uso interno vivo en `preProcesoEscaneo` (L303/308/326); comentario del módulo ajustado | grep interno; 0 QA las grepea |
+| 3B-B2b cola.ts | `124a884` | ✅ DE-EXPORT `abrirCola` — 7 usos internos; el QA solo lo cita en comentario PROPIO (qa-historico L110), NO es ancla de fuente | grep scripts/ |
+| 3B-B3a informe.ts | `2aab064` | ✅ DE-EXPORT `resumenColgadas` + `EntornoInforme`/`ResumenInforme`/`ProgresoInforme`/`InformeZip` — uso interno (L945/480/224/880/881) | grep interno |
+| 3B-B3b orientacion.ts | `d953f7d` | ✅ DE-EXPORT `PROBE_BUDGET_MS`/`MARGEN_ORIENTACION`/`PROBE_K_CROPS`/`Rotacion`/`ProbeOrientacion` — uso interno (L259/287/323-328/66-71/255). NINGÚN QA grepea orientacion.ts (umbrales 0.82/0.6/0.55 viven en clasificador.ts — intactos, verificado por 3 QA) | grep scripts/ completo |
+| 3B-B3c divipol.ts | `2c1a15d` | ✅ DE-EXPORT `DivipolPuesto`/`DivipolNodo`/`RutaDivipol`/`EstadoDivipol`. **DECISIÓN**: `mesaValida` + `buscarPuestosPorNombre` CONSERVADAS exportadas — funciones puras de lookup que la Prioridad 2 (tests) consume y protege (`divipol.test.ts`, 20 casos) | ver 6.2 |
+
+### 6.2 Prioridad 2 — suite unitaria Vitest (commit `ad8fde9`)
+
+- `vitest@5` devDependency (R4: solo añadir) + `vitest.config.ts` (entorno node) + `knip.json` entry `src/**/*.test.ts` + script `npm run test`.
+- **53 casos en 3 archivos** (`clasificador.test.ts` 23 · `completitud.test.ts` 10 · `divipol.test.ts` 20) — cero cambios de lógica en `src/`.
+- Casos con evidencia real del repo: informe 120553 (`CALRO`/`CAIRO` → similitud 0 — la equivalencia I↔L es de `normalizarNombreLugar`), Frankfurt §0-F4 (`/1000/453010202` → `710007453010202`), encuadre apretado del dueño §1c (0.998 sano tras Rev. 2), perdón 4/4 fiduciales FASE 2.
+- Limitación documentada (header de `completitud.test.ts`): densidades 20%/85% y perdón POR LADO requieren canvas real → runtime del dueño.
+- knip side-effect: `normalizarNombre`/`similitud`/`tipoDeDigito`/`candidatosCodigo1D`/`mesaValida`/`buscarPuestosPorNombre` ya NO se reportan muertos (los tests son consumers legítimos).
+
+### 6.3 Prioridad 3 — logger (commit `12ca597`)
+
+- `src/lib/logger.ts` NUEVO: debug/info gateadas por `NODE_ENV !== "production"`; warn/error siempre; `eslint-disable no-console` scoped al único archivo con licencia.
+- Migrado: `divipol.ts` (1 `console.warn` → `logger.warn`).
+- **Hallazgo**: dedup/historico/cola/origen tienen **0 `console.*`** (el plan overnight asumía que sí) — nada que migrar. Módulos grandes (runner 22, rapidocr 5, masiva/store 4, scanner-core-bridge 3, identidad-qr 3, store 2, orientacion 2, precalor 1) siguen PENDIENTES para Fase 4.
+
+### 6.4 🔒 Bloqueados/conservados con razón (NO tocar sin dueño)
+
+| Símbolo | Razón |
+|---|---|
+| `StitchFrameIcon` (icons.tsx) | Decisión menú §6.3/D65 — AUDITORIA-REGRESION #7 (borrar o conservar según reviva el menú) |
+| `borrarHistorico` (historico.ts) | **ANCLA QA POSITIVA**: `qa-historico-enviadas.ts:127` exige `export async function borrarHistorico` presente + RL-e65b-5 (helper deliberado sin cablear) |
+| `dhash64DeDataUrl` (dedup.ts) | Red line VIVA en `qa-qr-identidad.ts:453` (regex anti-hashes en informe) — ancla blanda, conservador |
+| `recienListas`/`posCola`/`modoMenuMontado` (3 warnings lint) | Decisiones B1/B2 D65 del dueño (§2.2) |
+| `identidad-qr.ts` (7), `archivos.ts` (4 types), `precalor.ts` (2), `store.ts` (3), `masiva/store.ts` (2), `scanner-core-bridge.ts` (1), `rapidocr.ts` (2), `AyudaOverlay.tsx` (1), `QuadEditor.tsx` (1), resto de types sueltos | Fuera de la lista 3B del plan overnight (módulos grandes / zona de ciclos store↔precalor↔runner / wasm.proxy) — Fase 4 |
+| `normalizarCodigo` (clasificador.ts) | Fuera de la lista de tests del plan (P2 nombraba 4 funciones); muerto según knip — candidato a test o borrado en Fase 4 |
+
+### 6.5 Lecciones de la noche (metodología)
+
+- **«export muerto» ≠ «código muerto»**: en este repo, casi todos los símbolos 3B resultaron tener USO INTERNO (knip reporta la falta de consumers EXTERNOS). El borrado correcto casi siempre es **de-export**; el gate tsc cazó el único caso mal clasificado antes de commitear. Regla para Fase 4: clasificar con `grep -n` en el MISMO archivo antes de decidir borrar vs de-export.
+- Los módulos «pequeños» de masiva ya estaban limpios de console — el inventario del AUDIT fila «Observabilidad» era correcto y el plan overnight sobreestimó ese frente.
