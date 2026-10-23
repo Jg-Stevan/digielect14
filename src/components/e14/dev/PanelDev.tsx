@@ -43,6 +43,8 @@ import {
   type SnapshotDispositivo,
 } from "./puente";
 import type { ErroresAgrupados, PoliticaDatos } from "./contrato";
+// KIT e14-observabilidad-v1 (agente 2 · C5): detalle de errores + breadcrumbs.
+import { VistaErrores } from "./VistaErrores";
 
 /** Timeout del armado — el MISMO patrón de «reiniciar jornada» (4 s). */
 const ARMADO_MS = 4000;
@@ -209,6 +211,8 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     void refrescarErrores();
   }, [refrescarErrores]);
+  // KIT C5: modal hijo con el detalle completo (VistaErrores).
+  const [detalleAbierto, setDetalleAbierto] = useState(false);
 
   // ── Sección 1 · estado (desactivar = flujo inverso del C1) ─────────────
   const [armadoDesactivar, armarDesactivar, desarmarDesactivar] = useArmado();
@@ -320,8 +324,11 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
   }, []);
 
   // ── Overlay: Esc cierra + focus trap básico (convención AyudaOverlay) ──
+  // Mientras el modal hijo (VistaErrores) está abierto, ESTE manejador se
+  // retira — Esc/clic cierran SOLO el hijo (sin cascada).
   const refPanel = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    if (detalleAbierto) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
@@ -347,7 +354,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, detalleAbierto]);
 
   const politicaTexto = [
     `Metadatos: ${politica.metadatos ? "sí" : "no"}`,
@@ -562,8 +569,19 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
               n={3}
               titulo="Reportes de errores"
               hijo={
-                <span className="font-mono text-[10px] font-bold uppercase tracking-wider rounded-md px-2 py-1 border border-slate-700 bg-slate-800/60 text-slate-300">
-                  {eventosBuffer} EN BUFFER
+                <span className="flex items-center gap-1.5">
+                  {eventosBuffer > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDetalleAbierto(true)}
+                      className="min-h-[32px] px-2.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:border-[#10b981]/60 hover:text-[#10b981] text-slate-300 font-mono text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/60"
+                    >
+                      VER DETALLE
+                    </button>
+                  )}
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-wider rounded-md px-2 py-1 border border-slate-700 bg-slate-800/60 text-slate-300">
+                    {eventosBuffer} EN BUFFER
+                  </span>
                 </span>
               }
             />
@@ -597,6 +615,15 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
               )}
             </div>
           </section>
+
+          {/* KIT e14-observabilidad-v1 (agente 2 · C5): modal hijo — errores
+              agrupados con breadcrumbs + vaciar buffer armado. */}
+          {detalleAbierto && (
+            <VistaErrores
+              onClose={() => setDetalleAbierto(false)}
+              alVaciar={() => void refrescarErrores()}
+            />
+          )}
 
           {/* ── 4 · AJUSTES DE DATOS (PRIVACIDAD) ──────────────────────── */}
           <section aria-label="Ajustes de datos y privacidad" className="flex flex-col gap-2">
