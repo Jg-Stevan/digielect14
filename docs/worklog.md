@@ -2109,3 +2109,36 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 - **Commits:** refactor(ui) B1 · feat(ui) 6f81f37 B2 · fix(ui) 81e681b B3 · docs (este) — Conventional, una tarea = un commit, gate por commit
 - **Cómo probar:** REPORTE §5/§6 — humo del dueño con hardware real de cámara (las rutas de stream quedaron byte a byte) + revisar PR
 - **Pendiente/Bloqueado:** dueño: merge (el agente NUNCA mergea) · fix trivial de logger.ts L25 (fuera de zona) · comentario stale en check-quality.sh §1 (scripts/ prohibido) · fila #6 audit (wasm.proxy) sigue siendo decisión del dueño
+
+### [2026-10-23 11:20] — obs-modo-dev-v1 (FASE 0) — Z.ai Code (agente 2, Task 7-b)
+- **Hecho:** UI completa del MODO DE DIAGNÓSTICO (KIT e14-observabilidad-v1,
+  agente 2) en 6 commits (C1→C6): tuerca SIEMPRE visible arriba-izquierda del
+  header de ResumenView con activación ARMADA (patrón «reiniciar jornada», copia
+  exacta del kit) · badge «DEV» no intrusivo en TopBar (reactivo por evento DOM +
+  storage, CERO timers) · botón INFORME ZIP fuera de Resumen (dif neto −77; el
+  flujo con lazy `generarInformeZip`+`downloadBlob` y chequeo de cola migró al
+  panel) · PanelDev (overlay convención AyudaOverlay + focus trap) con las 7
+  secciones del kit: Estado (versión/identidad truncada/política D4 en texto) ·
+  Salud (badge tier ALTO/MEDIO/BAJO + tierInferido + toggle muestreo 5 min con
+  confirmación) · Errores (contador + top-10 por digest) · Privacidad (4 toggles
+  con confirmación inline al ACTIVAR, D4) · Exportar (ZIP migrado + JSON +
+  «vaciar buffer tras exportar» default ON + disabled con motivo si buffer
+  vacío) · Kill switch (poolWorkers 2→1 · thumbsOn off · ocrThreadsTope 4→2 con
+  nota de efecto y el aviso «la app nunca los hace sola») · Flags activas (valor
+  efectivo + chip OVERRIDE + refrescar → ok|sin-endpoint|error) · VistaErrores
+  (modal hijo z-[80]: cards por digest con severidad/veces/1.ª-últ. relativas/
+  versiones + breadcrumbs del evento más reciente en timeline vertical +
+  VACIAR BUFFER armado) · useSaludVivo (snapshot + 30 s SOLO con panel abierto,
+  timer limpiado al desmontar). Entregado en FASE 0 (`origin/feat/obs-nucleo-v1`
+  aún no existe): `dev/contrato.ts` (tipos §4.2 verbatim) + `dev/puente.ts`
+  (firmas §4.3 contra las claves pinned §4.1 — persistencia real de
+  modo/política/overrides, stubs HONESTOS 0/[]/null para buffer/salud/
+  identidad/export). Verificado en navegador (390/360): activación+desactivación,
+  badge en REVISIÓN (acta SIM 7.0), toggles con confirmación y persistencia,
+  kill switch reflejado al instante, export bloqueado con motivo, 360 px sin
+  overflow. Detalle + desviaciones + plan FASE 1:
+  docs/REPORTE-obs-modo-dev-v1.md
+- **Archivos:** src/components/e14/dev/{TuercaResumen.tsx,PanelDev.tsx,VistaErrores.tsx,useSaludVivo.ts,puente.ts,contrato.ts} (NUEVOS), src/components/e14/screens/ResumenView.tsx, src/components/e14/TopBar.tsx (badge), docs/REPORTE-obs-modo-dev-v1.md (NUEVO)
+- **Commits:** C1..C6 en feat/obs-modo-dev-v1 (desde main b603183; PR DRAFT; SIN merge — orden del dueño: 1.º núcleo)
+- **Cómo probar:** RESUMEN → tuerca ⚙ (arriba-izquierda) → «¿ACTIVAR EL MODO DE DIAGNÓSTICO?» SÍ → la tuerca pasa a acento y TopBar muestra DEV en REVISIÓN → toque de nuevo → PANEL DEV (7 secciones: toggles con confirmación, kill switch que refleja en la tabla de flags, export bloqueado con BUFFER VACÍO) → DESACTIVAR MODO desde el panel. Todo persiste entre recargas (e14-dev-mode / e14-obs-politica / e14-flags-overrides).
+- **Pendiente/Bloqueado:** FASE 1 — recrear la branch sobre origin/feat/obs-nucleo-v1 y delegar el puente en obs/* (solo cambian los cuerpos del puente; la UI no se toca). Desviaciones menores documentadas (badge solo donde TopBar existe, 2 exports huérfanos transitorios C3→C4, sparkline opcional omitido).
