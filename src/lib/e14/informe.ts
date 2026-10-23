@@ -180,6 +180,13 @@ export interface FilaInforme {
    *  memoria/IDB). null = el instrumento no corrió / decode falló. Ídem:
    *  EXPORT-ONLY, jamás se recalcula en el exportador (kit §1.3). */
   dedupHash: string | null;
+  // ---------- ANEXO AGENTE C (REPARTE-3-AGENTES-v1) — aditivos AL FINAL ----------
+  /** dupOf del registro (fila gemela → id de su original; null = original). */
+  dupOf: string | null;
+  /** Tiempo AHORRADO por reutilizar el desenlace de la original (solo
+   *  duplicadas con dato — fórmula de ahorrosDedup; null = sin referencia,
+   *  jamás inventar). */
+  ahorroMs: number | null;
 }
 
 /** Resumen para la UI (T2) — espejo de lo importante del informe.json. */
@@ -347,6 +354,10 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
     // aquí — kit §1.3). null/ausente = sin dato (jamás inventar).
     qrPayload: reg.qrPayload ?? null,
     dedupHash: reg.hashDedup ?? null,
+    // ANEXO Agente C: dupOf del registro + ahorro (null aquí — el cálculo
+    // necesita el LOTE completo y vive en ahorrosDedup/generarInformeZip).
+    dupOf: reg.dupOf ?? null,
+    ahorroMs: null,
   };
 }
 
@@ -501,6 +512,157 @@ function mediosTiempos(filas: FilaInforme[]): ResumenInforme["tiemposMediosMs"] 
   return medias as ResumenInforme["tiemposMediosMs"];
 }
 
+// ---------- ANEXO AGENTE C — percentiles + throughput + ahorro de duplicadas ----------
+
+/** Etapas del desglose (nombres REALES de campos de FilaInforme — kit C §1.1).
+ *  "decode" = decode REAL del master: precalorMs cuando la fila nació de un
+ *  master precalentado (decodeMs top-level es 0 ahí — el decode vivió en el
+ *  precalor), decodeMs si no. Semántica idéntica a la línea
+ *  CONVERSION/PERSISTENCIA del txt (misma fuente de valores). */
+export type EtapaInforme = "decode" | "espera" | "probe" | "ocr" | "total";
+
+/** Valor REALES (ms) de una etapa para UNA fila — null si la fila no trae el
+ *  dato (jamás inventar). PURA. */
+export function valorEtapa(f: FilaInforme, etapa: EtapaInforme): number | null {
+  switch (etapa) {
+    case "decode": {
+      const v = f.precalentada ? f.precalorMs : f.decodeMs;
+      return typeof v === "number" ? v : null;
+    }
+    case "espera":
+      return typeof f.tiempos?.esperaMs === "number" ? f.tiempos.esperaMs : null;
+    case "probe":
+      return typeof f.orientacionProbeMs === "number" ? f.orientacionProbeMs : null;
+    case "ocr":
+      return typeof f.tiempos?.ocrMs === "number" ? f.tiempos.ocrMs : null;
+    case "total":
+      return typeof f.tiempos?.totalMs === "number" ? f.tiempos.totalMs : null;
+  }
+}
+
+/** Percentil p (0–100) con interpolación lineal estándar (método inclusivo:
+ *  rango = p/100·(n−1) sobre la lista ORDENADA; p50 ≡ mediana — para n par
+ *  da el promedio de los dos centrales, EXACTO el mismo valor que el cálculo
+ *  inline que el txt ya hacía para la espera). PURA y testable: [] → null
+ *  (sin reventar); 1 elemento → ese elemento. */
+export function percentil(valores: number[], p: number): number | null {
+  if (valores.length === 0) return null;
+  const ordenados = [...valores].sort((a, b) => a - b);
+  if (ordenados.length === 1) return ordenados[0];
+  const rango = (p / 100) * (ordenados.length - 1);
+  const bajo = Math.floor(rango);
+  const alto = Math.ceil(rango);
+  if (bajo === alto) return ordenados[bajo];
+  return ordenados[bajo] + (rango - bajo) * (ordenados[alto] - ordenados[bajo]);
+}
+
+/** p50/p95 (ms redondeados) por etapa — SOLO sobre actas con el dato
+ *  (null si la etapa no tiene datos — jamás inventar). PURA. */
+export function percentilesTiempos(
+  filas: FilaInforme[],
+): Record<EtapaInforme, { p50: number | null; p95: number | null }> {
+  const etapas: EtapaInforme[] = ["decode", "espera", "probe", "ocr", "total"];
+  const res = {} as Record<EtapaInforme, { p50: number | null; p95: number | null }>;
+  for (const etapa of etapas) {
+    const valores = filas
+      .map((f) => valorEtapa(f, etapa))
+      .filter((v): v is number => v != null);
+    res[etapa] = {
+      p50: valores.length ? Math.round(percentil(valores, 50) as number) : null,
+      p95: valores.length ? Math.round(percentil(valores, 95) as number) : null,
+    };
+  }
+  return res;
+}
+
+/** THROUGHPUT del lote (kit C §1.3): actas ENVIADAS por minuto de reloj.
+ *  Fórmula: nENVIADAS / ((último fin − primer inicio) / 60000), donde el
+ *  INICIO de un acta = agregadaEn + esperaMs (cuando salió de la cola) y su
+ *  FIN = inicio + totalMs (totalMs NO incluye la espera — línea TOTALES del
+ *  txt). Solo ENVIADAS con totalMs (sin dato → fuera del censo); sin
+ *  ENVIADAS con datos → null (jamás inventar). PURA. */
+export function throughputEnviadas(filas: FilaInforme[]): {
+  n: number;
+  minutos: number | null;
+  porMinuto: number | null;
+} {
+  const enviadas = filas.filter(
+    (f) => f.statusActa === "ENVIADA" && typeof f.tiempos?.totalMs === "number",
+  );
+  if (!enviadas.length) return { n: 0, minutos: null, porMinuto: null };
+  const inicios = enviadas.map(
+    (f) => f.agregadaEn + (typeof f.tiempos?.esperaMs === "number" ? f.tiempos.esperaMs : 0),
+  );
+  const fines = enviadas.map(
+    (f) =>
+      f.agregadaEn +
+      (typeof f.tiempos?.esperaMs === "number" ? f.tiempos.esperaMs : 0) +
+      (f.tiempos?.totalMs ?? 0),
+  );
+  const duracionMs = Math.max(...fines) - Math.min(...inicios);
+  const minutos = Math.round((duracionMs / 60000) * 100) / 100;
+  const porMinuto =
+    duracionMs > 0
+      ? Math.round((enviadas.length / (duracionMs / 60000)) * 100) / 100
+      : null;
+  return { n: enviadas.length, minutos, porMinuto };
+}
+
+/** ANEXO Agente C (Tarea 2) — AHORRO de cada DUPLICADA (PURO, testable).
+ *
+ *  Fórmula: ahorroMs = max(0, REFERENCIA − totalMs de la copia), donde
+ *  REFERENCIA es, en orden de precisión:
+ *  1. el totalMs de SU original (dupOf presente EN ESTE lote con dato),
+ *  2. la media de totalMs de las ENVIADAS del lote (el pipeline típico que
+ *     la copia se saltó — el mismo denominador natural que el anexo usa
+ *     para ahorroEquivalenteActas).
+ *  Nota de origen: la UI que citaba el anexo («Ahorrado 12.4s») NO existe
+ *  en main (MasivaView solo muestra «≡ original» para gemelas) → fórmula
+ *  propia documentada, calculada SOLO desde campos ya existentes.
+ *  Sin totalMs propio o sin referencia → la copia no aporta ahorro (null;
+ *  jamás inventar). ahorroTotalMs = suma redondeada (null si ninguna);
+ *  ahorroEquivalenteActas = ahorroTotalMs / media(totalMs ENVIADAS), a 1
+ *  decimal (cuántas actas-equivalentes se dejaron de procesar). */
+export function ahorrosDedup(filas: FilaInforme[]): {
+  porActa: Record<string, number>;
+  ahorroTotalMs: number | null;
+  ahorroEquivalenteActas: number | null;
+} {
+  const enviadas = filas.filter(
+    (f) => f.statusActa === "ENVIADA" && typeof f.tiempos?.totalMs === "number",
+  );
+  const mediaEnviadas = enviadas.length
+    ? enviadas.reduce((s, f) => s + (f.tiempos?.totalMs ?? 0), 0) / enviadas.length
+    : null;
+  const porId = new Map(filas.map((f) => [f.id, f] as const));
+  const porActa: Record<string, number> = {};
+  let suma = 0;
+  let cuenta = 0;
+  for (const f of filas) {
+    if (f.statusActa !== "DUPLICADA") continue;
+    const propio = f.tiempos?.totalMs;
+    if (typeof propio !== "number") continue; // sin dato → fuera (honesto)
+    const original = f.dupOf != null ? porId.get(f.dupOf) : undefined;
+    const referencia =
+      typeof original?.tiempos?.totalMs === "number"
+        ? original.tiempos.totalMs
+        : mediaEnviadas;
+    if (referencia == null) continue;
+    const ahorro = Math.max(0, Math.round(referencia - propio));
+    porActa[f.id] = ahorro;
+    suma += ahorro;
+    cuenta += 1;
+  }
+  return {
+    porActa,
+    ahorroTotalMs: cuenta ? Math.round(suma) : null,
+    ahorroEquivalenteActas:
+      cuenta && mediaEnviadas
+        ? Math.round((suma / mediaEnviadas) * 10) / 10
+        : null,
+  };
+}
+
 /** Entorno real del navegador (T1.2) — datos para calibrar, sin inventar. */
 function entornoInforme(): EntornoInforme {
   if (typeof navigator === "undefined") {
@@ -621,6 +783,10 @@ export function actaLivianaJson(fila: FilaInforme) {
     // intactos). EXPORT-ONLY: viajan tal cual, jamás se recalculan.
     ...(fila.qrPayload != null ? { qrPayload: fila.qrPayload } : {}),
     ...(fila.dedupHash != null ? { dedupHash: fila.dedupHash } : {}),
+    // ANEXO Agente C — dupOf + ahorroMs (ADITIVOS AL FINAL: campos AUSENTES
+    // si no aplican — originales no traen ahorro; informes previos intactos).
+    ...(fila.dupOf != null ? { dupOf: fila.dupOf } : {}),
+    ...(fila.ahorroMs != null ? { ahorroMs: fila.ahorroMs } : {}),
   };
 }
 
@@ -697,8 +863,16 @@ export function renderTxt(
   // decimal SOLO sobre filas con el dato ("-" si ninguna — jamás inventar);
   // conteos nativo/wasm sobre origenDecode; precalentadas = filas cuyo
   // desenlace nació de un master precalentado; precalor medio ídem.
+  // D66 (T4): media del decode REAL — FIX del bug «0.0s» fijo (kit C §1.4):
+  // decodeMs top-level es 0 para las filas PRECALENTADAS (el decode vivió en
+  // el precalor — su ms real está en precalorMs), así que la media salía
+  // 0.0s aunque el lote entero decodificara. El valor REAL por fila es
+  // precalorMs cuando precalentada y decodeMs si no (misma semántica de la
+  // etapa "decode" de los percentiles). nativo/wasm/precalentadas y el
+  // precalor medio quedan INTACTOS (append-only: solo cambia la fuente del
+  // valor de la media — el bug permitido a corregir por el kit).
   const decodeValores = filas
-    .map((f) => f.decodeMs)
+    .map((f) => (f.precalentada ? f.precalorMs : f.decodeMs))
     .filter((v): v is number => typeof v === "number");
   const decodeMediaS = decodeValores.length
     ? (decodeValores.reduce((a, b) => a + b, 0) / decodeValores.length / 1000).toFixed(1)
@@ -722,6 +896,21 @@ export function renderTxt(
     (f) => (f.tiempos?.procesoMs ?? 0) > 6000,
   ).length;
   linea(`Outliers procesoMs >6s: ${outliersProceso}`);
+  // Kit C (REPARTE-3-AGENTES-v1 §1.1) — líneas NUEVAS al final de TOTALES
+  // (append-only, D51: los parsers van por prefijo). p50/p95 por etapa SOLO
+  // sobre actas con dato ("-" si la etapa no tiene — jamás inventar).
+  const pcts = percentilesTiempos(filas);
+  const celdaPct = (v: { p50: number | null; p95: number | null }) =>
+    `${v.p50 ?? "-"} / ${v.p95 ?? "-"}`;
+  linea(
+    `PERCENTILES p50/p95 ms (solo actas con dato): decode ${celdaPct(pcts.decode)} - espera ${celdaPct(pcts.espera)} - probe ${celdaPct(pcts.probe)} - OCR ${celdaPct(pcts.ocr)} - total ${celdaPct(pcts.total)}`,
+  );
+  // Kit C (§1.3) — THROUGHPUT del lote: ENVIADAS por minuto de reloj
+  // (fórmula documentada en throughputEnviadas — primer inicio → último fin).
+  const tp = throughputEnviadas(filas);
+  linea(
+    `THROUGHPUT: ${tp.n} ENVIADAS en ${tp.minutos ?? "-"} min = ${tp.porMinuto ?? "-"} actas/min (primer inicio → último fin del lote)`,
+  );
   linea();
   const rechazoFilas = filas.filter((f) => f.rechazo);
   linea(`RECHAZOS (${rechazoFilas.length})`);
@@ -887,6 +1076,37 @@ export function renderTxt(
     ].filter((t): t is string => t != null);
     linea(`${i + 1}. ${trozos.join(" - ")}`);
   });
+  // ANEXO AGENTE C (Tarea 1) — desglose de TIEMPOS POR ACTA (formato puro:
+  // solo campos ya existentes). ENVIADAS primero (por totalMs desc), luego
+  // DUPLICADAS (por esperaMs desc), resto al final (orden estable). Los 3
+  // más lentos de CADA etapa se marcan con sufijo «<<» (saltan a la vista).
+  linea();
+  linea(
+    "TIEMPOS POR ACTA (id | status | decode | espera | probe | OCR | total | dedup | ahorro) — << = 3 más lentos de la etapa",
+  );
+  const etapasAnexo: EtapaInforme[] = ["decode", "espera", "probe", "ocr", "total"];
+  const marcadosLentos = new Set<string>();
+  for (const etapa of etapasAnexo) {
+    const conDato = filas
+      .filter((f) => valorEtapa(f, etapa) != null)
+      .sort((a, b) => (valorEtapa(b, etapa) ?? 0) - (valorEtapa(a, etapa) ?? 0));
+    for (const f of conDato.slice(0, 3)) marcadosLentos.add(f.id);
+  }
+  const ordenAnexo = [
+    ...filas
+      .filter((f) => f.statusActa === "ENVIADA")
+      .sort((a, b) => (b.tiempos?.totalMs ?? 0) - (a.tiempos?.totalMs ?? 0)),
+    ...filas
+      .filter((f) => f.statusActa === "DUPLICADA")
+      .sort((a, b) => (b.tiempos?.esperaMs ?? 0) - (a.tiempos?.esperaMs ?? 0)),
+    ...filas.filter((f) => f.statusActa !== "ENVIADA" && f.statusActa !== "DUPLICADA"),
+  ];
+  for (const f of ordenAnexo) {
+    const celda = (v: number | null) => (v != null ? `${v}` : "-");
+    linea(
+      `${f.id.slice(0, 8)} ${f.statusActa ?? f.estado} decode ${celda(valorEtapa(f, "decode"))} espera ${celda(valorEtapa(f, "espera"))} probe ${celda(valorEtapa(f, "probe"))} OCR ${celda(valorEtapa(f, "ocr"))} total ${celda(valorEtapa(f, "total"))} dedup ${f.dedup ?? "-"}${f.ahorroMs != null ? ` ahorro ${f.ahorroMs}` : ""}${marcadosLentos.has(f.id) ? " <<" : ""}`,
+    );
+  }
   if (recortado) {
     linea();
     linea(
@@ -973,6 +1193,12 @@ export async function generarInformeZip(
     ["ENVIADA", "OPTIMA", "ADVERTENCIA", "RECHAZADA", "EN_REVISION_HUMANA", "DUPLICADA"],
   );
   const tiemposMedios = mediosTiempos(filas);
+  // ANEXO Agente C (Tarea 2) — ahorro de duplicadas calculado sobre el LOTE
+  // completo y aplicado a las filas (ahorroMs por acta — JSON y txt).
+  const ahorros = ahorrosDedup(filas);
+  const filasConAhorro = filas.map((f) =>
+    ahorros.porActa[f.id] != null ? { ...f, ahorroMs: ahorros.porActa[f.id] } : f,
+  );
   const informe = {
     generado,
     fuente: "cola-masiva" as const,
@@ -995,6 +1221,10 @@ export async function generarInformeZip(
       // (jamás inventar). Base de comparación del criterio «IDB ~40 % menos»
       // del kit (antes/después con el MISMO lote).
       almacenamientoMB: await almacenamientoIdbMb(),
+      // Kit C/ANEXO (REPARTE-3-AGENTES-v1) — percentiles + throughput
+      // (ADITIVOS AL FINAL de totales: informes previos no cambian de forma).
+      tiemposPercentilesMs: percentilesTiempos(filas),
+      throughput: throughputEnviadas(filas),
     },
     rechazos: {
       porTipo: conteo(
@@ -1031,9 +1261,13 @@ export async function generarInformeZip(
         identidad: r.identidad, // e63k — capa 2 por identidad (aditivo al final)
         qr: r.qr, // e63m — capa 0 identidad-QR pre-OCR (aditivo al final)
         yaEnviada: r.yaEnviada, // e66 — capa e65 contra el histórico (aditivo al final)
+        // ANEXO Agente C (Tarea 2) — ahorro de las duplicadas (ADITIVO AL
+        // FINAL: null si ninguna copia aportó dato — jamás inventar).
+        ahorroTotalMs: ahorros.ahorroTotalMs,
+        ahorroEquivalenteActas: ahorros.ahorroEquivalenteActas,
       };
     })(),
-    actas: filas.map(actaLivianaJson),
+    actas: filasConAhorro.map(actaLivianaJson),
     ...(recortado
       ? { imagenesRecortadasA: TOPE_ACTAS_CON_IMAGEN, actasSinImagen: sinImagen }
       : {}),
@@ -1045,7 +1279,7 @@ export async function generarInformeZip(
       renderTxt(
         generado,
         entorno,
-        filas,
+        filasConAhorro,
         porEstadoFila,
         porStatusActa,
         tiemposMedios,

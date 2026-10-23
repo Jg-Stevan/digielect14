@@ -43,6 +43,7 @@ import { ErrorBoundaryObs, instalarCaptura } from "@/lib/e14/obs/captura";
 import { iniciarBreadcrumbs } from "@/lib/e14/obs/breadcrumbs";
 import { iniciarUso } from "@/lib/e14/obs/uso";
 import { iniciarMuestreoSalud } from "@/lib/e14/obs/dispositivo";
+import { iniciarDetectorHang } from "@/lib/e14/obs/hang"; // ANEXO Agente C (Pieza 2) — sensor de congelones
 import { iniciarTransporte } from "@/lib/e14/obs/transporte";
 import { refrescarFlags } from "@/lib/e14/flags";
 
@@ -68,6 +69,7 @@ export default function Page() {
       iniciarBreadcrumbs();
       iniciarUso();
       iniciarMuestreoSalud();
+      iniciarDetectorHang(); // ANEXO Agente C — longtask + drift (idempotente, silencioso)
       iniciarTransporte();
       void refrescarFlags();
     } catch {

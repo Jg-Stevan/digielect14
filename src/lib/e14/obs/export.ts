@@ -20,6 +20,7 @@
  * miniaturas OFF (default) → el ZIP no lleva muestras. Sin excepciones.
  */
 import { eventosPorDigest, leerEventos, purgarBuffer } from "./buffer";
+import { resumenHangsDe } from "./hang"; // ANEXO Agente C (Pieza 2)
 import { obtenerDispositivo } from "./dispositivo";
 import { appVersion, idDispositivo, idSesion } from "./identidad";
 import { leerPolitica } from "./politica";
@@ -123,6 +124,10 @@ export async function construirReporte(): Promise<ReporteSesion> {
   );
   const uso = agregarUso(await leerEventos((e) => e.tipo === "uso"));
   const perfResumen = perfDeDiags(await diagnosticosDeLaJornada(), saludMuestras);
+  // ANEXO Agente C (Pieza 2) — agregación de hangs de ESTA sesión (ADITIVO
+  // AL FINAL del reporte — informes previos no cambian de forma). Los
+  // eventos "hang" ya son de la sesión activa (appendEvento sella sesion).
+  const hangResumen = resumenHangsDe(await leerEventos((e) => e.tipo === "hang"));
   return {
     meta: {
       appVersion: appVersion(),
@@ -136,6 +141,7 @@ export async function construirReporte(): Promise<ReporteSesion> {
     perfResumen,
     saludMuestras,
     uso,
+    hangResumen,
   };
 }
 
