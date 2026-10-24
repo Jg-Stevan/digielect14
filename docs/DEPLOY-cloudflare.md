@@ -1,6 +1,6 @@
 # DEPLOY CLOUDFLARE PAGES — Receta de despliegue estático en la raíz
 
-**Qué es:** procedimiento para publicar la demo en **Cloudflare Pages** (`https://digielect14.pages.dev/`). Tercer espejo del proyecto: GH Pages (canónico, mono-hilo) · Vercel (subpath `/digielect14/`, multihilo) · Cloudflare Pages (raíz, multihilo). Referencias: `public/_headers`, `wrangler.toml`, `next.config.ts` (basePath «» explícito), `docs/DEPLOY-vercel.md` (receta hermana).
+**Qué es:** procedimiento para publicar la demo en **Cloudflare Pages** (`https://digielect14.pages.dev/`). Tercer espejo del proyecto: GH Pages (canónico, mono-hilo) · Vercel (subpath `/digielect14/`, multihilo) · Cloudflare Pages (raíz, multihilo). Referencias: `public/_headers`, `next.config.ts` (basePath «» explícito), `docs/DEPLOY-vercel.md` (receta hermana), `docs/DEPLOY-workers.md` (deploy Workers directo — NOTA: desde `chore/deploy-workers-directo-v1` este repo ya no lleva `wrangler.toml`; la config wrangler que vive en la raíz es la del **Worker**, no de Pages).
 
 ---
 
@@ -20,21 +20,25 @@
 
 | Dato | Valor |
 |---|---|
-| Proyecto Pages | `digielect14` (config en `wrangler.toml`: name + `pages_build_output_dir: out`) |
+| Proyecto Pages | `digielect14` (sin config wrangler desde deploy-workers-directo-v1: el nombre del proyecto pasa por flag) |
 | URL demo | https://digielect14.pages.dev/ |
 | Build command | `BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH= bunx next build` |
 | Output | `out` |
 
 ## §2 Receta CLI (recomendada)
 
-Desde la **RAÍZ del repo** (donde vive `wrangler.toml`):
+Desde la **RAÍZ del repo** (el nombre del proyecto va por flag — ya no hay `wrangler.toml` de Pages; el `wrangler.jsonc` de la raíz es del Worker, no lo toca este flujo):
 
 ```bash
 git switch main
 git pull origin main
 BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH= bunx next build   # → out/
-bunx wrangler pages deploy                               # lee wrangler.toml (name + out)
+bunx wrangler pages deploy out --project-name digielect14
 ```
+
+> Si por error wrangler intenta leer `wrangler.jsonc` (config de Workers) y protesta por
+> `main`/assets, es la señal de que faltó `--project-name`/`out`: `wrangler pages deploy`
+> con flag explícito de proyecto y directorio no necesita config de Pages.
 
 Primera vez en una máquina nueva (una sola vez, queda guardado):
 
@@ -58,7 +62,7 @@ bunx wrangler pages project create digielect14 --production-branch main
    - Variables: `NODE_VERSION=22`
 3. **Save and Deploy** → deploys automáticos en cada push a la rama de producción.
 
-**Nota:** la integración Git NO lee el build command de `wrangler.toml` (sirve para deploys CLI); los settings viven en el dashboard.
+**Nota:** la integración Git NO lee ningún build command del repo; los settings viven en el dashboard (el `wrangler.toml` que existía para deploys CLI fue retirado — ver §2).
 
 ## §4 Verificación post-deploy
 
