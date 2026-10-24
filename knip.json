@@ -5,7 +5,8 @@
     "scripts/qa-*.ts",
     "scripts/gen-divipol.mjs",
     "tools/**/*.{js,ts}",
-    "src/**/*.test.ts"
+    "src/**/*.test.ts",
+    "open-next.config.ts"
   ],
   "ignore": [
     "public/sw.js",

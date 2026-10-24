@@ -69,3 +69,11 @@ tools/bench-rec-int8/*.onnx
 # Evidencia forense conservada a propósito en el repo (regresión D65 / zip 4f9c871):
 # los .log bajo docs/evidence/ son registro de verificación, no basura de dev.
 !docs/evidence/**/*.log
+
+# OpenNext
+.open-next
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
