@@ -65,7 +65,12 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   // "src/lib/e14/masiva/vendor/jsQR.js": EL MISMO archivo vendido a producción
   // por e63m (kit e63m-capa0-qr-identidad-v1 §1.1 — copia BYTE-IDÉNTICA de la
   // de #72; d.ts aparte con los tipos): mismo criterio vendor.
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "lab/**/*.bundle.js", "tools/bench-qr-identidad/jsQR.js", "src/lib/e14/masiva/vendor/jsQR.js"]
+  // ".open-next/**" + ".wrangler/**": ARTEFACTOS del deploy Workers (Opción A
+  // — opennextjs-cloudflare build / wrangler state): bundles minificados del
+  // worker, no código fuente. SIN este ignore `eslint .` los parsea y muere
+  // por RAM (SIGABRT — hallazgo wave3: el gate de ayer corrió ANTES del
+  // primer deploy; hoy .open-next existe y el lint OOM-ea).
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", ".open-next/**", ".wrangler/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "lab/**/*.bundle.js", "tools/bench-qr-identidad/jsQR.js", "src/lib/e14/masiva/vendor/jsQR.js"]
 }];
 
 export default eslintConfig;

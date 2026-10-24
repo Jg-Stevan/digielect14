@@ -412,9 +412,16 @@ ok(
   "RL-e65b-4: cero dependencias nuevas — IndexedDB vanilla (package.json/bun.lock INTACTOS)",
 );
 
+// WAVE3 C.2 (obs-informe-wave3-v1) — ACTUALIZACIÓN DEL F-CHECK CON NOTA:
+// la unión dedup de tipos.ts se EXTIENDE con las puertas del veto AL FINAL
+// (contrato D57): "ya-enviada-postocr" (H1) y "ya-enviada-copia" (traza
+// visual sobre YA-ENVIADA — gap real lote 10). Los valores previos quedan
+// byte a byte en el MISMO orden; nada se elimina ni reordena.
 ok(
-  tipos.includes('dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr"\n    | "ya-enviada";'),
-  "D57-e65: la unión dedup de tipos.ts queda INTACTA (e65b NO agrega estados — la YA-ENVIADA ya existía)",
+  tipos.includes(
+    'dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr"\n    | "ya-enviada" // e65-dedup-enviadas-v1 — match contra registro ENVIADO del histórico/cola (bytes/dhash cinta cierta) — valor NUEVO AL FINAL (contrato D57)\n    // WAVE3 C.2 (obs-informe-wave3-v1) — puertas del veto AL FINAL (D57):\n    // distinguen POR DÓNDE llegó el veto ya-enviada (gap real lote 10:\n    // filas YA-ENVIADA con dedup:"sin-match" — la puerta quedaba invisible).\n    | "ya-enviada-postocr" // H1 post-OCR (punto único de envío — el OCR ya se pagó)\n    | "ya-enviada-copia"; // la traza visual de cadenaDedup aterrizó sobre un registro YA-ENVIADA (evidencia del veto preservada)',
+  ),
+  "D57-e65+wave3: la unión dedup de tipos.ts conserva TODOS sus valores en orden (e65b intacto) + puertas del veto AL FINAL (postocr/copia — wave3 C.2)",
 );
 
 ok(
