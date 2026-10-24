@@ -179,9 +179,13 @@ ok(
   "T-2c/F1: registrarEnviadaHistorico — ÚNICO punto de crecimiento; fallo IDB tragado + cache EN MEMORIA actualizado al instante",
 );
 
+// WAVE3 §A.3 (feat/ledger-remoto-envios-v1) — ACTUALIZACIÓN DEL F-CHECK CON
+// NOTA: la unión ViaYaEnviada se EXTIENDE con "payload-remoto" AL FINAL
+// (contrato D57 — kit §A.3 literal: el veto REMOTO del ledger D1 viaja por
+// esta puerta). Los valores previos quedan byte a byte en el MISMO orden.
 ok(
-  store.includes('export type ViaYaEnviada = "bytes" | "dhash" | "payload";'),
-  "RL-e65b-7/D57: ViaYaEnviada — \"payload\" es valor NUEVO AL FINAL de la unión",
+  store.includes('export type ViaYaEnviada = "bytes" | "dhash" | "payload" | "payload-remoto";'),
+  "RL-e65b-7/D57 + wave3 §A.3: ViaYaEnviada — \"payload\" y \"payload-remoto\" son valores NUEVOS AL FINAL de la unión (ledger D1)",
 );
 
 ok(
