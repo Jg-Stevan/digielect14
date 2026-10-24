@@ -1,0 +1,6 @@
+# Cloudflare Pages — config del proyecto para deploy directo con wrangler.
+# `wrangler pages deploy` desde la raíz del repo lee name + pages_build_output_dir.
+# NOTA: la integración Git del dashboard NO lee el build command de aquí —
+# ese se fija en el dashboard (ver docs/DEPLOY-cloudflare.md §3).
+name = "digielect14"
+pages_build_output_dir = "out"
