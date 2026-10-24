@@ -1,5 +1,10 @@
 # DEPLOY VERCEL — Receta post-merge (ítem del checklist: «redeploy manual + Ctrl+Shift+R»)
 
+> ⚠️ **DEPRECADO — 2026-10-23 (D73):** el espejo Vercel fue RETIRADO. Cloudflare Pages
+> asume su rol (demo multihilo COOP/COEP en la raíz): **`docs/DEPLOY-cloudflare.md`**.
+> Este documento queda SOLO como historia (D46, vercel-perf-v1, prowarm-ocr-v1) —
+> NO ejecutar los §2/§3.
+
 **Qué es:** procedimiento operativo para actualizar la demo de producción en Vercel tras cada merge a `main`. Lo ejecuta el dueño (§2 o §3) o el agente con token one-off provisto (como el deploy post-merge de PR #28, ver worklog). Referencias: D46 (demo Vercel con COOP/COEP), `vercel.json`, `docs/REPORTE-e14-vercel-perf-v1.md`.
 
 ---

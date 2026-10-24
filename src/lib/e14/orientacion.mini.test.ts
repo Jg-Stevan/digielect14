@@ -354,4 +354,92 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
     expect(r!.orientacionProbeEscala).toBe(320);
     expect(fuentesDet).toEqual([MINI_URL]); // la original ni siquiera se det-ea
   });
+
+  // ── WAVE2 A1 (REPARTE-WAVE2-tiempos-v1) — sub-decisión de la miniatura ──
+
+  it("WAVE2 A1: fallo seguro con mini descartada → orientacionProbeMini expone la sub-decisión de la MINI (la decisión sigue siendo de la original)", async () => {
+    detPorFuente = [
+      { nCrops: 8, w: 240, h: 320 }, // mini: ganadora 180 con 1 ancla → NO confiable
+      { nCrops: 8, w: 3000, h: 4000 }, // original: decide de siempre
+    ];
+    const unaAncla: Linea[] = [{ texto: "MESA 33", conf: 0.95 }];
+    recPorRotacion = [
+      TEXTO_DEBIL, // mini rot 0
+      unaAncla, // mini rot 180 — score ≥ MARGEN pero anclas=1 → descartada
+      TEXTO_DEBIL, // original rot 0
+      TEXTO_180, // original rot 180 → la decisión de HOY
+    ];
+    const r = await probeOrientacion(FOTO);
+    expect(r).not.toBeNull();
+    // La decisión de HOY NO cambia ni un byte:
+    expect(r!.rot).toBe(180);
+    expect(r!.aplicado).toBe(true);
+    expect(r!.orientacionProbeEscala).toBe(4000);
+    // La sub-decisión descartada queda expuesta (valores de la MINI):
+    expect(r!.orientacionProbeMini).toEqual({
+      rot: 180, // la ganadora de la mini
+      aplicado: true, // la mini HABRÍA rotado
+      corte: "completo",
+      conf: 0.95, // conf[180] de la mini
+      anclas: 1, // 1 ancla sola — exactamente lo que el fallo seguro rechaza
+    });
+  });
+
+  it("WAVE2 A1: miniatura sin correr (det lanza) → SIN orientacionProbeMini (jamás inventar)", async () => {
+    detPorFuente = [{ nCrops: 8, w: 3000, h: 4000 }];
+    recPorRotacion = [
+      TEXTO_DEBIL, // original rot 0
+      TEXTO_180, // original rot 180
+    ];
+    detPorFuente.unshift(null as unknown as { nCrops: number; w: number; h: number });
+    const r = await probeOrientacion(FOTO);
+    expect(r).not.toBeNull();
+    expect(r!.rot).toBe(180);
+    expect(r!.orientacionProbeEscala).toBe(4000);
+    expect(r!.orientacionProbeMini).toBeUndefined();
+  });
+
+  it("WAVE2 A1: camino confiado (escala=320) → SIN orientacionProbeMini (la mini YA es la decisión)", async () => {
+    detPorFuente = [{ nCrops: 8, w: 240, h: 320 }];
+    recPorRotacion = [TEXTO_SANA]; // rot 0 → corte «sana»
+    const r = await probeOrientacion(FOTO);
+    expect(r!.orientacionProbeEscala).toBe(320);
+    expect(r!.orientacionProbeMini).toBeUndefined();
+  });
+
+  it("WAVE2 A1: foto ya pequeña (≤320, un solo sondeo) → SIN orientacionProbeMini", async () => {
+    detPorFuente = [{ nCrops: 8, w: 300, h: 320 }];
+    recPorRotacion = [
+      TEXTO_DEBIL, // rot 0
+      TEXTO_180, // rot 180
+    ];
+    const { loadImageMemo } = await import("./image-utils");
+    (loadImageMemo as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async () => ({ naturalWidth: 300, naturalHeight: 320 }),
+    );
+    const r = await probeOrientacion(FOTO);
+    expect(r!.orientacionProbeEscala).toBe(320);
+    expect(r!.orientacionProbeMini).toBeUndefined();
+  });
+
+  it("WAVE2 A1: mini corrió pero det SIN cajas → campo presente con el sondeo vacío de la mini (honesto: corrió y no puntúa)", async () => {
+    detPorFuente = [
+      { nCrops: 0, w: 240, h: 320 }, // mini: det sin cajas (sondeo vacío)
+      { nCrops: 8, w: 3000, h: 4000 }, // original: decide de siempre
+    ];
+    recPorRotacion = [
+      TEXTO_DEBIL, // original rot 0
+      TEXTO_180, // original rot 180
+    ];
+    const r = await probeOrientacion(FOTO);
+    expect(r!.rot).toBe(180);
+    expect(r!.orientacionProbeEscala).toBe(4000);
+    expect(r!.orientacionProbeMini).toEqual({
+      rot: 0,
+      aplicado: false,
+      corte: "completo", // el sondeo vacío sale con corte «completo» + conf/anclas en 0
+      conf: 0,
+      anclas: 0,
+    });
+  });
 });
