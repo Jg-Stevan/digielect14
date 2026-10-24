@@ -30,6 +30,10 @@ import {
 } from "./historico";
 // SPLIT C1 (refactor/runner-logger-v1): hacerThumb vive en runner-thumbs.ts
 import { logger } from "../../logger";
+// WAVE3 §A.3 — ORDEN-WAVE3-remoto-rescate-obs-v1: cliente del ledger remoto
+// (el registro nace TAMBIÉN al drenar las filas «EN COLA» — único hook de
+// store.ts declarado por el kit §A.3/F).
+import { origenActual, registrarEnvioRemoto, sha256HexDeTexto } from "./ledger-remoto";
 // KIT e14-observabilidad-v1 (A1-C7): kill switch de thumbs (flags del dueño).
 import { leerFlags } from "../flags";
 // (responsabilidad de render — movimiento puro del runner).
@@ -373,8 +377,9 @@ export async function enviadaPorPayload(payload: string): Promise<EntradaHistori
  *  (aditivo) · al final del éxito ALIMENTA EL LEDGER (registrarEnviada-
  *  Historico — cierra el gap de marcas contra filas enviadas pre-kit). */
 // knip C3: export CONSERVADO — ancla QA (qa-historico-enviadas.ts grepea
-// esta línea byte-idéntica: «payload» es valor NUEVO AL FINAL, D57).
-export type ViaYaEnviada = "bytes" | "dhash" | "payload"; // valor NUEVO AL FINAL (contrato D57)
+// esta línea: «payload» fue valor NUEVO AL FINAL, D57; wave3 §A.3 añade
+// "payload-remoto" AL FINAL — F-check actualizado con nota en el PR).
+export type ViaYaEnviada = "bytes" | "dhash" | "payload" | "payload-remoto"; // valores NUEVOS AL FINAL (contrato D57)
 
 export async function marcarYaEnviada(
   id: string,
@@ -776,6 +781,24 @@ export async function refrescarEnviosTrasDrenaje(): Promise<void> {
         acta: { ...registro.acta, hashSha256: hashDrenaje() },
       });
       patchFila(fila.id, { envioEnCola: false });
+      // WAVE3 §A.3 — el registro remoto nace TAMBIÉN al drenar (kit §A.3:
+      // «el registro remoto nace en refrescarEnviosTrasDrenaje() cuando la
+      // fila drena — un void …catch()»): la fila ENVIADA offline viaja al
+      // ledger D1 al reconectar — fire-and-forget, jamás bloquea el drenaje
+      // (RL-e65b-3). SOLO el SHA-256 del payload (privacidad dura).
+      if (registro.qrPayload) {
+        const payloadDrenado = registro.qrPayload;
+        void (async () => {
+          const payloadHash = await sha256HexDeTexto(payloadDrenado);
+          if (!payloadHash) return; // sin crypto — sin registro (conservador)
+          await registrarEnvioRemoto({
+            payloadHash,
+            serie: registro.serie ?? undefined,
+            filaId: fila.id,
+            origenUrl: origenActual() ?? undefined,
+          });
+        })().catch(() => {});
+      }
     } catch {
       /* IDB caído → la fila queda «EN COLA» (honesto; reintento al recargar) */
     }

@@ -66,3 +66,38 @@ Primera vez: `bunx opennextjs-cloudflare` necesita `open-next.config.ts` + `wran
 - `wrangler.jsonc`: NO renombrar `name`/`service` (rompe el deploy y el self-reference).
 - `PROBE_MINI_ANCLAS_MIN = 2` / `PROBE_MINI_CONF_MIN = 0.6`: intactos (igual que en el gate).
 - Dos fuentes de verdad NO: este repo es la única fuente del Worker. El mirror `digielect14e` queda congelado/obsoleto a partir de aquí.
+
+## §5 — Binding D1 del ledger remoto (wave3 §A.1 — feat/ledger-remoto-envios-v1)
+
+El Worker lleva el binding `DB_ENVIOS_E14` → D1 `e14-envios-remoto`
+(database_id `c5a7be23-bdd3-403b-a550-bcc0316d4a77`, committeado en
+`wrangler.jsonc`). La tabla vive en `infra/d1/schema.sql` (aplicada en
+remoto; re-aplicar con:
+
+```bash
+export CLOUDFLARE_ACCOUNT_ID=<account>
+export CLOUDFLARE_API_TOKEN=<token con Workers Scripts Write + D1:Edit>
+bunx wrangler d1 execute e14-envios-remoto --remote --file=infra/d1/schema.sql
+```
+
+### NOTA pages.dev
+Añadir el binding `DB_ENVIOS_E14` en dash → Pages → digielect14 →
+Settings → Functions → D1 bindings (si falta, la API responde 500 y el
+cliente sigue como hoy — degradación honesta). La route vive en
+`src/app/api/e14/envios/route.ts` (implementación en `handler.ts`): el
+export estático BUILD_STATIC=1 — GH Pages / out/ — la OMITE sin error
+(Next 16 marca POST/DELETE como ƒ Dynamic y no la exporta — el out/ no
+trae /api) y el build de servidor la incluye (app-paths-manifest). Sin
+segment config (`dynamic`) en la route: force-dynamic ROMPE el export y
+un valor condicional no es parseable — hallazgo empírico del PR.
+
+### Reglas duras del ledger (kit §1/§F)
+- Al servidor JAMÁS viaja el payload QR completo — solo su SHA-256 + serie
+  + filaId + origen.
+- `forzarDedupOff` salta TAMBIÉN el remoto (RL-e65b-6).
+- `DELETE ?confirmacion=e14-reset-pruebas` SOLO manual (PanelDev, doble
+  confirmación) — ni vaciar local ni MODO PRUEBAS borran el remoto.
+- Todo fallo de red/D1 → la fila sigue su curso como hoy (el remoto es una
+  red EXTRA, jamás una dependencia).
+- El registro remoto nace SOLO tras el envío local exitoso (jamás antes);
+  offline → nace al drenar (`refrescarEnviosTrasDrenaje`).
