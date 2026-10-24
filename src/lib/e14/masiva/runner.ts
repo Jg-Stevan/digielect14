@@ -318,8 +318,11 @@ async function reutilizarResultadoCritica(fila: FilaMasiva, t0: number): Promise
  *  D66 — KIT e14-decode-unico-precalor-v1: el pipeline recibe el MASTER
  *  (T1: un solo decodificado a escala de trabajo) — precalentado (T3.3:
  *  decode = 0 s) o recién horneado con `maestroDeImagen`; sin master →
- *  fallback HONESTO a la ruta de siempre (identidad AC-P3 intacta). */
-async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
+ *  fallback HONESTO a la ruta de siempre (identidad AC-P3 intacta).
+ *  WAVE2 B1: `export` SOLO-TEST (runner-rechequeo.test.ts) — el kit exige
+ *  test conductual del re-chequeo post-reserva; knip tiene los *.test.ts
+ *  como entry (cero export muerto). Comportamiento byte-idéntico. */
+export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
   // % global: cada acta NACE en 0 — su propio 0→100 del proceso COMPLETO
   // (reset aquí cubre TAMBIÉN el fallback de la rama DUPLICADA de abajo).
   // e71 (Opt-3): estado POR-FILA — con 2 actas en vuelo, cada una lleva su
@@ -334,6 +337,24 @@ async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
   // original (<1 s). Si la original no sirve, la fila cae al pipeline
   // completo AQUÍ MISMO (fallback honesto — el dueño nunca pierde la foto).
   let fila = filaEntrante;
+  // WAVE2 B1 — re-chequeo post-reserva: la referencia del snapshot puede estar
+  // vieja — cadenaDedup (ingesta background FIFO) pudo marcar DUPLICADA la fila
+  // entre siguientePendiente() y aquí. El duplicado JAMÁS paga probe+OCR
+  // (kit e71 literal; e72: totalMs de la copia ≈ 0). Re-lectura del estado REAL
+  // del store — si ya está marcada, entra por la rama de reuso de abajo.
+  const filaFresca = useMasivaStore
+    .getState()
+    .filas.find((f) => f.id === filaEntrante.id);
+  if (
+    filaFresca &&
+    filaFresca.estado === "DUPLICADA" &&
+    fila.estado !== "DUPLICADA"
+  ) {
+    logger.info(
+      `[e14] dedup fila=${fila.id} re-chequeo post-reserva → reuso (carrera cerrada)`,
+    );
+    fila = { ...fila, estado: "DUPLICADA", dupOf: filaFresca.dupOf ?? null };
+  }
   if (fila.estado === "DUPLICADA") {
     marcarFila(fila.id, { estado: "PROCESANDO", error: null });
     const t0 = Date.now();
