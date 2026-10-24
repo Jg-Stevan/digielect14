@@ -26,6 +26,16 @@
  */
 import { listarMapeados, leerRegistro } from "./masiva/cola";
 import type { EstadoEntrada, RegistroMasiva } from "./masiva/tipos";
+// WAVE2 C3 — ANEXO2 (tier): SOLO lectura del tier (D6: la app detecta y
+// reporta — jamás cambia reglas). obtenerDispositivo NO muta estado (las
+// firmas que mutan — muestreo/buffer — no se importan ni se llaman).
+import { obtenerDispositivo } from "./obs/dispositivo";
+import type { Tier } from "./obs/tipos";
+// WAVE2 C2 — forma del diagnóstico que el kit A1 expone (orientacion.ts
+// L119 del kit REPARTE-WAVE2): hoy AÚN no está en DiagnosticoActa
+// (branches paralelas) — la intersección tipa el passthrough SIN as any;
+// cuando A1 aterrice los campos son idénticos y el cast queda en no-op.
+import type { DiagnosticoActa } from "./types";
 
 // ---------- Tope de tamaño (T1.6) ----------
 /** Tope de imágenes: si el estimado supera esto, solo las 50 actas-problema
@@ -50,6 +60,13 @@ interface EntornoInforme {
   memoriaGB: number | null;
   crossOriginIsolated: boolean;
   url: string;
+  // ---------- WAVE2 C3 — ANEXO2 (tier) — ADITIVOS AL FINAL (opcionales) ----------
+  /** (C3) Tier del dispositivo (reglas §4.4 de obs/dispositivo.ts — D6:
+   *  SOLO detectar y reportar). AUSENTE cuando el navegador no da datos
+   *  (SSR, vitest, lectura fallida) — jamás inventar. */
+  tier?: Tier;
+  /** (C3) true = tier INFERIDO (sin deviceMemory — iOS: núcleos + heapLimit). */
+  tierInferido?: boolean;
 }
 
 /** Fila liviana de la cola — base del informe.json (T1.2) y del filtro de
@@ -187,7 +204,39 @@ export interface FilaInforme {
    *  duplicadas con dato — fórmula de ahorrosDedup; null = sin referencia,
    *  jamás inventar). */
   ahorroMs: number | null;
+  // ---------- WAVE2 (REPARTE-WAVE2-tiempos-v1) — C2: diagnóstico del probe — ADITIVOS AL FINAL ----------
+  /** (C2) Sub-decisión de la miniatura del probe (A1), TAL CUAL viene del
+   *  diagnóstico si existe. AUSENTE si la mini no corrió o el camino fue
+   *  confiado (la mini YA fue la decisión — jamás inventar). SOLO
+   *  diagnóstico de campo para la calibración wave 3 — nada de esto
+   *  alimenta decisiones (D6). */
+  orientacionProbeMini?: {
+    rot: 0 | 90 | 180 | 270;
+    aplicado: boolean;
+    corte: "sana" | "presupuesto" | "completo" | "confirmada";
+    conf: number | null;
+    anclas: number | null;
+  };
+  /** (C2) Escala (lado mayor en px) a la que corrió el probe. Hoy NO llega
+   *  al registro — cuando A1 la conecte el informe la publica sin otro
+   *  cambio aquí. */
+  orientacionProbeEscala?: number;
 }
+
+/** WAVE2 C2 — campos del diagnóstico que el kit A1 añadirá a
+ *  DiagnosticoActa (hoy en branches paralelas). Intersección tipada (SIN
+ *  as any): el passthrough compila HOY y queda en no-op cuando A1
+ *  aterrice (campos idénticos). */
+type ProbeExtrasDiag = {
+  orientacionProbeMini?: {
+    rot: 0 | 90 | 180 | 270;
+    aplicado: boolean;
+    corte: "sana" | "presupuesto" | "completo" | "confirmada";
+    conf: number | null;
+    anclas: number | null;
+  };
+  orientacionProbeEscala?: number;
+};
 
 /** Resumen para la UI (T2) — espejo de lo importante del informe.json. */
 interface ResumenInforme {
@@ -266,6 +315,9 @@ function extensionDe(reg: RegistroMasiva): string {
 export function filaLiviana(reg: RegistroMasiva): FilaInforme {
   const acta = reg.acta;
   const diag = acta?.diagnostico;
+  // WAVE2 C2 — lectura del diagnóstico EXTENDIDO (A1): la intersección solo
+  // TIPEA los campos nuevos — jamás los fabrica (ausentes → undefined).
+  const diagProbe = diag as (DiagnosticoActa & ProbeExtrasDiag) | undefined;
   const conCarpeta =
     reg.estado === "ERROR"
       ? !!reg.archivo // ERROR de pipeline: conserva el Blob (T1.3)
@@ -358,6 +410,11 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
     // necesita el LOTE completo y vive en ahorrosDedup/generarInformeZip).
     dupOf: reg.dupOf ?? null,
     ahorroMs: null,
+    // WAVE2 C2 — diagnóstico del probe (A1): passthrough tal cual (campos
+    // AUSENTES si el diagnóstico no los trae — jamás inventar). SOLO
+    // diagnóstico de campo para la calibración wave 3 (D6).
+    orientacionProbeMini: diagProbe?.orientacionProbeMini,
+    orientacionProbeEscala: diagProbe?.orientacionProbeEscala,
   };
 }
 
@@ -524,6 +581,12 @@ export type EtapaInforme = "decode" | "espera" | "probe" | "ocr" | "total";
 /** Valor REALES (ms) de una etapa para UNA fila — null si la fila no trae el
  *  dato (jamás inventar). PURA. */
 export function valorEtapa(f: FilaInforme, etapa: EtapaInforme): number | null {
+  // WAVE2 C1 — reuso (dupOf != null): la copia NO pagó pipeline propio —
+  // sus decode/probe/OCR HEREDADOS del original (spread de
+  // reutilizarResultadoCritica, e72) NO son SU consumo (criterio literal
+  // del dueño en e72: el duplicado muestra SU consumo). espera y total SÍ
+  // son propios de la copia (e66 P3.4 / e72) → siguen igual.
+  if (f.dupOf != null && etapa !== "espera" && etapa !== "total") return null;
   switch (etapa) {
     case "decode": {
       const v = f.precalentada ? f.precalorMs : f.decodeMs;
@@ -565,6 +628,12 @@ export function percentilesTiempos(
   const res = {} as Record<EtapaInforme, { p50: number | null; p95: number | null }>;
   for (const etapa of etapas) {
     const valores = filas
+      // WAVE2 C1 — etapa total: las copias (dupOf) quedan FUERA aunque
+      // traigan su total real ≈0 (verdad que NO describe el costo del
+      // pipeline — el p50 total describe solo actas que SÍ procesaron).
+      // decode/probe/OCR se auto-excluyen vía valorEtapa → null; espera
+      // queda sobre TODAS las filas con dato (su espera es real).
+      .filter((f) => etapa !== "total" || f.dupOf == null)
       .map((f) => valorEtapa(f, etapa))
       .filter((v): v is number => v != null);
     res[etapa] = {
@@ -687,6 +756,24 @@ function entornoInforme(): EntornoInforme {
   };
 }
 
+/** WAVE2 C3 — ANEXO2: tier del entorno para el informe. Reusa
+ *  obtenerDispositivo() de obs/dispositivo.ts (SOLO lectura — no muta
+ *  nada; D6). null honesto cuando el navegador no da datos (SSR/vitest)
+ *  o cualquier lectura falla — jamás inventar (mismo patrón silencioso
+ *  de almacenamientoIdbMb). */
+async function tierDelEntorno(): Promise<{
+  tier: Tier;
+  tierInferido: boolean;
+} | null> {
+  try {
+    if (typeof navigator === "undefined") return null;
+    const snap = await obtenerDispositivo();
+    return { tier: snap.tier, tierInferido: snap.tierInferido };
+  } catch {
+    return null;
+  }
+}
+
 /** Nombre de archivo/carpeta seguro (T1.8): minúsculas, sin espacios ni
  *  caracteres raros, máx 40. Vacío → «acta» (nunca un tramo vacío). */
 function sanitizarNombre(nombre: string): string {
@@ -787,6 +874,19 @@ export function actaLivianaJson(fila: FilaInforme) {
     // si no aplican — originales no traen ahorro; informes previos intactos).
     ...(fila.dupOf != null ? { dupOf: fila.dupOf } : {}),
     ...(fila.ahorroMs != null ? { ahorroMs: fila.ahorroMs } : {}),
+    // WAVE2 C1 — reuso (dupOf): la herencia e72 se DECLARA sin borrar
+    // campos previos (D57 append-only — informes viejos siguen leyéndose).
+    // Solo las copias la traen (la original SÍ pagó su pipeline).
+    ...(fila.dupOf != null ? { tiemposHeredados: true } : {}),
+    // WAVE2 C2 — diagnóstico del probe (A1): campos AUSENTES si la fila no
+    // los trae (misma receta del spread condicional — informes previos
+    // intactos). SOLO diagnóstico de campo (D6: no alimenta decisiones).
+    ...(fila.orientacionProbeMini != null
+      ? { orientacionProbeMini: fila.orientacionProbeMini }
+      : {}),
+    ...(fila.orientacionProbeEscala != null
+      ? { orientacionProbeEscala: fila.orientacionProbeEscala }
+      : {}),
   };
 }
 
@@ -813,6 +913,14 @@ export function renderTxt(
   linea("ENTORNO");
   linea(`- Navegador: ${entorno.userAgent}`);
   linea(`- Idioma: ${entorno.idioma} - Nucleos: ${entorno.nucleos ?? "?"} - Memoria(GB): ${entorno.memoriaGB ?? "?"}`);
+  // WAVE2 C3 — ANEXO2 (tier del entorno): línea NUEVA tras Núcleos/Memoria
+  // (append-only — parsers por prefijo intactos). SOLO cuando el tier fue
+  // detectado — sin dato el txt queda byte-idéntico (jamás inventar).
+  // "(inferido)" = sin deviceMemory (iOS — reglas §4.4 de
+  // obs/dispositivo.ts; D6: detectar y reportar, jamás cambia reglas).
+  if (entorno.tier != null) {
+    linea(`- Tier: ${entorno.tier}${entorno.tierInferido ? " (inferido)" : ""}`);
+  }
   linea(`- crossOriginIsolated: ${entorno.crossOriginIsolated}`);
   linea(`- URL: ${entorno.url}`);
   linea();
@@ -830,6 +938,14 @@ export function renderTxt(
   );
   linea(
     `- Tiempos medios (solo actas con diagnostico): total ${tiemposMedios.totalMs ?? "-"}ms - proceso ${tiemposMedios.procesoMs ?? "-"}ms - calidad ${tiemposMedios.calidadMs ?? "-"}ms - OCR ${tiemposMedios.ocrMs ?? "-"}ms`,
+  );
+  // WAVE2 C1 — línea NUEVA tras la de medias (ADITIVA — la de medias queda
+  // INTACTA byte a byte: las medias siguen sobre TODAS las filas con dato,
+  // incluida la herencia e72; los percentiles son los que excluyen el
+  // reuso). n = copias con dupOf (reuso e65/e71/e72): su decode/probe/OCR
+  // es HEREDADO (no propio) y su total real ≈0 no describe pipeline.
+  linea(
+    `- Reuso excluido de percentiles decode/probe/OCR/total: ${filas.filter((f) => f.dupOf != null).length} reuso (sus medias/p50 propios son ≈0 por diseño e72 — el p50 total describe solo actas que procesaron)`,
   );
   // D57 — KIT e14-instrumentos-espera-v1 (T3): línea NUEVA tras los tiempos
   // medios (append-only — los parsers del dueño van por prefijo). p50 SOLO
@@ -1181,7 +1297,12 @@ export async function generarInformeZip(
 
   // T1.2 — informe.json (global, SIN imágenes — prohibido §6).
   const generado = new Date().toISOString();
-  const entorno = entornoInforme();
+  // WAVE2 C3 — ANEXO2: entorno + tier (campos AUSENTES si no hubo dato —
+  // informes previos no cambian de forma, D57 append-only).
+  const entorno: EntornoInforme = {
+    ...entornoInforme(),
+    ...(await tierDelEntorno()),
+  };
   const porEstadoFila = conteo(
     filas.map((f) => f.estado),
     ["PENDIENTE", "PROCESANDO", "LISTA", "ERROR"],
