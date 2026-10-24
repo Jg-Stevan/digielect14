@@ -225,8 +225,8 @@ ok(
 console.log("\n── Bloque 3 · T-3 hooks de envío — el ledger SOLO crece con ENVIADOS ──");
 
 ok(
-  runner.includes("void registrarEnviadaHistorico({\n        id: fila.id,\n        ts: Date.now(),\n        hashBytes: registro.hashBytes,\n        hashDedup: registro.hashDedup,\n        payloadQr: qrPayload ?? undefined,\n        serie: identidad?.serie ?? registro.serie ?? undefined,\n      }).catch(() => {});"),
-  "T-3a/F1: envío PROPIO del runner alimenta el ledger — payload/serie VIVOS de la corrida, fire-and-forget (RL-e65b-2/3)",
+  runner.includes("void registrarEnviadaHistorico({\n        id: fila.id,\n        ts: Date.now(),\n        hashBytes: filaViva?.hashBytes ?? registro.hashBytes,\n        hashDedup: filaViva?.hashDedup ?? registro.hashDedup,\n        payloadQr: qrPayload ?? undefined,\n        serie: identidad?.serie ?? registro.serie ?? undefined,\n      }).catch(() => {});"),
+  "T-3a/F1: envío PROPIO del runner alimenta el ledger — llaves hashDedup/hashBytes FRESCAS de la fila viva (HOTFIX H2 — recalibración aditiva del ancla: cadenaDedup persiste después de que el pipeline leyó el registro), payload/serie VIVOS de la corrida, fire-and-forget (RL-e65b-2/3)",
 );
 
 ok(
