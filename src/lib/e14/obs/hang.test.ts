@@ -129,10 +129,13 @@ describe("resumenHangsDe (agregación por sesión — PURA)", () => {
       { tipo: "hang", datos: { fuente: "longtask", duracionMs: 900, umbralMs: 50, breadcrumbs: [] } },
       { tipo: "salud", datos: {} },
     ] as Parameters<typeof resumenHangsDe>[0];
-    expect(resumenHangsDe(eventos)).toEqual({ cuenta: 2, mayorMs: 3200, totalMs: 4100 });
+    // WAVE3 §G.4: +cuentaOcultas (aditivo AL FINAL — legacy sin campo
+    // `visible` tratado visible: 0 ocultos aquí).
+    expect(resumenHangsDe(eventos)).toEqual({ cuenta: 2, mayorMs: 3200, totalMs: 4100, cuentaOcultas: 0 });
   });
   it("sin hangs → {cuenta:0, mayorMs:null, totalMs:null} (jamás inventar)", () => {
-    expect(resumenHangsDe([])).toEqual({ cuenta: 0, mayorMs: null, totalMs: null });
+    // WAVE3 §G.4: cuentaOcultas: 0 (aditivo AL FINAL).
+    expect(resumenHangsDe([])).toEqual({ cuenta: 0, mayorMs: null, totalMs: null, cuentaOcultas: 0 });
   });
 });
 
