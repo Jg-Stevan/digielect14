@@ -148,6 +148,12 @@ export interface DiagnosticoActa {
     /** D61 — KIT e14-tiempos-ocultos-v1 (T1): MASIVA — envío (SHA-256 + POST
      *  / reintentos offline). */
     envioMs?: number;
+    /** WAVE3 G.5 — ORDEN-WAVE3-add-envio-individual-v1: latencia del CHECK
+     *  remoto (ledger D1 — §A.3 hook del runner). null/ausente = sin check
+     *  (offline, forzarDedupOff, hash ausente o ledger indisponible) —
+     *  jamás inventar. La maquinaria §G.3 lo agrega a percentiles gratis
+     *  después (mismo patrón D61). */
+    remotoMs?: number | null;
   };
   /** D57 — KIT e14-instrumentos-espera-v1 (T2): coste del probe de
    *  orientación (`probe.ms` de `probeOrientacion()`) persistido en la ficha

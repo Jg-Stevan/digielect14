@@ -234,6 +234,22 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
   const [motivo, setMotivo] = useState<string | null>(null);
   const [vaciarTrasExportar, setVaciarTrasExportar] = useState(true);
   const bufferVacio = eventosBuffer === 0;
+  // WAVE3 §A.4 — válvula de pruebas del dueño (ledger remoto D1): doble
+  // confirmación en UI (patrón «reiniciar jornada» — armado 4 s). NUNCA
+  // automática: ni vaciar local ni MODO PRUEBAS borran el remoto.
+  const [armadoLedger, setArmadoLedger] = useState(false);
+  const [resultadoLedger, setResultadoLedger] = useState<string | null>(null);
+
+  const vaciarLedger = async () => {
+    setResultadoLedger(null);
+    try {
+      const { vaciarLedgerRemoto } = await import("@/lib/e14/masiva/ledger-remoto");
+      const r = await vaciarLedgerRemoto();
+      setResultadoLedger(r.ok ? "LEDGER REMOTO VACIADO ✓" : `NO SE PUDO: ${r.error ?? "?"}`);
+    } catch {
+      setResultadoLedger("NO SE PUDO VACIAR EL LEDGER REMOTO");
+    }
+  };
 
   const motivoDeError = (err: unknown): string => {
     const crudo = err instanceof Error ? err.message : String(err);
@@ -741,6 +757,40 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
                 />
               </span>
             </button>
+            {/* WAVE3 §A.4 — válvula de pruebas del dueño (ledger remoto D1):
+                doble confirmación en UI (primer toque arma 4 s, segundo
+                ejecuta). NUNCA automática — kit §A.4 literal. */}
+            <button
+              type="button"
+              aria-label="Vaciar ledger remoto (pruebas) — requiere doble confirmación"
+              onClick={() => {
+                if (!armadoLedger) {
+                  setArmadoLedger(true);
+                  window.setTimeout(() => setArmadoLedger(false), ARMADO_MS);
+                  return;
+                }
+                setArmadoLedger(false);
+                void vaciarLedger();
+              }}
+              className={`w-full min-h-11 rounded-xl px-3 border font-mono text-[11px] font-black uppercase tracking-wider transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ef4444]/60 ${
+                armadoLedger
+                  ? "border-[#ef4444] bg-[#ef4444]/20 text-[#ef4444]"
+                  : "border-[#ef4444]/50 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444]"
+              }`}
+            >
+              {armadoLedger
+                ? "¿SEGURO? TOCA DE NUEVO — BORRA EL LEDGER REMOTO (D1)"
+                : "VACIAR LEDGER REMOTO (PRUEBAS)"}
+            </button>
+            {resultadoLedger && (
+              <p
+                role="status"
+                aria-live="polite"
+                className="rounded-xl border border-slate-800 bg-[#0b1117] px-3.5 py-2 font-mono text-[10.5px] font-bold uppercase tracking-wider text-slate-300"
+              >
+                {resultadoLedger}
+              </p>
+            )}
             {bufferVacio && (
               <p
                 role="note"
