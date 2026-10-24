@@ -1,0 +1,31 @@
+# Cloudflare Pages — cabeceras servidas con cada deploy estático (out/)
+# La integración Git y `wrangler pages deploy` copian este archivo tal cual.
+
+# COOP/COEP — habilita SharedArrayBuffer → WASM multihilo (onnxruntime-web
+# ort-wasm-simd-threaded + OpenCV). Mismo contrato que vercel.json en Vercel.
+# GH Pages NO puede enviarlas → ahí el wasm corre mono-hilo; en CF Pages sí.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
+# Chunks de Next con hash de contenido → inmutables
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Vendidos versionados a mano (cambian con releases del core) → caché de 1 día
+/wasm/*
+  Cache-Control: public, max-age=86400
+
+/models/*
+  Cache-Control: public, max-age=86400
+
+/vendor/*
+  Cache-Control: public, max-age=86400
+
+# HTML y service worker siempre revalidados — evita la app vieja/en blanco
+# tras un deploy (misma lección del §5 de DEPLOY-vercel.md)
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache

@@ -9,10 +9,18 @@ import path from "node:path";
  *    El sitio vive en jg-stevan.github.io/digielect14/ → basePath condicional
  *    desde NEXT_PUBLIC_BASE_PATH (la fija el workflow de deploy: /digielect14).
  *    El core localiza sus assets (worker/OpenCV) con la misma variable.
+ *  · Cloudflare Pages (estático en raíz): `BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH=
+ *    bunx next build` → basePath desactivado (servido en la raíz del dominio,
+ *    ej. digielect14.pages.dev). El string vacío explícito = a propósito.
  */
 const isStatic = process.env.BUILD_STATIC === "1";
+// "" explícito → deploy en raíz (Cloudflare Pages). Sin definir → fallback
+// histórico /digielect14 (GH Pages). El core y el código e14 usan `?? ""`,
+// así que el string vacío ya produce rutas raíz correctas en el cliente.
 const basePath = isStatic
-  ? process.env.NEXT_PUBLIC_BASE_PATH || "/digielect14"
+  ? process.env.NEXT_PUBLIC_BASE_PATH === ""
+    ? undefined
+    : process.env.NEXT_PUBLIC_BASE_PATH || "/digielect14"
   : undefined;
 
 const nextConfig: NextConfig = {
