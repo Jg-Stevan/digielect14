@@ -38,6 +38,9 @@ import {
   useMasivaStore,
 } from "./store";
 import { clasificarOrigenDeArchivo, type OrigenVeredicto } from "./origen"; // D63-A — detector de origen (kit e63a-origen-escaneo-v1)
+// §G.2 — ORDEN-WAVE3-add-envio-individual-v1: la red del momento del envío
+// (parche D61 — envioRedTipo/envioDownlinkMbps junto al envioMs existente).
+import { redActual } from "../obs/dispositivo";
 import { preProcesoEscaneo, type PreProcesoEscaneo } from "./deskew"; // D63-B — pre-proceso de escaneos (kit e63b-deskew-escaneo-v1)
 import { paginaDeActa, tituloDeActa, type FilaMasiva, type RegistroMasiva } from "./tipos";
 import type { Acta, EtapaAnalisis } from "../types";
@@ -1231,11 +1234,17 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     // del parche esperaMs de D57 (spread, solo si diagnostico != null). Va
     // ANTES de construir registroListo → viaja en la PRIMERA persistencia.
     if (envioMs != null && actaFinal.diagnostico != null) {
+      // §G.2 — ORDEN-WAVE3-add-envio-individual-v1: la red del momento del
+      // envío viaja JUNTO al envioMs D61 (mismo parche inmutable — mismos
+      // nulls honestos: sin navigator.connection → null, jamás inventar).
+      const redEnvio = redActual();
       actaFinal = {
         ...actaFinal,
         diagnostico: {
           ...actaFinal.diagnostico,
           tiempos: { ...actaFinal.diagnostico.tiempos, envioMs },
+          envioRedTipo: redEnvio?.tipo ?? null,
+          envioDownlinkMbps: redEnvio?.downlinkMbps ?? null,
         },
       };
     }

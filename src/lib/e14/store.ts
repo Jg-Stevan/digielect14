@@ -18,6 +18,9 @@ import type { Acta, FuenteCaptura, HistorialRow, Mesa, ProgresoAnalisis, TipoPag
 // rescate post-timeout — MISMO patrón del runner MASIVA (variable tipada →
 // sin excess-check en la llamada al bridge).
 import { type OpcionesEscaneoConTimeout } from "./scanner-core-bridge";
+// §G.2 — ORDEN-WAVE3-add-envio-individual-v1: la red del momento del envío
+// (registrarEnvio G.1 — envioRedTipo/envioDownlinkMbps en el diagnóstico).
+import { redActual } from "./obs/dispositivo";
 // KIT e14-carga-masiva-v1 (T3.4): solo la capa de DATOS de la cola (sin
 // dependencia del mini-store — cero ciclos de import).
 import { leerRegistro } from "./masiva/cola";
@@ -481,6 +484,10 @@ export const useE14Store = create<E14Store>((set, get) => {
   const registrarEnvio = (tituloPagina: string, actaEnvio?: Acta) => {
     const { online, historial, completadas, mesas, paginaObjetivo, actaActual, archivadas } = get();
     const actaFuente = actaEnvio ?? actaActual;
+    // §G.1 — ORDEN-WAVE3-add-envio-individual-v1 (obs-envio-individual-v1):
+    // telemetría del envío INDIVIDUAL. t0 al ENTRAR (el costo del armado del
+    // set — archivarHueco incluido — es parte del envío observable).
+    const t0 = performance.now();
     const hora = bridge.horaHistorial();
     const fila: HistorialRow = {
       id: idHistorial(),
@@ -542,7 +549,33 @@ export const useE14Store = create<E14Store>((set, get) => {
       puestoActual: puestoNuevo ?? get().puestoActual,
       actaActual:
         actaFuente === actaActual && actaActual
-          ? { ...actaActual, hashSha256: hash }
+          ? {
+              ...actaActual,
+              hashSha256: hash,
+              // §G.1 — envioMs SOLO flujo INDIVIDUAL (actaFuente ===
+              // actaActual): la MASIVA la mide el runner con SU envioMs
+              // externo D61 (medir aquí también sería doble medición).
+              // Regla de contrato: envioMs != null ⇔ había red al enviar
+              // (offline → SIN campo — null honesto, misma disciplina del
+              // runner D61). HOY el envío es registro local (~0-5 ms, hash
+              // demo hashMock) — este número ES el BASELINE: cuando §A
+              // (ledger D1) aterrice, el MISMO campo captura la latencia de
+              // red real. §G.2 — la red del momento viaja en el MISMO parche
+              // (envioRedTipo/envioDownlinkMbps — nulls honestos sin dato).
+              ...(actaActual.diagnostico != null && online
+                ? {
+                    diagnostico: {
+                      ...actaActual.diagnostico,
+                      tiempos: {
+                        ...actaActual.diagnostico.tiempos,
+                        envioMs: Math.round(performance.now() - t0),
+                      },
+                      envioRedTipo: redActual()?.tipo ?? null,
+                      envioDownlinkMbps: redActual()?.downlinkMbps ?? null,
+                    },
+                  }
+                : {}),
+            }
           : actaActual,
     });
     return { online, hora };
