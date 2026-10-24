@@ -156,7 +156,7 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] T2 — Verificación local: lint 0 · tsc 0 · build estático OK · servidor con headers exactos → `crossOriginIsolated=true`, 0 bloqueos COEP, pipeline completo con desenlace idéntico (8.2 ÓPTIMA auto-envío, cod 710007453010102).
 - [x] T3 — Docs: REPORTE + D46 + esta entrada + worklog + AGENTS.
 - [x] T4 — PR DRAFT (merge solo con orden del dueño).
-- [ ] Post-merge (dueño, PLAN §6): deploy en Vercel (dashboard o `bunx vercel deploy --prod`) → inspector (`E14.informe()`) sobre las 2-3 actas de la línea base → comparar vs GH Pages (34-68 s / rec 23-34 s, mono-hilo).
+- [x] ~~Post-merge (dueño, PLAN §6): deploy en Vercel (dashboard o `bunx vercel deploy --prod`) → inspector (`E14.informe()`) sobre las 2-3 actas de la línea base → comparar vs GH Pages (34-68 s / rec 23-34 s, mono-hilo).~~ **OBSOLETO (D73, 2026-10-23):** espejo Vercel retirado — la demo multihilo vive en https://digielect14.pages.dev/ (`docs/DEPLOY-cloudflare.md`).
 - [ ] Opción pendiente de decisión: fase 2 Electron/nativo (solo si la demo web no alcanza).
 
 ## MASIVA-UX — e14-masiva-ux-v1 (2026-10-19): detección al importar + formatos + estados de envío
@@ -182,7 +182,7 @@ Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
 - [x] V — lint 0-0 · tsc 0 · build OK · SIM 8.2/7.0/4.3 exactos · traza del pipeline intacta (mismo quad/cod/score 8.5, pre-warm NO sumado) · 1 sola traza `[e14-prowarm]` por carga · fallo controlado (onnx bloqueado → fallback honesto + recuperación del pipeline) · bundle +830 B en chunk existente (main chunk idéntico) · heap +8.5 MB movidos a antes de la 1.ª acta.
 - [x] T3 — Docs: REPORTE + D50 + esta entrada + worklog + AGENTS.
 - [x] T4 — PR DRAFT (merge solo con orden del dueño).
-- [ ] Del dueño: merge · redeploy manual en Vercel (`docs/DEPLOY-vercel.md` §2) + Ctrl+Shift+R · validar la eliminación del frío en SU entorno: `[e14-prowarm] listo` al montar MASIVA y 1.ª acta real SIN el pico de 35.9 s (comparable a caliente 8.3 s).
+- [x] ~~Del dueño: merge · redeploy manual en Vercel (`docs/DEPLOY-vercel.md` §2) + Ctrl+Shift+R · validar la eliminación del frío en SU entorno: `[e14-prowarm] listo` al montar MASIVA y 1.ª acta real SIN el pico de 35.9 s (comparable a caliente 8.3 s).~~ **OBSOLETO (D73, 2026-10-23):** espejo Vercel retirado — validar el frío en https://digielect14.pages.dev/ (el pre-warm corre igual; `docs/DEPLOY-cloudflare.md` §4).
 ## BENCH-REC-INT8 — e14-bench-rec-int8-v1 (2026-10-19): banco int8 del rec (SOLO evidencia, cero producción)
 
 - [x] T1 — `tools/bench-rec-int8/cuantizar.py`: cuantización dinámica del rec (QUInt8 — fallback §3-T2.7 tras salida degenerada de QInt8, hallazgo doble-verificado CPU EP + wasm EP) con paso previo oficial de ORT (`quant_pre_process` skip_symbolic_shape); artifact local ignorado por `.gitignore` (`tools/bench-rec-int8/*.onnx`).
