@@ -38,6 +38,14 @@ import {
   useMasivaStore,
 } from "./store";
 import { clasificarOrigenDeArchivo, type OrigenVeredicto } from "./origen"; // D63-A — detector de origen (kit e63a-origen-escaneo-v1)
+// WAVE3 §A.3 — ORDEN-WAVE3-remoto-rescate-obs-v1: cliente del ledger REMOTO
+// (módulo aparte con inyección de fetch — cero fetch suelto en runner).
+import {
+  consultarEnvioRemoto,
+  origenActual,
+  registrarEnvioRemoto,
+  sha256HexDeTexto,
+} from "./ledger-remoto";
 // §G.2 — ORDEN-WAVE3-add-envio-individual-v1: la red del momento del envío
 // (parche D61 — envioRedTipo/envioDownlinkMbps junto al envioMs existente).
 import { redActual } from "../obs/dispositivo";
@@ -1143,6 +1151,10 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     // cola offline; la sección síncrona del envío). SOLO hay envío real ONLINE:
     // offline/EN COLA y no-OPTIMA → campo OMITIDO (jamás 0 falso — kit §2-T3).
     let envioMs: number | null = null;
+    // WAVE3 G.5 — latencia del CHECK remoto (ledger D1 — §A.3). Estampa en
+    // el MISMO parche D61 (viaja solo en envíos online — mismos nulls
+    // honestos: sin check → omitido, jamás inventar).
+    let remotoMs: number | null = null;
     if (actaDesenlace.status === "OPTIMA") {
       // HOTFIX H1 (fix/ya-enviada-veto-postocr-v1) — veto ya-enviada POST-OCR:
       // si el payload del QR (presente en el desenlace) ya pertenece a una
@@ -1182,6 +1194,41 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
               `[e14] veto ya-enviada post-ocr ${qrCorto(diagQr)} fila=${fila.id} hist=${enviadaPostOcr.id}`,
             );
             return; // sin envío — el OCR pagado es costo hundido (caso raro)
+          }
+        }
+      }
+      // WAVE3 §A.3 — veto ya-enviada REMOTO (ledger D1 en Cloudflare — la
+      // garantía definitiva vive FUERA del navegador): el gap real del lote
+      // 9 fue doble envío tras borrar IndexedDB + cambiar de origen. El
+      // check SOLO usa el SHA-256 del payload (privacidad dura — jamás el
+      // payload). MISMO escape del dueño: forzarDedupOff salta TAMBIÉN el
+      // remoto (RL-e65b-6). Timeout 3 s / fallo → continuar como hoy
+      // (doctrina del conservador: el remoto es una red EXTRA, jamás una
+      // dependencia). El marcado fallido (IDB caído) también continúa.
+      if (diagQr && !fila.forzarDedupOff) {
+        const payloadHashRemoto = await sha256HexDeTexto(diagQr);
+        if (payloadHashRemoto) {
+          const tRemoto = Date.now();
+          const remoto = await consultarEnvioRemoto(payloadHashRemoto);
+          remotoMs = Date.now() - tRemoto;
+          if (remoto && remoto.duplicado) {
+            const marcadoRemoto = await marcarYaEnviada(
+              fila.id,
+              remoto.filaOriginal ?? "remoto",
+              "payload-remoto", // WAVE3 §A.3/D57 — valor NUEVO AL FINAL
+              undefined,
+              undefined,
+              diagQr,
+              true,
+            );
+            if (marcadoRemoto) {
+              logger.info(
+                `[e14] veto ya-enviada REMOTO ${qrCorto(diagQr)} fila=${fila.id} remoto=${remoto.filaOriginal ?? "?"}`,
+              );
+              return; // sin envío — igual que H1 (costo OCR hundido)
+            }
+          } else if (remoto === null) {
+            logger.info("[e14] ledger remoto indisponible — continúo");
           }
         }
       }
@@ -1226,6 +1273,27 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         payloadQr: qrPayload ?? undefined,
         serie: identidad?.serie ?? registro.serie ?? undefined,
       }).catch(() => {}); // fire-and-forget — jamás bloquea ni tumba el envío (RL-e65b-3)
+      // WAVE3 §A.3 — registro REMOTO tras el envío local exitoso (junto al
+      // H2, MISMA disciplina RL-e65b-3: fire-and-forget). Dirección del
+      // riesgo asumida y documentada (kit §1): registrar DESPUÉS del envío —
+      // un duplicado es detectable; un acta perdida no. SOLO online (offline
+      // → el registro nace en refrescarEnviosTrasDrenaje). forzarDedupOff
+      // salta TAMBIÉN el remoto (RL-e65b-6 — el escape del dueño manda).
+      if (diagQr && onlineAlEnviar && !fila.forzarDedupOff) {
+        const payloadRegistro = diagQr;
+        const serieRegistro = identidad?.serie ?? registro.serie ?? undefined;
+        const filaRegistro = fila.id;
+        void (async () => {
+          const payloadHash = await sha256HexDeTexto(payloadRegistro);
+          if (!payloadHash) return; // sin crypto — sin registro (conservador)
+          await registrarEnvioRemoto({
+            payloadHash,
+            serie: serieRegistro,
+            filaId: filaRegistro,
+            origenUrl: origenActual() ?? undefined,
+          });
+        })().catch(() => {});
+      }
       if (onlineAlEnviar) envioMs = Math.round(performance.now() - tEnvio);
     } else {
       useE14Store.getState().contarMotivoNoEnvioActa(actaDesenlace);
@@ -1237,12 +1305,18 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       // §G.2 — ORDEN-WAVE3-add-envio-individual-v1: la red del momento del
       // envío viaja JUNTO al envioMs D61 (mismo parche inmutable — mismos
       // nulls honestos: sin navigator.connection → null, jamás inventar).
+      // WAVE3 G.5 — remotoMs (latencia del check del ledger) viaja en el
+      // MISMO parche cuando el check corrió (omitido si no — jamás inventar).
       const redEnvio = redActual();
       actaFinal = {
         ...actaFinal,
         diagnostico: {
           ...actaFinal.diagnostico,
-          tiempos: { ...actaFinal.diagnostico.tiempos, envioMs },
+          tiempos: {
+            ...actaFinal.diagnostico.tiempos,
+            envioMs,
+            ...(remotoMs != null ? { remotoMs } : {}),
+          },
           envioRedTipo: redEnvio?.tipo ?? null,
           envioDownlinkMbps: redEnvio?.downlinkMbps ?? null,
         },
