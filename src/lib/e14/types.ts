@@ -155,6 +155,28 @@ export interface DiagnosticoActa {
    *  Asignación defensiva en el bridge (si no hay diagnóstico, se omite).
    *  Ausente en SIM (el probe no corre) y en registros previos a D57. */
   orientacionProbeMs?: number;
+  /** WAVE2 A1 — KIT REPARTE-WAVE2-tiempos-v1 (Agente A, Tarea A1):
+   *  sub-decisión de la MINIATURA (320 px) descartada por el FALLO SEGURO
+   *  del probe de orientación — datos de campo para la calibración wave 3.
+   *  SOLO visibilidad: jamás cambia la decisión de orientación de HOY (el
+   *  fallo seguro es lo único que evita rotaciones equivocadas). Presente
+   *  únicamente cuando la miniatura CORRIÓ y fue descartada; ausente en el
+   *  camino confiado (escala=320), en foto pequeña (≤320) y cuando la
+   *  miniatura falló/no corrió — jamás inventar. */
+  orientacionProbeMini?: {
+    /** Rotación ganadora de la miniatura descartada. */
+    rot: 0 | 90 | 180 | 270;
+    /** ¿Habría aplicado la miniatura su rotación? (diagnóstico — la decisión
+     *  aplicada sigue siendo la del sondeo a resolución original). */
+    aplicado: boolean;
+    /** Corte por el que terminó la miniatura (mismo vocabulario D56 §3 T4
+     *  de la traza; "presupuesto" = abortó a mitad por el techo de 12 s). */
+    corte: "sana" | "presupuesto" | "completo" | "confirmada";
+    /** conf media del rec de la ganadora (null si sin dato para esa rot). */
+    conf: number | null;
+    /** anclas de la ganadora (null si sin dato para esa rot). */
+    anclas: number | null;
+  };
   /** D63-A — KIT e63a-origen-escaneo-v1 (T2): origen del archivo MASIVA
    *  según el detector heurístico (masiva/origen.ts). null = duda honesta —
    *  jamás inventar. Ausente en SIM y en registros previos a D63-A. SOLO
