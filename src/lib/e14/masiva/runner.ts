@@ -38,6 +38,9 @@ import {
   useMasivaStore,
 } from "./store";
 import { clasificarOrigenDeArchivo, type OrigenVeredicto } from "./origen"; // D63-A — detector de origen (kit e63a-origen-escaneo-v1)
+// WAVE3 §B — ORDEN-WAVE3-remoto-rescate-obs-v1: predicado PURO del rescate
+// anti-falso-rechazo (RECHAZADA-BAJO intermitente — reintento, no rotaciones).
+import { procedeRescateRechazo } from "./rescate";
 // WAVE3 §A.3 — ORDEN-WAVE3-remoto-rescate-obs-v1: cliente del ledger REMOTO
 // (módulo aparte con inyección de fetch — cero fetch suelto en runner).
 import {
@@ -133,6 +136,10 @@ const RELECTURA_TOPE_MS = 45_000;
 
 let corriendoFlag = false;
 let stopFlag = false;
+// WAVE3 §B — rescate anti-falso-rechazo: rescates YA LANZADOS en ESTA
+// corrida (techo MAX_RESCATES_CORRIDA — kit §B.1). Se reinicia en
+// iniciarRunner (cada corrida arranca de cero).
+let rescatesCorrida = 0;
 // e71 (Opt-3): el throttle del progreso pasa a POR-FILA (campo ultimoEn de
 // VidaFila) — con 2 actas en vuelo cada una lleva SU cadencia de 250 ms.
 // e63g FASE 1: ¿el dueño arrancó la cola ALGUNA VEZ en esta sesión? El
@@ -434,6 +441,11 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
   let watchdogUsados = 0;
   let etapaAlMorir: string | null = null;
   let elapsedMuerteMs: number | null = null;
+  // WAVE3 §B — el rescate LANZADO para ESTA fila (máx 1 — el predicado
+  // exige intento 1): la traza rescateRechazo del registro nace aquí
+  // ("salvado" si el desenlace final ≠ RECHAZADA; "lanzado" si no).
+  // Fuera del try — el catch del post-mortem TAMBIÉN la estampa.
+  let rescateLanzado = false;
   try {
     registro = await leerRegistro(fila.id);
     const archivo = registro.archivo;
@@ -769,7 +781,32 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           maestroDesenlace = maestro;
           decodeMasterMs = decodeMsIntento;
           intentoDesenlace = intento;
-          if (!esVeredictoTimeout(resultado.acta)) break; // desenlace REAL
+          if (!esVeredictoTimeout(resultado.acta)) {
+            // WAVE3 §B — ORDEN-WAVE3-remoto-rescate-obs-v1 (feat/rescate-
+            // rechazo-v1): RECHAZADA-BAJO en el intento 1 es INTERMITENTE
+            // (OCR bajo presión — evidencia lotes 7/8/9: las MISMAS actas
+            // dieron score 10 FUERTE después; el probe jamás rotó) → UNA
+            // 2ª pasada del paso desenlace con workers frescos (la
+            // maquinaria EXISTENTE del bucle — nada nuevo de OCR). Cupos:
+            // 1 por fila (el predicado exige intento===1) +
+            // MAX_RESCATES_CORRIDA por corrida. Si el reintento también
+            // RECHAZA → se acepta el rechazo (honesto, sin inventar).
+            // forzarDedupOff manda SIEMPRE (RL-e65b-6 — escape del dueño).
+            if (
+              procedeRescateRechazo(resultado.acta, {
+                intento,
+                rescatesCorrida,
+                forzarDedupOff: fila.forzarDedupOff,
+              })
+            ) {
+              rescatesCorrida += 1;
+              rescateLanzado = true;
+              logger.info(`[e14] rescate-rechazo fila=${fila.id} intento=2`);
+              await matarYRecrearWorkers(); // workers frescos (misma infra T1.2)
+              continue; // 2ª pasada del MISMO paso desenlace — el bucle re-ejecuta
+            }
+            break; // desenlace REAL (comportamiento de siempre)
+          }
           // veredicto-timeout del bridge → el intento MURIÓ (cae al final del
           // loop: traza + kill de workers + reintento si queda cupo).
         } else if (resultado.tipo === "error") {
@@ -808,6 +845,15 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       // el veredicto de SIEMPRE con la MISMA forma del acta de timeout del
       // bridge (score 0 — nada inventado).
       actaBruta = actaTimeoutWatchdog(fila.id);
+    }
+    // WAVE3 §B — traza del rescate SALVADOR: el reintento produjo un
+    // desenlace ≠ RECHAZADA (honesto — solo cuando el rescate corrió).
+    if (
+      rescateLanzado &&
+      actaBruta.status !== "RECHAZADA" &&
+      !esVeredictoTimeout(actaBruta)
+    ) {
+      logger.info(`[e14] rescate-rechazo OK fila=${fila.id}`);
     }
     // D57 (T1): parche INMUTABLE del diagnóstico (kit §4-T1). ADITIVO — no
     // toca score/status/gate; si el diagnóstico no existe (no debería: el
@@ -1118,6 +1164,9 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           ...(identidad ? { serie: identidad.serie } : {}),
           ...(qrPayload ? { qrPayload } : {}),
           ...(qrEstadoCapa0 ? { qrEstado: qrEstadoCapa0 } : {}),
+          // WAVE3 §B — la DUPLICADA tras un rescate cuenta como SALVADA
+          // (desenlace final ≠ RECHAZADA — traza honesta del informe).
+          ...(rescateLanzado ? { rescateRechazo: "salvado" as const } : {}),
         });
         marcarFila(fila.id, {
           estado: "DUPLICADA",
@@ -1361,6 +1410,17 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       // e64-qr T-0.2 — estado SOLO-VISUAL de la capa 0 (chip QR ✓/✗;
       // sobrevive la recarga vía filaDeRegistro). Aditivo al final (D57).
       ...(qrEstadoCapa0 ? { qrEstado: qrEstadoCapa0 } : {}),
+      // WAVE3 §B — traza del rescate anti-falso-rechazo (ADITIVA AL FINAL,
+      // D57): "salvado" = el desenlace final ≠ RECHAZADA tras el reintento;
+      // "lanzado" = el reintento también rechazó (se acepta el rechazo —
+      // honesto). Ausente = sin rescate (jamás inventar).
+      ...(rescateLanzado
+        ? {
+            rescateRechazo: (
+              actaDesenlace.status !== "RECHAZADA" ? "salvado" : "lanzado"
+            ) as "salvado" | "lanzado",
+          }
+        : {}),
     };
     // FIX M14 (auditoría 2-c): persistencia fallida TRAS el envío — la fila
     // NO pasa a ERROR (el acta SÍ se transmitió; una fila ERROR invita a
@@ -1468,6 +1528,9 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
                 ...(elapsedMuerteMs != null ? { elapsedMs: elapsedMuerteMs } : {}),
               }
             : {}),
+          // WAVE3 §B — el rescate lanzado no se pierde en un ERROR tardío
+          // (traza honesta del post-mortem — el intento 2 pagó su costo).
+          ...(rescateLanzado ? { rescateRechazo: "lanzado" as const } : {}),
         });
       } catch {
         /* IDB otra vez — la fila ya quedó ERROR en memoria (honesto) */
@@ -1540,6 +1603,7 @@ export function iniciarRunner(): void {
   if (corriendoFlag) return;
   corriendoFlag = true;
   stopFlag = false;
+  rescatesCorrida = 0; // WAVE3 §B — techo del rescate por CORRIDA
   colaSesionIniciada = true; // e63g FASE 1: sesión viva — el swap puede rearrancar
   useMasivaStore.setState({ corriendo: true });
   void bucle().finally(() => {

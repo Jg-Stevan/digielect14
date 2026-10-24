@@ -224,6 +224,13 @@ export interface RegistroMasiva {
    *  tras el envío (la REVISIÓN y el recorte manual la usan — kit e68 §3:
    *  «No borrar fotoProcesada»). */
   fotoProcesadaBlob?: Blob;
+  // ---------- WAVE3 §B — ORDEN-WAVE3-remoto-rescate-obs-v1 (feat/rescate-rechazo-v1) ----------
+  /** (§B) traza del RESCATE anti-falso-rechazo: "lanzado" = el reintento
+   *  del paso desenlace corrió (RECHAZADA-BAJO intermitente, intento 1) y
+   *  también rechazó (se acepta el rechazo — honesto); "salvado" = el
+   *  desenlace final ≠ RECHAZADA tras el reintento. Ausente = sin rescate
+   *  (jamás inventar). Aditivo AL FINAL del contrato D57. */
+  rescateRechazo?: "lanzado" | "salvado";
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del
