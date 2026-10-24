@@ -1141,6 +1141,46 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     // offline/EN COLA y no-OPTIMA → campo OMITIDO (jamás 0 falso — kit §2-T3).
     let envioMs: number | null = null;
     if (actaDesenlace.status === "OPTIMA") {
+      // HOTFIX H1 (fix/ya-enviada-veto-postocr-v1) — veto ya-enviada POST-OCR:
+      // si el payload del QR (presente en el desenlace) ya pertenece a una
+      // ENVIADA del histórico, el envío JAMÁS sale. La capa 0 consulta el
+      // ledger pre-OCR (L543-562) pero SOLO en la rama sin original de sesión
+      // (`if (!originalQr)`) — las rutas que llegan aquí CON payload en mano
+      // (fallback de reutilizarResultado=false, original PENDIENTE/ERROR,
+      // techo-vencido de la APLAZADA) hoy envían sin volver a consultar.
+      // ADAPTACIÓN al árbol real (el kit cita `diag.qrPayload` — el bridge
+      // OMITE qrCam en masiva, scanner-core-bridge L1156): las fuentes reales
+      // del payload en el punto de envío son la capa 0 de ESTA corrida
+      // (qrPayload local), el acta (futuro-proof — undefined hoy en masiva) y
+      // el registro (payload persistido por una pasada previa del MISMO
+      // registro — ERROR/DUPLICADA reprocesada). MISMA llave exacta y
+      // maquinaria de capa0-qr (marcarYaEnviada via "payload") — RED LINES:
+      // sin fuzzy. Índice caído → null conservador (RL-e65b-3): la fila sigue
+      // su curso como hoy. forzarDedupOff manda SIEMPRE (RL-e65b-6 — el
+      // escape del dueño es sagrado, mismas capas L543/L580).
+      const diagQr =
+        qrPayload ?? actaDesenlace.qrPayload ?? registro.qrPayload ?? null;
+      if (diagQr && !fila.forzarDedupOff) {
+        const enviadaPostOcr = await enviadaPorPayload(diagQr);
+        if (enviadaPostOcr && enviadaPostOcr.id !== fila.id) {
+          if (
+            await marcarYaEnviada(
+              fila.id,
+              enviadaPostOcr.id,
+              "payload",
+              undefined,
+              undefined,
+              diagQr,
+              true,
+            )
+          ) {
+            logger.info(
+              `[e14] veto ya-enviada post-ocr ${qrCorto(diagQr)} fila=${fila.id} hist=${enviadaPostOcr.id}`,
+            );
+            return; // sin envío — el OCR pagado es costo hundido (caso raro)
+          }
+        }
+      }
       // KIT e14-masiva-ux-v1 (T3.2): el envío respeta la conexión del momento
       // (misma semántica que registrarEnvio para actaActual): OFFLINE →
       // hashSha256 "EN COLA" — la fila pinta «EN COLA» y refrescarEnviosTrasDrenaje
@@ -1160,11 +1200,25 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
       // bloquea ni tumba el envío (RL-e65b-2/3). El payload/serie VIVOS de
       // ESTA corrida mandan sobre los del registro leído (la capa 0 acaba
       // de decodificar el QR y la capa 2 la serie).
+      // HOTFIX H2 (fix/ya-enviada-veto-postocr-v1) — el ledger lleva las
+      // llaves FRESCAS de la fila: `registro` se leyó al ENTRAR al pipeline
+      // (L427) y cadenaDedup persiste hashDedup/hashBytes DESPUÉS (carrera
+      // ingesta×pipeline — el valor del snapshot viaja undefined). La fila
+      // viva del store lleva lo que cadenaDedup estampó (guardarRegistro +
+      // patchFila de la cadena). Sin estos campos el cinturón
+      // dhash-vs-histórico D-e65-6 SALTA la entrada del índice
+      // (`if (!h.hashDedup ...) continue`) — caso imagen10: una copia
+      // re-saved a Hamming 0 de una enviada no era atrapada en ingesta.
+      // Sin campos nuevos: completar la escritura de campos ya declarados
+      // (EntradaHistorica.hashDedup/hashBytes — mismo contrato del índice).
+      const filaViva = useMasivaStore.getState().filas.find(
+        (f) => f.id === fila.id,
+      );
       void registrarEnviadaHistorico({
         id: fila.id,
         ts: Date.now(),
-        hashBytes: registro.hashBytes,
-        hashDedup: registro.hashDedup,
+        hashBytes: filaViva?.hashBytes ?? registro.hashBytes,
+        hashDedup: filaViva?.hashDedup ?? registro.hashDedup,
         payloadQr: qrPayload ?? undefined,
         serie: identidad?.serie ?? registro.serie ?? undefined,
       }).catch(() => {}); // fire-and-forget — jamás bloquea ni tumba el envío (RL-e65b-3)
