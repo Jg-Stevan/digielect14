@@ -128,6 +128,8 @@ import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
 // (escaneo y pipelineRecorte). SIM OMITIDO (guard — chips 8.2/7.0/4.3
 // intactos, §2.2); JAMÁS lanza (catch interno — el pipeline no depende, §5).
 import { probeOrientacion, rotarDataUrl } from "./orientacion";
+// WAVE2 A1 — tipo del resultado del probe (para el diag de la mini descartada por el fallo seguro).
+import type { ProbeOrientacion } from "./orientacion";
 // KIT e14-ocr-escalonado-v1 (§2): caps del det-preprocess (op4) expuestos por
 // el motor + decisión/elegir del módulo PURO nuevo (testable headless — bun).
 import { DET_CAP_PROD, DET_CAP_RAPIDO } from "./ocr/rapidocr";
@@ -1364,6 +1366,10 @@ export class RealCoreBridge implements E14Bridge {
     // en el diagnóstico (aditivo — la traza de consola D51 ya existe; esto la
     // vuelve permanente en la ficha). null si el probe no corrió (SIM o error).
     let probeMsOrientacion: number | null = null;
+    // WAVE2 A1 — sub-decisión de la miniatura descartada por el fallo seguro
+    // (datos para calibración wave 3 — jamás cambia la decisión de HOY).
+    let probeMiniOrientacion: ProbeOrientacion["orientacionProbeMini"] | null =
+      null;
     // e66 (P4) → e70 (P4.1) — REVERSA PARCIAL del skip ciego por EXIF: el
     // EXIF de cámara dice cómo estaba el TELÉFONO, no cómo quedó el acta
     // (evidencia del dueño: 3 fotos landscape CON EXIF rechazadas score 4.9,
@@ -1384,6 +1390,7 @@ export class RealCoreBridge implements E14Bridge {
         confirmar: { quadWorker: quadOrigen === "worker" },
       });
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
+      probeMiniOrientacion = probe?.orientacionProbeMini ?? null; // WAVE2 A1 — la mini que el fallo seguro descartó
       if (probe?.aplicado) {
         fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
         fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
@@ -1391,6 +1398,7 @@ export class RealCoreBridge implements E14Bridge {
     } else if (!opciones.simular) {
       const probe = await probeOrientacion(fotoOcr);
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
+      probeMiniOrientacion = probe?.orientacionProbeMini ?? null; // WAVE2 A1 — la mini que el fallo seguro descartó
       if (probe?.aplicado) {
         fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
         fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
@@ -1820,6 +1828,12 @@ export class RealCoreBridge implements E14Bridge {
     if (diag != null && probeMsOrientacion != null) {
       diag.orientacionProbeMs = probeMsOrientacion;
     }
+    // WAVE2 A1 — sub-decisión de la miniatura descartada por el fallo seguro
+    // (asignación DEFENSIVA — jamás lanza; sin diagnóstico o sin mini → se
+    // omite — jamás inventar). Datos de calibración wave 3.
+    if (diag != null && probeMiniOrientacion != null) {
+      diag.orientacionProbeMini = probeMiniOrientacion;
+    }
     logger.info(
       `[e14] pipeline ${opciones.fuente}/${"archivo" in entrada ? "file" : "video-grab"} ` +
         `total=${Math.round(ms.total)}ms ` +
@@ -2117,9 +2131,14 @@ export class RealCoreBridge implements E14Bridge {
     // D57 — KIT e14-instrumentos-espera-v1 (T2): MISMO instrumento del escaneo
     // — coste del probe persistido en el diagnóstico (aditivo, defensivo).
     let probeMsOrientacion: number | null = null;
+    // WAVE2 A1 — sub-decisión de la miniatura descartada por el fallo seguro
+    // (datos para calibración wave 3 — jamás cambia la decisión de HOY).
+    let probeMiniOrientacion: ProbeOrientacion["orientacionProbeMini"] | null =
+      null;
     {
       const probe = await probeOrientacion(fotoOcr);
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
+      probeMiniOrientacion = probe?.orientacionProbeMini ?? null; // WAVE2 A1 — la mini que el fallo seguro descartó
       if (probe?.aplicado) {
         fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
         fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
@@ -2449,6 +2468,12 @@ export class RealCoreBridge implements E14Bridge {
     // omite — kit §4-T2). ADITIVO: no toca score/status/gate/tiempos.
     if (diag != null && probeMsOrientacion != null) {
       diag.orientacionProbeMs = probeMsOrientacion;
+    }
+    // WAVE2 A1 — sub-decisión de la miniatura descartada por el fallo seguro
+    // (asignación DEFENSIVA — jamás lanza; sin diagnóstico o sin mini → se
+    // omite — jamás inventar). Datos de calibración wave 3.
+    if (diag != null && probeMiniOrientacion != null) {
+      diag.orientacionProbeMini = probeMiniOrientacion;
     }
     logger.info(
       `[e14] recorte ${acta.fuente} total=${Math.round(ms.total)}ms ` +

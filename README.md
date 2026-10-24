@@ -16,6 +16,7 @@ y exportación.
   como instrumento de laboratorio en los docs históricos (`docs/`).
 
 Demo: https://jg-stevan.github.io/digielect14/
+Demo multihilo (Cloudflare Pages, COOP/COEP): https://digielect14.pages.dev/
 Motor: https://github.com/Jg-Stevan/web-scanner (packages/scanner-core → npm `@jg-stevan/scanner-core`)
 Versión del motor consumida: ^0.4.0
 

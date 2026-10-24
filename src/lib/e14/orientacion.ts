@@ -100,7 +100,7 @@ import { logger } from "../logger"; // SPRINT-A A6 — console→logger (mensaje
 
 type Rotacion = 0 | 90 | 180 | 270;
 
-interface ProbeOrientacion {
+export interface ProbeOrientacion {
   rot: Rotacion; // ganadora (aplicada o 0 si no rota)
   aplicado: boolean;
   scores: Partial<Record<Rotacion, number>>;
@@ -117,6 +117,18 @@ interface ProbeOrientacion {
   // Cero consumidores rotos: el bridge solo lee rot/aplicado/ms; el informe
   // (territorio del Agente C) puede anotarlo después (append-only).
   orientacionProbeEscala: number;
+  // WAVE2 A1 — sub-decisión de la miniatura descartada por el FALLO SEGURO
+  // (datos de campo para la calibración wave 3 — jamás cambia la decisión de
+  // HOY). Solo en el camino fallo seguro CON miniatura corrida; ausente si
+  // mini==null (det/rec de la mini falló o no corrió), en el camino confiado
+  // (escala=320 — la mini YA es la decisión) y en foto pequeña (≤320).
+  orientacionProbeMini?: {
+    rot: Rotacion;
+    aplicado: boolean;
+    corte: "sana" | "presupuesto" | "completo" | "confirmada";
+    conf: number | null;
+    anclas: number | null;
+  };
 }
 
 /** e70 (P4.1) — opciones del probe. Su PRESENCIA activa el MODO
@@ -594,7 +606,19 @@ export async function probeOrientacion(
     const ms = Math.round(performance.now() - t0);
     trazarSondeo(full, ms, Math.max(full.w, full.h), gan, !!opciones?.confirmar);
     if (full.aplicado) anilloGanadorRegistrar(full.rot); // D62 T1.4
-    return resultadoDe(full, ms, Math.max(full.w, full.h));
+    // WAVE2 A1 — sub-decisión de la miniatura descartada por el fallo seguro
+    // (datos para calibración wave 3 — jamás cambia la decisión de HOY).
+    const res = resultadoDe(full, ms, Math.max(full.w, full.h));
+    if (mini) {
+      res.orientacionProbeMini = {
+        rot: mini.rot,
+        aplicado: mini.aplicado,
+        corte: mini.corte,
+        conf: mini.conf[mini.rot] ?? null,
+        anclas: mini.anclas[mini.rot] ?? null,
+      };
+    }
+    return res;
   } catch {
     return null; // §5: el probe jamás tumba el pipeline (comportamiento de hoy)
   }
