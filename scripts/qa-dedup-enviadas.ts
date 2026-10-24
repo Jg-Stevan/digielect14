@@ -266,10 +266,17 @@ ok(
   "T-7: colaVida/enColaVida INTACTOS — YA-ENVIADA no entra al contador de cola (no se procesa nada)",
 );
 
+// WAVE3 C.2 (obs-informe-wave3-v1) — ACTUALIZACIÓN DEL F-CHECK CON NOTA:
+// la unión dedup del informe se EXTIENDE con las puertas del veto AL FINAL
+// (D57): "ya-enviada-postocr" (H1) + "ya-enviada-copia" (traza sobre
+// YA-ENVIADA — gap real lote 10). 'ya-enviada' sigue presente, en su orden,
+// y las puertas nuevas rematan la unión antes de | null.
 ok(
-  informe.includes("| \"ya-enviada\" | null;") &&
+  informe.includes('| "ya-enviada" // e65-dedup-enviadas-v1 — valor NUEVO AL FINAL (contrato D57, export-only)') &&
+    informe.includes('| "ya-enviada-postocr"') &&
+    informe.includes('| "ya-enviada-copia" | null;') &&
     informe.includes('yaEnviadas: filas.filter((f) => f.statusActa === "ENVIADA").length,'),
-  "T-8 + e71/P3.1: informe export-only — unión dedup con 'ya-enviada' intacta; contador yaEnviadas ahora cuenta statusActa === ENVIADA (kit e71: reportaba 0 porque YA-ENVIADA solo nace en re-subidas de la misma sesión)",
+  "T-8 + e71/P3.1 + wave3 C.2: informe export-only — unión dedup conserva 'ya-enviada' + puertas postocr/copia AL FINAL (D57); contador yaEnviadas cuenta statusActa === ENVIADA (kit e71)",
 );
 
 ok(!informe.includes("hashBytes"),
@@ -285,10 +292,16 @@ ok(
   "RL-e65-6/D57: YA-ENVIADA es valor NUEVO AL FINAL de EstadoEntrada (registros previos siguen leyéndose)",
 );
 
+// WAVE3 C.2 (obs-informe-wave3-v1) — ACTUALIZACIÓN DEL F-CHECK CON NOTA:
+// ídem informe: las puertas del veto van AL FINAL de la unión dedup de
+// RegistroMasiva (postocr/copia) — 'ya-enviada' sigue INMEDIATAMENTE tras
+// 'qr' (orden e65 intacto), nada se reordena ni elimina.
 ok(
-  tipos.includes("| \"ya-enviada\"; // e65-dedup-enviadas-v1") &&
-    tipos.indexOf("\"ya-enviada\"") > tipos.indexOf("\"qr\""),
-  "RL-e65-6/D57: 'ya-enviada' AL FINAL de la unión dedup (RegistroMasiva)",
+  tipos.includes('| "ya-enviada" // e65-dedup-enviadas-v1') &&
+    tipos.indexOf('"ya-enviada"') > tipos.indexOf('"qr"') &&
+    tipos.includes('| "ya-enviada-postocr" // H1 post-OCR') &&
+    tipos.includes('| "ya-enviada-copia";'),
+  "RL-e65-6/D57 + wave3 C.2: 'ya-enviada' tras 'qr' + puertas postocr/copia AL FINAL de la unión dedup (RegistroMasiva)",
 );
 
 ok(

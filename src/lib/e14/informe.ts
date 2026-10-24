@@ -144,7 +144,12 @@ export interface FilaInforme {
    *  marcó DUPLICADA por serie impresa repetida. e63m: "qr" = CAPA 0
    *  (identidad-QR pre-OCR — payload EXACTO repetido, OCR jamás se paga). */
   dedup: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr"
-    | "ya-enviada" | null; // e65-dedup-enviadas-v1 — valor NUEVO AL FINAL (contrato D57, export-only)
+    | "ya-enviada" // e65-dedup-enviadas-v1 — valor NUEVO AL FINAL (contrato D57, export-only)
+    // WAVE3 C.2 (obs-informe-wave3-v1) — puertas del veto AL FINAL (D57):
+    // "ya-enviada-postocr" (H1 post-OCR) · "ya-enviada-copia" (traza visual
+    // de cadenaDedup aterrizó sobre un registro YA-ENVIADA).
+    | "ya-enviada-postocr"
+    | "ya-enviada-copia" | null;
   /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
   dedupDistancia: number | null;
   // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
@@ -453,12 +458,15 @@ function conteo(
 const DETALLE_TIMEOUT_INFORME = "TIEMPO DE PROCESADO EXCEDIDO";
 
 /** e63m (F3) — prefijo corto del payload para la columna dedupQr del txt:
- *  primeros 8 chars + «…» (kit §1.3 LITERAL — la decisión vive SIEMPRE en
- *  la igualdad EXACTA; esto es SOLO cosmética). Espejo local de qrCorto de
- *  identidad-qr.ts (informe.ts NO importa el módulo QR: el exportador jamás
- *  toca el decodificador — export-only). */
+ *  primeros 24 chars + «…» (WAVE3 C.4 — el corte 8 COLISIONABA entre actas
+ *  DISTINTAS: par LcyzMYaR del informe 104609 diverge en el char 22 — 16
+ *  chars AÚN colisionaban, 24 los distingue; verificado con los 4 payloads
+ *  reales). La decisión vive SIEMPRE en la igualdad EXACTA; esto es SOLO
+ *  cosmética. Espejo local de qrCorto de identidad-qr.ts (informe.ts NO
+ *  importa el módulo QR: el exportador jamás toca el decodificador —
+ *  export-only). */
 function qrCortoInforme(payload: string): string {
-  return `${payload.slice(0, 8)}…`;
+  return `${payload.slice(0, 24)}…`;
 }
 
 /** D65 (T4.2) — resumen de COLGADAS (PURO — humo bun): n = filas con
@@ -511,6 +519,12 @@ export function resumenDedup(filas: FilaInforme[]): {
   /** e66 (P3): filas nacidas YA-ENVIADA (dedup "ya-enviada" — match contra
    *  registro enviado del histórico). Aditivo al final. */
   yaEnviada: number;
+  /** WAVE3 C.2 (obs-informe-wave3-v1) — puertas del veto (aditivo al final):
+   *  postocr = H1 en el punto único de envío; copia = traza visual que
+   *  aterrizó sobre un registro YA-ENVIADA. NO cuentan en `matches`
+   *  (semántica e66 estable — solo trazas nuevas explícitas). */
+  yaEnviadaPostocr: number;
+  yaEnviadaCopia: number;
 } {
   const conMatch = filas.filter(
     (f) =>
@@ -536,6 +550,8 @@ export function resumenDedup(filas: FilaInforme[]): {
     identidad: filas.filter((f) => f.dedup === "identidad").length,
     qr: filas.filter((f) => f.dedup === "qr").length,
     yaEnviada: filas.filter((f) => f.dedup === "ya-enviada").length,
+    yaEnviadaPostocr: filas.filter((f) => f.dedup === "ya-enviada-postocr").length,
+    yaEnviadaCopia: filas.filter((f) => f.dedup === "ya-enviada-copia").length,
   };
 }
 
@@ -1008,8 +1024,13 @@ export function renderTxt(
   // D66 (T4): vigilancia del outlier de 19 s del informe 122235 — cuántas
   // actas mantienen procesoMs por encima de 6 s (criterio de aceptación 2
   // del kit: cero outliers >6 s en lote normal). 0 con datos = honesto.
+  // WAVE3 C.1 (obs-informe-wave3-v1): EXCLUYE el reuso (dupOf — el MISMO
+  // conjunto que «Reuso excluido de percentiles» identifica como heredados
+  // e72): su procesoMs es HEREDADO (copia del desenlace), jamás un outlier
+  // del pipeline real. Evidencia real lote 9: 19 → 11 (solo ENVIADAS). La
+  // ETIQUETA queda SIN CAMBIOS (D51 — parsers por prefijo intactos).
   const outliersProceso = filas.filter(
-    (f) => (f.tiempos?.procesoMs ?? 0) > 6000,
+    (f) => f.dupOf == null && (f.tiempos?.procesoMs ?? 0) > 6000,
   ).length;
   linea(`Outliers procesoMs >6s: ${outliersProceso}`);
   // Kit C (REPARTE-3-AGENTES-v1 §1.1) — líneas NUEVAS al final de TOTALES
@@ -1142,7 +1163,10 @@ export function renderTxt(
       // MULTI-CAPA: v2+identidad+qr+ya-enviada — M-e66-2); los tokens previos
       // no cambian de forma y `capa3-ya-enviada` se AÑADE AL FINAL (contrato
       // D51: solo añadir — los parsers del dueño por prefijo intactos).
-      `DEDUP-CAPAS: capa0-qr ${resumenCapas.qr} - capa1-dhash-marcada ${resumenCapas.v2} - capa2-identidad ${resumenCapas.identidad} - capa3-ya-enviada ${resumenCapas.yaEnviada}`,
+      // WAVE3 C.2: conteos de las puertas nuevas AL FINAL de la línea
+      // (SIEMPRE impresos — formato estable: 0 es dato real, patrón
+      // gateMarco; capa3-ya-enviada queda INTACTO).
+      `DEDUP-CAPAS: capa0-qr ${resumenCapas.qr} - capa1-dhash-marcada ${resumenCapas.v2} - capa2-identidad ${resumenCapas.identidad} - capa3-ya-enviada ${resumenCapas.yaEnviada} - capa3-ya-enviada-postocr ${resumenCapas.yaEnviadaPostocr} - capa3-ya-enviada-copia ${resumenCapas.yaEnviadaCopia}`,
     );
   }
   linea();
@@ -1186,9 +1210,20 @@ export function renderTxt(
       // reordenar, contrato D57). Sin dato NO se imprime nada (honesto).
       f.serie != null ? `serie ${f.serie}` : null,
       // e63m (F3) — columna dedupQr AL FINAL de la línea (aditivo — jamás
-      // reordenar, contrato D57). Kit §1.3 LITERAL: primeros 8 chars + «…»,
-      // «—» si null (la columna SIEMPRE aparece).
+      // reordenar, contrato D57). WAVE3 C.4: primeros 24 chars + «…»
+      // (el corte 8 colisionaba entre actas distintas), «—» si null (la
+      // columna SIEMPRE aparece).
       `dedupQr ${f.qrPayload != null ? qrCortoInforme(f.qrPayload) : "—"}`,
+      // WAVE3 C.3 (obs-informe-wave3-v1) — TODO ERROR es visible (aditivo
+      // AL FINAL de la línea, D51): con motivo → entre comillas; sin motivo
+      // (registro pre-wave3) → la AUSENCIA es visible, jamás inventada.
+      // El chunk histórico `error X` de la mitad queda INTACTO (parsers por
+      // prefijo — solo añadir).
+      f.estado === "ERROR"
+        ? f.error
+          ? `error "${f.error}"`
+          : "error (sin motivo — registro pre-wave3)"
+        : null,
     ].filter((t): t is string => t != null);
     linea(`${i + 1}. ${trozos.join(" - ")}`);
   });
@@ -1382,6 +1417,8 @@ export async function generarInformeZip(
         identidad: r.identidad, // e63k — capa 2 por identidad (aditivo al final)
         qr: r.qr, // e63m — capa 0 identidad-QR pre-OCR (aditivo al final)
         yaEnviada: r.yaEnviada, // e66 — capa e65 contra el histórico (aditivo al final)
+        yaEnviadaPostocr: r.yaEnviadaPostocr, // WAVE3 C.2 — puerta H1 post-OCR (aditivo al final)
+        yaEnviadaCopia: r.yaEnviadaCopia, // WAVE3 C.2 — puerta traza-sobre-veto (aditivo al final)
         // ANEXO Agente C (Tarea 2) — ahorro de las duplicadas (ADITIVO AL
         // FINAL: null si ninguna copia aportó dato — jamás inventar).
         ahorroTotalMs: ahorros.ahorroTotalMs,

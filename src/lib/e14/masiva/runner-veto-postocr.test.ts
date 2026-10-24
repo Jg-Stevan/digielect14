@@ -220,7 +220,10 @@ describe("HOTFIX H1 — veto ya-enviada post-OCR (punto único de envío)", () =
       .find((r) => r.estado === "YA-ENVIADA");
     expect(writeYaEnviada).toBeDefined();
     expect(writeYaEnviada?.enviadaDe).toBe("hist-imagen9");
-    expect(writeYaEnviada?.dedup).toBe("ya-enviada");
+    // WAVE3 C.2 (obs-informe-wave3-v1): la puerta del veto viaja en la marca
+    // (parámetro dedupValor — D57 AL FINAL): H1 post-OCR → "ya-enviada-
+    // postocr". El default "ya-enviada" de las capas pre-OCR queda INTACTO.
+    expect(writeYaEnviada?.dedup).toBe("ya-enviada-postocr");
     // 3) la bandeja quedó YA-ENVIADA (sobrevive el return — patchFila real):
     const filaFinal = useMasivaStore
       .getState()
