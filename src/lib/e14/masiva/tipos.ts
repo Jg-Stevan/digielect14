@@ -136,7 +136,12 @@ export interface RegistroMasiva {
    *  marcó DUPLICADA por serie impresa repetida. e63m: "qr" = CAPA 0
    *  (identidad-QR pre-OCR — payload EXACTO repetido, OCR jamás se paga). */
   dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr"
-    | "ya-enviada"; // e65-dedup-enviadas-v1 — match contra registro ENVIADO del histórico/cola (bytes/dhash cinta cierta) — valor NUEVO AL FINAL (contrato D57)
+    | "ya-enviada" // e65-dedup-enviadas-v1 — match contra registro ENVIADO del histórico/cola (bytes/dhash cinta cierta) — valor NUEVO AL FINAL (contrato D57)
+    // WAVE3 C.2 (obs-informe-wave3-v1) — puertas del veto AL FINAL (D57):
+    // distinguen POR DÓNDE llegó el veto ya-enviada (gap real lote 10:
+    // filas YA-ENVIADA con dedup:"sin-match" — la puerta quedaba invisible).
+    | "ya-enviada-postocr" // H1 post-OCR (punto único de envío — el OCR ya se pagó)
+    | "ya-enviada-copia"; // la traza visual de cadenaDedup aterrizó sobre un registro YA-ENVIADA (evidencia del veto preservada)
   /** (T2) distancia de Hamming del match v2 (0–64). Solo filas con
    *  dedup === "v2" lo traen; sin match no hay distancia (no se inventa). */
   dedupDistancia?: number | null;

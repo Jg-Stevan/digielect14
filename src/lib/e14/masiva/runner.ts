@@ -1172,6 +1172,7 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
               undefined,
               diagQr,
               true,
+              "ya-enviada-postocr", // WAVE3 C.2 — puerta del veto AL FINAL (D57): distingue el veto post-OCR (OCR ya pagado)
             )
           ) {
             logger.info(
