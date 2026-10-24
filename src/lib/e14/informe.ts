@@ -152,6 +152,12 @@ export interface FilaInforme {
     | "ya-enviada-copia" | null;
   /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
   dedupDistancia: number | null;
+  // ---------- WAVE3 §B — ORDEN-WAVE3-remoto-rescate-obs-v1 (T rescate) ----------
+  /** traza del RESCATE anti-falso-rechazo (§B): "lanzado" = reintento del
+   *  paso desenlace corrió y también rechazó; "salvado" = el desenlace
+   *  final ≠ RECHAZADA tras el reintento. null = sin rescate (pre-wave3 o
+   *  fila sin pipeline — jamás inventar). Aditivo AL FINAL (D57). */
+  rescateRechazo: "lanzado" | "salvado" | null;
   // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
   /** D66 (T4): ms SOLO del decodificado a MASTER (0 = precalentada — el
    *  decode vivió en el precalor; null = sin master: fallback/ERROR/
@@ -396,6 +402,9 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
     elapsedMs: reg.elapsedMs ?? null,
     dedup: reg.dedup ?? null,
     dedupDistancia: reg.dedupDistancia ?? null,
+    // WAVE3 §B — traza del rescate (null si el registro no la trae —
+    // pre-wave3 o sin rescate; jamás inventar).
+    rescateRechazo: reg.rescateRechazo ?? null,
     tieneDiagnostico: !!diag,
     conCarpeta,
     pesoImagenes,
@@ -1048,6 +1057,14 @@ export function renderTxt(
   linea(
     `THROUGHPUT: ${tp.n} ENVIADAS en ${tp.minutos ?? "-"} min = ${tp.porMinuto ?? "-"} actas/min (primer inicio → último fin del lote)`,
   );
+  // WAVE3 §B — ORDEN-WAVE3-remoto-rescate-obs-v1 (feat/rescate-rechazo-v1):
+  // línea NUEVA AL FINAL de TOTALES (aditiva — D51, parsers por prefijo).
+  // usados = reintentos lanzados (rescateRechazo != null); salvaron =
+  // desenlace final ≠ RECHAZADA tras rescate ("salvado"). 0/0 = honesto
+  // (sin rescates en la corrida — el instrumento silencioso es un dato).
+  const rescatesUsados = filas.filter((f) => f.rescateRechazo != null).length;
+  const rescatesSalvaron = filas.filter((f) => f.rescateRechazo === "salvado").length;
+  linea(`Rescates rechazo: ${rescatesUsados} usados / ${rescatesSalvaron} salvaron`);
   linea();
   const rechazoFilas = filas.filter((f) => f.rechazo);
   linea(`RECHAZOS (${rechazoFilas.length})`);
