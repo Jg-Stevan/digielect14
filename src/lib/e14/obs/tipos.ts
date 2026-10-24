@@ -58,6 +58,12 @@ export interface HangEvento {
   duracionMs: number; // gap REAL medido (kit: captura el gap real) o duración de la task
   umbralMs: number; // umbral que disparó el registro (3 000 drift · 50 longtask)
   breadcrumbs: Breadcrumb[]; // contexto de navegación alrededor (sin contenido)
+  /** §G.4 — ORDEN-WAVE3-add-envio-individual-v1 (obs-envio-individual-v1):
+   *  estado de VISIBILIDAD al momento de la detección (AL FINAL — D57).
+   *  En background el SO congela los timers: el gap NO es congelón (fantasma
+   *  real del informe 1230: 117 s de pantalla bloqueada contaban como hang).
+   *  Eventos legacy sin el campo → tratar como visible (`?? true`). */
+  visible: boolean;
 }
 
 export interface PoliticaDatos {
@@ -115,7 +121,19 @@ export interface ReporteSesion {
     p95OcrMs: number | null;
     fallosGate: number;
     memoriaPicoMB: number | null;
+    /** §G.3 — ORDEN-WAVE3-add-envio-individual-v1 (aditivos AL FINAL —
+     *  precedente hangResumen): telemetría del ENVÍO. envios = diagnósticos
+     *  con envioMs presente (0 ms es válido hoy — registro local BASELINE;
+     *  con §A/ledger D1 el mismo campo captura latencia de red real). */
+    envios: number;
+    p50EnvioMs: number | null;
+    p95EnvioMs: number | null;
   };
+  /** §G.3 — una fila por diagnóstico con envioMs != null (aditivo OPCIONAL
+   *  al final — informes previos no cambian de forma). PRIVACIDAD dura
+   *  (qa-obs-privacidad): actaIdHash = fnv1a8 del id (JAMÁS el id plano) ·
+   *  SIN título/mesa/puesto/payload — solo números y la red del momento. */
+  enviosDetalle?: EnvioDetalle[];
   saludMuestras: SaludSnapshot[];
   uso: UsoContador[];
   /** ANEXO Agente C (Pieza 2) — agregación de hangs de la sesión (ADITIVA,
@@ -125,5 +143,26 @@ export interface ReporteSesion {
     cuenta: number;
     mayorMs: number | null;
     totalMs: number | null;
+    /** §G.4 — hangs OCULTOS (document.hidden — timers congelados por el SO:
+     *  NO son congelones). cuenta/mayor/total quedan SOLO-VISIBLES desde
+     *  wave3; los ocultos van aquí (aditivo AL FINAL — el patrón del
+     *  informe 1230 — 117 s fantasma — queda imposible). */
+    cuentaOcultas: number;
   };
+}
+
+/** §G.3 — fila de enviosDetalle (una por diagnóstico con envioMs != null).
+ *  PRIVACIDAD: actaIdHash (fnv1a8 — JAMÁS el id plano), sin título/mesa/
+ *  puesto/payload (qa-obs-privacidad manda). modo = canal del diagnóstico
+ *  al export ("individual" = actaActual — una acta abierta desde la bandeja
+ *  a REVISIÓN cuenta individual; "masiva" = cola). */
+export interface EnvioDetalle {
+  actaIdHash: string; // fnv1a8(actaId) — 8 hex (JAMÁS el id plano)
+  modo: "individual" | "masiva";
+  status: string; // ActaStatus del desenlace (string — informe JSON estable)
+  ocrMs: number | null;
+  totalMs: number | null;
+  envioMs: number; // != null por construcción (solo filas con envío medido)
+  envioRedTipo: string | null;
+  envioDownlinkMbps: number | null;
 }

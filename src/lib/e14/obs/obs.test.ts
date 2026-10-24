@@ -970,7 +970,9 @@ describe("export · perfDeDiags (agrega de ACTAS/diagnósticos, no de eventos �
     const { perfDeDiags } = await importarExport();
     try {
       const resumen = perfDeDiags([], []);
-      expect(resumen).toEqual({ actas: 0, p50OcrMs: null, p95OcrMs: null, fallosGate: 0, memoriaPicoMB: null });
+      // WAVE3 §G.3: +envios/p50EnvioMs/p95EnvioMs (aditivos AL FINAL — 0 =
+      // sin envíos medidos, dato real; nulls honestos sin datos).
+      expect(resumen).toEqual({ actas: 0, p50OcrMs: null, p95OcrMs: null, fallosGate: 0, memoriaPicoMB: null, envios: 0, p50EnvioMs: null, p95EnvioMs: null });
     } finally {
       limpiarExport();
     }
