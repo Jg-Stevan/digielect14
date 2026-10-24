@@ -105,6 +105,16 @@ export interface DatosPerfActa {
   ocrValido: boolean;
 }
 
+/** §G.3 — ORDEN-WAVE3-add-envio-individual-v1 (obs-envio-individual-v1):
+ *  hash del actaId para enviosDetalle (PURO). La MISMA disciplina §4.3 de
+ *  emitirPerfDeActa: el id plano SOLO existe dentro de captura.ts (ancla
+ *  qa-obs-privacidad bloque d — actaId plano jamás sale de aquí) —
+ *  export.ts consume el diag y recibe el id YA HASHEADO: el token `actaId`
+ *  ni siquiera aparece en el código del exportador. fnv1a8 8 hex. */
+export function hashDeActaIdDe(diag: { actaId: string }): string {
+  return fnv1a8(typeof diag?.actaId === "string" ? diag.actaId : "");
+}
+
 /** Emisión perf del puente (C7): hashea el actaId (FNV-1a 8 hex — el id
  *  plano JAMÁS sale, §2.5), respeta politica.metadatos (kill switch de
  *  datos), try/catch total, lazy import del buffer — el pipeline no espera

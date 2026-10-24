@@ -75,6 +75,24 @@ function redDe(n: Navigator): { tipo: string | null; downlinkMbps: number | null
   };
 }
 
+/** §G.2 — ORDEN-WAVE3-add-envio-individual-v1 (obs-envio-individual-v1):
+ *  wrapper PÚBLICO de redDe(navigator) — la red del MOMENTO (tipo + downlink
+ *  estimado). La consume el sello de envío (store.ts registrarEnvio G.1 /
+ *  runner.ts parche D61) para estampar envioRedTipo/envioDownlinkMbps en el
+ *  diagnóstico. null HONESTO en node/SSR y sin navigator.connection
+ *  (iOS/Safari — jamás inventar). try/catch total (el sello jamás lanza). */
+export function redActual(): { tipo: string | null; downlinkMbps: number | null } | null {
+  try {
+    if (typeof navigator === "undefined") return null;
+    const nav = navigator as Navigator & { connection?: unknown };
+    if (!nav.connection) return null;
+    const r = redDe(nav);
+    return { tipo: r.tipo, downlinkMbps: r.downlinkMbps };
+  } catch {
+    return null;
+  }
+}
+
 async function storageLibreMB(): Promise<number | null> {
   try {
     if (!navigator.storage || typeof navigator.storage.estimate !== "function") return null;

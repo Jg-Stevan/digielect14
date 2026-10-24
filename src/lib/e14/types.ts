@@ -202,6 +202,16 @@ export interface DiagnosticoActa {
    *  (no debería en MASIVA post-D63-A2 — jamás inventar). El informe lo
    *  consume como `preprocesoAplicado` (bool, presente si origen escaneo). */
   maestroFuente?: "corregido" | "original" | null;
+  /** §G.2 — ORDEN-WAVE3-add-envio-individual-v1 (obs-envio-individual-v1):
+   *  la red del MOMENTO del envío (aditivos AL FINAL del interface — patrón
+   *  «diag-campos-aditivos»). tipo = effectiveType ("4g"/"3g"… —
+   *  NetworkInformation) · downlinkMbps = downlink estimado. null = sin
+   *  dato (navegador sin navigator.connection — iOS/Safari — o SSR):
+   *  jamás inventar. JAMÁS dentro de `tiempos` (es Record de números — el
+   *  tipo de red es string). Con §G.1/G.3 el dueño correlaciona envíos
+   *  lentos con red mala (evidencia 1230: cel en 4G 1.5 Mbps). */
+  envioRedTipo?: string | null;
+  envioDownlinkMbps?: number | null;
 }
 
 export interface Acta {

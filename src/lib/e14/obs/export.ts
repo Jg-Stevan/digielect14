@@ -22,12 +22,15 @@
 import { eventosPorDigest, leerEventos, purgarBuffer } from "./buffer";
 import { resumenHangsDe } from "./hang"; // ANEXO Agente C (Pieza 2)
 import { obtenerDispositivo } from "./dispositivo";
+// §G.3 — el id del acta YA llega hasheado (el token actaId plano jamás
+// aparece aquí — qa-obs-privacidad bloque d: solo captura.ts lo toca).
+import { hashDeActaIdDe } from "./captura";
 import { appVersion, idDispositivo, idSesion } from "./identidad";
 import { leerPolitica } from "./politica";
 import { useE14Store } from "../store";
 import { listarMapeados } from "../masiva/cola";
 import type { DiagnosticoActa } from "../types";
-import type { EventoObs, ReporteSesion, SaludSnapshot, UsoContador } from "./tipos";
+import type { EnvioDetalle, EventoObs, ReporteSesion, SaludSnapshot, UsoContador } from "./tipos";
 
 /** percentil nearest-rank sobre lista ASCENDENTE (PURA — testeada). */
 export function percentilDe(asc: number[], p: number): number | null {
@@ -59,10 +62,22 @@ export function selloDe(d: Date): string {
   );
 }
 
-/** Mínimo que el perf necesita de un acta (PURA, testeable sin Acta real). */
+/** Mínimo que el perf necesita de un acta (PURA, testeable sin Acta real).
+ *  §G.3 — ORDEN-WAVE3-add-envio-individual-v1: opcionales AL FINAL (D57) —
+ *  canal (modo), status del desenlace, red del momento del envío y el id
+ *  YA HASHEADO (hashDeActaIdDe de captura.ts — el token actaId plano
+ *  jamás aparece en este archivo: qa-obs-privacidad bloque d intacto). */
 export interface FragDiag {
   tiempos: DiagnosticoActa["tiempos"];
   gate: { completa: boolean };
+  /** §G.3: canal del diagnóstico al export — "individual" = actaActual (una
+   *  acta abierta desde la bandeja a REVISIÓN cuenta individual), "masiva" =
+   *  cola. */
+  modo?: "individual" | "masiva";
+  status?: DiagnosticoActa["status"];
+  envioRedTipo?: string | null;
+  envioDownlinkMbps?: number | null;
+  actaIdHash?: string;
 }
 
 /** Diagnósticos de la jornada — SOLO LECTURA (kit A1-C6):
@@ -76,14 +91,24 @@ async function diagnosticosDeLaJornada(): Promise<FragDiag[]> {
   const salida: FragDiag[] = [];
   try {
     const e14 = useE14Store.getState();
-    if (e14.actaActual?.diagnostico) salida.push(e14.actaActual.diagnostico);
+    if (e14.actaActual?.diagnostico)
+      salida.push({
+        ...e14.actaActual.diagnostico,
+        modo: "individual",
+        actaIdHash: hashDeActaIdDe(e14.actaActual.diagnostico),
+      });
   } catch {
     /* silencioso */
   }
   try {
     await listarMapeados((r) => {
       const d = r.acta?.diagnostico;
-      if (d) salida.push(d);
+      if (d)
+        salida.push({
+          ...d,
+          modo: "masiva",
+          actaIdHash: hashDeActaIdDe(d),
+        });
       return null; // NADA se retiene del registro completo (L7)
     });
   } catch {
@@ -96,11 +121,18 @@ async function diagnosticosDeLaJornada(): Promise<FragDiag[]> {
  *  (campo REAL del contrato DiagnosticoActa), fallosGate por
  *  gate.completa=false. Las copias DUPLICADAS traen ocrMs=0 (no corrieron
  *  OCR — runner e63k) → se excluyen del percentil (0 ms jamás es un tiempo
- *  de OCR real). */
+ *  de OCR real). §G.3 — telemetría del ENVÍO (aditivos AL FINAL):
+ *  envios = diagnósticos con envioMs presente (0 ms válido — registro
+ *  local BASELINE hoy; latencia de red real con §A/ledger D1); p50/p95 con
+ *  percentilDe (mismos nulls honestos). Campos OCR INTACTOS. */
 export function perfDeDiags(diags: FragDiag[], saludMuestras: SaludSnapshot[]): ReporteSesion["perfResumen"] {
   const ocrs = diags
     .map((d) => d.tiempos.ocrMs ?? 0)
     .filter((ms) => ms > 0)
+    .sort((a, b) => a - b);
+  const envios = diags
+    .map((d) => d.tiempos.envioMs)
+    .filter((v): v is number => typeof v === "number")
     .sort((a, b) => a - b);
   const memorias = saludMuestras
     .map((s) => s.memoriaMB)
@@ -111,7 +143,31 @@ export function perfDeDiags(diags: FragDiag[], saludMuestras: SaludSnapshot[]): 
     p95OcrMs: percentilDe(ocrs, 95),
     fallosGate: diags.filter((d) => d.gate.completa === false).length,
     memoriaPicoMB: memorias.length ? Math.max(...memorias) : null,
+    envios: envios.length,
+    p50EnvioMs: percentilDe(envios, 50),
+    p95EnvioMs: percentilDe(envios, 95),
   };
+}
+
+/** §G.3 — enviosDetalle: una fila por diagnóstico con envioMs != null.
+ *  PRIVACIDAD dura: actaIdHash (fnv1a8 — el id YA llega hasheado por el
+ *  mapper via hashDeActaIdDe de captura.ts), SIN título/mesa/puesto/payload
+ *  (qa-obs-privacidad manda). Sin filas → undefined (campo omitido —
+ *  informes previos no cambian de forma). */
+export function enviosDetalleDe(diags: FragDiag[]): EnvioDetalle[] | undefined {
+  const filas: EnvioDetalle[] = diags
+    .filter((d) => typeof d.tiempos.envioMs === "number")
+    .map((d) => ({
+      actaIdHash: d.actaIdHash ?? "",
+      modo: d.modo ?? ("masiva" as const),
+      status: d.status ?? "—",
+      ocrMs: typeof d.tiempos.ocrMs === "number" ? d.tiempos.ocrMs : null,
+      totalMs: typeof d.tiempos.totalMs === "number" ? d.tiempos.totalMs : null,
+      envioMs: d.tiempos.envioMs as number,
+      envioRedTipo: d.envioRedTipo ?? null,
+      envioDownlinkMbps: d.envioDownlinkMbps ?? null,
+    }));
+  return filas.length ? filas : undefined;
 }
 
 /** ReporteSesion completo (contrato §4.2). */
@@ -123,7 +179,11 @@ export async function construirReporte(): Promise<ReporteSesion> {
     (e) => e.datos as SaludSnapshot,
   );
   const uso = agregarUso(await leerEventos((e) => e.tipo === "uso"));
-  const perfResumen = perfDeDiags(await diagnosticosDeLaJornada(), saludMuestras);
+  const diags = await diagnosticosDeLaJornada();
+  const perfResumen = perfDeDiags(diags, saludMuestras);
+  // §G.3 — enviosDetalle (aditivo opcional AL FINAL): solo filas con envío
+  // medido; undefined si ninguna (informes previos no cambian de forma).
+  const enviosDetalle = enviosDetalleDe(diags);
   // ANEXO Agente C (Pieza 2) — agregación de hangs de ESTA sesión (ADITIVO
   // AL FINAL del reporte — informes previos no cambian de forma). Los
   // eventos "hang" ya son de la sesión activa (appendEvento sella sesion).
@@ -139,6 +199,7 @@ export async function construirReporte(): Promise<ReporteSesion> {
     dispositivo,
     erroresAgrupados,
     perfResumen,
+    ...(enviosDetalle ? { enviosDetalle } : {}),
     saludMuestras,
     uso,
     hangResumen,

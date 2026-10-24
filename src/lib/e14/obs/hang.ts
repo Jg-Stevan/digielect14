@@ -31,6 +31,18 @@ export const LONGTASK_UMBRAL_MS = 50;
 let observer: PerformanceObserver | null = null;
 let timerDrift: number | null = null;
 let proximoTick = 0;
+let alVisibilidad: (() => void) | null = null;
+
+/** §G.4 — el estado de visibilidad al momento de la detección (AL FINAL del
+ *  HangEvento — D57). En node/SSR sin document → visible (no hay SO que
+ *  congele timers — jamás inventar ocultos). */
+function visibleAhora(): boolean {
+  try {
+    return typeof document === "undefined" || document.visibilityState !== "hidden";
+  } catch {
+    return true;
+  }
+}
 
 /** Emite el evento hang al buffer obs (con el contexto de breadcrumbs del
  *  momento). Todo silencioso: el rastreo jamás rompe la app. */
@@ -50,10 +62,20 @@ async function emitirHang(h: HangEvento): Promise<void> {
 }
 
 /** Sensor drift: gap entre el tick esperado y el real (Date.now()). Con el
- *  hilo congelado F ms, el tick atrasa ≈ F — el GAP REAL es la duración. */
+ *  hilo congelado F ms, el tick atrasa ≈ F — el GAP REAL es la duración.
+ *  §G.4 — ORDEN-WAVE3-add-envio-individual-v1: si el documento está OCULTO
+ *  (cel bloqueado / app en background), el SO congela los timers del
+ *  intervalo y TODO el tiempo en background entraría como «congelón»
+ *  (fantasma REAL del informe 1230: 117 s de pantalla bloqueada → el mayor
+ *  hang de la sesión). En hidden: re-sincronizar proximoTick y NO emitir —
+ *  el gap no es congelón. Solo longtasks reales, etiquetados. */
 function tickDrift(): void {
   try {
     const ahora = Date.now();
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      proximoTick = ahora + DRIFT_TICK_MS; // re-sincroniza — sin emisión
+      return;
+    }
     const gap = ahora - proximoTick;
     proximoTick = ahora + DRIFT_TICK_MS;
     if (gap > DRIFT_UMBRAL_MS) {
@@ -62,6 +84,7 @@ function tickDrift(): void {
         duracionMs: gap,
         umbralMs: DRIFT_UMBRAL_MS,
         breadcrumbs: obtenerBreadcrumbs(),
+        visible: visibleAhora(),
       });
     }
   } catch {
@@ -85,6 +108,7 @@ function iniciarLongtask(): void {
               duracionMs: Math.round(entrada.duration),
               umbralMs: LONGTASK_UMBRAL_MS,
               breadcrumbs: obtenerBreadcrumbs(),
+              visible: visibleAhora(),
             });
           }
         }
@@ -100,7 +124,10 @@ function iniciarLongtask(): void {
 }
 
 /** Arranca los 2 sensores. IDEMPOTENTE (llamado desde el bootstrap de
- *  page.tsx junto a los demás iniciar*). Cero costo en node/SSR. */
+ *  page.tsx junto a los demás iniciar*). Cero costo en node/SSR.
+ *  §G.4 — escucha `visibilitychange`: al VOLVER a "visible" re-sincroniza
+ *  proximoTick — sin esto el PRIMER tick post-resume seguiría fantasma
+ *  (el gap que cruzó el background entraría como congelón). */
 export function iniciarDetectorHang(): void {
   try {
     if (typeof window === "undefined") return;
@@ -108,6 +135,20 @@ export function iniciarDetectorHang(): void {
     iniciarLongtask();
     proximoTick = Date.now() + DRIFT_TICK_MS;
     timerDrift = window.setInterval(tickDrift, DRIFT_TICK_MS);
+    alVisibilidad = () => {
+      try {
+        if (document.visibilityState === "visible") {
+          proximoTick = Date.now() + DRIFT_TICK_MS; // descarta el gap del background
+        }
+      } catch {
+        /* silencioso */
+      }
+    };
+    // Guard SSR/node (mismo criterio del módulo — el listener es browser-only;
+    // los stubs de window SIN document — hang.test — no rompen el armado):
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      document.addEventListener("visibilitychange", alVisibilidad);
+    }
   } catch {
     /* silencioso */
   }
@@ -121,6 +162,10 @@ export function detenerDetectorHang(): void {
       clearTimeout(timerDrift as unknown as ReturnType<typeof setTimeout>);
       timerDrift = null;
     }
+    if (alVisibilidad !== null && typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+      document.removeEventListener("visibilitychange", alVisibilidad);
+    }
+    alVisibilidad = null;
     observer?.disconnect();
     observer = null;
   } catch {
@@ -131,20 +176,27 @@ export function detenerDetectorHang(): void {
 /** Agregación por sesión (kit §2.3) — PURA y testable: sobre los eventos
  *  "hang" del buffer (ya filtrados por el caller — export.ts lee con el
  *  filtro de tipo y de sesión) cuenta hangs, mayor hang y total congelado.
- *  Sin hangs → {cuenta:0, mayorMs:null, totalMs:null} (jamás inventar). */
+ *  §G.4 — ORDEN-WAVE3-add-envio-individual-v1: cuenta/mayor/total SOLO
+ *  sobre eventos VISIBLES (los ocultos — timers congelados por el SO en
+ *  background — NO son congelones) y van a cuentaOcultas. Legacy sin el
+ *  campo `visible` → tratado visible (`?? true` — jamás recontar).
+ *  Sin hangs → {cuenta:0, mayorMs:null, totalMs:null, cuentaOcultas:0}. */
 export function resumenHangsDe(
   eventos: Pick<EventoObs, "tipo" | "datos">[],
-): { cuenta: number; mayorMs: number | null; totalMs: number | null } {
-  const duraciones = eventos
-    .filter((e) => e.tipo === "hang")
+): { cuenta: number; mayorMs: number | null; totalMs: number | null; cuentaOcultas: number } {
+  const hangs = eventos.filter((e) => e.tipo === "hang");
+  const duraciones = hangs
+    .filter((e) => (e.datos as HangEvento).visible ?? true)
     .map((e) => (e.datos as HangEvento).duracionMs)
     .filter((v): v is number => typeof v === "number");
+  const ocultas = hangs.filter((e) => !((e.datos as HangEvento).visible ?? true)).length;
   return {
     cuenta: duraciones.length,
     mayorMs: duraciones.length ? Math.max(...duraciones) : null,
     totalMs: duraciones.length
       ? duraciones.reduce((a, b) => a + b, 0)
       : null,
+    cuentaOcultas: ocultas,
   };
 }
 
