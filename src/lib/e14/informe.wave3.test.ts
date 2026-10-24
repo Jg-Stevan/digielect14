@@ -48,6 +48,7 @@ function fila(over: Partial<FilaInforme>): FilaInforme {
     elapsedMs: null,
     dedup: null,
     dedupDistancia: null,
+    rescateRechazo: null, // WAVE3 §B — traza del rescate (null en fixtures)
     decodeMs: null,
     origenDecode: null,
     precalentada: false,
