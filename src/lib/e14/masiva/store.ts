@@ -384,6 +384,10 @@ export async function marcarYaEnviada(
   hamming?: number,
   qrPayload?: string,
   aceptarProcesando?: boolean, // e65b (M-e65b-3): SOLO la capa 0 payload (runner T-4) lo declara
+  // WAVE3 C.2 (obs-informe-wave3-v1): puerta del veto (D57 AL FINAL) —
+  // undefined = "ya-enviada" (callers existentes SIN cambio de contrato:
+  // el write de abajo conserva su literal byte a byte — ancla QA).
+  dedupValor?: RegistroMasiva["dedup"],
 ): Promise<boolean> {
   const filaViva = useMasivaStore.getState().filas.find((f) => f.id === id);
   // e65b (M-e65b-3): la capa 0 payload llega con la fila YA en PROCESANDO
@@ -408,6 +412,10 @@ export async function marcarYaEnviada(
       enviadaDe: enviadaDeId,
       dedup: "ya-enviada",
       ...(qrPayload ? { qrPayload } : {}), // e65b (T-2d) — aditivo (D57)
+      // WAVE3 C.2 — la puerta del veto SOBREESCRIBE el dedup solo cuando el
+      // caller la declara ("ya-enviada-postocr" = H1 post-OCR): el literal
+      // de arriba queda INTACTO (ancla QA qa-historico-enviadas byte a byte).
+      ...(dedupValor && dedupValor !== "ya-enviada" ? { dedup: dedupValor } : {}),
     });
   } catch {
     return false; // IDB caído → la fila procesa normal (conservador)
@@ -559,7 +567,20 @@ async function cadenaDedup(
                 dedupVisualDe: original.id,
               }
             : { dedup: "sin-match" };
-      await guardarRegistro({ ...registro, hashDedup: hash, hashBytes: bytes ?? registro.hashBytes, ...trazaDedup });
+      const writeHashYTraza = { ...registro, hashDedup: hash, hashBytes: bytes ?? registro.hashBytes, ...trazaDedup };
+      // WAVE3 C.2 (obs-informe-wave3-v1) — el veto ya-enviada JAMÁS es
+      // destruido por la traza visual: si el registro YA es YA-ENVIADA (el
+      // veto capa-0/bytes aterrizó antes que el dhash de esta cadena), la
+      // traza NO puede estampar "sin-match"/"v2"/"visual-aplazada" sobre la
+      // evidencia del veto — gap REAL del lote 10 (3 filas YA-ENVIADA ∧
+      // dedup:"sin-match", informes 104609+): la ventana entre el snapshot
+      // leerRegistro (L arriba) y ESTE write dejaba al veto sin su marca.
+      // La puerta queda evidenciada: "ya-enviada-copia" (D57 AL FINAL).
+      await guardarRegistro(
+        registro.estado === "YA-ENVIADA"
+          ? { ...writeHashYTraza, dedup: "ya-enviada-copia" as const }
+          : writeHashYTraza,
+      );
       patchFila(entrada.id, { hashDedup: hash, ...(bytes ? { hashBytes: bytes } : {}) });
       // e63k (F1.3): SOLO la cinta CIERTA (hamming ≤ DEDUP_CINTA_CIERTA)
       // marca DUPLICADA pre-OCR — comportamiento de HOY byte a byte. La

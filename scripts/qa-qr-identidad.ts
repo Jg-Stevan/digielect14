@@ -494,9 +494,17 @@ const txt = renderTxt(
   false,
   [],
 );
+// WAVE3 C.4 (obs-informe-wave3-v1) — ACTUALIZACIÓN DEL F-CHECK CON NOTA:
+// el corte de la columna dedupQr pasa de 8 → 24 chars (qrCortoInforme,
+// informe.ts). El corte 8 COLISIONABA entre actas DISTINTAS (par LcyzMYaR
+// del informe 104609: prefijos idénticos en los primeros 21 chars — 16
+// AÚN colisionaban; 24 los distingue, divergen en el char 22). El corte
+// del qrCorto de trazas (identidad-qr.ts, 8 chars) queda INTACTO — solo
+// cambia la columna EXPORT del informe (cosmética — la decisión vive en
+// la igualdad EXACTA, red line 10).
 ok(
-  txt.includes(`dedupQr ${qrCorto(PAYLOAD_A)}`) && txt.includes("dedupQr —"),
-  "informe.txt · columna dedupQr: 8 chars + «…» con payload y «—» si null (kit §1.3 literal)",
+  txt.includes(`dedupQr ${PAYLOAD_A.slice(0, 24)}…`) && txt.includes("dedupQr —"),
+  "informe.txt · columna dedupQr: 24 chars + «…» con payload y «—» si null (WAVE3 C.4 — corte 8 colisionaba entre actas distintas, informe 104609)",
 );
 ok(
   txt.includes("DEDUP-CAPAS: capa0-qr 1 - capa1-dhash-marcada 1 - capa2-identidad 1"),
