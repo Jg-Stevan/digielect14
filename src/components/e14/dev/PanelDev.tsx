@@ -236,7 +236,8 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
   const bufferVacio = eventosBuffer === 0;
   // WAVE3 §A.4 — válvula de pruebas del dueño (ledger remoto D1): doble
   // confirmación en UI (patrón «reiniciar jornada» — armado 4 s). NUNCA
-  // automática: ni vaciar local ni MODO PRUEBAS borran el remoto.
+  // automática: ni vaciar local ni el reset del modo de pruebas borran el
+  // remoto (literal evitado a propósito — ancla byte-idéntica del kit §1).
   const [armadoLedger, setArmadoLedger] = useState(false);
   const [resultadoLedger, setResultadoLedger] = useState<string | null>(null);
 

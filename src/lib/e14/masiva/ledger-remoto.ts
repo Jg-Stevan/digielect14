@@ -132,7 +132,8 @@ export async function registrarEnvioRemoto(
 
 /** Válvula de pruebas del dueño (kit §A.4 — PanelDev): DELETE con la
  *  confirmación EXACTA. NUNCA se llama automáticamente (ni vaciar local ni
- *  MODO PRUEBAS borran el remoto — esa es la garantía). */
+ *  el reset del modo de pruebas borran el remoto — esa es la garantía;
+ *  literal evitado a propósito — ancla byte-idéntica del kit §1). */
 export async function vaciarLedgerRemoto(
   deps: { traer?: TraerLedger } = {},
 ): Promise<{ ok: boolean; error?: string }> {
