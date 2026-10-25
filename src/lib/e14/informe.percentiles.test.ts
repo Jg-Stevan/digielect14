@@ -52,6 +52,8 @@ function fila(over: Partial<FilaInforme>): FilaInforme {
     dedup: null,
     dedupDistancia: null,
     rescateRechazo: null, // WAVE3 §B — traza del rescate (null en fixtures)
+    sondeoQrMs: null, // KIT e73 (§E) — telemetría del sondeo (null en fixtures)
+    sondeoQrTier: null,
     decodeMs: null,
     origenDecode: null,
     precalentada: false,
