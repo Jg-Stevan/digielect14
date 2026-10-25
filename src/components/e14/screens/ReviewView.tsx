@@ -988,6 +988,10 @@ function BadgeRefresco({ size = 6 }: { size?: 5 | 6 }) {
 export function ReviewCtas() {
   const acta = useE14Store((s) => s.actaActual);
   const navegar = useE14Store((s) => s.navegar);
+  // KIT ux-masiva-fixes-v1 (T2/§B, UX-3): mismo criterio que TopBar — el
+  // CTA regresa al ORIGEN (VOLVER A MASIVA si el acta se abrió desde la
+  // bandeja). SOLO-LECTURA del flag; la lógica vive en el store.
+  const masivaOrigen = useE14Store((s) => s.masivaOrigen);
   // G4 (KIT e14-gate-v2): el selector enviarActa se retiró — la ÓPTIMA ya
   // no llega a REVISIÓN (se auto-envía al capturar y tras el recorte), y
   // el envío MANUAL solo existe para ADVERTENCIA vía REVISIÓN HUMANA.
@@ -1006,14 +1010,17 @@ export function ReviewCtas() {
     // el CTA se calma VISUALMENTE (glow/padding/texto menores) — la
     // píldora de score ÓPTIMA pasa a ser lo primero que se lee; sigue
     // siendo la acción primaria funcional (mismo handler/primacía).
+    // KIT ux-masiva-fixes-v1 (T2/§B, UX-3): si se llegó desde MASIVA,
+    // label y destino dinámicos (VOLVER A MASIVA).
     return (
       <button
         type="button"
-        onClick={() => navegar("escanear")}
+        onClick={() => navegar(masivaOrigen ? "masiva" : "escanear")}
+        aria-label={masivaOrigen ? "Volver a la bandeja masiva" : "Seguir escaneando"}
         className="w-full bg-brand-green hover:bg-emerald-400 text-black font-extrabold text-[13px] py-3.5 px-6 rounded-2xl shadow-[0_2px_12px_rgba(0,230,118,0.25)] flex items-center justify-center gap-2 tap-action transition-all select-none"
       >
         <span className="tracking-wide uppercase font-mono font-bold">
-          SEGUIR ESCANEANDO
+          {masivaOrigen ? "VOLVER A MASIVA" : "SEGUIR ESCANEANDO"}
         </span>
       </button>
     );

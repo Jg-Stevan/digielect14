@@ -117,6 +117,10 @@ export function TopBar() {
   const alternarConexion = useE14Store((s) => s.alternarConexion);
   const navegar = useE14Store((s) => s.navegar);
   const acta = useE14Store((s) => s.actaActual);
+  // KIT ux-masiva-fixes-v1 (T2/§B, UX-3): volver al ORIGEN — si el acta se
+  // abrió desde la bandeja MASIVA (store.ts:1349), la flecha regresa ahí.
+  // SOLO-LECTURA del flag: la lógica de masivaOrigen vive en el store.
+  const masivaOrigen = useE14Store((s) => s.masivaOrigen);
   // KIT e14-observabilidad-v1 (agente 2 · C2): modo dev reactivo.
   const modoDev = useModoDev();
 
@@ -126,9 +130,9 @@ export function TopBar() {
     <header className="relative z-30 pt-safe shrink-0 bg-brand-black/95 backdrop-blur border-b border-brand-border/60">
       <div className="max-w-md lg:max-w-2xl mx-auto px-4 pt-4 pb-2.5 flex items-center justify-between gap-2">
         <button
-          aria-label="Volver al menú de escaneo"
+          aria-label={masivaOrigen ? "Volver a la bandeja masiva" : "Volver al menú de escaneo"}
           type="button"
-          onClick={() => navegar("escanear")}
+          onClick={() => navegar(masivaOrigen ? "masiva" : "escanear")}
           className="w-10 h-10 rounded-full flex items-center justify-center text-brand-green hover:bg-brand-surfacelight tap-action transition-colors"
         >
           <StitchArrowLeftIcon />
