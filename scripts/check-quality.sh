@@ -59,6 +59,15 @@ paso "3bis/6 · Smoke de bundling del worker de sondeo (FIX DICTAMEN-e73 §3.2 �
 bun scripts/smoke-sondeo-worker.mjs || fail "smoke sondeo-worker (worker NO compilado de verdad)"
 ok "worker de sondeo precompilado, fresco y jsQR-only · cliente limpio"
 
+paso "3ter/6 · Smoke de bundling del worker de heartbeat (KIT e14-obs-hang-atribucion-v1 §C.1)"
+# El §C.1 re-confirmó la lección e73: Turbopack emitió el .ts CRUDO como
+# asset (verde falso). Mismo guard que el 3bis: artefacto FRESCO (byte a
+# byte) · marcadores del guardián · PROHIBIDOS ausentes (import( / process.
+# env / console. / localStorage) · CLIENTE sin .ts en media y apuntando al
+# .worker.js precompilado.
+bun scripts/smoke-heartbeat-worker.mjs || fail "smoke heartbeat-worker (worker NO compilado de verdad)"
+ok "worker de heartbeat precompilado y fresco · cliente limpio"
+
 paso "4/6 · Vitest (suite unitaria)"
 bun run test || fail "vitest"
 ok "vitest verde"

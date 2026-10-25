@@ -216,7 +216,10 @@ async function tickSalud(): Promise<void> {
       sesion: idSesion(),
       dispositivo: idDispositivo(),
       appVersion: appVersion(),
-      datos: snap,
+      // KIT e14-obs-hang-atribucion-v1 (§F v1.1) — `ts` en CADA muestra:
+      // sin timestamp las narrativas de memoria (picos/GC/recuperación)
+      // son indatables (dictamen 1045/1048 — las baterías lo demostraron).
+      datos: { ...snap, ts: Date.now() } as SaludSnapshot,
     });
   } catch {
     /* silencioso — la salud jamás rompe la app */

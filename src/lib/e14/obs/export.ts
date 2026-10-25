@@ -20,13 +20,19 @@
  * miniaturas OFF (default) → el ZIP no lleva muestras. Sin excepciones.
  */
 import { eventosPorDigest, leerEventos, purgarBuffer } from "./buffer";
-import { resumenHangsDe } from "./hang"; // ANEXO Agente C (Pieza 2)
+import { hangsPorOp, resumenHangsDe } from "./hang"; // ANEXO Agente C (Pieza 2) · KIT e14-obs-hang-atribucion-v1 (§B)
 import { obtenerDispositivo } from "./dispositivo";
+// KIT e14-obs-hang-atribucion-v1 (§F) — leerModoDev: meta auto-descriptivo
+// (el gate del sampler queda legible DESDE el artefacto).
+import { leerModoDev, leerPolitica } from "./politica";
 // §G.3 — el id del acta YA llega hasheado (el token actaId plano jamás
 // aparece aquí — qa-obs-privacidad bloque d: solo captura.ts lo toca).
 import { hashDeActaIdDe } from "./captura";
 import { appVersion, idDispositivo, idSesion } from "./identidad";
-import { leerPolitica } from "./politica";
+// KIT e14-obs-hang-atribucion-v1 (§F) — el reporte se AUTO-DESCRIPTIVA: el
+// gate completo del sampler (modoDev && saludEnVivo && telemetriaSalud)
+// queda legible desde el artefacto.
+import { leerFlags } from "../flags";
 import { useE14Store } from "../store";
 import { listarMapeados } from "../masiva/cola";
 import type { DiagnosticoActa } from "../types";
@@ -187,7 +193,14 @@ export async function construirReporte(): Promise<ReporteSesion> {
   // ANEXO Agente C (Pieza 2) — agregación de hangs de ESTA sesión (ADITIVO
   // AL FINAL del reporte — informes previos no cambian de forma). Los
   // eventos "hang" ya son de la sesión activa (appendEvento sella sesion).
-  const hangResumen = resumenHangsDe(await leerEventos((e) => e.tipo === "hang"));
+  // KIT e14-obs-hang-atribucion-v1 (§B) — UNA sola lectura alimenta AMBAS
+  // agregaciones (hangResumen + hangPorOp — mismo resultado que dos
+  // llamadas a leerEventos, la mitad de IDB reads).
+  const eventosHang = await leerEventos((e) => e.tipo === "hang");
+  const hangResumen = resumenHangsDe(eventosHang);
+  // KIT e14-obs-hang-atribucion-v1 (§B) — distribución por op (D58),
+  // ADITIVA AL FINAL (tras hangResumen — D57).
+  const hangPorOp = hangsPorOp(eventosHang);
   return {
     meta: {
       appVersion: appVersion(),
@@ -195,6 +208,12 @@ export async function construirReporte(): Promise<ReporteSesion> {
       deviceId: idDispositivo(),
       sesion: idSesion(),
       politica,
+      // KIT e14-obs-hang-atribucion-v1 (§F) — espejo del gate del sampler
+      // (dispositivo.ts condicionesOk = modoDev && politica.saludEnVivo &&
+      // flags.telemetriaSalud): saludMuestras vacío queda EXPLICADO desde el
+      // JSON (campo: modoDev false) — sin forense externa.
+      modoDev: leerModoDev(),
+      telemetriaSalud: leerFlags().telemetriaSalud,
     },
     dispositivo,
     erroresAgrupados,
@@ -203,6 +222,7 @@ export async function construirReporte(): Promise<ReporteSesion> {
     saludMuestras,
     uso,
     hangResumen,
+    hangPorOp,
   };
 }
 

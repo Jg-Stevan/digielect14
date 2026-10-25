@@ -126,6 +126,11 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     if (o.endpointReportes === null || typeof o.endpointReportes === "string") {
       limpio.endpointReportes = o.endpointReportes;
     }
+    // KIT e14-obs-hang-atribucion-v1 (§D) — el kill-switch `hangEnCurso` del
+    // dueño pasa por ESTE whitelist: sin esta línea el override localStorage
+    // (§G.3.d del smoke) sería inalcanzable — mismo criterio de
+    // colaPersistente arriba (el override MANUAL es la máxima prioridad, D6).
+    if (typeof o.hangEnCurso === "boolean") limpio.hangEnCurso = o.hangEnCurso;
     return limpio;
   } catch {
     return {};
