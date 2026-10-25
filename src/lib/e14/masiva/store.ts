@@ -26,6 +26,9 @@ import {
   borrarHistorico,
   listarHistorico,
   registrarEntradaHistorico,
+  // KIT e73-sondeo-qr-precoz-v1 (§C) — índice histórico por payload del sondeo
+  actualizarIndicePayload,
+  indiceEnviadasPorPayload,
   type EntradaHistorica,
 } from "./historico";
 // SPLIT C1 (refactor/runner-logger-v1): hacerThumb vive en runner-thumbs.ts
@@ -36,6 +39,10 @@ import { logger } from "../../logger";
 import { origenActual, registrarEnvioRemoto, sha256HexDeTexto } from "./ledger-remoto";
 // KIT e14-observabilidad-v1 (A1-C7): kill switch de thumbs (flags del dueño).
 import { leerFlags } from "../flags";
+// KIT e73-sondeo-qr-precoz-v1 (§B.2) — cliente del SONDEO QR en ingesta
+// (worker e73: lee la identidad QR ANTES del pool — gemelas jamás pagan
+// slot/probe/OCR; null honesto = la vía de HOY — doctrina del conservador).
+import { sondearQrPrecoz } from "./sondeo-qr.client";
 // (responsabilidad de render — movimiento puro del runner).
 import { hacerThumb } from "./runner-thumbs";
 import { iniciarRunner, pausarRunner, rearrancarTrasEncolar } from "./runner";
@@ -223,6 +230,11 @@ function filaDeRegistro(r: RegistroMasiva): FilaMasiva {
     // tras recargar), enviadaDe SOLO cuando el estado lo es (SOLO-VISUAL).
     hashBytes: r.hashBytes ?? null,
     ...(r.estado === "YA-ENVIADA" ? { enviadaDe: r.enviadaDe ?? null } : {}),
+    // KIT e73-sondeo-qr-precoz-v1 (§E) — la telemetría del sondeo sobrevive
+    // la recarga (chip «Sondeo QR N/M» + p50/p95 del informe). Aditivos AL
+    // FINAL del objeto retornado (contrato D57). Ausentes = registros previos.
+    ...(r.sondeoQrMs != null ? { sondeoQrMs: r.sondeoQrMs } : {}),
+    ...(r.sondeoQrTier != null ? { sondeoQrTier: r.sondeoQrTier } : {}),
   };
 }
 
@@ -351,6 +363,10 @@ export async function registrarEnviadaHistorico(e: EntradaHistorica): Promise<vo
     if (i >= 0) indiceEnviadas[i] = entrada;
     else indiceEnviadas.push(entrada);
   }
+  // KIT e73-sondeo-qr-precoz-v1 (§C) — hook al MISMO punto de invalidación:
+  // el índice por payload del sondeo ve el MISMO gesto de sesión (no-op si
+  // aún no cargó — se construirá con TODO dentro al primer uso).
+  actualizarIndicePayload(e);
 }
 
 /** e65b (T-2e): lookup O(n) sobre el índice cacheado (n = enviadas; miles OK).
@@ -464,8 +480,21 @@ export async function marcarYaEnviada(
  *  cadena, y la traza aditiva dedup/dedupDistancia (kit T2.3) persiste en el
  *  MISMO write del hashDedup (campos nuevos al final del contrato D57). */
 async function cadenaDedup(
-  lote: { id: string; archivo: File; hashBytes?: string | null }[],
+  lote: {
+    id: string;
+    archivo: File;
+    hashBytes?: string | null;
+    // KIT e73 (§B.2) — cinturón: el override del dueño viaja con la entrada
+    // (hoy ninguna fila nace con él en la ingesta — PROCESAR IGUAL lo pone
+    // en la fila viva; el guard queda POR CONSTRUCCIÓN para futuros callers).
+    forzarDedupOff?: boolean;
+  }[],
 ): Promise<void> {
+  // KIT e73-sondeo-qr-precoz-v1 (§B.2-a) — mapa payload → filaId construido
+  // EN la cadena (FIFO — el primer ganador gana y la original siempre lleva
+  // delante; filas ≠ PENDIENTE excluidas). Memoria del LOTE (muere con la
+  // cadena — mismo ciclo de vida del mapaQrPayload de la capa 0, kit §5).
+  const mapaSondeoPayload = new Map<string, string>();
   for (const entrada of lote) {
     try {
       // e65 — CAPA BYTES primero (D-e65-5): barata (~50-200 ms, SIN decode).
@@ -510,6 +539,114 @@ async function cadenaDedup(
           }
         }
       }
+      // ─── KIT e73-sondeo-qr-precoz-v1 (§B.2) — NUEVA CAPA: SONDEO QR ──────
+      // Lee la identidad QR en INGESTA (worker e73 — presupuesto 2500 ms,
+      // jamás throw). forzarDedupOff manda SIEMPRE (cinturón — RL-e65b-6:
+      // sin sondeo si está puesto). null/fallo → continuar a dhash COMO HOY
+      // (doctrina del conservador — la capa dhash queda íntegra byte a byte).
+      let sondeo: Awaited<ReturnType<typeof sondearQrPrecoz>> = null;
+      if (!entrada.forzarDedupOff) {
+        sondeo = await sondearQrPrecoz(entrada.archivo);
+        if (sondeo) {
+          logger.info(
+            `[e14] sondeo-qr fila=${entrada.id} tier=${sondeo.tier ?? "null"} ms=${sondeo.ms}`,
+          );
+          // Telemetría EN VIVO sobre la fila (chip «Sondeo QR N/M» — §E);
+          // patchFila no-op si la fila murió durante el sondeo (anti-zombi).
+          patchFila(entrada.id, {
+            sondeoQrMs: sondeo.ms,
+            ...(sondeo.payload != null ? { sondeoQrTier: sondeo.tier ?? undefined } : {}),
+          });
+        }
+      }
+      if (sondeo && sondeo.payload != null) {
+        const payloadSondeo = sondeo.payload;
+        // (a) Cola viva — mapa payload → filaId (primer ganador gana).
+        // Match → DUPLICADA persistente con la MISMA rama del dhash (guard
+        // filaViva PENDIENTe + leerRegistro + write + patchFila) con dedup
+        // "qr-sondeo" (D57 AL FINAL) → NO entra al pool (jamás slot/probe/OCR).
+        const originalSondeo = mapaSondeoPayload.get(payloadSondeo);
+        if (originalSondeo && originalSondeo !== entrada.id) {
+          const filaVivaSondeo = useMasivaStore
+            .getState()
+            .filas.find((f) => f.id === entrada.id);
+          if (!filaVivaSondeo || filaVivaSondeo.estado !== "PENDIENTE") continue; // anti-zombi
+          let regSondeo: RegistroMasiva;
+          try {
+            regSondeo = await leerRegistro(entrada.id);
+          } catch {
+            continue; // fuera de la cola (IDB/vaciar) — nada que marcar
+          }
+          // Write ÚNICO con la telemetría del sondeo plegada (patrón D65
+          // T2.3 — campos AL FINAL del contrato D57).
+          await guardarRegistro({
+            ...regSondeo,
+            estado: "DUPLICADA",
+            dupOf: originalSondeo,
+            dedup: "qr-sondeo",
+            sondeoQrMs: sondeo.ms,
+            sondeoQrTier: sondeo.tier ?? undefined,
+          });
+          patchFila(entrada.id, { estado: "DUPLICADA", dupOf: originalSondeo });
+          logger.info(
+            `[e14] sondeo-qr fila=${entrada.id} → DUPLICADA qr-sondeo dupOf=${originalSondeo}`,
+          );
+          continue;
+        }
+        // (b) Histórico — índice por payload (§C) → YA-ENVIADA via "payload"
+        // EXISTENTE (cero churn D57), dedup default "ya-enviada" (el guard
+        // wave3 C.2 de escritores YA-ENVIADA queda satisfecho).
+        // COLA_PERSISTENTE=false (MODO PRUEBAS e64p C-3): el ledger NO
+        // alimenta los Maps de dedup — el índice por payload tampoco.
+        if (COLA_PERSISTENTE) {
+          try {
+            const hitSondeo = (await indiceEnviadasPorPayload(true)).get(payloadSondeo);
+            if (hitSondeo) {
+              // Telemetría del sondeo sobre el registro ANTES de la marca —
+              // marcarYaEnviada la ARRASTRA con su spread ...registro (el
+              // write ancla de marcarYaEnviada queda byte a byte). Write
+              // extra SOLO en hits (desviación M-e73-3 del REPORTE).
+              try {
+                const regPre = await leerRegistro(entrada.id);
+                await guardarRegistro({
+                  ...regPre,
+                  sondeoQrMs: sondeo.ms,
+                  sondeoQrTier: sondeo.tier ?? undefined,
+                });
+              } catch {
+                /* conservador — la marca sigue sin telemetría (jamás inventar) */
+              }
+              if (
+                await marcarYaEnviada(
+                  entrada.id,
+                  hitSondeo.id,
+                  "payload",
+                  undefined,
+                  undefined,
+                  payloadSondeo,
+                )
+              ) {
+                logger.info(`[e14] sondeo-qr fila=${entrada.id} → YA-ENVIADA payload`);
+                continue;
+              }
+              // guard falló (ya no es PENDIENTE / registro ilegible) → cae
+              // al comportamiento de siempre (el conservador manda — RL-e65-3).
+            }
+          } catch {
+            /* índice caído → conservador: sigue a dhash (RL-e65b-3) */
+          }
+        }
+        // (c) Sin match → registrar como original futura (primer ganador
+        // gana; filas ≠ PENDIENTE excluidas) + seguir a dhash (capa íntegra).
+        if (!mapaSondeoPayload.has(payloadSondeo)) {
+          const vivaParaMapa = useMasivaStore
+            .getState()
+            .filas.find((f) => f.id === entrada.id);
+          if (vivaParaMapa && vivaParaMapa.estado === "PENDIENTE") {
+            mapaSondeoPayload.set(payloadSondeo, entrada.id);
+          }
+        }
+      }
       const hash = await dhashDeArchivo(entrada.archivo);
       if (!hash) continue; // decode/hash falló → sin dedup para esta fila
       // Guard anti-zombi: la fila pudo ser quitada/vaciada mientras el decode corría.
@@ -519,6 +656,19 @@ async function cadenaDedup(
         registro = await leerRegistro(entrada.id);
       } catch {
         continue; // fuera de la cola (IDB/vaciar) — nada que marcar
+      }
+      // KIT e73 (§E) — telemetría del sondeo plegada al snapshot del registro
+      // (patrón D65 T2.3 — viaja EN el MISMO write del hash): ms SIEMPRE que
+      // el sondeo corrió; tier SOLO con lectura (jamás inventar). El pliegue
+      // va sobre el snapshot para que los write LITERALES anclados de wave3
+      // C.2 (guard de contrato) queden byte a byte — los campos nuevos viajan
+      // DENTRO del spread ...registro (AL FINAL del contrato D57).
+      if (sondeo) {
+        registro = {
+          ...registro,
+          sondeoQrMs: sondeo.ms,
+          ...(sondeo.payload != null ? { sondeoQrTier: sondeo.tier ?? undefined } : {}),
+        };
       }
       // ¿Gemela de una fila existente? (filas ANTERIORES con hash — la
       // cadena es FIFO, la original siempre lleva delante). D65: la búsqueda

@@ -291,7 +291,7 @@ describe("e73 T1 · sondeo-qr.client (singleton FIFO + hard-kill + feature-detec
     expect(ultimo?.enviados.length).toBe(2); // ahora sí salió el 2.º
     responder(ultimo!, { payload: null, tier: null, ms: 1 });
     const r2 = await p2;
-    expect(r2).toBeNull(); // respuesta sin payload → null honesto
+    expect(r2).toEqual({ payload: null, tier: null, ms: 1 }); // corrió sin QR — telemetría real (§E)
   });
 
   it("9 · hard-kill: worker colgado → terminate + respawn + null", async () => {

@@ -149,7 +149,8 @@ export interface FilaInforme {
     // "ya-enviada-postocr" (H1 post-OCR) · "ya-enviada-copia" (traza visual
     // de cadenaDedup aterrizó sobre un registro YA-ENVIADA).
     | "ya-enviada-postocr"
-    | "ya-enviada-copia" | null;
+    | "ya-enviada-copia"
+    | "qr-sondeo" | null; // KIT e73-sondeo-qr-precoz-v1 (§B) — gemela por payload EXACTO leído en INGESTA (valor NUEVO AL FINAL — contrato D57)
   /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
   dedupDistancia: number | null;
   // ---------- WAVE3 §B — ORDEN-WAVE3-remoto-rescate-obs-v1 (T rescate) ----------
