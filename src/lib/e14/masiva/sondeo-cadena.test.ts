@@ -391,7 +391,7 @@ describe("e73 §C · índice histórico por payload (historico.ts — REAL sobre
     expect(mapa.has(PAYLOAD_Q)).toBe(false);
   });
 
-  it("C.3 · MODO PRUEBAS (incluirPersistido=false) → el ledger NO alimenta", async () => {
+  it("C.3 · modo pruebas (incluirPersistido=false) → el ledger NO alimenta", async () => {
     const { registrarEntradaHistorico } = await import("./historico");
     await registrarEntradaHistorico({ id: "h1", ts: 1, payloadQr: PAYLOAD_P });
     __resetIndicePayloadParaTest();

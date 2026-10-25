@@ -122,7 +122,7 @@ let indicePayloadListo = false;
 /**
  * Índice por payload EXACTO (§C): carga LIVIANA una vez por sesión del
  * índice (getAll de llaves chicas — L7) + hook en vivo. `incluirPersistido`
- *=false NO alimenta desde el ledger (MODO PRUEBAS e64p C-3 — los Maps de
+ *=false NO alimenta desde el ledger (modo pruebas e64p C-3 — los Maps de
  * dedup no se comen de NADA persistido; el hook in-memory de la SESIÓN
  * sigue vivo — misma doctrina del índice fusionado). Fallo del ledger →
  * índice vacío-conservador (RL-e65b-3): el caller sigue su curso.
