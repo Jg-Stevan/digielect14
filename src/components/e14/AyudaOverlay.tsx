@@ -201,7 +201,7 @@ export function AyudaOverlay() {
 
           {/* Niveles de calidad */}
           <section aria-label="Niveles de calidad">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
               Niveles de calidad (score)
             </p>
             <div className="flex flex-col gap-2">
@@ -215,7 +215,7 @@ export function AyudaOverlay() {
                   >
                     {n.chip}
                   </span>
-                  <span className="font-mono text-[10px] text-slate-500 tabular-nums w-[74px] shrink-0">
+                  <span className="font-mono text-[10px] text-slate-400 tabular-nums w-[74px] shrink-0">
                     {n.rango}
                   </span>
                   <span className="text-[12px] text-slate-400 leading-snug">
@@ -228,7 +228,7 @@ export function AyudaOverlay() {
 
           {/* Glossario */}
           <section aria-label="Glosario">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
               Términos clave
             </p>
             <dl className="flex flex-col gap-2.5">
@@ -273,7 +273,7 @@ export function AyudaOverlay() {
           >
             Entendido — empezar
           </button>
-          <p className="text-center text-[10px] text-slate-500 mt-2 font-mono">
+          <p className="text-center text-[10px] text-slate-400 mt-2 font-mono">
             Vuelve a abrirla con «?» — CÓMO FUNCIONA (menú lateral)
           </p>
         </div>

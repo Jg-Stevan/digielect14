@@ -234,7 +234,7 @@ export function AnalyzingView() {
               DIGITALIZADOR OFICIAL E-14
             </span>
           </div>
-          <span className="font-mono text-[11px] text-slate-500 text-center">
+          <span className="font-mono text-[11px] text-slate-400 text-center">
             VALIDACIÓN AUTOMÁTICA DE REGISTRO ELECTORAL
           </span>
         </div>

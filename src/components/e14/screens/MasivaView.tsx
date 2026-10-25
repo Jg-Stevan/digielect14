@@ -543,7 +543,7 @@ export function MasivaView() {
             <p className="font-mono text-[11px] tracking-wider text-slate-400 uppercase mt-1">
               SUELTA ARCHIVOS EN CUALQUIER PARTE DE ESTA PANTALLA
             </p>
-            <span className="font-mono text-[9px] text-slate-500 uppercase tracking-widest">
+            <span className="font-mono text-[9px] text-slate-400 uppercase tracking-widest">
               SOPORTA MÚLTIPLES FOTOS, PDF, ZIP O RAR
             </span>
           </div>
@@ -584,7 +584,7 @@ export function MasivaView() {
                 </span>
               )}
             </p>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500 shrink-0">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400 shrink-0">
               {corriendo ? "COLA ACTIVA" : pendientes > 0 ? `${pendientes} EN COLA` : "COLA QUIETA"}
             </p>
           </div>
@@ -620,7 +620,7 @@ export function MasivaView() {
               </button>
             ))}
             <span
-              className="font-mono text-[10px] uppercase tracking-wider text-slate-500"
+              className="font-mono text-[10px] uppercase tracking-wider text-slate-400"
               aria-label={`Conteos: ${enviadas} enviadas, ${enCola} en cola, ${pendientes} pendientes, ${duplicadas} duplicadas, ${yaEnviadas} ya enviadas, ${errores} errores`}
             >
               ENVIADAS {enviadas} · EN COLA {enCola} · PENDIENTES {pendientes}
@@ -764,7 +764,7 @@ export function MasivaView() {
                       )}
                       {f.qrEstado === "sin-payload" && f.estado === "LISTA" && (
                         <span
-                          className="rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide text-white/30"
+                          className="rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide text-slate-400"
                           aria-label="QR no decodificado"
                         >
                           QR ✗
@@ -773,7 +773,7 @@ export function MasivaView() {
                       {/* KIT e14-masiva-tiempos-v1 (PR-1): la DUPLICADA señala
                           a su original — transparencia total del dedup. */}
                       {f.estado === "DUPLICADA" && f.dupOf && (
-                        <span className="font-mono text-[9px] uppercase tracking-wider text-gray-500 truncate">
+                        <span className="font-mono text-[9px] uppercase tracking-wider text-gray-400 truncate">
                           ≡ {filas.find((o) => o.id === f.dupOf)?.nombre ?? "OTRA FILA"}
                         </span>
                       )}
@@ -886,7 +886,7 @@ export function MasivaView() {
                       disabled={f.estado === "PROCESANDO"}
                       onClick={() => void quitar(f.id)}
                       aria-label={`Quitar ${f.nombre} de la cola`}
-                      className="min-h-[44px] min-w-[44px] rounded-lg text-gray-500 hover:text-red-400 font-mono text-[10px] font-bold uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                      className="min-h-[44px] min-w-[44px] rounded-lg text-gray-400 hover:text-red-400 font-mono text-[10px] font-bold uppercase tracking-wider disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
                     >
                       QUITAR
                     </button>
@@ -927,7 +927,7 @@ export function MasivaView() {
                         <div className="h-1 rounded-full bg-white/5" aria-hidden />
                       )}
                       {(enColaVida || (esActiva && progreso)) && (
-                        <p className="mt-1 font-mono text-[11px] tabular-nums tracking-wider text-gray-500 uppercase truncate">
+                        <p className="mt-1 font-mono text-[11px] tabular-nums tracking-wider text-gray-400 uppercase truncate">
                           <span aria-live="polite">
                             {enColaVida
                               ? `EN COLA #${posCola} DE ${colaVida.length}`
@@ -945,7 +945,7 @@ export function MasivaView() {
 
             })}
             {visibles.length === 0 && (
-              <li className="rounded-xl border border-brand-borderdim bg-brand-surface/40 px-3 py-4 text-center font-mono text-[10px] uppercase tracking-wider text-gray-500">
+              <li className="rounded-xl border border-brand-borderdim bg-brand-surface/40 px-3 py-4 text-center font-mono text-[10px] uppercase tracking-wider text-gray-400">
                 SIN FILAS CON ESE FILTRO
               </li>
             )}

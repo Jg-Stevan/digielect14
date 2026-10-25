@@ -335,7 +335,7 @@ export function ActasView() {
             className="w-full h-10 lg:h-11 pl-9 pr-10 bg-[#10161f] border border-slate-800 rounded-xl text-xs lg:text-sm text-white placeholder-slate-500 font-mono focus:outline-none focus:border-[#10b981]/60 focus:ring-1 focus:ring-[#10b981]/30 transition shadow-xs"
           />
           <span
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"
             aria-hidden
           >
             🔍
