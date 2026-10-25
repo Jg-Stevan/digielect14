@@ -494,7 +494,7 @@ export function ReviewView() {
             aria-label="QR leído"
           >
             <span className="text-emerald-300/90">QR ✓</span>
-            <span className="text-gray-500 uppercase">capa 0 qr</span>
+            <span className="text-gray-400 uppercase">capa 0 qr</span>
           </div>
         )}
 
@@ -613,7 +613,7 @@ export function ReviewView() {
               </div>
             ) : (
               <div className="mt-2 rounded-xl border border-slate-800 bg-[#090d12] h-48 flex items-center justify-center">
-                <span className="font-mono text-[10px] tracking-widest text-slate-500 uppercase">
+                <span className="font-mono text-[10px] tracking-widest text-slate-400 uppercase">
                   FOTO NO DISPONIBLE
                 </span>
               </div>
@@ -666,7 +666,7 @@ export function ReviewView() {
               </div>
             ) : (
               <div className="mt-2 rounded-xl border border-slate-800 bg-[#090d12] h-48 flex items-center justify-center">
-                <span className="font-mono text-[10px] tracking-widest text-slate-500 uppercase">
+                <span className="font-mono text-[10px] tracking-widest text-slate-400 uppercase">
                   FOTO NO DISPONIBLE
                 </span>
               </div>
@@ -807,7 +807,7 @@ export function ReviewView() {
                     </span>
                     <span
                       className={`text-[11px] ${
-                        activo ? "font-medium text-white" : "text-gray-500"
+                        activo ? "font-medium text-white" : "text-gray-400"
                       }`}
                     >
                       {f.label}

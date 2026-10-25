@@ -218,7 +218,7 @@ export function ResumenView() {
                 HISTORIAL DE TRANSMISIONES
               </span>
               {modoSimulacion && (
-                <span className="text-[10px] text-slate-500 font-mono">(DATOS EN MODO SIMULACIÓN)</span>
+                <span className="text-[10px] text-slate-400 font-mono">(DATOS EN MODO SIMULACIÓN)</span>
               )}
             </div>
             <span className="font-mono text-[11px] text-slate-400">
@@ -228,7 +228,7 @@ export function ResumenView() {
 
           <div className="flex flex-col max-h-96 lg:max-h-[28rem] overflow-y-auto thin-scroll rounded-2xl border border-slate-800 bg-[#10161f] divide-y divide-slate-800/80 shadow-sm">
             {filas.length === 0 ? (
-              <div className="p-4 text-center text-xs font-mono text-slate-500">
+              <div className="p-4 text-center text-xs font-mono text-slate-400">
                 NO HAY ENVÍOS REGISTRADOS EN ESTA SESIÓN
               </div>
             ) : (

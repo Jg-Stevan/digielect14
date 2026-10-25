@@ -72,7 +72,7 @@ export function SideNav() {
             DIGITALIZADOR
             <span className="text-emerald-400"> E-14</span>
           </p>
-          <p className="text-[10px] text-slate-500 font-mono uppercase tracking-[0.18em] mt-0.5">
+          <p className="text-[10px] text-slate-400 font-mono uppercase tracking-[0.18em] mt-0.5">
             Precisión electoral
           </p>
         </div>
@@ -113,7 +113,7 @@ export function SideNav() {
                 >
                   {label}
                 </span>
-                <span className="block text-[10px] text-slate-500 leading-tight mt-0.5 truncate">
+                <span className="block text-[10px] text-slate-400 leading-tight mt-0.5 truncate">
                   {hint}
                 </span>
               </span>
@@ -150,12 +150,12 @@ export function SideNav() {
                 {online ? "En línea" : "Sin conexión"}
               </span>
             </span>
-            <span className="font-mono text-[10px] text-slate-500 tabular-nums shrink-0">
+            <span className="font-mono text-[10px] text-slate-400 tabular-nums shrink-0">
               {online ? "" : `COLA ${colaOffline}`}
             </span>
           </div>
           <div className="flex items-center justify-between gap-3 border-t border-slate-800/80 pt-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">
               Actas de sesión
             </span>
             <span className="font-mono text-sm font-extrabold text-white tabular-nums">
@@ -175,7 +175,7 @@ export function SideNav() {
           Cómo funciona
         </button>
 
-        <p className="text-center text-[9px] text-slate-600 font-mono uppercase tracking-[0.2em]">
+        <p className="text-center text-[9px] text-slate-400 font-mono uppercase tracking-[0.2em]">
           E-14 · Precisión electoral
         </p>
       </div>
