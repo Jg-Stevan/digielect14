@@ -596,7 +596,7 @@ async function cadenaDedup(
         // (b) Histórico — índice por payload (§C) → YA-ENVIADA via "payload"
         // EXISTENTE (cero churn D57), dedup default "ya-enviada" (el guard
         // wave3 C.2 de escritores YA-ENVIADA queda satisfecho).
-        // COLA_PERSISTENTE=false (MODO PRUEBAS e64p C-3): el ledger NO
+        // COLA_PERSISTENTE=false (modo pruebas e64p C-3): el ledger NO
         // alimenta los Maps de dedup — el índice por payload tampoco.
         if (COLA_PERSISTENTE) {
           try {

@@ -96,6 +96,10 @@ vi.mock("./historico", () => ({
   borrarHistorico: vi.fn(() => Promise.resolve()),
   listarHistorico: vi.fn(() => Promise.resolve([])),
   registrarEntradaHistorico: vi.fn(() => Promise.resolve()),
+  // KIT e73-sondeo-qr-precoz-v1 (§C) — el store llama al hook del índice
+  // por payload al registrar (mismo punto de invalidación):
+  actualizarIndicePayload: vi.fn(),
+  indiceEnviadasPorPayload: vi.fn(() => Promise.resolve(new Map())),
 }));
 vi.mock("../../logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
