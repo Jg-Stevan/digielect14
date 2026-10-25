@@ -447,7 +447,7 @@ export function MasivaView() {
                 type="button"
                 onClick={pausar}
                 aria-label="Pausar la cola"
-                className="min-h-[42px] px-4 rounded-xl border border-amber-500/50 bg-amber-500/15 text-amber-300 font-mono text-[11px] font-bold uppercase tracking-wider hover:bg-amber-500/25 transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                className="min-h-[44px] px-4 rounded-xl border border-amber-500/50 bg-amber-500/15 text-amber-300 font-mono text-[11px] font-bold uppercase tracking-wider hover:bg-amber-500/25 transition cursor-pointer flex items-center gap-1.5 shadow-sm"
               >
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                 PAUSAR
@@ -458,7 +458,7 @@ export function MasivaView() {
                 onClick={iniciar}
                 disabled={!colaDisponible || (pendientes === 0 && duplicadas === 0)}
                 aria-label="Procesar la cola"
-                className="min-h-[42px] px-4 md:px-5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-[11px] md:text-xs font-black uppercase tracking-wider shadow-md shadow-[#10b981]/25 hover:shadow-[#10b981]/40 active:scale-[0.98] transition cursor-pointer disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed flex items-center gap-1.5"
+                className="min-h-[44px] px-4 md:px-5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-[11px] md:text-xs font-black uppercase tracking-wider shadow-md shadow-[#10b981]/25 hover:shadow-[#10b981]/40 active:scale-[0.98] transition cursor-pointer disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <span className="w-2 h-2 rounded-full bg-[#090d12]" />
                 PROCESAR COLA
@@ -484,7 +484,7 @@ export function MasivaView() {
               aria-label={
                 vaciarArmado ? "Confirmar vaciar toda la cola" : "Vaciar toda la cola"
               }
-              className={`min-h-[42px] px-3 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold uppercase tracking-wider transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`min-h-[44px] px-3 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold uppercase tracking-wider transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                 vaciarArmado
                   ? "border-red-500 text-red-400 bg-red-500/20 animate-pulse"
                   : "border-slate-800 bg-[#10161f] text-slate-400 hover:border-slate-700 hover:text-white"
@@ -610,7 +610,7 @@ export function MasivaView() {
                 type="button"
                 onClick={() => setFiltro(valor)}
                 aria-pressed={filtro === valor}
-                className={`min-h-[32px] px-3 py-1 rounded-full border font-mono text-[10px] font-bold uppercase tracking-wider transition ${
+                className={`min-h-[44px] px-3 py-1 rounded-full border font-mono text-[10px] font-bold uppercase tracking-wider transition ${
                   filtro === valor
                     ? "border-[#10b981] text-[#10b981] bg-[#10b981]/15"
                     : "border-slate-800 text-slate-400 hover:text-white hover:border-slate-700"
@@ -633,7 +633,7 @@ export function MasivaView() {
                 disabled={enviandoLote}
                 onClick={() => void enviarLote("ADVERTENCIA")}
                 aria-label={`Enviar ${advertenciasPend} actas con advertencia`}
-                className="ml-auto min-h-[34px] px-3.5 rounded-full border border-amber-400/60 text-amber-400 bg-amber-400/10 font-mono text-[10px] font-bold uppercase tracking-wider hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                className="ml-auto min-h-[44px] px-3.5 rounded-full border border-amber-400/60 text-amber-400 bg-amber-400/10 font-mono text-[10px] font-bold uppercase tracking-wider hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 {enviandoLote ? "ENVIANDO…" : `ENVIAR ADVERTENCIAS (${advertenciasPend})`}
               </button>

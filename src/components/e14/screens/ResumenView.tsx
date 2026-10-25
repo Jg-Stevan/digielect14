@@ -198,7 +198,7 @@ export function ResumenView() {
                 ? "Confirmar reiniciar la jornada completa (incluye la cola masiva)"
                 : "Reiniciar la jornada completa"
             }
-            className={`w-full lg:max-w-sm min-h-[40px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
+            className={`w-full lg:max-w-sm min-h-[44px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
               reiniciarArmado
                 ? "border-red-500 text-red-400 bg-red-500/15 shadow-sm shadow-red-500/20"
                 : "border-slate-800 bg-[#10161f] text-slate-400 hover:border-red-500/50 hover:text-red-400"
