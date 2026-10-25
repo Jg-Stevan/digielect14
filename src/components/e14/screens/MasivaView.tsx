@@ -866,8 +866,15 @@ export function MasivaView() {
                     {/* D59 — KIT e14-info-acta-filas-v1 (T4): «REINTENTAR» del
                         mockup en filas ERROR — re-encola (PENDIENTE) para que
                         PROCESAR la procese; SIN_ARCHIVO_ORIGINAL si el
-                        registro no trae el archivo original (honesto). */}
-                    {f.estado === "ERROR" && (
+                        registro no trae el archivo original (honesto).
+                        KIT ux-masiva-fixes-v1 (T3/§C, UX-2): la fila ERROR
+                        SIN_ARCHIVO_ORIGINAL NO renderiza REINTENTAR (el
+                        original NO existe — el store ya lo documenta a
+                        priori en store.ts:1271-1287); conserva su QUITAR.
+                        Filas ERROR post-PROCESAR con original vivo conservan
+                        REINTENTAR intacto (D59). SOLO copy-estado — cero
+                        lógica de store. */}
+                    {f.estado === "ERROR" && f.error !== "SIN_ARCHIVO_ORIGINAL" && (
                       <button
                         type="button"
                         onClick={() => void reintentar(f.id)}
