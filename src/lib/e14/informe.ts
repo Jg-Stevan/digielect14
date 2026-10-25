@@ -149,7 +149,8 @@ export interface FilaInforme {
     // "ya-enviada-postocr" (H1 post-OCR) · "ya-enviada-copia" (traza visual
     // de cadenaDedup aterrizó sobre un registro YA-ENVIADA).
     | "ya-enviada-postocr"
-    | "ya-enviada-copia" | null;
+    | "ya-enviada-copia"
+    | "qr-sondeo" | null; // KIT e73-sondeo-qr-precoz-v1 (§B) — gemela por payload EXACTO leído en INGESTA (valor NUEVO AL FINAL — contrato D57)
   /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
   dedupDistancia: number | null;
   // ---------- WAVE3 §B — ORDEN-WAVE3-remoto-rescate-obs-v1 (T rescate) ----------
@@ -158,6 +159,14 @@ export interface FilaInforme {
    *  final ≠ RECHAZADA tras el reintento. null = sin rescate (pre-wave3 o
    *  fila sin pipeline — jamás inventar). Aditivo AL FINAL (D57). */
   rescateRechazo: "lanzado" | "salvado" | null;
+  // ---------- KIT e73-sondeo-qr-precoz-v1 (§E) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** (§E) ms del sondeo QR en ingesta — PRESENTE solo si el sondeo CORRIÓ
+   *  (con o sin lectura — "N leídos"); null = no corrió (flag OFF / sin
+   *  soporte / hard-kill / registro previo al kit — jamás inventar). */
+  sondeoQrMs: number | null;
+  /** (§E) tier que leyó el payload — SOLO con lectura ("M con payload");
+   *  null = sondeó sin leer. */
+  sondeoQrTier: string | null;
   // ---------- D66 — KIT e14-decode-unico-precalor-v1 (T4) ----------
   /** D66 (T4): ms SOLO del decodificado a MASTER (0 = precalentada — el
    *  decode vivió en el precalor; null = sin master: fallback/ERROR/
@@ -405,6 +414,10 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
     // WAVE3 §B — traza del rescate (null si el registro no la trae —
     // pre-wave3 o sin rescate; jamás inventar).
     rescateRechazo: reg.rescateRechazo ?? null,
+    // KIT e73 (§E) — telemetría del sondeo QR en ingesta (null si el registro
+    // no la trae — pre-e73 / flag OFF / hard-kill — jamás inventar).
+    sondeoQrMs: reg.sondeoQrMs ?? null,
+    sondeoQrTier: reg.sondeoQrTier ?? null,
     tieneDiagnostico: !!diag,
     conCarpeta,
     pesoImagenes,
@@ -534,6 +547,9 @@ export function resumenDedup(filas: FilaInforme[]): {
    *  (semántica e66 estable — solo trazas nuevas explícitas). */
   yaEnviadaPostocr: number;
   yaEnviadaCopia: number;
+  /** KIT e73 (§E) — gemelas atrapadas por el SONDEO en INGESTA (dedup
+   *  "qr-sondeo" — pre-pool: jamás slot/probe/OCR). Aditivo al final. */
+  qrSondeo: number;
 } {
   const conMatch = filas.filter(
     (f) =>
@@ -561,6 +577,7 @@ export function resumenDedup(filas: FilaInforme[]): {
     yaEnviada: filas.filter((f) => f.dedup === "ya-enviada").length,
     yaEnviadaPostocr: filas.filter((f) => f.dedup === "ya-enviada-postocr").length,
     yaEnviadaCopia: filas.filter((f) => f.dedup === "ya-enviada-copia").length,
+    qrSondeo: filas.filter((f) => f.dedup === "qr-sondeo").length,
   };
 }
 
@@ -1065,6 +1082,40 @@ export function renderTxt(
   const rescatesUsados = filas.filter((f) => f.rescateRechazo != null).length;
   const rescatesSalvaron = filas.filter((f) => f.rescateRechazo === "salvado").length;
   linea(`Rescates rechazo: ${rescatesUsados} usados / ${rescatesSalvaron} salvaron`);
+  // KIT e73-sondeo-qr-precoz-v1 (§E) — línea NUEVA AL FINAL de TOTALES
+  // (aditiva — D51, parsers por prefijo): el sondeo QR en INGESTA. N leídos
+  // = filas cuyo sondeo CORRIÓ (con o sin lectura — sondeoQrMs presente);
+  // M con payload = sondeos con LECTURA (sondeoQrTier presente). p50/p95 de
+  // sondeoQrMs SOLO sobre filas con el dato; desglose por tier SOLO con
+  // lecturas ("-" si nada — jamás inventar). 0/0 = honesto (flag OFF o
+  // registros previos al kit — el instrumento silencioso es un dato).
+  const sondeadas = filas.filter((f) => f.sondeoQrMs != null);
+  const conPayloadSondeo = sondeadas.filter((f) => f.sondeoQrTier != null);
+  const p50Sondeo = percentil(
+    sondeadas.map((f) => f.sondeoQrMs as number),
+    50,
+  );
+  const p95Sondeo = percentil(
+    sondeadas.map((f) => f.sondeoQrMs as number),
+    95,
+  );
+  const tiersSondeo = [
+    "full",
+    "recorte",
+    "rot90",
+    "rot180",
+    "rot270",
+    "barrido",
+  ]
+    .map((t) => {
+      const n = conPayloadSondeo.filter((f) => f.sondeoQrTier === t).length;
+      return n > 0 ? `${t} ${n}` : null;
+    })
+    .filter((v): v is string => v != null)
+    .join(" / ");
+  linea(
+    `Sondeo QR: ${sondeadas.length} leídos · ${conPayloadSondeo.length} con payload · p50/p95 ${p50Sondeo ?? "-"}/${p95Sondeo ?? "-"} ms · tiers: ${tiersSondeo || "-"}`,
+  );
   linea();
   const rechazoFilas = filas.filter((f) => f.rechazo);
   linea(`RECHAZOS (${rechazoFilas.length})`);
@@ -1436,6 +1487,7 @@ export async function generarInformeZip(
         yaEnviada: r.yaEnviada, // e66 — capa e65 contra el histórico (aditivo al final)
         yaEnviadaPostocr: r.yaEnviadaPostocr, // WAVE3 C.2 — puerta H1 post-OCR (aditivo al final)
         yaEnviadaCopia: r.yaEnviadaCopia, // WAVE3 C.2 — puerta traza-sobre-veto (aditivo al final)
+        qrSondeo: r.qrSondeo, // KIT e73 — sondeo QR en ingesta (aditivo al final)
         // ANEXO Agente C (Tarea 2) — ahorro de las duplicadas (ADITIVO AL
         // FINAL: null si ninguna copia aportó dato — jamás inventar).
         ahorroTotalMs: ahorros.ahorroTotalMs,

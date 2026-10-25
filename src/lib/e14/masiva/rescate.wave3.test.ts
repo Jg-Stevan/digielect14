@@ -138,6 +138,8 @@ describe("WAVE3 §B — informe: línea `Rescates rechazo: N usados / M salvaron
       dedup: null,
       dedupDistancia: null,
       rescateRechazo: null,
+      sondeoQrMs: null, // KIT e73 (§E) — telemetría del sondeo (null en fixtures)
+      sondeoQrTier: null,
       decodeMs: null,
       origenDecode: null,
       precalentada: false,

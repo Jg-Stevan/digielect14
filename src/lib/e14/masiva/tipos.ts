@@ -85,6 +85,12 @@ export interface FilaMasiva {
    *  esta fila (bytes exactos o dhash cinta cierta). SOLO-VISUAL (chip).
    *  Ausente/null = match contra fila viva NO enviada → DUPLICADA de siempre. */
   enviadaDe?: string | null;
+  // ---------- KIT e73-sondeo-qr-precoz-v1 (§E) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** (§E) telemetría del sondeo QR en ingesta — espejo de RegistroMasiva
+   *  (chip «Sondeo QR N/M» en vivo + supervivencia de recarga). */
+  sondeoQrMs?: number;
+  /** (§E) tier que leyó el payload — SOLO cuando hubo lectura (jamás inventar). */
+  sondeoQrTier?: string;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
@@ -141,7 +147,8 @@ export interface RegistroMasiva {
     // distinguen POR DÓNDE llegó el veto ya-enviada (gap real lote 10:
     // filas YA-ENVIADA con dedup:"sin-match" — la puerta quedaba invisible).
     | "ya-enviada-postocr" // H1 post-OCR (punto único de envío — el OCR ya se pagó)
-    | "ya-enviada-copia"; // la traza visual de cadenaDedup aterrizó sobre un registro YA-ENVIADA (evidencia del veto preservada)
+    | "ya-enviada-copia" // la traza visual de cadenaDedup aterrizó sobre un registro YA-ENVIADA (evidencia del veto preservada)
+    | "qr-sondeo"; // KIT e73-sondeo-qr-precoz-v1 (§B) — gemela por payload EXACTO leído en INGESTA (pre-pool; no paga slot/probe/OCR) — valor NUEVO AL FINAL (contrato D57)
   /** (T2) distancia de Hamming del match v2 (0–64). Solo filas con
    *  dedup === "v2" lo traen; sin match no hay distancia (no se inventa). */
   dedupDistancia?: number | null;
@@ -231,6 +238,17 @@ export interface RegistroMasiva {
    *  desenlace final ≠ RECHAZADA tras el reintento. Ausente = sin rescate
    *  (jamás inventar). Aditivo AL FINAL del contrato D57. */
   rescateRechazo?: "lanzado" | "salvado";
+  // ---------- KIT e73-sondeo-qr-precoz-v1 (§E) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** (§E) telemetría del SONDEO QR en INGESTA (e73): ms del sondeo del
+   *  archivo (corre en el worker — se estampa cuando el sondeo CORRIÓ, con
+   *  o sin payload — jamás inventar). Ausente = el sondeo no corrió (flag
+   *  OFF / sin soporte / hard-kill / fila previa al kit). */
+  sondeoQrMs?: number;
+  /** (§E) tier del ladder que LEYÓ el payload ("full" | "recorte" |
+   *  "rot90" | "rot180" | "rot270" | "barrido"). PRESENTE SOLO cuando el
+   *  sondeo leyó payload ("con payload" del informe) — ausente = sondeó sin
+   *  lectura (jamás inventar). */
+  sondeoQrTier?: string;
 }
 
 /** KIT e14-carga-masiva-v1 (helper compartido runner/store): página corta del

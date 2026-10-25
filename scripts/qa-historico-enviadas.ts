@@ -140,8 +140,14 @@ ok(
 console.log("\n── Bloque 2 · T-2 store — índice fusionado ledger+cola ──");
 
 ok(
-  store.includes('import {\n  borrarHistorico,\n  listarHistorico,\n  registrarEntradaHistorico,\n  type EntradaHistorica,\n} from "./historico";'),
-  "T-2a + e64p: EntradaHistorica UNIFICADA — importada del módulo (bloque ampliado con borrarHistorico por el kit e64p)",
+  // KIT e73-sondeo-qr-precoz-v1 (§C) — el bloque de import crece con el
+  // índice por payload (actualizarIndicePayload + indiceEnviadasPorPayload):
+  // MISMO módulo, MISMO patrón (D57 append — nada se reordena ni elimina).
+  store.includes('import {\n  borrarHistorico,\n  listarHistorico,\n  registrarEntradaHistorico,') &&
+    store.includes('actualizarIndicePayload,') &&
+    store.includes('indiceEnviadasPorPayload,') &&
+    store.includes('type EntradaHistorica,\n} from "./historico";'),
+  "T-2a + e64p + e73: EntradaHistorica UNIFICADA — importada del módulo (bloque ampliado con borrarHistorico por e64p y con el índice por payload por e73 §C)",
 );
 
 ok(
@@ -421,11 +427,13 @@ ok(
 // (contrato D57): "ya-enviada-postocr" (H1) y "ya-enviada-copia" (traza
 // visual sobre YA-ENVIADA — gap real lote 10). Los valores previos quedan
 // byte a byte en el MISMO orden; nada se elimina ni reordena.
+// KIT e73-sondeo-qr-precoz-v1 — 'qr-sondeo' entra AL FINAL (D57 append;
+// todas las puertas del veto quedan byte a byte).
 ok(
   tipos.includes(
-    'dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr"\n    | "ya-enviada" // e65-dedup-enviadas-v1 — match contra registro ENVIADO del histórico/cola (bytes/dhash cinta cierta) — valor NUEVO AL FINAL (contrato D57)\n    // WAVE3 C.2 (obs-informe-wave3-v1) — puertas del veto AL FINAL (D57):\n    // distinguen POR DÓNDE llegó el veto ya-enviada (gap real lote 10:\n    // filas YA-ENVIADA con dedup:"sin-match" — la puerta quedaba invisible).\n    | "ya-enviada-postocr" // H1 post-OCR (punto único de envío — el OCR ya se pagó)\n    | "ya-enviada-copia"; // la traza visual de cadenaDedup aterrizó sobre un registro YA-ENVIADA (evidencia del veto preservada)',
+    'dedup?: "v2" | "sin-match" | "identidad" | "visual-aplazada" | "qr"\n    | "ya-enviada" // e65-dedup-enviadas-v1 — match contra registro ENVIADO del histórico/cola (bytes/dhash cinta cierta) — valor NUEVO AL FINAL (contrato D57)\n    // WAVE3 C.2 (obs-informe-wave3-v1) — puertas del veto AL FINAL (D57):\n    // distinguen POR DÓNDE llegó el veto ya-enviada (gap real lote 10:\n    // filas YA-ENVIADA con dedup:"sin-match" — la puerta quedaba invisible).\n    | "ya-enviada-postocr" // H1 post-OCR (punto único de envío — el OCR ya se pagó)\n    | "ya-enviada-copia" // la traza visual de cadenaDedup aterrizó sobre un registro YA-ENVIADA (evidencia del veto preservada)\n    | "qr-sondeo"; // KIT e73-sondeo-qr-precoz-v1 (§B) — gemela por payload EXACTO leído en INGESTA (pre-pool; no paga slot/probe/OCR) — valor NUEVO AL FINAL (contrato D57)',
   ),
-  "D57-e65+wave3: la unión dedup de tipos.ts conserva TODOS sus valores en orden (e65b intacto) + puertas del veto AL FINAL (postocr/copia — wave3 C.2)",
+  "D57-e65+wave3+e73: la unión dedup de tipos.ts conserva TODOS sus valores en orden (e65b intacto) + puertas del veto AL FINAL (postocr/copia — wave3 C.2) + 'qr-sondeo' AL FINAL (e73 §B)",
 );
 
 ok(

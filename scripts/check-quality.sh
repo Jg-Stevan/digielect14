@@ -51,6 +51,14 @@ paso "3/6 · Build de producción"
 bun run build > /tmp/check-quality-build.log 2>&1 || { tail -15 /tmp/check-quality-build.log; fail "build"; }
 ok "build exit 0 ($(grep -c 'Route' /tmp/check-quality-build.log 2>/dev/null || echo '?') rutas)"
 
+paso "3bis/6 · Smoke de bundling del worker de sondeo (FIX DICTAMEN-e73 §3.2 — jamás verde falso)"
+# Lección del dictamen: «exit 0 no es worker compilado» — Turbopack emitía el
+# .ts crudo como asset. Este smoke afirma: artefacto FRESCO (byte-idéntico a
+# la regeneración) · marcadores del ladder · PROHIBIDOS ausentes (import(
+# / zxing / process.env) · cliente sin .ts en media y apuntando al .worker.js.
+bun scripts/smoke-sondeo-worker.mjs || fail "smoke sondeo-worker (worker NO compilado de verdad)"
+ok "worker de sondeo precompilado, fresco y jsQR-only · cliente limpio"
+
 paso "4/6 · Vitest (suite unitaria)"
 bun run test || fail "vitest"
 ok "vitest verde"

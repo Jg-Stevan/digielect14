@@ -57,33 +57,57 @@
  * · e64 §7-6 — Sin timers globales: promesas acotadas + parámetros
  *   inyectables (el presupuesto del barrido zxing es reló local).
  */
-import jsQR from "./vendor/jsQR.js";
+// (jsQR vivía aquí — desde el FIX DICTAMEN-e73 §3.1 TODO el decode jsQR puro
+// vive en qr-pixeles.ts; este módulo ya no lo importa directamente.)
 import type { Binarizer, ReaderOptions } from "zxing-wasm/reader";
 import type { EstadoEntrada } from "./tipos";
 import { canvasCon, decodeImagenLru } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
 import { logger } from "../../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
+// ─── KIT e73-sondeo-qr-precoz-v1 (§A.2) — refactor puro ADITIVO ───────────
+// El núcleo puro de píxeles (PixelesQr · EspecieBanda · BANDAS_BASE/BANDA_A ·
+// intentoSobrePixeles · rotar90/rotarPixeles) vive en qr-pixeles.ts
+// (módulo NUEVO worker-safe: cero DOM, cero zxing — solo jsQR vendido) y se
+// RE-EXPORTA aquí — cero diffs en consumidores (runner.ts, puente, QA y
+// tests siguen importando de este módulo). El contenido fue MOVIDO sin
+// cambiar comportamiento (los tiers que lo consumen — ladderBase/ladderQr/
+// rotación — ejercitan el mismo código: qa-qr-identidad verde).
+// FIX DICTAMEN-e73-implementacion-v1 §3.1: el BARRIDO jsQR completo
+// (barridoQrDePixeles · BARRIDO_VENTANAS · QR_RECORTE_LADO · Cuadrante/
+// CUADRANTES · limitesDeCuadrante · ventanaDePixeles · jsQrDeVentana ·
+// ladoDeVentana) se MOVIÓ TAMBIÉN al módulo puro — mismo trato sin cambio
+// de comportamiento — para que el WORKER de sondeo importe el S3 de forma
+// ESTÁTICA y su bundle quede jsQR-only (cero identidad-qr → cero
+// scanner-core/logger/zxing/process.env en el worker emitido).
+import {
+  barridoQrDePixeles,
+  BANDA_A,
+  BANDAS_BASE,
+  BARRIDO_VENTANAS,
+  CUADRANTES,
+  intentoSobrePixeles,
+  jsQrDeVentana,
+  ladoDeVentana,
+  limitesDeCuadrante,
+  QR_RECORTE_LADO,
+  rotarPixeles,
+  ventanaDePixeles,
+  type PixelesQr,
+} from "./qr-pixeles";
+export {
+  barridoQrDePixeles,
+  BANDA_A,
+  BANDAS_BASE,
+  BARRIDO_VENTANAS,
+  intentoSobrePixeles,
+  QR_RECORTE_LADO,
+  rotarPixeles,
+} from "./qr-pixeles";
+export type { EspecieBanda, PixelesQr } from "./qr-pixeles";
 
 // ─── Constantes NUEVAS del kit e63m §1.1 (separadas de las existentes) ──────
 /** Lado largo MÁXIMO del canvas de trabajo (kit §1.1 — igual que el banco:
  *  el thumb 320 del dhash es DEMASIADO PEQUEÑO para el QR). */
 export const QR_LADO_LARGO = 2048;
-/** Bandas del ladder — fracciones EXACTAS del banco (#72 bench.html). */
-interface EspecieBanda {
-  id: string;
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-  escala: number;
-}
-const BANDAS_BASE: EspecieBanda[] = [
-  { id: "A", x0: 0.0, y0: 0.0, x1: 1.0, y1: 1.0, escala: 1 }, // imagen completa
-  { id: "B", x0: 0.0, y0: 0.0, x1: 0.45, y1: 0.25, escala: 1 }, // banda top-left
-  { id: "C", x0: 0.08, y0: 0.05, x1: 0.38, y1: 0.2, escala: 1 }, // banda ajustada
-  { id: "C1.5", x0: 0.08, y0: 0.05, x1: 0.38, y1: 0.2, escala: 1.5 }, // reintento up-escalado
-];
-const BANDA_A = BANDAS_BASE[0]!; // floor del tier de rotación (A completa)
-
 /** Ladder BASE en orden (kit §1.1 — byte-idéntico al banco): A imagen
  *  completa → B banda top-left → C banda ajustada → C×1.5 up-escalado. */
 export const QR_INTENTOS_BASE: readonly string[] = BANDAS_BASE.map((b) => b.id);
@@ -98,13 +122,10 @@ export const QR_ROTACIONES: readonly number[] = [90, 180, 270];
 export const QR_ESPERA_INTERVALO_MS = 1_500;
 export const QR_ESPERA_INTENTOS = 10;
 
-// ─── e63n (T-PRE) — constantes del BARRIDO y del tier ZXING ────────────────
-/** Fracciones de ventana del barrido ceñido (doc hermano §1: grilla por
- *  cuadrante × fracciones — el QR de campo mide ~5-8% del ancho y la
- *  ventana ganadora lo llena al 38-55%). e64-qr T-1.3: 0.08 y 0.32 cubren
- *  los EXTREMOS del rango (QR chico ~5% del ancho / QR grande ~8%+).
- *  Cada fracción es del ANCHO del canvas de trabajo. */
-export const BARRIDO_VENTANAS: readonly number[] = [0.08, 0.11, 0.14, 0.19, 0.25, 0.32];
+// ─── e63n (T-PRE) — constantes del tier ZXING ──────────────────────────────
+// (BARRIDO_VENTANAS y TODO el barrido jsQR viven en qr-pixeles.ts desde el
+// FIX DICTAMEN-e73 §3.1 — re-exportados arriba; el tier zxing de este
+// archivo los consume vía el import del módulo puro.)
 /** Presupuesto de reló del barrido zxing (doc hermano §1: 4 000 ms — el
  *  barrido jsQR NO tiene reló: es puro y acotado por nº de ventanas). */
 const ZXING_BARRIDO_PRESUPUESTO_MS = 4_000; // SPRINT-A A5: de-export (vivo solo aquí)
@@ -119,113 +140,17 @@ const ZXING_BINARIZADORES: readonly Binarizer[] = [ // SPRINT-A A5: de-export (v
  *  barrido (micro-decisión declarada: el formato es dato del dominio). */
 const ZXING_FORMATO = "QRCode" as const; // SPRINT-A A5: de-export (vivo solo aquí)
 
-// ─── e71 (Opt-2) — RECORTE de la esquina estándar (kit e71-consolidación) ───
-/** Lado del RECORTE de la esquina estándar del QR (kit: «aprox 600x600 px»):
- *  el QR del E-14 vive en la esquina superior-izquierda (las bandas B/C del
- *  ladder lo apuntan) — un recorte cuadrado de ESA esquina lo contiene con
- *  contexto de sobra y se lee en UNA pasada. El kit midió los barridos
- *  completos hasta ~15 s; sobre el recorte el tier completo es <500 ms. */
-export const QR_RECORTE_LADO = 600;
-
-/** Fuente de píxeles RGBA — la MISMA forma que devuelve getImageData
- *  (canal a canal, 4 bytes por píxel, fila por fila). */
-export interface PixelesQr {
-  data: Uint8ClampedArray;
-  width: number;
-  height: number;
-}
+// (QR_RECORTE_LADO vive en qr-pixeles.ts desde el FIX DICTAMEN-e73 §3.1 —
+// re-exportado arriba; decodificarQrDeRecorte lo consume vía ese import.)
 
 /** Estado del original para la espera acotada — EstadoEntrada + AUSENTE
  *  (la fila fue quitada/vaciada mientras se esperaba). */
 export type EstadoOriginalQr = EstadoEntrada | "AUSENTE";
 
-// ─── Núcleo puro: UN intento de decode sobre UNA banda ──────────────────────
-/** Semántica EXACTA del intentoDecode del banco: banda fuente redondeada
- *  (sw/sh), destino = banda × escala (dw/dh), jsQR con attemptBoth, payload
- *  EXACTO tal cual sale. escala=1 → copia 1:1 (idéntica al drawImage del
- *  banco); escala>1 → remuestreo bilinear (misma intención del smoothing
- *  del banco — única diferencia microscópica vs drawImage del navegador,
- *  declarada en el REPORTE: C1.5 es el 4.º intento del ladder, el floor del
- *  tier de rotación es A a escala 1 EXACTO). */
-function intentoSobrePixeles(cv: PixelesQr, esp: EspecieBanda): string | null {
-  try {
-    const sx = Math.round(cv.width * esp.x0);
-    const sy = Math.round(cv.height * esp.y0);
-    const sw = Math.max(1, Math.round(cv.width * (esp.x1 - esp.x0)));
-    const sh = Math.max(1, Math.round(cv.height * (esp.y1 - esp.y0)));
-    const dw = Math.max(1, Math.round(sw * esp.escala));
-    const dh = Math.max(1, Math.round(sh * esp.escala));
-    const data = new Uint8ClampedArray(dw * dh * 4);
-    for (let y = 0; y < dh; y++) {
-      for (let x = 0; x < dw; x++) {
-        const di = (y * dw + x) * 4;
-        if (esp.escala === 1) {
-          // Copia 1:1 EXACTA de la banda (el drawImage del banco con
-          // destino = tamaño fuente es idéntico píxel a píxel).
-          const sxi = Math.min(cv.width - 1, sx + x);
-          const syi = Math.min(cv.height - 1, sy + y);
-          const si = (syi * cv.width + sxi) * 4;
-          data[di] = cv.data[si]!;
-          data[di + 1] = cv.data[si + 1]!;
-          data[di + 2] = cv.data[si + 2]!;
-          data[di + 3] = cv.data[si + 3]!;
-        } else {
-          // Remuestreo bilinear del up-escalado (mismas fracciones/rounding).
-          const fx = Math.min(cv.width - 1, Math.max(0, (x + 0.5) * (sw / dw) - 0.5 + sx));
-          const fy = Math.min(cv.height - 1, Math.max(0, (y + 0.5) * (sh / dh) - 0.5 + sy));
-          const x0 = Math.floor(fx);
-          const y0 = Math.floor(fy);
-          const x1 = Math.min(cv.width - 1, x0 + 1);
-          const y1 = Math.min(cv.height - 1, y0 + 1);
-          const tx = fx - x0;
-          const ty = fy - y0;
-          const i00 = (y0 * cv.width + x0) * 4;
-          const i10 = (y0 * cv.width + x1) * 4;
-          const i01 = (y1 * cv.width + x0) * 4;
-          const i11 = (y1 * cv.width + x1) * 4;
-          for (let c = 0; c < 4; c++) {
-            const arriba = cv.data[i00 + c]! * (1 - tx) + cv.data[i10 + c]! * tx;
-            const abajo = cv.data[i01 + c]! * (1 - tx) + cv.data[i11 + c]! * tx;
-            data[di + c] = arriba * (1 - ty) + abajo * ty;
-          }
-        }
-      }
-    }
-    const res = jsQR(data, dw, dh, { inversionAttempts: "attemptBoth" });
-    return res ? res.data : null;
-  } catch {
-    return null; // un intento jamás tumba el ladder
-  }
-}
-
-/** Rotación EXACTA de 90° horaria (permutación de píxeles — para múltiplos
- *  de 90° el canvasRotado del banco es la MISMA permutación, sin
- *  interpolación). Rotaciones compuestas: siempre DESDE la fuente (el banco
- *  rota el canvas de trabajo original para cada grados). */
-function rotar90Pixeles(src: PixelesQr): PixelesQr {
-  const w = src.width;
-  const h = src.height;
-  const data = new Uint8ClampedArray(w * h * 4);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const si = (y * w + x) * 4;
-      // dst(x' = h-1-y, y' = x) — dst width = h, dst height = w.
-      const di = (x * h + (h - 1 - y)) * 4;
-      data[di] = src.data[si]!;
-      data[di + 1] = src.data[si + 1]!;
-      data[di + 2] = src.data[si + 2]!;
-      data[di + 3] = src.data[si + 3]!;
-    }
-  }
-  return { data, width: h, height: w };
-}
-
-function rotarPixeles(src: PixelesQr, grados: number): PixelesQr {
-  let actual = src;
-  for (let k = 0; k < grados / 90; k++) actual = rotar90Pixeles(actual);
-  return actual;
-}
-
+// ─── Núcleo puro del decode: vive en qr-pixeles.ts (KIT e73 §A.2) ───────
+// intentoSobrePixeles (banda → jsQR attemptBoth, puro) y rotar90/rotarPixeles
+// (permutación exacta) se movieron SIN cambiar comportamiento al módulo puro
+// worker-safe — re-exportados arriba (cero diffs en consumidores).
 /**
  * Ladder BASE sobre píxeles (T-PRE — refactor del bucle del kit §1.1):
  * A imagen completa → B banda top-left → C banda ajustada → C1.5
@@ -259,119 +184,15 @@ export function ladderQrDePixeles(pix: PixelesQr): string | null {
   return null;
 }
 
-// ─── e63n (T-PRE) — BARRIDO CEÑIDO (grilla de ventanas por cuadrante) ──────
-/** Cuadrantes del barrido EN ORDEN (doc hermano §1: TL→TR→BL→BR). La
- *  frontera cae en floor(lado/2) — las ventanas NUNCA cruzan cuadrantes. */
-interface Cuadrante {
-  id: string;
-  x0: number; // fracción del ancho donde empieza
-  y0: number; // fracción del alto donde empieza
-  x1: number; // fracción del ancho donde termina
-  y1: number; // fracción del alto donde termina
-}
-const CUADRANTES: Cuadrante[] = [
-  { id: "TL", x0: 0, y0: 0, x1: 0.5, y1: 0.5 },
-  { id: "TR", x0: 0.5, y0: 0, x1: 1, y1: 0.5 },
-  { id: "BL", x0: 0, y0: 0.5, x1: 0.5, y1: 1 },
-  { id: "BR", x0: 0.5, y0: 0.5, x1: 1, y1: 1 },
-];
-
-/** Límites EN PÍXELES de un cuadrante (frontera en floor — micro-decisión
- *  declarada: sin solapes entre cuadrantes, coberturas exactas). */
-function limitesDeCuadrante(
-  pix: PixelesQr,
-  q: Cuadrante,
-): { x0: number; y0: number; x1: number; y1: number } {
-  return {
-    x0: Math.round(pix.width * q.x0),
-    y0: Math.round(pix.height * q.y0),
-    x1: Math.round(pix.width * q.x1),
-    y1: Math.round(pix.height * q.y1),
-  };
-}
-
-/** Ventana cuadrada CLAMPADA a la imagen (T-PRE — la usa el barrido y el
- *  filo del cuadrante de T-1.0): clampea origen y lado, JAMÁS inventa
- *  píxeles (copia fila a fila del buffer fuente). null si el lado pedido
- *  excede la imagen (nada que decodificar ahí). */
-function ventanaDePixeles( // SPRINT-A A5: de-export (vivo solo aquí)
-  pix: PixelesQr,
-  x: number,
-  y: number,
-  lado: number,
-): PixelesQr | null {
-  const ladoX = Math.min(lado, pix.width);
-  const ladoY = Math.min(lado, pix.height);
-  if (ladoX < 1 || ladoY < 1) return null;
-  const x0 = Math.min(Math.max(0, Math.round(x)), pix.width - ladoX);
-  const y0 = Math.min(Math.max(0, Math.round(y)), pix.height - ladoY);
-  const data = new Uint8ClampedArray(ladoX * ladoY * 4);
-  for (let yy = 0; yy < ladoY; yy++) {
-    const si = ((y0 + yy) * pix.width + x0) * 4;
-    data.set(
-      pix.data.subarray(si, si + ladoX * 4),
-      yy * ladoX * 4,
-    );
-  }
-  return { data, width: ladoX, height: ladoY };
-}
-
-/** UN intento jsQR sobre UNA ventana (attemptBoth — la inversión la cubre
- *  aquí, no en el tier zxing). Jamás throw (red line e64 §7-4). */
-// SPRINT-A A5: de-export (vivo solo aquí — barrido de ventanas y filo)
-function jsQrDeVentana(win: PixelesQr): string | null {
-  try {
-    const res = jsQR(win.data, win.width, win.height, {
-      inversionAttempts: "attemptBoth",
-    });
-    return res ? res.data : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Lado EN PÍXELES de la ventana de UNA fracción (micro-decisión declarada:
- *  fracción del ANCHO — el doc hermano H-6 mide el QR «~5-8% del ancho» y
- *  calibra las fracciones contra esa magnitud). */
-function ladoDeVentana(pix: PixelesQr, fraccion: number): number {
-  return Math.max(16, Math.round(pix.width * fraccion));
-}
-
-/**
- * BARRIDO CEÑIDO jsQR (doc hermano §1.3): grilla de ventanas cuadradas por
- * cuadrante [TL→TR→BL→BR] × BARRIDO_VENTANAS × paso 0.5 (solape de media
- * ventana — micro-decisión declarada), jsQR attemptBoth por ventana,
- * early-exit al primer payload. Puro, sin reló (acotado por nº de
- * ventanas — el reló de 4 s es del tier zxing). T-1.0 del e64 añadió la
- * celda final anclada al filo inferior-derecho de cada cuadrante (doc
- * hermano H-5 — la franja de hasta `paso` px que la condición `+ lado <=`
- * dejaba descubierta).
- */
-export function barridoQrDePixeles(pix: PixelesQr): string | null {
-  for (const q of CUADRANTES) {
-    const lim = limitesDeCuadrante(pix, q);
-    for (const fraccion of BARRIDO_VENTANAS) {
-      const lado = ladoDeVentana(pix, fraccion);
-      const paso = Math.max(1, Math.round(lado * 0.5));
-      for (let y = lim.y0; y + lado <= lim.y1; y += paso) {
-        for (let x = lim.x0; x + lado <= lim.x1; x += paso) {
-          const win = ventanaDePixeles(pix, x, y, lado);
-          if (!win) continue;
-          const payload = jsQrDeVentana(win);
-          if (payload != null) return payload;
-        }
-      }
-      // e64-qr T-1.0 — celda final del cuadrante: la condición `+ lado <=`
-      // deja una franja descubierta de hasta `paso` px en el filo
-      // derecho/inferior (doc hermano H-5); este anclaje la cubre (el clamp
-      // de ventanaDePixeles ya existe — jamás inventa píxeles).
-      const winFilo = ventanaDePixeles(pix, lim.x1 - lado, lim.y1 - lado, lado);
-      const payloadFilo = winFilo ? jsQrDeVentana(winFilo) : null;
-      if (payloadFilo != null) return payloadFilo;
-    }
-  }
-  return null;
-}
+// ─── e63n (T-PRE) — BARRIDO CEÑIDO: vive en qr-pixeles.ts ──────────────────
+// (FIX DICTAMEN-e73 §3.1 — barridoQrDePixeles + Cuadrante/CUADRANTES +
+// limitesDeCuadrante + ventanaDePixeles + jsQrDeVentana + ladoDeVentana se
+// movieron SIN cambiar comportamiento al módulo puro worker-safe;
+// barridoQrDePixeles y BARRIDO_VENTANAS se re-exportan arriba. El tier
+// zxing de ESTE archivo (barridoQrZxingDePixeles) consume las mismas
+// primitivas vía el import del módulo puro. El QA qa-qr-identidad valida
+// la celda filo en AMBOS barridos: el jsQR (qr-pixeles.ts) y el zxing
+// (este archivo).)
 
 // ─── e64-qr T-1.1 · NITIDEZ (unsharp 3×3) ──────────────────────────────
 /** Máscara de enfoque sobre RGBA: salida = clamp(orig + k·(orig − blur3×3)).
