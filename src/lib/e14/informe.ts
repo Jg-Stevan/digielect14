@@ -26,6 +26,9 @@
  */
 import { listarMapeados, leerRegistro } from "./masiva/cola";
 import type { EstadoEntrada, RegistroMasiva } from "./masiva/tipos";
+// KIT e14-obs-hang-atribucion-v1 (§A.4) — hook D58: el export de la cola es
+// trabajo main-thread REAL (mappeo dentro del cursor + compilación + zip).
+import { marcarOperacion } from "./obs/operacion";
 // WAVE2 C3 — ANEXO2 (tier): SOLO lectura del tier (D6: la app detecta y
 // reporta — jamás cambia reglas). obtenerDispositivo NO muta estado (las
 // firmas que mutan — muestreo/buffer — no se importan ni se llaman).
@@ -1376,6 +1379,10 @@ async function almacenamientoIdbMb(): Promise<number | null> {
 export async function generarInformeZip(
   onProgreso?: (p: ProgresoInforme) => void,
 ): Promise<InformeZip> {
+  // KIT e14-obs-hang-atribucion-v1 (§A.4) — la ENTRADA del informe marca la
+  // operación activa (el export de 47 actas es trabajo main-thread real;
+  // sin clear — la edad delata la obsolescencia).
+  marcarOperacion("informe");
   // T1.1 — fuente de datos: la cola masiva. FIX C6 (auditoría 2-c): el mapa
   // liviano sale del MAPPER DENTRO del cursor — los registros completos
   // (acta con dataURLs de ~7-14 MB c/u) JAMÁS se materializan todos a la

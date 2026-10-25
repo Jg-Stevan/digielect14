@@ -68,6 +68,10 @@ import {
   hamming64,
   hashBytesDeArchivo, // e65-dedup-enviadas-v1 — capa bytes (SHA-256 exacto, D-e65-1)
 } from "./dedup";
+// KIT e14-obs-hang-atribucion-v1 (§A.3) — hook D58 del sitio main-thread
+// pesado de la cadenaDedup (precedente masiva→obs: runner.ts importa
+// ../obs/dispositivo).
+import { marcarOperacion } from "../obs/operacion";
 // e63k — KIT e63k-capa2-identidad-v1: la cinta CIERTA del dedup visual (≤ 2).
 // La banda 3..6 NO marca: la decide la capa 2 post-OCR (identidad.ts).
 import { DEDUP_CINTA_CIERTA } from "./identidad";
@@ -647,6 +651,10 @@ async function cadenaDedup(
           }
         }
       }
+      // KIT e14-obs-hang-atribucion-v1 (§A.3) — el cómputo del dhash es
+      // trabajo main-thread REAL del pipeline: marcar la operación activa
+      // ANTES (sin clear después — la edad delata la obsolescencia).
+      marcarOperacion("dhash");
       const hash = await dhashDeArchivo(entrada.archivo);
       if (!hash) continue; // decode/hash falló → sin dedup para esta fila
       // Guard anti-zombi: la fila pudo ser quitada/vaciada mientras el decode corría.
