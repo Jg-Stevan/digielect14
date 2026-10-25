@@ -48,6 +48,9 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       telemetriaSalud: true,
       endpointReportes: null,
       colaPersistente: true,
+      // KIT e73-sondeo-qr-precoz-v1 (§D) — aditivos AL FINAL (contrato D57):
+      sondeoQrPrecoz: true,
+      sondeoQrPresupuestoMs: 2500,
     });
   });
 
