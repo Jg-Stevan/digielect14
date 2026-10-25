@@ -14,14 +14,14 @@ type Tone = "ok" | "warn" | "crit" | "neutral";
 const toneDot: Record<Tone, string> = {
   ok: "bg-[#10b981]",
   warn: "bg-[#f59e0b]",
-  crit: "bg-[#ef4444]",
+  crit: "bg-[#E52222]",
   neutral: "bg-slate-400",
 };
 
 const toneText: Record<Tone, string> = {
   ok: "text-[#10b981]",
   warn: "text-[#f59e0b]",
-  crit: "text-[#ef4444]",
+  crit: "text-[#E52222]",
   neutral: "text-slate-400",
 };
 
@@ -48,7 +48,7 @@ export function Chip({
             : tone === "warn"
               ? "bg-[#f59e0b] text-[#090d12] shadow-[#f59e0b]/20 font-extrabold"
               : tone === "crit"
-                ? "bg-[#ef4444] text-white shadow-[#ef4444]/25 font-extrabold"
+                ? "bg-[#E52222] text-white shadow-[#E52222]/25 font-extrabold"
                 : "bg-slate-800 text-slate-200 border border-slate-700"
         } ${className}`}
       >
@@ -170,7 +170,7 @@ export function PrimaryBtn({
     "flex-1 min-w-0 px-4 flex items-center justify-center gap-2 uppercase tracking-wider leading-tight text-center transition-all duration-150 active:scale-[0.98] cursor-pointer select-none";
   const styles: Record<string, string> = {
     ok: "bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-black text-sm py-3.5 px-6 rounded-2xl shadow-[0_4px_24px_rgba(16,185,129,0.35)]",
-    crit: "bg-[#ef4444] hover:bg-red-600 text-white font-black text-xs sm:text-sm py-3.5 rounded-2xl shadow-[0_4px_24px_rgba(239,68,68,0.4)]",
+    crit: "bg-[#E52222] hover:bg-red-600 text-white font-black text-xs sm:text-sm py-3.5 rounded-2xl shadow-[0_4px_24px_rgba(229,34,34,0.4)]",
     warn: "bg-[#10161f] hover:bg-[#17222f] border border-amber-500/80 text-amber-400 font-mono font-bold text-xs py-3 rounded-xl shadow-sm",
     outline:
       "bg-[#10161f] hover:bg-[#17222f] border border-slate-700 text-slate-200 font-bold text-xs py-3.5 rounded-2xl",
