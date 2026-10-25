@@ -275,12 +275,18 @@ ok(
   // KIT e73-sondeo-qr-precoz-v1 — ACTUALIZACIÓN DEL F-CHECK (patrón wave3):
   // 'qr-sondeo' entra AL FINAL de la unión dedup del informe (D57 — los
   // valores nuevos se AÑADEN al final; nada se reordena ni elimina).
+  // KIT e14-obs-hang-atribucion-v1 (§E.3) — ACTUALIZACIÓN CON NOTA (mismo
+  // patrón F-CHECK): 'reuso' (sello EXPORT-ONLY de dupOf sin capa) REMATA
+  // la unión; los literales históricos se conservan todos y el de
+  // 'qr-sondeo' se ajusta SOLO en su remate ('| null;' baja al nuevo
+  // último valor — §E.2 del kit: jamás reordenar ni eliminar valores).
   informe.includes('| "ya-enviada" // e65-dedup-enviadas-v1 — valor NUEVO AL FINAL (contrato D57, export-only)') &&
     informe.includes('| "ya-enviada-postocr"') &&
     informe.includes('| "ya-enviada-copia"') &&
-    informe.includes('| "qr-sondeo" | null; // KIT e73-sondeo-qr-precoz-v1') &&
+    informe.includes('| "qr-sondeo" // KIT e73-sondeo-qr-precoz-v1') &&
+    informe.includes('| "reuso" | null; // KIT e14-obs-hang-atribucion-v1') &&
     informe.includes('yaEnviadas: filas.filter((f) => f.statusActa === "ENVIADA").length,'),
-  "T-8 + e71/P3.1 + wave3 C.2 + e73: informe export-only — unión dedup conserva 'ya-enviada' + puertas postocr/copia + 'qr-sondeo' AL FINAL (D57); contador yaEnviadas cuenta statusActa === ENVIADA (kit e71)",
+  "T-8 + e71/P3.1 + wave3 C.2 + e73 + obs-hang: informe export-only — unión dedup conserva 'ya-enviada' + puertas postocr/copia + 'qr-sondeo' + sello 'reuso' rematando (D57); contador yaEnviadas cuenta statusActa === ENVIADA (kit e71)",
 );
 
 ok(!informe.includes("hashBytes"),
