@@ -272,11 +272,15 @@ ok(
 // YA-ENVIADA — gap real lote 10). 'ya-enviada' sigue presente, en su orden,
 // y las puertas nuevas rematan la unión antes de | null.
 ok(
+  // KIT e73-sondeo-qr-precoz-v1 — ACTUALIZACIÓN DEL F-CHECK (patrón wave3):
+  // 'qr-sondeo' entra AL FINAL de la unión dedup del informe (D57 — los
+  // valores nuevos se AÑADEN al final; nada se reordena ni elimina).
   informe.includes('| "ya-enviada" // e65-dedup-enviadas-v1 — valor NUEVO AL FINAL (contrato D57, export-only)') &&
     informe.includes('| "ya-enviada-postocr"') &&
-    informe.includes('| "ya-enviada-copia" | null;') &&
+    informe.includes('| "ya-enviada-copia"') &&
+    informe.includes('| "qr-sondeo" | null; // KIT e73-sondeo-qr-precoz-v1') &&
     informe.includes('yaEnviadas: filas.filter((f) => f.statusActa === "ENVIADA").length,'),
-  "T-8 + e71/P3.1 + wave3 C.2: informe export-only — unión dedup conserva 'ya-enviada' + puertas postocr/copia AL FINAL (D57); contador yaEnviadas cuenta statusActa === ENVIADA (kit e71)",
+  "T-8 + e71/P3.1 + wave3 C.2 + e73: informe export-only — unión dedup conserva 'ya-enviada' + puertas postocr/copia + 'qr-sondeo' AL FINAL (D57); contador yaEnviadas cuenta statusActa === ENVIADA (kit e71)",
 );
 
 ok(!informe.includes("hashBytes"),
@@ -296,19 +300,28 @@ ok(
 // ídem informe: las puertas del veto van AL FINAL de la unión dedup de
 // RegistroMasiva (postocr/copia) — 'ya-enviada' sigue INMEDIATAMENTE tras
 // 'qr' (orden e65 intacto), nada se reordena ni elimina.
+// KIT e73-sondeo-qr-precoz-v1 — 'qr-sondeo' entra AL FINAL (D57 — append;
+// el resto de la unión queda byte a byte).
 ok(
   tipos.includes('| "ya-enviada" // e65-dedup-enviadas-v1') &&
     tipos.indexOf('"ya-enviada"') > tipos.indexOf('"qr"') &&
     tipos.includes('| "ya-enviada-postocr" // H1 post-OCR') &&
-    tipos.includes('| "ya-enviada-copia";'),
-  "RL-e65-6/D57 + wave3 C.2: 'ya-enviada' tras 'qr' + puertas postocr/copia AL FINAL de la unión dedup (RegistroMasiva)",
+    tipos.includes('| "ya-enviada-copia" //') &&
+    tipos.includes('| "qr-sondeo"; // KIT e73-sondeo-qr-precoz-v1') &&
+    tipos.indexOf('"qr-sondeo"') > tipos.indexOf('"ya-enviada-copia"'),
+  "RL-e65-6/D57 + wave3 C.2 + e73: 'ya-enviada' tras 'qr' + puertas postocr/copia + 'qr-sondeo' AL FINAL de la unión dedup (RegistroMasiva)",
 );
 
 ok(
   tipos.includes("hashBytes?: string | null;\n  /** e65-dedup-enviadas-v1: id del registro YA ENVIADO") &&
-    tipos.includes("enviadaDe?: string | null;\n}") &&
-    tipos.includes("hashBytes?: string;\n  /** e65-dedup-enviadas-v1: id del registro enviado matcheado"),
-  "RL-e65-6/D57: hashBytes/enviadaDe son los ÚLTIMOS campos de FilaMasiva y RegistroMasiva",
+    tipos.includes("enviadaDe?: string | null;") &&
+    tipos.includes("hashBytes?: string;\n  /** e65-dedup-enviadas-v1: id del registro enviado matcheado") &&
+    // KIT e73-sondeo-qr-precoz-v1 (§E) — los NUEVOS ÚLTIMOS campos son la
+    // telemetría del sondeo (D57 append — hashBytes/enviadaDe quedan en su
+    // lugar documentado, nada se reordena):
+    tipos.includes("sondeoQrMs?: number;\n  /** (§E) tier que leyó el payload") &&
+    tipos.includes("sondeoQrTier?: string;\n}"),
+  "RL-e65-6/D57 + e73: hashBytes/enviadaDe en su lugar documentado + sondeoQrMs/sondeoQrTier son los ÚLTIMOS campos de FilaMasiva y RegistroMasiva (D57 append)",
 );
 
 ok(

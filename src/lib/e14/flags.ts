@@ -23,7 +23,9 @@ const REINTENTO_TOPE_MS = REFRESH_MS;
 /** Defaults del contrato §4.2 (poolWorkers 2 · thumbsOn true ·
  *  ocrThreadsTope 4 · telemetriaSalud true · endpointReportes null — sin
  *  backend, D1 · colaPersistente true — ANEXO cola-persistente-v1: la masiva
- *  SOLO se elimina con vaciar() del dueño; false = MODO PRUEBAS e64p). */
+ *  SOLO se elimina con vaciar() del dueño; false = MODO PRUEBAS e64p ·
+ *  sondeoQrPrecoz true + sondeoQrPresupuestoMs 2500 — KIT e73-sondeo-qr-
+ *  precoz-v1 §D: sondeo QR en INGESTA, kill-switch del dueño). */
 export const FLAGS_DEFAULT: FlagsApp = {
   poolWorkers: 2,
   thumbsOn: true,
@@ -31,6 +33,8 @@ export const FLAGS_DEFAULT: FlagsApp = {
   telemetriaSalud: true,
   endpointReportes: null,
   colaPersistente: true,
+  sondeoQrPrecoz: true,
+  sondeoQrPresupuestoMs: 2500,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -51,6 +55,12 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.telemetriaSalud === "boolean") limpio.telemetriaSalud = p.telemetriaSalud;
   if (p.endpointReportes === null || typeof p.endpointReportes === "string") {
     limpio.endpointReportes = p.endpointReportes;
+  }
+  // KIT e73-sondeo-qr-precoz-v1 (§D) — whitelist aditiva (claves conocidas;
+  // el saneo sigue rechazando desconocidas). Tipo inválido → default (ausente).
+  if (typeof p.sondeoQrPrecoz === "boolean") limpio.sondeoQrPrecoz = p.sondeoQrPrecoz;
+  if (typeof p.sondeoQrPresupuestoMs === "number" && Number.isFinite(p.sondeoQrPresupuestoMs)) {
+    limpio.sondeoQrPresupuestoMs = Math.max(500, Math.min(30_000, Math.round(p.sondeoQrPresupuestoMs)));
   }
   return limpio;
 }
