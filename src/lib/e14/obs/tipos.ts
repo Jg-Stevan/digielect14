@@ -40,6 +40,11 @@ export interface SaludSnapshot {
   storageLibreMB: number | null;
   tier: Tier;
   tierInferido: boolean;
+  /** KIT e14-obs-hang-atribucion-v1 (§F v1.1) — Date.now() al CAPTURAR. Sin
+   *  ts, las narrativas de memoria (picos/GC/recuperación) son indatables
+   *  (dictamen 1045/1048: baterías 0.74 → 0.54 → 0.53 = horas de span, no un
+   *  ciclo de una corrida). AUSENTE en eventos legacy — jamás inventar. */
+  ts?: number;
 }
 
 export interface UsoContador {
@@ -136,6 +141,11 @@ export interface ReporteSesion {
     deviceId: string;
     sesion: string;
     politica: PoliticaDatos;
+    // ─── KIT e14-obs-hang-atribucion-v1 (§F) — AL FINAL (D57): el gate del
+    // ─── sampler (dispositivo.ts condicionesOk) espejado — saludMuestras
+    // ─── pasa de misterio a explicado DESDE el artefacto.
+    modoDev: boolean;
+    telemetriaSalud: boolean;
   };
   dispositivo: SaludSnapshot & { os: string; ua: string };
   erroresAgrupados: ErroresAgrupados[];
