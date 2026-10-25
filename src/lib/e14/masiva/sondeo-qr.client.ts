@@ -45,12 +45,23 @@ type PeticionSondeoAnonima = { blob: Blob; presupuestoMs: number };
  *  producción es la ÚNICA referencia `new Worker` de src/ (smoke §A.1). */
 export type FabricaWorkerSondeo = () => WorkerSondeo | null;
 
+/** Base pública de assets — MISMO patrón del repo (flags.ts/rapidocr.ts/
+ *  scanner-core WORKER_URL): assets servidos desde public/ con prefijo
+ *  NEXT_PUBLIC_BASE_PATH (Vercel sirve bajo /digielect14). */
+const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 function fabricaProduccion(): WorkerSondeo | null {
-  // §A.1 — la línea de la PUERTA del kit: Turbopack empaqueta el worker
-  // (verificada con `bun run build` — REPORTE-kit §smoke).
-  return new Worker(new URL("./sondeo-qr.worker.ts", import.meta.url), {
-    type: "module",
-  }) as unknown as WorkerSondeo;
+  // FIX DICTAMEN-e73-implementacion-v1 §3.1: Turbopack trató
+  // `new Worker(new URL("./sondeo-qr.worker.ts", import.meta.url))` como
+  // ASSET estático (emitía el .ts crudo → verde falso del smoke §A.1). El
+  // worker vive ahora PRECOMPILADO en public/scanner/sondeo-qr.worker.js
+  // (IIFE clásica — precedente detection-worker.js de scanner-core,
+  // WORKER_URL = `${PUBLIC_BASE}/scanner/detection-worker.js?v=8`),
+  // regenerado por scripts/build-sondeo-worker.mjs y verificado por el
+  // smoke REAL del gate (scripts/smoke-sondeo-worker.mjs).
+  return new Worker(
+    `${PUBLIC_BASE}/scanner/sondeo-qr.worker.js`,
+  ) as unknown as WorkerSondeo;
 }
 
 let fabrica: FabricaWorkerSondeo = fabricaProduccion;

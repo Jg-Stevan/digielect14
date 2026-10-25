@@ -132,3 +132,46 @@ números (ahorro honesto: ~20-35 % de la ventana; captura esperada 90-95 %).
 | Anclas COLA_PERSISTENTE 10 · RL-e65b-5 3 · MODO PRUEBAS 11 | **INTACTAS** (verificado: 10 · 3 · 11 sobre el árbol final — las 2 menciones del sondeo reescritas a minúsculas para no inflar el ancla; qa-dedup-enviadas 50/50 · qa-historico-enviadas 49/49 con F-checks actualizados patrón wave3 — M-e73-6) |
 | `runner.ts` diff | **VACÍO** (§G — cero cambios en todo el kit) |
 | knip | informativo — main 42 → rama **48** (+6: tipos de contrato e73 `SondeoQr · FabricaWorkerSondeo · PeticionSondeo · DepsLadderSondeo · DesenlaceSondeo · EspecieBanda` — consumidos por re-export/vía ReturnType; knip no rompe el gate) |
+
+## 9. FIX DICTAMEN-e73-implementacion-v1 (bloqueante único §2 — verde falso del smoke §A.1)
+
+El auditor demostró forensemente que Turbopack emitía este worker como **asset crudo**
+(`.next/static/media/sondeo-qr.worker.<hash>.ts` = fuente sin compilar): el build exit 0 era
+verdadero pero VACÍO — la función `sondearEnWorker` no existía en ningún chunk y el cliente
+referenciaba TypeScript crudo (fallo de MIME en producción). Feature muerta en silencio
+(honesta — onerror → null → dhash intacta — pero 0 % de captura en lugar de 90-95 %).
+
+### Fix (§3.1-3.3 del dictamen — criterios todos verificados)
+
+| Criterio | Implementación | Verificación |
+|---|---|---|
+| §3.1 worker emitido como JS compilado | Precompilación DEDICADA: `scripts/build-sondeo-worker.mjs` (Bun.build IIFE clásica, sin minificar) → `public/scanner/sondeo-qr.worker.js` (artefacto comprometido; precedente `detection-worker.js` de scanner-core). Cliente instancia por URL absoluta `${NEXT_PUBLIC_BASE_PATH}/scanner/sondeo-qr.worker.js` (worker CLÁSICO, patrón WORKER_URL del core) | MIME `application/javascript` en producción (curl sobre `next start`) · smoke marcadores |
+| §3.2 smoke REAL integrado al gate | `scripts/smoke-sondeo-worker.mjs` en check-quality.sh (paso 3bis): FRESCURA (regenera a /tmp y compara BYTE A BYTE — artefacto obsoleto = fallo) · MARCADORES (`sondearEnWorker` · `ladderSondeoDePixeles` · `barridoQrDePixeles` · `onmessage`) · PROHIBIDOS ausentes (`import(` · `zxing` · `process.env` · `identidad-qr`) · CLIENTE (cero `.ts` en `static/media`, cero refs al `.ts`, chunk referenciando el `.worker.js`) · ENTREGA (`out/` byte-idéntico si existe) | gate TODO VERDE — el smoke quedó dentro del paso 3bis y corta el gate |
+| §3.3 verificación de navegador PRE-merge | `next start` + inyección de PNG con la matriz QR real del corpus vía input MASIVA | **chip «SONDEO QR 2/2» + status «Sondeo QR: 2 leídos, 2 con payload» + gemela marcada DUPLICADA en INGESTA (dedup pre-pool §B vivo)** — imposible con worker muerto («0 leídos · 0 con payload» según el propio dictamen §2.3) |
+
+### Cambios del fix (contención T1 — diseño intacto, el auditor lo aprobó sin reservas)
+
+1. **Movimiento puro §A.2 (misma doctrina del kit):** el BARRIDO jsQR completo
+   (`barridoQrDePixeles` + `Cuadrante`/`CUADRANTES` + `limitesDeCuadrante` + `ventanaDePixeles`
+   + `jsQrDeVentana` + `ladoDeVentana` + `BARRIDO_VENTANAS` + `QR_RECORTE_LADO`) se movió de
+   `identidad-qr.ts` a **qr-pixeles.ts** SIN cambio de comportamiento, con RE-EXPORT en
+   identidad-qr (cero diffs en consumidores: runner.ts, QA y tests siguen importando de
+   identidad-qr). Motivo: el S3 pasa a import ESTÁTICO del módulo puro — el grafo del bundle
+   queda jsQR-only (el import dinámico de identidad-qr arrastraba scanner-core con
+   `process.env` a nivel de módulo, que CRASHEA en worker; verificado empíricamente).
+2. `sondeo-qr.worker.ts`: import estático de `barridoQrDePixeles`/`QR_RECORTE_LADO` +
+   `DEPS_REPO` estático (muere `depsRepoDe` y su modo de fallo) — API del ladder y deps
+   inyectables de tests SIN CAMBIO.
+3. `sondeo-qr.client.ts`: fábrica → worker clásico por URL absoluta (muere el
+   `new URL(..., import.meta.url)` que Turbopack no compila).
+4. `scripts/qa-qr-identidad.ts`: 3 anclas de source-scan actualizadas por la reubicación
+   (winFilo ≥ 4 y `e64-qr T-1.0` ≥ 2 se cuentan sobre AMBAS fuentes; literal
+   `export const QR_RECORTE_LADO = 600;` se ancla a qr-pixeles.ts) — mismas garantías,
+   nueva ubicación. QA 72/72 verde.
+5. Desviación de herramienta declarada: `Bun.build` con `outfile` a solas NO escribe en
+   bun 1.3.14 — ambos scripts usan `outdir`+`naming` (quirk documentado en el código).
+
+### Gate del fix (completo, sobre el árbol con el fix)
+
+tsc 0 · lint 0 · build exit 0 · **smoke 3bis TODO OK** · vitest **294/294** · QA **11/11**
+(incl. qr-identidad 72/72) · knip informativo · humo de navegador pre-merge §3.3 ✓

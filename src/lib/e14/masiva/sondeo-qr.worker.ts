@@ -9,6 +9,14 @@
  *
  * Mensaje: `{blob, presupuestoMs}` → respuesta `{payload|null, tier, ms}`.
  *
+ * EMISIÓN (FIX DICTAMEN-e73-implementacion-v1 §3.1): este archivo NO se
+ * deja al bundler de la app — se PRECOMPILA con `bun scripts/
+ * build-sondeo-worker.mjs` a `public/scanner/sondeo-qr.worker.js` (IIFE
+ * clásica, precedida por detection-worker.js) y el cliente lo instancia
+ * por URL absoluta. Turbopack emitía el .ts crudo como asset estático
+ * (verde falso del smoke §A.1) — el smoke REAL del gate (smoke-sondeo-
+ * worker.mjs) verifica el bundle emitido para que jamás vuelva a pasar.
+ *
  * Ladder PRESUPUESTADO (reló LOCAL del worker — chequeo ANTES de entrar a
  * cada tier; sin presupuesto → null inmediato):
  *   S1 full    — intentoSobrePixeles(frame, BANDA_A): jsQR full-frame a
@@ -20,24 +28,27 @@
  *                (fotos rotadas físicas — sin depender del EXIF).
  *   S3 barrido — SOLO si restan ≥ SONDEO_S3_MINIMO_RESTANTE_MS al terminar
  *                S2: el barrido jsQR del repo (barridoQrDePixeles — puro,
- *                exportado en identidad-qr.ts), completo una vez entrado.
- *                Presupuesto insuficiente → abortar a null.
+ *                en qr-pixeles.ts desde el FIX DICTAMEN-e73 §3.1), completo
+ *                una vez entrado. Presupuesto insuficiente → abortar a null.
  *
  * RED LINES (kit §I):
  * · zxing-wasm JAMÁS en el worker (corrección #3 del dictamen): el grafo
  *   ESTÁTICO de este worker solo contiene qr-pixeles.ts (jsQR vendido, puro
- *   JS). El barrido del repo llega por import DINÁMICO (una sola vez por
- *   vida del worker, cacheado) — la referencia lazy nunca ejecuta los tiers
- *   zxing del pool (barridoQrDePixeles es jsQR-only síncrono).
- * · JAMÁS throw: cualquier fallo interno (decode/ladrillo/budget/carga) →
+ *   JS). FIX DICTAMEN-e73-implementacion-v1 §3.1: el barrido del repo llega
+ *   por import ESTÁTICO desde el módulo puro (barridoQrDePixeles vive en
+ *   qr-pixeles.ts desde el fix) — el grafo completo queda jsQR-only y el
+ *   bundle emitido no contiene zxing/logger/process.env (smoke del gate).
+ * · JAMÁS throw: cualquier fallo interno (decode/ladrillo/budget) →
  *   `{payload: null, tier: null, ms}` — la vía de HOY sigue (doctrina del
  *   conservador).
  * · Memoria: `bitmap.close()` INMEDIATO tras el draw (pico ~49 MB en
  *   4032px, liberado al instante); el OffscreenCanvas muere con el mensaje.
  */
 import {
+  barridoQrDePixeles,
   BANDA_A,
   intentoSobrePixeles,
+  QR_RECORTE_LADO,
   rotarPixeles,
   type PixelesQr,
 } from "./qr-pixeles";
@@ -176,25 +187,15 @@ async function pixelesDeBlob(
   }
 }
 
-/** Deps del import dinámico del barrido del repo — undefined = aún no
- *  intentado · null = la carga falló (S3 degrada a null) · deps = listo. */
-let depsRepo:
-  | { barrido: BarridoQrFn; ladoRecorte: number }
-  | null
-  | undefined;
-
-/** Carga ÚNICA (cacheada) del barrido jsQR del repo (identidad-qr.ts —
- *  puro, worker-safe). Fallo → null conservador (S3 aborta a null). */
-async function depsRepoDe(): Promise<{ barrido: BarridoQrFn; ladoRecorte: number } | null> {
-  if (depsRepo !== undefined) return depsRepo;
-  try {
-    const repo = await import("./identidad-qr");
-    depsRepo = { barrido: repo.barridoQrDePixeles, ladoRecorte: repo.QR_RECORTE_LADO };
-  } catch {
-    depsRepo = null; // la red de seguridad in-pool cubre — conservador
-  }
-  return depsRepo;
-}
+/** Deps del ladder — resueltas ESTÁTICAMENTE del módulo puro (FIX DICTAMEN-e73
+ *  §3.1: barridoQrDePixeles vive en qr-pixeles.ts — jsQR-only, worker-safe;
+ *  antes llegaban por import dinámico de identidad-qr y el bundler emitía
+ *  el .ts crudo — verde falso del smoke §A.1). Los tests siguen inyectando
+ *  sus propias deps sin worker real — kit §A.5.1. */
+const DEPS_REPO: DepsLadderSondeo = {
+  barrido: barridoQrDePixeles,
+  ladoRecorte: QR_RECORTE_LADO,
+};
 
 /** Mensaje completo: decode + ladder presupuestado + ms. JAMÁS throw. */
 async function sondearEnWorker(peticion: PeticionSondeo): Promise<RespuestaSondeo> {
@@ -203,9 +204,7 @@ async function sondearEnWorker(peticion: PeticionSondeo): Promise<RespuestaSonde
     const presupuesto = peticion.presupuestoMs;
     const pix = await pixelesDeBlob(peticion.blob, 2048 /* QR_LADO_LARGO */);
     if (!pix) return { payload: null, tier: null, ms: Date.now() - t0 };
-    const deps = await depsRepoDe();
-    if (!deps) return { payload: null, tier: null, ms: Date.now() - t0 };
-    const desenlace = ladderSondeoDePixeles(pix, presupuesto, deps);
+    const desenlace = ladderSondeoDePixeles(pix, presupuesto, DEPS_REPO);
     return { ...desenlace, ms: Date.now() - t0 };
   } catch {
     return { payload: null, tier: null, ms: Date.now() - t0 }; // jamás throw (§I)
