@@ -146,6 +146,13 @@ export function ResumenView() {
               {pct}%
             </span>
           </div>
+          {/* KIT ux-masiva-fixes-v1 (T6/§F.4, UX-10): el % es del PUESTO
+              asignado, no del lote completo — caption explícita (dato ya
+              computado). slate-400: el QA aa-quickwins prohíbe gris 500/600
+              co-ocurrente con tamaño ≤12px en la misma línea. */}
+          <span className="text-[10px] font-mono text-slate-400">
+            de tu puesto asignado ({totalPaginas} páginas)
+          </span>
           <SegmentedBar total={totalPaginas} filled={paginasOk} tone="ok" />
           <span className="text-xs text-slate-400 font-mono">
             Completadas {paginasOk} de {totalPaginas} páginas del puesto.

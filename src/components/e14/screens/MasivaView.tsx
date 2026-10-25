@@ -212,9 +212,11 @@ export function MasivaView() {
   }, []);
 
   // Confirmación inline de 2 toques — se desarma sola (kit §6, sin window.confirm).
+  // KIT ux-masiva-fixes-v1 (T6/§F.1, UX-8): ventana 3000→6000 ms — 3 s no
+  // alcanzaba a leer el aviso (cancelar con calma). SOLO la de VACIAR masiva.
   useEffect(() => {
     if (!vaciarArmado) return;
-    const t = window.setTimeout(() => setVaciarArmado(false), 3000);
+    const t = window.setTimeout(() => setVaciarArmado(false), 6000);
     return () => window.clearTimeout(t);
   }, [vaciarArmado]);
 
@@ -292,6 +294,9 @@ export function MasivaView() {
       (f) =>
         f.estado === "LISTA" || f.estado === "ERROR" || f.estado === "YA-ENVIADA",
     ).length; // e65: la YA-ENVIADA está terminada (cero pipeline)
+  // KIT ux-masiva-fixes-v1 (T6/§F.5, UX-11): filas en vuelo simultáneas —
+  // con más de 1, el header lo dice («+N MÁS EN VUELO»); con 1, idéntico a hoy.
+  const enVuelo = filas.filter((f) => f.estado === "PROCESANDO").length;
   // e65-dedup-enviadas-v1 (T-7): contador de la línea de resumen.
   const yaEnviadas = filas.filter((f) => f.estado === "YA-ENVIADA").length;
   const advertenciasPend = filas.filter(
@@ -483,7 +488,7 @@ export function MasivaView() {
                 onClick={iniciar}
                 disabled={!colaDisponible || (pendientes === 0 && duplicadas === 0)}
                 aria-label="Procesar la cola"
-                className="min-h-[44px] px-4 md:px-5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-[11px] md:text-xs font-black uppercase tracking-wider shadow-md shadow-[#10b981]/25 hover:shadow-[#10b981]/40 active:scale-[0.98] transition cursor-pointer disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed flex items-center gap-1.5"
+                className="min-h-[44px] px-4 md:px-5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-[11px] md:text-xs font-black uppercase tracking-wider shadow-md shadow-[#10b981]/25 hover:shadow-[#10b981]/40 active:scale-[0.98] transition cursor-pointer disabled:bg-slate-800 disabled:text-slate-500 disabled:border-slate-700 disabled:shadow-none disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <span className="w-2 h-2 rounded-full bg-[#090d12]" />
                 PROCESAR COLA
@@ -585,8 +590,10 @@ export function MasivaView() {
 
           {/* KIT e73-sondeo-qr-precoz-v1 (§E — deseado): chip del SONDEO QR en
               ingesta — N leídos / M con payload (en vivo, junto al progreso de
-              ingesta; SIN tocar la lógica de la cola — SOLO-LECTURA del store). */}
-          {sondeadas > 0 && (
+              ingesta; SIN tocar la lógica de la cola — SOLO-LECTURA del store).
+              KIT ux-masiva-fixes-v1 (T6/§F.3, UX-13): desaparece al COMPLETADA
+              (sondeadas>0 && pendientes>0 — antes persistía tras terminar). */}
+          {sondeadas > 0 && pendientes > 0 && (
             <p
               className="mt-3 inline-block rounded-full border border-[#10b981]/30 bg-[#10b981]/10 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-[#10b981]"
               role="status"
@@ -601,11 +608,15 @@ export function MasivaView() {
         {hayCola && (
           <div className="flex items-center justify-between gap-3 rounded-xl bg-[#10161f] border border-slate-800 px-3.5 py-2.5 shadow-xs">
             <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-slate-300 truncate">
-              PROCESANDO {terminadas}/{filas.length}
+              {/* KIT ux-masiva-fixes-v1 (T5/§E, UX-6): «PROCESANDO N/M» mentía
+                  con la cola quieta — el verbo pasa a COLA (neutro); el estado
+                  REAL sigue a la derecha (COLA ACTIVA / N EN COLA / QUIETA). */}
+              COLA {terminadas}/{filas.length}
               {filaActiva && progreso && (
                 <span className="text-slate-400 font-medium">
                   {" "}
-                  — {filaActiva.nombre} · {etiquetaVida(progreso)}
+                  — {filaActiva.nombre}
+                  {enVuelo > 1 && <> +{enVuelo - 1} MÁS EN VUELO</>} · {etiquetaVida(progreso)}
                 </span>
               )}
             </p>
