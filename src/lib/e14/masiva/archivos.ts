@@ -219,12 +219,26 @@ export function parecePdfMasiva(archivo: File): boolean {
 
 /** Guard del kit T2.2 que NO invalida el lote (viajan junto a las imágenes
  *  extraídas — el store los convierte en filas ERROR con motivo corto).
- *  D60 añade LIMITE_PAGINAS_PDF (una fila por PDF que exceda el tope). */
+ *  D60 añade LIMITE_PAGINAS_PDF (una fila por PDF que exceda el tope).
+ *  KIT ux-masiva-fixes-v1 (T1/UX-1) añade NO_SE_PUDO_LEER AL FINAL del
+ *  union (D57): NotReadableError = el archivo no se pudo LEER del disco/
+ *  lector (contraseña/corrupción siguen en PROTEGIDO_O_CORRUPTO — §0.3.3). */
 export type MotivoExtraccion =
   | "PROTEGIDO_O_CORRUPTO"
   | "ARCHIVO_ANIDADO"
   | "LIMITE_500_POR_COMPRIMIDO"
-  | "LIMITE_PAGINAS_PDF";
+  | "LIMITE_PAGINAS_PDF"
+  | "NO_SE_PUDO_LEER";
+
+/** KIT ux-masiva-fixes-v1 (T1/UX-1): clasificador PURO del fallo de
+ *  lectura de getDocument — testeable sin pdfjs. NotReadableError (el
+ *  archivo no se pudo leer del disco/lector — p. ej. lector removido a
+ *  mitad de ingesta) → motivo PROPIO; PasswordException y el resto
+ *  (parse/corrupción) → PROTEGIDO_O_CORRUPTO (ya correcto hoy). */
+export function motivoDeErrorLectura(err: unknown): MotivoExtraccion {
+  const nombre = err instanceof Error ? err.name : "";
+  return nombre === "NotReadableError" ? "NO_SE_PUDO_LEER" : "PROTEGIDO_O_CORRUPTO";
+}
 
 export interface ErrorExtraccion {
   nombre: string;
@@ -285,6 +299,9 @@ export async function extraerPdf(archivo: File): Promise<ResultadoExtraccion> {
 
   // getDocument: contraseña (PasswordException) o parse/corrupción → el
   // motivo ya es conocido por la bandeja (fila ERROR corta) — ídem zip/rar.
+  // KIT ux-masiva-fixes-v1 (T1/UX-1): NotReadableError gana motivo propio
+  // (NO_SE_PUDO_LEER) y la excepción REAL va a consola — jamás un catch
+  // silencioso en el camino de archivos del dueño (no-console OFF en repo).
   // ADAPTACIÓN v6 (REPORTE §desviaciones): el destroy vive en el LOADING
   // TASK (PDFDocumentProxy ya no lo expone) — memoria disciplinada ídem.
   let carga: ReturnType<typeof pdfjs.getDocument>;
@@ -292,8 +309,9 @@ export async function extraerPdf(archivo: File): Promise<ResultadoExtraccion> {
   try {
     carga = pdfjs.getDocument({ data: await archivo.arrayBuffer() });
     doc = await carga.promise;
-  } catch {
-    throw new Error("PROTEGIDO_O_CORRUPTO");
+  } catch (err) {
+    console.warn("[e14-pdf] getDocument falló:", err);
+    throw new Error(motivoDeErrorLectura(err));
   }
 
   const base = archivo.name.replace(/\.pdf$/i, "");
