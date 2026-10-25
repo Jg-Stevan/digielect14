@@ -153,7 +153,8 @@ export interface FilaInforme {
     // de cadenaDedup aterrizó sobre un registro YA-ENVIADA).
     | "ya-enviada-postocr"
     | "ya-enviada-copia"
-    | "qr-sondeo" | null; // KIT e73-sondeo-qr-precoz-v1 (§B) — gemela por payload EXACTO leído en INGESTA (valor NUEVO AL FINAL — contrato D57)
+    | "qr-sondeo" // KIT e73-sondeo-qr-precoz-v1 (§B) — gemela por payload EXACTO leído en INGESTA (valor NUEVO AL FINAL — contrato D57)
+    | "reuso" | null; // KIT e14-obs-hang-atribucion-v1 (§E.2) — sello EXPORT-ONLY: dupOf SIN capa (desenlace heredado e72 — 9 filas en campo 25-oct). Jamás sobre un sello real.
   /** (T2) distancia de Hamming del match v2 (0–64); null = sin match. */
   dedupDistancia: number | null;
   // ---------- WAVE3 §B — ORDEN-WAVE3-remoto-rescate-obs-v1 (T rescate) ----------
@@ -412,7 +413,13 @@ export function filaLiviana(reg: RegistroMasiva): FilaInforme {
     watchdog: reg.watchdog ?? null,
     etapaAlMorir: reg.etapaAlMorir ?? null,
     elapsedMs: reg.elapsedMs ?? null,
-    dedup: reg.dedup ?? null,
+    // KIT e14-obs-hang-atribucion-v1 (§E.2) — sello EXPORT-ONLY del reuso:
+    // un registro con dupOf y SIN capa de dedup propia ("reuso") es una
+    // copia cuyo desenlace fue HEREDADO (e72) — legible sin recalcular
+    // nada. JAMÁS sobre-escribe un sello real (los 27 con capa quedan
+    // intactos; precedente tiemposHeredados WAVE2 C1, que ya deriva el
+    // campo del export desde dupOf).
+    dedup: reg.dedup ?? (reg.dupOf != null ? "reuso" : null),
     dedupDistancia: reg.dedupDistancia ?? null,
     // WAVE3 §B — traza del rescate (null si el registro no la trae —
     // pre-wave3 o sin rescate; jamás inventar).
@@ -932,6 +939,13 @@ export function actaLivianaJson(fila: FilaInforme) {
     ...(fila.orientacionProbeEscala != null
       ? { orientacionProbeEscala: fila.orientacionProbeEscala }
       : {}),
+    // KIT e14-obs-hang-atribucion-v1 (§E.1) — telemetría del sondeo POR FILA
+    // (ya vivía en FilaInforme fuera del export — 0/47 filas en el informe
+    // de campo del 25-oct). AUSENTES si el registro no la trae (pre-e73 /
+    // flag OFF / hard-kill — jamás inventar; informes previos no cambian de
+    // forma). AL FINAL del objeto (contrato D57).
+    ...(fila.sondeoQrMs != null ? { sondeoQrMs: fila.sondeoQrMs } : {}),
+    ...(fila.sondeoQrTier != null ? { sondeoQrTier: fila.sondeoQrTier } : {}),
   };
 }
 

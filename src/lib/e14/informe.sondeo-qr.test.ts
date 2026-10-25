@@ -131,3 +131,47 @@ describe("e73 §E — línea aditiva «Sondeo QR» del informe", () => {
     expect(r.matches).toBe(1); // semántica e66 ESTABLE — qr-sondeo NO entra al set e66 (como las puertas wave3)
   });
 });
+
+// ─── KIT e14-obs-hang-atribucion-v1 (§E, T5 ≥ 3) — D57 por fila + sello reuso ──
+import { actaLivianaJson, filaLiviana } from "./informe";
+import type { RegistroMasiva } from "./masiva/tipos";
+
+describe("§E.1 — telemetría del sondeo POR FILA en actaLivianaJson", () => {
+  it("registro con sondeoQr → sondeoQrMs/sondeoQrTier presentes en el JSON del export", () => {
+    const json = actaLivianaJson(
+      fila({ sondeoQrMs: 1840, sondeoQrTier: "recorte" }),
+    );
+    expect(json.sondeoQrMs).toBe(1840);
+    expect(json.sondeoQrTier).toBe("recorte");
+  });
+  it("registro SIN sondeo (pre-e73/flag OFF/hard-kill) → campos AUSENTES (jamás inventar)", () => {
+    const json = actaLivianaJson(fila({}));
+    expect("sondeoQrMs" in json).toBe(false);
+    expect("sondeoQrTier" in json).toBe(false);
+  });
+});
+
+describe("§E.2 — sello EXPORT-ONLY 'reuso' (dupOf sin capa — jamás sobre un sello real)", () => {
+  const reg = (over: Partial<RegistroMasiva>): RegistroMasiva =>
+    ({
+      id: "r1",
+      nombre: "a.jpg",
+      agregadaEn: 1,
+      estado: "LISTA",
+      ...over,
+    }) as RegistroMasiva;
+
+  it("dupOf SIN dedup → dedup 'reuso' (desenlace heredado e72 — legible en el export)", () => {
+    const f = filaLiviana(reg({ dupOf: "original-1" }));
+    expect(f.dedup).toBe("reuso");
+    // y viaja al JSON del acta:
+    expect(actaLivianaJson(f).dedup).toBe("reuso");
+  });
+  it("sello REAL + dupOf → el sello queda INTACTO (jamás sobre-escribir)", () => {
+    expect(filaLiviana(reg({ dupOf: "original-2", dedup: "qr-sondeo" })).dedup).toBe("qr-sondeo");
+    expect(filaLiviana(reg({ dupOf: "original-3", dedup: "ya-enviada-copia" })).dedup).toBe("ya-enviada-copia");
+  });
+  it("sin dupOf y sin dedup → null honesto (originales/legacy intactos)", () => {
+    expect(filaLiviana(reg({})).dedup).toBeNull();
+  });
+});
