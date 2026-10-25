@@ -11,6 +11,10 @@
 import { useMasivaStore } from "./store";
 import type { FilaMasiva } from "./tipos";
 import type { ProgresoAnalisis } from "../types";
+// KIT e14-obs-hang-atribucion-v1 (§A.2) — hook D58: cada señal del bridge
+// actualiza la operación ACTIVA (module state, barato — sin tocar el
+// throttling). Precedente masiva→obs: runner.ts ya importa ../obs/dispositivo.
+import { marcarOperacion } from "../obs/operacion";
 
 /** Throttle del progreso (250 ms — kit D65 T3.1 literal): el OCR emite decenas
  *  de eventos por etapa; la bandeja solo necesita el último. */
@@ -132,6 +136,12 @@ function marcarVida(id: string, p: ProgresoAnalisis): void {
   const vida = vidaDe(id);
   const bruto = fracGlobalDe(id, p);
   if (bruto > vida.frac) vida.frac = bruto; // MONOTÓNICO
+  // KIT e14-obs-hang-atribucion-v1 (§A.2) — ÚNICO cambio de este archivo:
+  // marcar la etapa ANTES del throttle return (cada señal del bridge —
+  // decode/detección/OCR/verificación — actualiza el registro D58; es el
+  // MISMO bucket de bucketDeVida, vocabulario append-only §A). Sin clear:
+  // la edad delata la obsolescencia.
+  marcarOperacion(bucketDeVida(p).etapa);
   const ahora = Date.now();
   if (ahora - vida.ultimoEn < PROGRESO_MS) return;
   vida.ultimoEn = ahora;

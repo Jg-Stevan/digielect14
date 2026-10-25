@@ -40,6 +40,11 @@ export interface SaludSnapshot {
   storageLibreMB: number | null;
   tier: Tier;
   tierInferido: boolean;
+  /** KIT e14-obs-hang-atribucion-v1 (§F v1.1) — Date.now() al CAPTURAR. Sin
+   *  ts, las narrativas de memoria (picos/GC/recuperación) son indatables
+   *  (dictamen 1045/1048: baterías 0.74 → 0.54 → 0.53 = horas de span, no un
+   *  ciclo de una corrida). AUSENTE en eventos legacy — jamás inventar. */
+  ts?: number;
 }
 
 export interface UsoContador {
@@ -54,7 +59,7 @@ export interface UsoContador {
  *  momentos — jamás contenido de actas. breadcrumbs = los últimos 30 al
  *  momento del congelón (Breadcrumb ya es sin-contenido por contrato). */
 export interface HangEvento {
-  fuente: "drift" | "longtask"; // drift = gap del intervalo 500 ms · longtask = PerformanceObserver
+  fuente: "drift" | "longtask" | "hang-en-curso"; // drift = gap del intervalo 500 ms · longtask = PerformanceObserver · hang-en-curso = marca del WAL drenada al arranque (KIT e14-obs-hang-atribucion-v1 §C — la duración real murió con la página: duracionMs = umbralMs, mínimo demostrable §1; resumenHangsDe ya filtra typeof duracionMs === "number" y el mínimo es honesto para cuenta/mayor/total)
   duracionMs: number; // gap REAL medido (kit: captura el gap real) o duración de la task
   umbralMs: number; // umbral que disparó el registro (3 000 drift · 50 longtask)
   breadcrumbs: Breadcrumb[]; // contexto de navegación alrededor (sin contenido)
@@ -64,6 +69,25 @@ export interface HangEvento {
    *  real del informe 1230: 117 s de pantalla bloqueada contaban como hang).
    *  Eventos legacy sin el campo → tratar como visible (`?? true`). */
   visible: boolean;
+  /** KIT e14-obs-hang-atribucion-v1 (D58) — última operación REGISTRADA al
+   *  detectarse el hang (§A — vocabulario append-only). Ausente = sin
+   *  registro (eventos legacy / nada marcado — jamás inventar). */
+  op?: string;
+  /** Edad de la marca al emitir (ms) — el sesgo es parte del dato. */
+  opEdadMs?: number;
+  // ─── KIT e14-obs-hang-atribucion-v1 (§C.6) — SOLO fuente "hang-en-curso" ───
+  /** epoch ms del último beat ANTES del silencio (marca del WAL). */
+  inicio?: number;
+  /** epoch ms en que el worker cruzó el umbral (marca del WAL). */
+  detectadoEn?: number;
+  /** Arranque NUEVO − inicio: cuánto tardó la sesión nueva en descubrir
+   *  la marca sobreviviente (el sesgo es parte del dato). */
+  gapHastaReinicioMs?: number;
+  /** Sesión de ORIGEN (la que colgó) — la del evento es la NUEVA que
+   *  descubre la marca (appendEvento sella con identidad actual). */
+  sesionOrigen?: string;
+  /** appVersion de ORIGEN (la que colgó). */
+  appVersionOrigen?: string;
 }
 
 export interface PoliticaDatos {
@@ -106,6 +130,8 @@ export interface FlagsApp {
   // ─── KIT e73-sondeo-qr-precoz-v1 (§D) — campos ADITIVOS AL FINAL (D57) ───
   sondeoQrPrecoz: boolean; // default true — sondeo QR en INGESTA (worker e73); false = kill-switch (byte-idéntico a 043b2ba)
   sondeoQrPresupuestoMs: number; // default 2500 — presupuesto del reló del ladder del worker (jamás extender — kit §I)
+  // ─── KIT e14-obs-hang-atribucion-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
+  hangEnCurso: boolean; // default true — sensor hang-en-curso (worker heartbeat + WAL); false = byte-idéntico a b688fbc
 }
 
 export interface ReporteSesion {
@@ -115,6 +141,11 @@ export interface ReporteSesion {
     deviceId: string;
     sesion: string;
     politica: PoliticaDatos;
+    // ─── KIT e14-obs-hang-atribucion-v1 (§F) — AL FINAL (D57): el gate del
+    // ─── sampler (dispositivo.ts condicionesOk) espejado — saludMuestras
+    // ─── pasa de misterio a explicado DESDE el artefacto.
+    modoDev: boolean;
+    telemetriaSalud: boolean;
   };
   dispositivo: SaludSnapshot & { os: string; ua: string };
   erroresAgrupados: ErroresAgrupados[];
@@ -152,6 +183,21 @@ export interface ReporteSesion {
      *  informe 1230 — 117 s fantasma — queda imposible). */
     cuentaOcultas: number;
   };
+  /** KIT e14-obs-hang-atribucion-v1 (§B) — distribución de los hangs por la
+   *  última operación registrada (D58): una fila por `op` (null = legacy/sin
+   *  marca), orden cuenta desc → op asc (JSON estable). Aditivo AL FINAL del
+   *  reporte (informes previos no cambian de forma). Correlación, NO prueba
+   *  de causalidad (§A — el sesgo viaja en opEdadMs). */
+  hangPorOp?: HangPorOp[];
+}
+
+/** KIT e14-obs-hang-atribucion-v1 (§B) — fila de hangPorOp (tipado del
+ *  agregado PURO hangsPorOp de hang.ts). */
+export interface HangPorOp {
+  op: string | null;
+  cuenta: number;
+  totalMs: number;
+  mayorMs: number;
 }
 
 /** §G.3 — fila de enviosDetalle (una por diagnóstico con envioMs != null).
