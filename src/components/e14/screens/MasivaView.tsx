@@ -148,6 +148,10 @@ export function MasivaView() {
   const colaDisponible = useMasivaStore((s) => s.colaDisponible);
   const avisoCola = useMasivaStore((s) => s.avisoCola);
   const enviandoLote = useMasivaStore((s) => s.enviandoLote);
+  // KIT e73 (§E): contadores del chip del sondeo QR en ingesta (SOLO-LECTURA
+  // — derivados de las filas; jamás tocan la cola ni el runner).
+  const sondeadas = filas.filter((f) => f.sondeoQrMs != null).length;
+  const conPayload = filas.filter((f) => f.sondeoQrTier != null).length;
   const {
     cargarFilas,
     sincronizarAlVolver,
@@ -551,6 +555,19 @@ export function MasivaView() {
               aria-live="polite"
             >
               GUARDANDO {guardando}…
+            </p>
+          )}
+
+          {/* KIT e73-sondeo-qr-precoz-v1 (§E — deseado): chip del SONDEO QR en
+              ingesta — N leídos / M con payload (en vivo, junto al progreso de
+              ingesta; SIN tocar la lógica de la cola — SOLO-LECTURA del store). */}
+          {sondeadas > 0 && (
+            <p
+              className="mt-3 inline-block rounded-full border border-[#10b981]/30 bg-[#10b981]/10 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-[#10b981]"
+              role="status"
+              aria-label={`Sondeo QR: ${sondeadas} leídos, ${conPayload} con payload`}
+            >
+              SONDEO QR {conPayload}/{sondeadas}
             </p>
           )}
         </div>
