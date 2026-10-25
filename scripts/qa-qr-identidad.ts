@@ -338,6 +338,13 @@ const srcQr = await readFile(
   new URL("../src/lib/e14/masiva/identidad-qr.ts", import.meta.url),
   "utf8",
 );
+// FIX DICTAMEN-e73 §3.1: el barrido jsQR puro vive en qr-pixeles.ts (módulo
+// worker-safe re-exportado por identidad-qr) — los source-scans que anclan
+// su contenido leen AMBAS fuentes (mismas garantías, nueva ubicación).
+const srcQrPixeles = await readFile(
+  new URL("../src/lib/e14/masiva/qr-pixeles.ts", import.meta.url),
+  "utf8",
+);
 
 // Imports del kit + vía del capture.
 ok(
@@ -793,9 +800,9 @@ ok(
   "orden de la cadena: base → barrido → NITIDEZ (T-1.1) → BINARIZADA (T-1.2) → zxing → rotación",
 );
 ok(
-  (srcQr.match(/winFilo/g) ?? []).length >= 4 &&
-    (srcQr.match(/e64-qr T-1\.0/g) ?? []).length >= 2,
-  `T-1.0 · celda filo presente en los 2 barridos (${(srcQr.match(/winFilo/g) ?? []).length} referencias)`,
+  ((srcQr.match(/winFilo/g) ?? []).length + (srcQrPixeles.match(/winFilo/g) ?? []).length) >= 4 &&
+    ((srcQr.match(/e64-qr T-1\.0/g) ?? []).length + (srcQrPixeles.match(/e64-qr T-1\.0/g) ?? []).length) >= 2,
+  `T-1.0 · celda filo presente en los 2 barridos (${(srcQr.match(/winFilo/g) ?? []).length + (srcQrPixeles.match(/winFilo/g) ?? []).length} referencias — barrido jsQR en qr-pixeles.ts + zxing aquí, FIX DICTAMEN-e73 §3.1)`,
 );
 ok(
   srcQr.includes("rescate4096") &&
@@ -869,7 +876,7 @@ ok(
   iRecorte > 0 &&
     iRecorte < srcQr.indexOf("const barrido = barridoQrDePixeles(pix);") &&
     srcQr.includes('trazaQr("recorte-600"') &&
-    srcQr.includes("export const QR_RECORTE_LADO = 600;"),
+    srcQrPixeles.includes("export const QR_RECORTE_LADO = 600;"), // FIX DICTAMEN-e73 §3.1 — vive en el módulo puro (re-exportado por identidad-qr)
   "Opt-2 · orden de la cadena: base → recorte-600 → barrido → NITIDEZ → BINARIZADA → zxing → rotación (traza nueva tier=recorte-600)",
 );
 

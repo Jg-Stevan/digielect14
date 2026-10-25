@@ -2216,3 +2216,14 @@ Chunk MASIVA (donde vive el T2 rev.2) `1ag8g9u1m5gd2.js` (12,433 bytes, sha256 `
 - **Commits:** ver branch perf/dedup-rechequeo-reserva-v1 (feat + test + docs).
 - **Cómo probar:** gate `bunx tsc --noEmit && bun run lint && bun run test` (204/204) y `bash scripts/check-quality.sh` (QA 11/11 — dedup-enviadas 50/50, qr-identidad 72/72, watchdog 34/34, build exit 0). Campo (kit §6.1): subir 2 archivos idénticos de golpe → copia muere <1 s; si cae en la carrera, consola trae `re-chequeo post-reserva → reuso (carrera cerrada)` y totalMs ≈ 0 sin OCR. Kill switch intacto: `{"poolWorkers":1}` sigue secuencial.
 - **Pendiente/Bloqueado:** nada de este branch — PR DRAFT abierto (el agente nunca mergea). Smoke manual kit §6 completo es post-merge en deploy de prueba (dueño). Reviso NEXT wave: orden de integración sugerido C → A → B (territorios disjuntos).
+
+## FIX DICTAMEN-e73-implementacion-v1 (2026-10-25 · rama feat/sondeo-qr-precoz-v1, pre-merge)
+El auditor demostró que Turbopack emitía el worker del sondeo como .ts CRUDO (verde falso del
+smoke §A.1 — «exit 0 no es worker compilado»). Fix contenido en T1: barrido jsQR movido a
+qr-pixeles.ts (doctrina §A.2, re-exportado — cero diffs en consumidores) → S3 por import
+ESTÁTICO → precompilación dedicada (Bun.build IIFE) a public/scanner/sondeo-qr.worker.js
+(precendente detection-worker.js) + cliente por URL absoluta con NEXT_PUBLIC_BASE_PATH +
+smoke REAL en el gate (3bis: frescura byte a byte · marcadores · prohibidos · cliente sin
+.ts en media). QA qa-qr-identidad: 3 anclas source-scan re-ancladas a la nueva ubicación
+(mismas garantías). Gate TODO VERDE (vitest 294 · QA 11/11) + humo de navegador PRE-merge
+(§3.3): chip «SONDEO QR 2/2», «2 leídos · 2 con payload», gemela DUPLICADA en ingesta.
