@@ -101,6 +101,11 @@ async function main(): Promise<void> {
 
   // ── Check 6 · UX-13: chip desaparece al COMPLETADA ────────────────────
   ok(masiva.includes("{sondeadas > 0 && pendientes > 0 && ("), "6.1 chip SONDEO QR con sondeadas > 0 && pendientes > 0");
+  ok(
+    masiva.includes("disabled:bg-slate-800 disabled:text-slate-500 disabled:border-slate-700 disabled:shadow-none disabled:cursor-not-allowed") &&
+      !masiva.includes("disabled:opacity-40"),
+    "6.2 UX-12: disabled PROCESAR COLA gris (slate-800/500/700 sin opacity — contrato de la exención disabled: del QA aa-quickwins M-ux-2)",
+  );
 
   // ── Check 7 · anclas QA previas INTACTAS ──────────────────────────────
   ok(masiva.includes('label: "YA ENVIADA", clases: "border-emerald-500/60 text-emerald-300 bg-emerald-500/10"'), "7.1 chip YA ENVIADA (pildoraDe) intacto");

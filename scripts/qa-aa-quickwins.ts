@@ -62,6 +62,14 @@ async function tsxDe(dir: string): Promise<string[]> {
 
 const GRIS = /text-(?:slate|gray)-(?:500|600)/;
 const PEQUE = /text-\[(?:9|9\.5|10|10\.5|11)px\]|text-xs\b/;
+/** KIT ux-masiva-fixes-v1 (§F.2, M-ux-2): los tokens con prefijo
+ *  `disabled:` son estilos de ESTADO INACTIVO — WCAG 1.4.3 los exime
+ *  (mismo criterio que la exención de PanelClasificacion DISABLED, §5)
+ *  y el kit ux-masiva-fixes-v1 prescribe disabled:text-slate-500 para
+ *  PROCESAR COLA. Se remueven de la línea ANTES del test GRIS: cualquier
+ *  gris 500/600 en texto ACTIVO sigue prohibido con la misma severidad
+ *  (el contrato del estilo disabled vive en qa-ux-masiva-fixes 6.2). */
+const ESTADO_INACTIVO = /(?:disabled|enabled):text-(?:slate|gray)-(?:500|600)/g;
 
 async function main(): Promise<void> {
   // ── 1 · Grises AA: 0 co-ocurrencias gris ≤12px en src/components/** ──────
@@ -70,7 +78,11 @@ async function main(): Promise<void> {
   for (const f of componentes) {
     const src = (await leer(f)) ?? "";
     for (const linea of src.split("\n")) {
-      if (GRIS.test(linea) && PEQUE.test(linea)) coocurrentes++;
+      // M-ux-2: estilos de estado inactivo (disabled:) fuera del scan —
+      // el texto ACTIVO con gris 500/600 sigue contando (ver arriba).
+      if (GRIS.test(linea.replace(ESTADO_INACTIVO, "")) && PEQUE.test(linea)) {
+        coocurrentes++;
+      }
     }
   }
   ok(
