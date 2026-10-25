@@ -44,6 +44,7 @@ import { iniciarBreadcrumbs } from "@/lib/e14/obs/breadcrumbs";
 import { iniciarUso } from "@/lib/e14/obs/uso";
 import { iniciarMuestreoSalud } from "@/lib/e14/obs/dispositivo";
 import { iniciarDetectorHang } from "@/lib/e14/obs/hang"; // ANEXO Agente C (Pieza 2) — sensor de congelones
+import { iniciarSensorHangEnCurso } from "@/lib/e14/obs/heartbeat.client"; // KIT e14-obs-hang-atribucion-v1 (§C.7) — heartbeat + WAL (idempotente, silencioso, kill-switch hangEnCurso)
 import { iniciarTransporte } from "@/lib/e14/obs/transporte";
 import { refrescarFlags } from "@/lib/e14/flags";
 
@@ -70,6 +71,7 @@ export default function Page() {
       iniciarUso();
       iniciarMuestreoSalud();
       iniciarDetectorHang(); // ANEXO Agente C — longtask + drift (idempotente, silencioso)
+      iniciarSensorHangEnCurso(); // KIT e14-obs-hang-atribucion-v1 (§C.7) — drena el WAL + heartbeat del hang-en-curso (idempotente, silencioso, kill-switch hangEnCurso)
       iniciarTransporte();
       void refrescarFlags();
     } catch {
