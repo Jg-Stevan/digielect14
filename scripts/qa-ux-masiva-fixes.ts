@@ -101,9 +101,14 @@ async function main(): Promise<void> {
 
   // ── Check 6 · UX-13: chip desaparece al COMPLETADA ────────────────────
   ok(masiva.includes("{sondeadas > 0 && pendientes > 0 && ("), "6.1 chip SONDEO QR con sondeadas > 0 && pendientes > 0");
+  // El contrato es sobre el botón PROCESAR COLA (kit §F.2) — los otros dos
+  // disabled:opacity-40 de MasivaView (PAUSAR · banner EN COLA) NO se tocan.
+  const lineaProcesar = masiva.split("\n").find((l) => l.includes("disabled:bg-slate-800"));
   ok(
-    masiva.includes("disabled:bg-slate-800 disabled:text-slate-500 disabled:border-slate-700 disabled:shadow-none disabled:cursor-not-allowed") &&
-      !masiva.includes("disabled:opacity-40"),
+    lineaProcesar != null &&
+      lineaProcesar.includes("disabled:text-slate-500 disabled:border-slate-700 disabled:shadow-none disabled:cursor-not-allowed") &&
+      !lineaProcesar.includes("disabled:opacity-40") &&
+      lineaProcesar.includes("bg-[#10b981]"),
     "6.2 UX-12: disabled PROCESAR COLA gris (slate-800/500/700 sin opacity — contrato de la exención disabled: del QA aa-quickwins M-ux-2)",
   );
 
