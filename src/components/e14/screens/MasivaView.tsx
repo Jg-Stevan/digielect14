@@ -124,15 +124,23 @@ function etiquetaVida(p: { etapa: EtapaVidaKit; fracGlobal?: number }): string {
 /** % ÚNICO del PROCESO COMPLETO del acta (0% a 100%) — pedido del dueño:
  *  un solo número por acta, sin reinicios por fase. `fracGlobal` lo computa
  *  el runner (monotónico, todas las fases sumadas). LISTA = 100 · ERROR = 0 ·
- *  fila PROCESANDO sin señal viva (zombi de recarga) = 20 como hoy. */
-function porcentajeProcesoActa(
+ *  fila PROCESANDO sin señal viva (zombi de recarga) = 20 como hoy.
+ *  KIT ux-masiva-fixes-v1 (T4/§D, UX-4): fila PROCESANDO no-activa (cedió
+ *  el progreso al pool) muestra su ÚLTIMO fracGlobal real del mapa
+ *  `ultimosFrac` — jamás retrocede a 20. Sin entrada en el mapa → 20
+ *  (zombis de recarga, igual que hoy). EXPORTADA para test node puro. */
+export function porcentajeProcesoActa(
   f: FilaMasiva,
   esActiva: boolean,
   progreso: { fracGlobal?: number } | null,
+  ultimosFrac: Map<string, number>,
 ): number {
   if (f.estado === "LISTA") return 100;
   if (f.estado === "ERROR") return 0;
-  if (!esActiva) return f.estado === "PROCESANDO" ? 20 : 0;
+  if (!esActiva) {
+    if (f.estado !== "PROCESANDO") return 0;
+    return Math.round((ultimosFrac.get(f.id) ?? 0.2) * 100);
+  }
   if (progreso?.fracGlobal != null) {
     return Math.min(99, Math.max(1, Math.round(progreso.fracGlobal * 100)));
   }
@@ -140,9 +148,26 @@ function porcentajeProcesoActa(
 }
 
 export function MasivaView() {
+  // KIT ux-masiva-fixes-v1 (T4/§D, UX-4): acumulador del ÚLTIMO fracGlobal
+  // real por fila — el % de una fila PROCESANDO que cede el progreso al
+  // pool SE QUEDA en su último valor (1 frame de retraso a throttle
+  // 250 ms, imperceptible). Sobrescritura incondicional: un REINTENTAR que
+  // relanza la fila reinicia desde su nuevo frac honesto. Sin cleanup
+  // (acotado por nº de filas de la sesión; zombis de recarga sin entrada
+  // → 20, igual que hoy). REF por rendimiento: el render la lee sin
+  // suscribirse, el efecto de progreso ya re-renderiza al cambiar.
+  const ultimosFrac = useRef(new Map<string, number>());
   const filas = useMasivaStore((s) => s.filas);
   const corriendo = useMasivaStore((s) => s.corriendo);
   const progreso = useMasivaStore((s) => s.progreso);
+  // KIT ux-masiva-fixes-v1 (T4/§D, UX-4): alimenta el mapa de últimos
+  // fracs REALES por fila (sobrescritura incondicional — REINTENTAR que
+  // relanza reinicia desde el nuevo frac honesto).
+  useEffect(() => {
+    if (progreso?.id && progreso.fracGlobal != null) {
+      ultimosFrac.current.set(progreso.id, progreso.fracGlobal);
+    }
+  }, [progreso]);
   const filtro = useMasivaStore((s) => s.filtro);
   const guardando = useMasivaStore((s) => s.guardando);
   const colaDisponible = useMasivaStore((s) => s.colaDisponible);
@@ -653,7 +678,7 @@ export function MasivaView() {
               // D65 (T3.3) — señal de vida de la fila (barra h-1 discreta):
               const enColaVida = f.estado === "PENDIENTE" || f.estado === "DUPLICADA";
               const posCola = enColaVida ? colaVida.indexOf(f.id) + 1 : 0;
-              const pctProceso = porcentajeProcesoActa(f, Boolean(esActiva), progreso);
+              const pctProceso = porcentajeProcesoActa(f, Boolean(esActiva), progreso, ultimosFrac.current);
               // % SOLO si es dato REAL (OCR del reconocedor) — kit T3 honestidad.
               const ocrPct =
                 esActiva && progreso?.etapa === "ocr" && progreso.ocrFraccion != null
