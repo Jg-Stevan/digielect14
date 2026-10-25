@@ -23,8 +23,12 @@ import { logger } from "../../logger";
 import { leerFlags } from "../flags";
 import type { RespuestaSondeo } from "./sondeo-qr.worker";
 
-/** Resultado del sondeo — payload EXACTO (llave opaca) + tier que lo leyó. */
-export type SondeoQr = { payload: string; tier: string; ms: number };
+/** Resultado del sondeo — ESPEJO de RespuestaSondeo del worker: el objeto
+ *  (nunca null) significa «el sondeo CORRIÓ y midió ms» (payload null = sin
+ *  QR — honesto, alimenta «N leídos» del informe §E); `null` de la promesa
+ *  significa «NO corrió» (flag OFF / sin soporte / hard-kill / error).
+ *  Payload EXACTO (llave opaca) + tier que lo leyó — M-e73-2 del REPORTE. */
+export type SondeoQr = { payload: string | null; tier: string | null; ms: number };
 
 /** Contrato mínimo del worker que este cliente maneja (tests lo falsifican). */
 export interface WorkerSondeo {
@@ -165,9 +169,15 @@ async function ejecutar(tarea: {
     }, presupuestoMs + 1000);
     w.onmessage = (ev: MessageEvent<RespuestaSondeo>) => {
       const r = ev.data;
+      // Respuesta COMPLETA del worker (el objeto = corrió; payload null =
+      // sin QR — la telemetría de ms es REAL incluso sin lectura — §E).
       terminar(
-        r && typeof r.payload === "string" && r.payload.length > 0
-          ? { payload: r.payload, tier: String(r.tier ?? ""), ms: Number(r.ms) || 0 }
+        r
+          ? {
+              payload: typeof r.payload === "string" && r.payload.length > 0 ? r.payload : null,
+              tier: typeof r.payload === "string" && r.payload.length > 0 ? String(r.tier ?? "") : null,
+              ms: Number(r.ms) || 0,
+            }
           : null,
       );
     };

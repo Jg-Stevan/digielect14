@@ -108,3 +108,56 @@ export async function borrarHistorico(): Promise<void> {
     tx.onabort = () => reject(tx.error ?? new Error("IDB_HISTORICO_BORRAR_ABORTADA"));
   });
 }
+
+// ─── KIT e73-sondeo-qr-precoz-v1 (§C) — ÍNDICE HISTÓRICO POR PAYLOAD ──────
+// El sondeo QR en INGESTA (store.ts cadenaDedup §B.2-b) marca YA-ENVIADA
+// por payload EXACTO — llave opaca (historico.ts:23, jamás se parsea).
+// MISMO patrón del cache en memoria del índice de enviadas (store.ts
+// indiceEnviadasDe): cache + hook al MISMO punto de invalidación
+// (registrarEnviadaHistorico — el MISMO gesto de sesión queda visible sin
+// recargar). Solo entradas con payloadQr != null; NUNCA retiene Blob (L7).
+let indicePayload: Map<string, EntradaHistorica> | null = null;
+let indicePayloadListo = false;
+
+/**
+ * Índice por payload EXACTO (§C): carga LIVIANA una vez por sesión del
+ * índice (getAll de llaves chicas — L7) + hook en vivo. `incluirPersistido`
+ *=false NO alimenta desde el ledger (MODO PRUEBAS e64p C-3 — los Maps de
+ * dedup no se comen de NADA persistido; el hook in-memory de la SESIÓN
+ * sigue vivo — misma doctrina del índice fusionado). Fallo del ledger →
+ * índice vacío-conservador (RL-e65b-3): el caller sigue su curso.
+ */
+export async function indiceEnviadasPorPayload(
+  incluirPersistido: boolean = true,
+): Promise<Map<string, EntradaHistorica>> {
+  if (indicePayloadListo && indicePayload) return indicePayload;
+  const mapa = new Map<string, EntradaHistorica>();
+  if (incluirPersistido) {
+    try {
+      const entradas = await listarHistorico();
+      for (const e of entradas) {
+        if (e.payloadQr != null && e.payloadQr !== "") mapa.set(e.payloadQr, e);
+      }
+    } catch {
+      /* conservador — índice solo in-memory (hook) hasta el próximo reset */
+    }
+  }
+  indicePayload = mapa;
+  indicePayloadListo = true;
+  return mapa;
+}
+
+/** Hook del MISMO punto de invalidación (store.ts registrarEnviadaHistorico
+ *  — kit §C): la entrada recién registrada queda visible para el sondeo AL
+ *  INSTANTE (mismo gesto). No-op si el índice aún no cargó — se construirá
+ *  con TODO dentro al primer uso. */
+export function actualizarIndicePayload(e: EntradaHistorica): void {
+  if (!indicePayloadListo || !indicePayload) return;
+  if (e.payloadQr != null && e.payloadQr !== "") indicePayload.set(e.payloadQr, e);
+}
+
+/** Prueba interna (tests): reset del índice por payload. */
+export function __resetIndicePayloadParaTest(): void {
+  indicePayload = null;
+  indicePayloadListo = false;
+}
