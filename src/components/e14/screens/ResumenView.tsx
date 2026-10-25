@@ -198,7 +198,7 @@ export function ResumenView() {
                 ? "Confirmar reiniciar la jornada completa (incluye la cola masiva)"
                 : "Reiniciar la jornada completa"
             }
-            className={`w-full lg:max-w-sm min-h-[40px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
+            className={`w-full lg:max-w-sm min-h-[44px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
               reiniciarArmado
                 ? "border-red-500 text-red-400 bg-red-500/15 shadow-sm shadow-red-500/20"
                 : "border-slate-800 bg-[#10161f] text-slate-400 hover:border-red-500/50 hover:text-red-400"
@@ -218,7 +218,7 @@ export function ResumenView() {
                 HISTORIAL DE TRANSMISIONES
               </span>
               {modoSimulacion && (
-                <span className="text-[10px] text-slate-500 font-mono">(DATOS EN MODO SIMULACIÓN)</span>
+                <span className="text-[10px] text-slate-400 font-mono">(DATOS EN MODO SIMULACIÓN)</span>
               )}
             </div>
             <span className="font-mono text-[11px] text-slate-400">
@@ -228,7 +228,7 @@ export function ResumenView() {
 
           <div className="flex flex-col max-h-96 lg:max-h-[28rem] overflow-y-auto thin-scroll rounded-2xl border border-slate-800 bg-[#10161f] divide-y divide-slate-800/80 shadow-sm">
             {filas.length === 0 ? (
-              <div className="p-4 text-center text-xs font-mono text-slate-500">
+              <div className="p-4 text-center text-xs font-mono text-slate-400">
                 NO HAY ENVÍOS REGISTRADOS EN ESTA SESIÓN
               </div>
             ) : (

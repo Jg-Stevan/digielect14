@@ -72,7 +72,7 @@ function TituloSeccion({
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <h3 className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+      <h3 className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
         {n} · {titulo}
       </h3>
       {hijo}
@@ -83,7 +83,7 @@ function TituloSeccion({
 function FilaDato({ etiqueta, valor }: { etiqueta: string; valor: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-1.5">
-      <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
+      <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
         {etiqueta}
       </span>
       <span className="font-mono text-[12px] text-slate-200 text-right min-w-0 break-all">
@@ -121,7 +121,7 @@ function SwitchFila({
         <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-slate-200">
           {etiqueta}
         </span>
-        {nota && <span className="text-[11px] leading-snug text-slate-500">{nota}</span>}
+        {nota && <span className="text-[11px] leading-snug text-slate-400">{nota}</span>}
       </span>
       <span
         aria-hidden="true"
@@ -424,7 +424,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
               <FilaDato etiqueta="Versión" valor={appVersion()} />
               <div className="border-t border-slate-800/70" />
               <div className="flex items-center justify-between gap-3 py-1.5">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
                   Modo diagnóstico
                 </span>
                 {modoDev ? (
@@ -499,12 +499,12 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
                 </span>
               )}
               {snapshot?.tierInferido && (
-                <span className="text-[10.5px] text-slate-500 font-mono">
+                <span className="text-[10.5px] text-slate-400 font-mono">
                   tier inferido (sin deviceMemory — iOS)
                 </span>
               )}
               {!snapshot && (
-                <span className="text-[10.5px] text-slate-500 font-mono">
+                <span className="text-[10.5px] text-slate-400 font-mono">
                   esperando el núcleo obs (FASE 1)
                 </span>
               )}
@@ -535,7 +535,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
                   key={k}
                   className="rounded-xl border border-slate-800 bg-[#0b1117] px-3 py-2 flex flex-col gap-0.5"
                 >
-                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">
                     {k}
                   </span>
                   <span className="font-mono text-[13px] font-bold text-slate-200 tabular-nums">
@@ -597,7 +597,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
             />
             <div className="rounded-2xl border border-slate-800 bg-[#0b1117] px-3.5 py-1.5">
               {errores.length === 0 ? (
-                <p className="py-3 text-center font-mono text-[11px] text-slate-500">
+                <p className="py-3 text-center font-mono text-[11px] text-slate-400">
                   SIN EVENTOS EN EL BUFFER
                 </p>
               ) : (
@@ -616,7 +616,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
                       <span className="font-mono text-[11px] text-slate-200 truncate min-w-0">
                         {e.tipo}: {e.mensaje}
                       </span>
-                      <span className="ml-auto font-mono text-[10px] text-slate-500 shrink-0 tabular-nums">
+                      <span className="ml-auto font-mono text-[10px] text-slate-400 shrink-0 tabular-nums">
                         ×{e.veces}
                       </span>
                     </li>
@@ -926,7 +926,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
             )}
           </section>
 
-          <p className="text-center font-mono text-[9.5px] text-slate-600 pb-1">
+          <p className="text-center font-mono text-[9.5px] text-slate-400 pb-1">
             Nada sale del dispositivo sin que lo exportes manualmente (D1)
           </p>
         </div>
