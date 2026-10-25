@@ -125,7 +125,7 @@ export function VistaErrores({
 
         <div className="px-5 py-5 flex flex-col gap-3">
           {errores.length === 0 ? (
-            <p className="py-8 text-center font-mono text-[11px] text-slate-500">
+            <p className="py-8 text-center font-mono text-[11px] text-slate-400">
               SIN ERRORES REGISTRADOS EN EL BUFFER
             </p>
           ) : (
@@ -150,7 +150,7 @@ export function VistaErrores({
                     <span className="font-mono text-[11px] font-bold text-slate-200 truncate min-w-0">
                       {e.tipo}
                     </span>
-                    <span className="ml-auto font-mono text-[10px] text-slate-500 shrink-0 tabular-nums">
+                    <span className="ml-auto font-mono text-[10px] text-slate-400 shrink-0 tabular-nums">
                       ×{e.veces}
                     </span>
                   </div>
@@ -165,19 +165,19 @@ export function VistaErrores({
                   {/* Metadatos */}
                   <dl className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[10px]">
                     <div className="flex gap-1.5 min-w-0">
-                      <dt className="text-slate-500 shrink-0">digest</dt>
+                      <dt className="text-slate-400 shrink-0">digest</dt>
                       <dd className="text-slate-300 truncate">{e.digest}</dd>
                     </div>
                     <div className="flex gap-1.5 min-w-0">
-                      <dt className="text-slate-500 shrink-0">archivo</dt>
+                      <dt className="text-slate-400 shrink-0">archivo</dt>
                       <dd className="text-slate-300 truncate">{e.archivo ?? "—"}</dd>
                     </div>
                     <div className="flex gap-1.5 min-w-0">
-                      <dt className="text-slate-500 shrink-0">1.ª</dt>
+                      <dt className="text-slate-400 shrink-0">1.ª</dt>
                       <dd className="text-slate-300">{hace(e.primera)}</dd>
                     </div>
                     <div className="flex gap-1.5 min-w-0">
-                      <dt className="text-slate-500 shrink-0">últ.</dt>
+                      <dt className="text-slate-400 shrink-0">últ.</dt>
                       <dd className="text-slate-300">{hace(e.ultima)}</dd>
                     </div>
                   </dl>
@@ -207,7 +207,7 @@ export function VistaErrores({
                   {abierto && (
                     <ol className="mt-1 ml-1.5 border-l border-slate-700/80 pl-4 flex flex-col gap-2.5">
                       {e.breadcrumbsRecientes.length === 0 ? (
-                        <li className="font-mono text-[10.5px] text-slate-500">
+                        <li className="font-mono text-[10.5px] text-slate-400">
                           SIN BREADCRUMBS PARA ESTE EVENTO
                         </li>
                       ) : (

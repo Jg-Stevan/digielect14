@@ -457,14 +457,14 @@ export function QuadEditor({
                   <span className="font-mono text-[10px] tracking-widest text-red-400 uppercase text-center">
                     NO SE PUDO DECODIFICAR LA FOTO
                   </span>
-                  <span className="font-mono text-[10px] tracking-wider text-gray-500 uppercase text-center">
+                  <span className="font-mono text-[10px] tracking-wider text-gray-400 uppercase text-center">
                     CANCELA Y VUELVE A CAPTURAR EL ACTA
                   </span>
                 </>
               ) : (
                 <>
                   <span className="block h-7 w-7 rounded-full border-[3px] border-brand-border border-t-brand-green animate-spin" />
-                  <span className="font-mono text-[10px] tracking-widest text-gray-500 uppercase">
+                  <span className="font-mono text-[10px] tracking-widest text-gray-400 uppercase">
                     Decodificando foto…
                   </span>
                 </>
@@ -644,7 +644,7 @@ export function QuadEditor({
             <span className="truncate">DETECCIÓN AUTOMÁTICA</span>
           </button>
         </div>
-        <span className="font-mono text-[9px] tracking-[0.18em] text-gray-500 uppercase text-center">
+        <span className="font-mono text-[9px] tracking-[0.18em] text-gray-400 uppercase text-center">
           Arrastra las asas · la lupa amplía 3× el punto de corte
         </span>
         <button

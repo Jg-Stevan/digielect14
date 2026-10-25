@@ -998,7 +998,7 @@ export function ScanView() {
                 </div>
 
                 <div className="w-full py-1 border-t border-slate-800/80 flex items-center justify-center">
-                  <span className="text-[9px] font-mono text-slate-500 tracking-wider uppercase">
+                  <span className="text-[9px] font-mono text-slate-400 tracking-wider uppercase">
                     DIGITALIZADOR OFICIAL E-14
                   </span>
                 </div>
@@ -1032,7 +1032,7 @@ export function ScanView() {
             <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" aria-hidden />
             {labelModo}
           </span>
-          <span className="text-[9px] text-slate-500">TEST SCORES</span>
+          <span className="text-[9px] text-slate-400">TEST SCORES</span>
         </div>
 
         {/* Barra de SIMULACIÓN — Task 2-b: lg:max-w-md + chips con más aire en
