@@ -157,3 +157,80 @@ describe("iniciarDetectorHang (bootstrap) — idempotente y apagable", () => {
     expect(tick).toBeNull();
   });
 });
+
+// ─── KIT e14-obs-hang-atribucion-v1 (§B, T2 ≥ 4) — D58 + hangsPorOp ────────
+import { __resetOperacionParaTest, marcarOperacion } from "./operacion";
+import { hangsPorOp } from "./hang";
+
+describe("D58 — los sensores enriquecen el hang con la operación activa (§B)", () => {
+  it("drift con marca previa → el evento viaja con op + opEdadMs (edad REAL)", async () => {
+    vi.useFakeTimers({ now: 0 });
+    stubWindow();
+    iniciarDetectorHang(); // proximoTick = 500
+    vi.setSystemTime(500);
+    await tick!(); // gap = 0, proximoTick = 1000
+    appendMock.mockClear();
+    marcarOperacion("ocr"); // marca a los 500 ms (fake now)
+    vi.setSystemTime(1000 + DRIFT_UMBRAL_MS + 200); // congelón de 3.2 s (umbral ESTRICTO)
+    await tick!();
+    expect(appendMock).toHaveBeenCalledTimes(1);
+    const datos = appendMock.mock.calls[0][0].datos as { op?: string; opEdadMs?: number };
+    expect(datos.op).toBe("ocr");
+    expect(datos.opEdadMs).toBe(4200 - 500); // 3700 — edad de la marca al emitir
+  });
+  it("drift SIN marca → el evento NO trae op (spread condicional — jamás inventar 'ocioso')", async () => {
+    vi.useFakeTimers({ now: 0 });
+    stubWindow();
+    __resetOperacionParaTest(); // sin ninguna marca
+    iniciarDetectorHang();
+    vi.setSystemTime(DRIFT_UMBRAL_MS + 600);
+    await tick!();
+    expect(appendMock).toHaveBeenCalledTimes(1);
+    const datos = appendMock.mock.calls[0][0].datos as { op?: string };
+    expect("op" in datos).toBe(false);
+  });
+});
+
+describe("hangsPorOp — agregación por operación (§B, PURA)", () => {
+  const ev = (op: string | undefined, duracionMs: number) =>
+    ({ tipo: "hang", datos: { fuente: "drift", duracionMs, umbralMs: 3000, breadcrumbs: [], ...(op != null ? { op, opEdadMs: 10 } : {}) } });
+
+  it("agrupa/cuenta/suma; no-hang y duración no-numérica fuera", () => {
+    const eventos = [
+      ev("ocr", 3200),
+      ev("ocr", 800),
+      ev("dhash", 500),
+      { tipo: "salud", datos: {} },
+      { tipo: "hang", datos: { fuente: "drift", umbralMs: 3000, breadcrumbs: [] } }, // sin duración honesta
+    ] as Parameters<typeof hangsPorOp>[0];
+    expect(hangsPorOp(eventos)).toEqual([
+      { op: "ocr", cuenta: 2, totalMs: 4000, mayorMs: 3200 },
+      { op: "dhash", cuenta: 1, totalMs: 500, mayorMs: 500 },
+    ]);
+  });
+  it("legacy sin op → grupo {op: null}; evento con op + opEdadMs conserva valores", () => {
+    const eventos = [
+      ev(undefined, 1000), // legacy
+      ev("verificacion", 200),
+    ] as Parameters<typeof hangsPorOp>[0];
+    const salida = hangsPorOp(eventos);
+    expect(salida).toHaveLength(2);
+    expect(salida[0]).toEqual({ op: null, cuenta: 1, totalMs: 1000, mayorMs: 1000 });
+    expect(salida[1]).toEqual({ op: "verificacion", cuenta: 1, totalMs: 200, mayorMs: 200 });
+  });
+  it("orden estable: cuenta desc, empate op asc (null primero en empate)", () => {
+    const escena = [
+      ev("deteccion", 100),
+      ev(undefined, 400), // legacy → grupo null
+      ev("deteccion", 300),
+      ev("deteccion", 200),
+      ev("informe", 900),
+    ] as Parameters<typeof hangsPorOp>[0];
+    // deteccion (3) primero; empate a 1: null ("") < "informe" → null ANTES:
+    expect(hangsPorOp(escena).map((g) => g.op)).toEqual(["deteccion", null, "informe"]);
+    expect(hangsPorOp(escena)[0]).toEqual({ op: "deteccion", cuenta: 3, totalMs: 600, mayorMs: 300 });
+  });
+  it("sin hangs → [] (honesto)", () => {
+    expect(hangsPorOp([])).toEqual([]);
+  });
+});
