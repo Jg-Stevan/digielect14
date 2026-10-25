@@ -64,6 +64,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       // KIT e73-sondeo-qr-precoz-v1 (§D) — aditivos AL FINAL (contrato D57):
       sondeoQrPrecoz: true,
       sondeoQrPresupuestoMs: 2500,
+      // KIT e14-obs-hang-atribucion-v1 (§D) — aditivo AL FINAL (contrato D57):
+      hangEnCurso: true,
     });
   });
 
@@ -227,5 +229,29 @@ describe("flags · refrescarFlags (fetch mockeado)", () => {
     expect(await refrescarFlags()).toBe("ok");
     expect(await refrescarFlags()).toBe("error");
     expect(leerFlags().thumbsOn).toBe(false); // fallback al último bueno
+  });
+});
+
+// ─── KIT e14-obs-hang-atribucion-v1 (§D, T4 ≥ 2) — flag hangEnCurso ────────
+describe("flags · hangEnCurso (kill-switch del sensor hang-en-curso, §D)", () => {
+  it("saneo acepta booleano (true/false); leerFlags lo aplica sobre defaults", () => {
+    expect(sanearFlags({ hangEnCurso: false })).toEqual({ hangEnCurso: false });
+    expect(sanearFlags({ hangEnCurso: true })).toEqual({ hangEnCurso: true });
+    stubWindow();
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) => (k === "e14-flags-overrides" ? JSON.stringify({ hangEnCurso: false }) : null),
+        setItem: () => {},
+      },
+    });
+    expect(leerFlags().hangEnCurso).toBe(false); // override manual del dueño (D6)
+  });
+  it("tipo inválido (no-booleano) → default (ausente del whitelist)", () => {
+    expect(sanearFlags({ hangEnCurso: "off" })).toEqual({});
+    expect(sanearFlags({ hangEnCurso: 0 })).toEqual({});
+    expect(sanearFlags({ hangEnCurso: null })).toEqual({});
+    expect(leerFlags().hangEnCurso).toBe(true); // FLAGS_DEFAULT.hangEnCurso
   });
 });

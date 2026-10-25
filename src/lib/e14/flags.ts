@@ -25,7 +25,9 @@ const REINTENTO_TOPE_MS = REFRESH_MS;
  *  backend, D1 · colaPersistente true — ANEXO cola-persistente-v1: la masiva
  *  SOLO se elimina con vaciar() del dueño; false = MODO PRUEBAS e64p ·
  *  sondeoQrPrecoz true + sondeoQrPresupuestoMs 2500 — KIT e73-sondeo-qr-
- *  precoz-v1 §D: sondeo QR en INGESTA, kill-switch del dueño). */
+ *  precoz-v1 §D: sondeo QR en INGESTA, kill-switch del dueño · hangEnCurso
+ *  true — KIT e14-obs-hang-atribucion-v1 §D: sensor hang-en-curso,
+ *  kill-switch del dueño). */
 export const FLAGS_DEFAULT: FlagsApp = {
   poolWorkers: 2,
   thumbsOn: true,
@@ -35,6 +37,7 @@ export const FLAGS_DEFAULT: FlagsApp = {
   colaPersistente: true,
   sondeoQrPrecoz: true,
   sondeoQrPresupuestoMs: 2500,
+  hangEnCurso: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -62,6 +65,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.sondeoQrPresupuestoMs === "number" && Number.isFinite(p.sondeoQrPresupuestoMs)) {
     limpio.sondeoQrPresupuestoMs = Math.max(500, Math.min(30_000, Math.round(p.sondeoQrPresupuestoMs)));
   }
+  // KIT e14-obs-hang-atribucion-v1 (§D) — whitelist aditiva (booleano).
+  if (typeof p.hangEnCurso === "boolean") limpio.hangEnCurso = p.hangEnCurso;
   return limpio;
 }
 

@@ -54,7 +54,7 @@ export interface UsoContador {
  *  momentos — jamás contenido de actas. breadcrumbs = los últimos 30 al
  *  momento del congelón (Breadcrumb ya es sin-contenido por contrato). */
 export interface HangEvento {
-  fuente: "drift" | "longtask"; // drift = gap del intervalo 500 ms · longtask = PerformanceObserver
+  fuente: "drift" | "longtask" | "hang-en-curso"; // drift = gap del intervalo 500 ms · longtask = PerformanceObserver · hang-en-curso = marca del WAL drenada al arranque (KIT e14-obs-hang-atribucion-v1 §C — la duración real murió con la página: duracionMs = umbralMs, mínimo demostrable §1; resumenHangsDe ya filtra typeof duracionMs === "number" y el mínimo es honesto para cuenta/mayor/total)
   duracionMs: number; // gap REAL medido (kit: captura el gap real) o duración de la task
   umbralMs: number; // umbral que disparó el registro (3 000 drift · 50 longtask)
   breadcrumbs: Breadcrumb[]; // contexto de navegación alrededor (sin contenido)
@@ -70,6 +70,19 @@ export interface HangEvento {
   op?: string;
   /** Edad de la marca al emitir (ms) — el sesgo es parte del dato. */
   opEdadMs?: number;
+  // ─── KIT e14-obs-hang-atribucion-v1 (§C.6) — SOLO fuente "hang-en-curso" ───
+  /** epoch ms del último beat ANTES del silencio (marca del WAL). */
+  inicio?: number;
+  /** epoch ms en que el worker cruzó el umbral (marca del WAL). */
+  detectadoEn?: number;
+  /** Arranque NUEVO − inicio: cuánto tardó la sesión nueva en descubrir
+   *  la marca sobreviviente (el sesgo es parte del dato). */
+  gapHastaReinicioMs?: number;
+  /** Sesión de ORIGEN (la que colgó) — la del evento es la NUEVA que
+   *  descubre la marca (appendEvento sella con identidad actual). */
+  sesionOrigen?: string;
+  /** appVersion de ORIGEN (la que colgó). */
+  appVersionOrigen?: string;
 }
 
 export interface PoliticaDatos {
@@ -112,6 +125,8 @@ export interface FlagsApp {
   // ─── KIT e73-sondeo-qr-precoz-v1 (§D) — campos ADITIVOS AL FINAL (D57) ───
   sondeoQrPrecoz: boolean; // default true — sondeo QR en INGESTA (worker e73); false = kill-switch (byte-idéntico a 043b2ba)
   sondeoQrPresupuestoMs: number; // default 2500 — presupuesto del reló del ladder del worker (jamás extender — kit §I)
+  // ─── KIT e14-obs-hang-atribucion-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
+  hangEnCurso: boolean; // default true — sensor hang-en-curso (worker heartbeat + WAL); false = byte-idéntico a b688fbc
 }
 
 export interface ReporteSesion {
