@@ -19,7 +19,10 @@
 import { appendEvento } from "./buffer";
 import { obtenerBreadcrumbs } from "./breadcrumbs";
 import { appVersion, idDispositivo, idSesion } from "./identidad";
-import type { EventoObs, HangEvento } from "./tipos";
+// KIT e14-obs-hang-atribucion-v1 (§B) — la marca D58 de la operación activa
+// enriquece AMBOS sensores (spread condicional — eventos legacy intactos).
+import { operacionActa } from "./operacion";
+import type { EventoObs, HangEvento, HangPorOp } from "./tipos";
 
 /** Tick del sensor drift (kit: setInterval de 500 ms). */
 export const DRIFT_TICK_MS = 500;
@@ -79,12 +82,17 @@ function tickDrift(): void {
     const gap = ahora - proximoTick;
     proximoTick = ahora + DRIFT_TICK_MS;
     if (gap > DRIFT_UMBRAL_MS) {
+      // KIT e14-obs-hang-atribucion-v1 (§B) — D58: la última operación
+      // REGISTRADA viaja en el evento (spread condicional — sin marca el
+      // evento queda igual que antes, jamás inventar "ocioso").
+      const marca = operacionActa();
       void emitirHang({
         fuente: "drift",
         duracionMs: gap,
         umbralMs: DRIFT_UMBRAL_MS,
         breadcrumbs: obtenerBreadcrumbs(),
         visible: visibleAhora(),
+        ...(marca.op != null && marca.edadMs != null ? { op: marca.op, opEdadMs: marca.edadMs } : {}),
       });
     }
   } catch {
@@ -103,12 +111,16 @@ function iniciarLongtask(): void {
       try {
         for (const entrada of lista.getEntries()) {
           if (entrada.duration > LONGTASK_UMBRAL_MS) {
+            // KIT e14-obs-hang-atribucion-v1 (§B) — D58 en el sensor
+            // longtask (mismo spread condicional del drift — §A).
+            const marca = operacionActa();
             void emitirHang({
               fuente: "longtask",
               duracionMs: Math.round(entrada.duration),
               umbralMs: LONGTASK_UMBRAL_MS,
               breadcrumbs: obtenerBreadcrumbs(),
               visible: visibleAhora(),
+              ...(marca.op != null && marca.edadMs != null ? { op: marca.op, opEdadMs: marca.edadMs } : {}),
             });
           }
         }
@@ -198,6 +210,45 @@ export function resumenHangsDe(
       : null,
     cuentaOcultas: ocultas,
   };
+}
+
+/** KIT e14-obs-hang-atribucion-v1 (§B) — agregación POR OPERACIÓN (PURA y
+ *  testable): agrupa los eventos "hang" por su última operación registrada
+ *  (D58 — legacy sin op → op: null) y devuelve una fila por grupo con
+ *  cuenta/total/mayor, ordenada cuenta desc → op asc (JSON estable; null se
+ *  ordena como "" — primero en empate). Disciplina de resumenHangsDe: SOLO
+ *  duraciones numéricas cuentan (un evento sin duración honesta no se
+ *  inventa). Sin hangs → []. El sesgo viaja en el evento (opEdadMs) — esta
+ *  agregación es CORRELACIÓN, no prueba de causalidad (§A). */
+export function hangsPorOp(
+  eventos: Pick<EventoObs, "tipo" | "datos">[],
+): HangPorOp[] {
+  const grupos = new Map<string, { op: string | null; cuenta: number; totalMs: number; mayorMs: number }>();
+  for (const e of eventos) {
+    if (e.tipo !== "hang") continue;
+    const d = e.datos as HangEvento;
+    if (typeof d.duracionMs !== "number") continue; // jamás inventar duración
+    const clave = d.op ?? "\u0000null"; // clave interna — null agrupa aparte
+    const g = grupos.get(clave);
+    if (g) {
+      g.cuenta += 1;
+      g.totalMs += d.duracionMs;
+      g.mayorMs = Math.max(g.mayorMs, d.duracionMs);
+    } else {
+      grupos.set(clave, {
+        op: d.op ?? null,
+        cuenta: 1,
+        totalMs: d.duracionMs,
+        mayorMs: d.duracionMs,
+      });
+    }
+  }
+  return [...grupos.values()].sort((a, b) => {
+    if (b.cuenta !== a.cuenta) return b.cuenta - a.cuenta; // cuenta desc
+    const oa = a.op ?? "";
+    const ob = b.op ?? "";
+    return oa < ob ? -1 : oa > ob ? 1 : 0; // desempate op asc (null como "")
+  });
 }
 
 /** Prueba interna (tests): reset del estado del módulo. */

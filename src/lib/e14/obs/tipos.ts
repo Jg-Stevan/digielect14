@@ -64,6 +64,12 @@ export interface HangEvento {
    *  real del informe 1230: 117 s de pantalla bloqueada contaban como hang).
    *  Eventos legacy sin el campo → tratar como visible (`?? true`). */
   visible: boolean;
+  /** KIT e14-obs-hang-atribucion-v1 (D58) — última operación REGISTRADA al
+   *  detectarse el hang (§A — vocabulario append-only). Ausente = sin
+   *  registro (eventos legacy / nada marcado — jamás inventar). */
+  op?: string;
+  /** Edad de la marca al emitir (ms) — el sesgo es parte del dato. */
+  opEdadMs?: number;
 }
 
 export interface PoliticaDatos {
@@ -152,6 +158,21 @@ export interface ReporteSesion {
      *  informe 1230 — 117 s fantasma — queda imposible). */
     cuentaOcultas: number;
   };
+  /** KIT e14-obs-hang-atribucion-v1 (§B) — distribución de los hangs por la
+   *  última operación registrada (D58): una fila por `op` (null = legacy/sin
+   *  marca), orden cuenta desc → op asc (JSON estable). Aditivo AL FINAL del
+   *  reporte (informes previos no cambian de forma). Correlación, NO prueba
+   *  de causalidad (§A — el sesgo viaja en opEdadMs). */
+  hangPorOp?: HangPorOp[];
+}
+
+/** KIT e14-obs-hang-atribucion-v1 (§B) — fila de hangPorOp (tipado del
+ *  agregado PURO hangsPorOp de hang.ts). */
+export interface HangPorOp {
+  op: string | null;
+  cuenta: number;
+  totalMs: number;
+  mayorMs: number;
 }
 
 /** §G.3 — fila de enviosDetalle (una por diagnóstico con envioMs != null).
