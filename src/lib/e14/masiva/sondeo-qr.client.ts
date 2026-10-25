@@ -21,6 +21,9 @@
  */
 import { logger } from "../../logger";
 import { leerFlags } from "../flags";
+// KIT e14-obs-hang-atribucion-v1 (§A.5) — hook D58: contexto barato al
+// resolver el sondeo en main (el trabajo pesado vive en el worker).
+import { marcarOperacion } from "../obs/operacion";
 import type { RespuestaSondeo } from "./sondeo-qr.worker";
 
 /** Resultado del sondeo — ESPEJO de RespuestaSondeo del worker: el objeto
@@ -165,6 +168,11 @@ async function ejecutar(tarea: {
     const terminar = (r: SondeoQr | null): void => {
       if (resuelto) return;
       resuelto = true;
+      // KIT e14-obs-hang-atribucion-v1 (§A.5) — al resolver en main el
+      // resultado del worker se marca la operación activa (contexto barato:
+      // el trabajo pesado vive en el worker; aquí corre el patch de bandeja
+      // y la continuación de la cadenaDedup). Sin clear — la edad delata.
+      marcarOperacion("qr-sondeo-ingesta");
       if (hardKill !== null) clearTimeout(hardKill);
       resolve(r);
       listo();
