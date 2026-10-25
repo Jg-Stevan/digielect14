@@ -35,6 +35,19 @@ describe("flags · sanearFlags", () => {
     // poolWorkers fuera de 1|2 se descarta; ocrThreadsTope se CLAMPA al rango 1..8
     expect(sanearFlags({ poolWorkers: 7, ocrThreadsTope: -3 })).toEqual({ ocrThreadsTope: 1 });
   });
+  // KIT e73-sondeo-qr-precoz-v1 (§D) — whitelist aditiva (claves conocidas):
+  it("e73 · sondeoQrPrecoz/sondeoQrPresupuestoMs: override válido acepta; tipo inválido → default", () => {
+    // Override válido — aceptado (el presupuesto se CLAMPA al rango 500..30000):
+    expect(
+      sanearFlags({ sondeoQrPrecoz: false, sondeoQrPresupuestoMs: 4000 }),
+    ).toEqual({ sondeoQrPrecoz: false, sondeoQrPresupuestoMs: 4000 });
+    expect(sanearFlags({ sondeoQrPresupuestoMs: 99_999 })).toEqual({ sondeoQrPresupuestoMs: 30_000 });
+    // Tipo inválido → ausente (el caller conserva el default — jamás inventar):
+    expect(sanearFlags({ sondeoQrPrecoz: "sí", sondeoQrPresupuestoMs: "2500" })).toEqual({});
+    expect(sanearFlags({ sondeoQrPresupuestoMs: Number.NaN })).toEqual({});
+    // Claves desconocidas siguen rechazadas (el saneo no abre la puerta):
+    expect(sanearFlags({ sondeoQrLado: 999 })).toEqual({});
+  });
 });
 
 describe("flags · leerFlags (cadena de prioridad)", () => {
