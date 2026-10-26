@@ -241,6 +241,19 @@ function ctxDe(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
 export const DET_CAP_PROD = 1920;
 export const DET_CAP_RAPIDO = 1280;
 
+// ─── KIT e14-rec-wmax480-v1 (bench v8.5): cap del ancho del tensor rec ──────
+// El run() WASM del rec escala con n×wmax (floats del tensor [b,3,48,wmax]),
+// NO con los píxeles del crop — medido ~0.56 ms/unidad constante en Q2–Q4
+// (bench v8.5, 70 lotes). El techo 480 da: rec full media 10,733→8,729 ms
+// (−19%), RapidOCR full 12,150→10,093 ms (−17%), peor caso 16.0→11.8 s
+// (−26%), outliers 51.2s/41.2s/34.6s MUERTOS (max 1,760 ms) y calidad
+// 7/7 gt ×4/4 intacta — tensorDeCanvases hace squish horizontal (rw=
+// min(natural, targetW) con pad de ceros), NO truncado: líneas naturales
+// hasta 864 sobrevivieron sin pérdida. Aplicado en AMBOS rec (producción y
+// probe §2.1) para mantener el pre/post idéntico. Kill switch: REC_WMAX =
+// Infinity = comportamiento anterior byte a byte.
+export const REC_WMAX = 480;
+
 // ─── Pre-det (main.py fidelidad: reduce_max → increase_min → letterbox →
 //     det-preprocess round32) + registro de ops para mapear de vuelta ───────
 
@@ -901,7 +914,10 @@ export async function rapidOcrReconocer(
   for (let k = 0; k < orden.length; k += 6) {
     const lote = orden.slice(k, k + 6);
     const maxRatio = Math.max(320 / 48, ...lote.map((o) => o.ratio));
-    const W = Math.floor(48 * maxRatio);
+    // KIT e14-rec-wmax480-v1 (bench v8.5): cap del ancho del tensor — el lote
+    // entero corre al ancho de su línea más ancha; sin cap, una sola línea
+    // de 864 px hinchaba TODOS los tensores del lote (0.56 ms/unidad WASM).
+    const W = Math.min(REC_WMAX, Math.floor(48 * maxRatio));
     const canvases = lote.map((o) => cropsFinales[o.i]);
     const tensor = tensorDeCanvases(rt.ort, canvases, W);
     const res = await rt.rec.run({ [rt.rec.inputNames[0]]: tensor });
@@ -1021,7 +1037,9 @@ export async function rapidOcrRecLote(
   for (let k = 0; k < orden.length; k += 6) {
     const lote = orden.slice(k, k + 6);
     const maxRatio = Math.max(320 / 48, ...lote.map((o) => o.ratio));
-    const W = Math.floor(48 * maxRatio);
+    // KIT e14-rec-wmax480-v1: MISMO cap que el rec de producción — el probe
+    // promete «el MISMO pre/post del rec» y su conf cruda debe ser comparable.
+    const W = Math.min(REC_WMAX, Math.floor(48 * maxRatio));
     const tensor = tensorDeCanvases(rt.ort, lote.map((o) => canvases[o.i]), W);
     const res = await rt.rec.run({ [rt.rec.inputNames[0]]: tensor });
     const out = res[rt.rec.outputNames[0]];
