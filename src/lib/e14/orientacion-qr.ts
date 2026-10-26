@@ -38,6 +38,12 @@
  *   · round-robin de esquinas (lección del bench: 9 intentos se quemaban en
  *     la esquina equivocada): RONDA 1 = {1.5G, 2G} × esquinas — RONDA 2 =
  *     variantes restantes {L, jsQR@2, θ ±10°} × esquinas.
+ *   · ORDEN base +180° (tiempos del run v8.3 del dueño): el hogar efectivo
+ *     del QR cayó +180° de la regla H/W en 4/4 (vert→BR · horiz→TR); probar
+ *     la predicción primero quemó 6–8 intentos (QR-HR 5.1/4.5 s vs 1.4/1.3
+ *     s de los que cayeron al 1.º). Base INVERTIDO del bench v8.4:
+ *     vert ? [BR,TL,BL,TR] : [TR,BL,TL,BR] — con el anillo D62 POR ENCIMA
+ *     (campo > prior): rescate típico ~2–3 intentos (~1.3 s vs 3.1 s media).
  *
  * CONTRATO (mismo espíritu e64 §7):
  *   · JAMÁS throw: cualquier fallo = null = el caller cae al sondeo OCR de
@@ -368,13 +374,33 @@ function tagBin(b: Binarizer): string {
   return b === "GlobalHistogram" ? "G" : "L";
 }
 
-/** Orden de esquinas del rescate: el ganador persistente D62 (rotación
- *  aplicada recientemente en el lote) manda SU esquina primero — el bench
- *  midió que el orden fijo por forma del warp erró 4/4; el anillo es la
- *  señal de campo real. Sin anillo: TL (acta derecha, la más común) → BR
- *  (180°, el caso dominante del lote arrugado) → TR → BL. */
-function ordenEsquinas(ganador: RotacionQr | null): (0 | 1 | 2 | 3)[] {
-  const base: CuadranteQr[] = ["TL", "BR", "TR", "BL"];
+/** Forma del warp SIN rotar — la MISMA regla H/W del bench (vert = H ≥ W,
+ *  bench v8.3 línea «geo.acta.height >= geo.acta.width»). loadImageMemo es
+ *  LRU compartido: si warpQrJsQrAsync ya decodificó fotoOcr esto es HIT
+ *  (~1 ms, sin decode doble). JAMÁS lanza (default vertical = caso E-14). */
+async function vertDelWarp(fotoOcr: string): Promise<boolean> {
+  try {
+    const img = await loadImageMemo(fotoOcr);
+    const w = img.naturalWidth || 0;
+    const h = img.naturalHeight || 0;
+    if (!w || !h) return true;
+    return h >= w;
+  } catch {
+    return true;
+  }
+}
+
+/** Orden de esquinas del rescate (tiempos del run v8.3 del dueño): el hogar
+ *  efectivo del QR cayó +180° de la regla H/W en 4/4 (160903/durazno4: BR
+ *  real vs TL predicho · 160922/durazno1: TR real vs BL predicho) — la
+ *  predicción primera quemó 6–8 intentos. Base INVERTIDO (bench v8.4,
+ *  índices [TL,TR,BR,BL]: vert ? [2,0,3,1] : [1,3,0,2]): PRIMERO la esquina
+ *  del caso probable (+180° de la apuesta H/W), SEGUNDO la apuesta original,
+ *  al final los perdedores 90/270. El ganador persistente D62 (rotación
+ *  reciente del lote — señal de CAMPO real) manda CUANDO EXISTE: su esquina
+ *  va primera, el resto conserva el orden base. */
+function ordenEsquinas(ganador: RotacionQr | null, vert: boolean): (0 | 1 | 2 | 3)[] {
+  const base: CuadranteQr[] = vert ? ["BR", "TL", "BL", "TR"] : ["TR", "BL", "TL", "BR"];
   if (ganador !== null && ganador !== 0) {
     const primero = base.find((q) => ROT_POR_CUADRANTE[q] === ganador);
     if (primero) {
@@ -482,7 +508,7 @@ export async function brujulaQrOrientacion(
     if (!alta) {
       intentos.push("HR:sin-canvas");
     } else {
-      const orden = ordenEsquinas(ganadorPersistente());
+      const orden = ordenEsquinas(ganadorPersistente(), await vertDelWarp(fotoOcr));
       const CUADS: CuadranteQr[] = ["TL", "TR", "BR", "BL"];
       // PASO 1 (round-robin): {1.5G, 2G} por esquina — los 4 ganadores del
       // bench viven aquí; el orden de esquinas lo manda el anillo D62.
