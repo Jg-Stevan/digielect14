@@ -48,6 +48,16 @@ describe("flags · sanearFlags", () => {
     // Claves desconocidas siguen rechazadas (el saneo no abre la puerta):
     expect(sanearFlags({ sondeoQrLado: 999 })).toEqual({});
   });
+
+  // KIT e14-orientacion-qr-v1 (§D) — whitelist aditiva (booleano):
+  it("orientacion-qr · qrBrujulaOrientacion: override válido acepta; tipo inválido → default", () => {
+    // Override válido — aceptado (kill switch del dueño):
+    expect(sanearFlags({ qrBrujulaOrientacion: false })).toEqual({ qrBrujulaOrientacion: false });
+    expect(sanearFlags({ qrBrujulaOrientacion: true })).toEqual({ qrBrujulaOrientacion: true });
+    // Tipo inválido → ausente (el caller conserva el default — jamás inventar):
+    expect(sanearFlags({ qrBrujulaOrientacion: "sí" })).toEqual({});
+    expect(sanearFlags({ qrBrujulaOrientacion: 1 })).toEqual({});
+  });
 });
 
 describe("flags · leerFlags (cadena de prioridad)", () => {
@@ -68,6 +78,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       hangEnCurso: true,
       // KIT e107-prescan-qr-cola-v1 (§D.4) — aditivo AL FINAL (contrato D57):
       prescanQrCola: true,
+      // KIT e14-orientacion-qr-v1 (§D) — aditivo AL FINAL (contrato D57):
+      qrBrujulaOrientacion: true,
     });
   });
 
