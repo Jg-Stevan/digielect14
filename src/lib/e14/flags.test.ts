@@ -66,6 +66,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       sondeoQrPresupuestoMs: 2500,
       // KIT e14-obs-hang-atribucion-v1 (§D) — aditivo AL FINAL (contrato D57):
       hangEnCurso: true,
+      // KIT e107-prescan-qr-cola-v1 (§D.4) — aditivo AL FINAL (contrato D57):
+      prescanQrCola: true,
     });
   });
 
