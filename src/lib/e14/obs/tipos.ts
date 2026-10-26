@@ -134,6 +134,8 @@ export interface FlagsApp {
   hangEnCurso: boolean; // default true — sensor hang-en-curso (worker heartbeat + WAL); false = byte-idéntico a b688fbc
   // ─── KIT e107-prescan-qr-cola-v1 (§D.4) — campo ADITIVO AL FINAL (D57) ───
   prescanQrCola: boolean; // default true — pre-scan QR en «PROCESAR COLA» (quad+warp → BarcodeDetector/jsQR); false = byte-idéntico a 3f1cc17
+  // ─── KIT e14-orientacion-qr-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
+  qrBrujulaOrientacion: boolean; // default true — QR-brújula de orientación (cuadrante del QR manda + rescate hi-res ZXing; bench v8.3 4/4); false = sondeo OCR de siempre byte a byte
 }
 
 export interface ReporteSesion {
