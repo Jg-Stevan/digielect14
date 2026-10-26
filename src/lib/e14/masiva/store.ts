@@ -509,6 +509,18 @@ async function cadenaDedup(
       // e71 (Opt-1): el hash pudo llegar PRE-CALCULADO por la ingesta
       // (agregarFiles → agregarLote) — reutilizado, cero re-hash (la SHA de
       // la ingesta es la MISMA llave: hashBytesDeArchivo determinista).
+      // KIT e14-sondeo-burst-v1 (P1a): SHA-256 idéntica a una fila VIVA ⇒
+      // identidad EXACTA ya probada — señal MÁS fuerte que cualquier QR/dhash
+      // — y el sondeo del duplicado es trabajo de worker REGALADO al burst:
+      // en el run 4 (47 archivos de golpe) el sondeo-qr worker se ahogó de
+      // contención (14 hard-kills en 2 min — worker LENTO por hambruna de
+      // CPU: dhash/decode en main + OCR WASM en 4 hilos, no zombi) y cada
+      // kill costó presupuesto completo + respawn frío. Omitir SOLO el
+      // sondeo: la capa dhash decide igual que hoy (gemela por bytes ⇒
+      // hamming 0 ⇒ DUPLICADA / YA-ENVIADA si la original se envía primero)
+      // y si la gemela muere después, el dhash propio no encuentra candidata
+      // y la fila procesa normal — raza cubierta por los guards de siempre.
+      let saltaSondeoPorBytes = false;
       const bytes =
         entrada.hashBytes ?? (await hashBytesDeArchivo(entrada.archivo));
       if (bytes) {
@@ -536,6 +548,16 @@ async function cadenaDedup(
                 regViva.estado === "YA-ENVIADA"
               ) {
                 if (await marcarYaEnviada(entrada.id, viva.id, "bytes", bytes)) continue;
+                // guard falló (ya marcada/ilegible) → conserva el sondeo
+                // (sin flag — el conservador manda, RL-e65-3).
+              } else {
+                // KIT e14-sondeo-burst-v1 (P1a): gemela viva NO enviada →
+                // omitir el sondeo (redundante: bytes idénticos). Sin marca
+                // AQUÍ — el desenlace lo firma la capa dhash como hoy.
+                saltaSondeoPorBytes = true;
+                logger.info(
+                  `[e14] dedup fila=${entrada.id} bytes gemela viva=${viva.id} → sondeo QR omitido (dhash decide)`,
+                );
               }
             } catch {
               /* conservador — sigue a la capa dhash (comportamiento de hoy) */
@@ -550,7 +572,12 @@ async function cadenaDedup(
       // (doctrina del conservador — la capa dhash queda íntegra byte a byte).
       let sondeo: Awaited<ReturnType<typeof sondearQrPrecoz>> = null;
       if (!entrada.forzarDedupOff) {
-        sondeo = await sondearQrPrecoz(entrada.archivo);
+        // KIT e14-sondeo-burst-v1 (P1a): el skip por bytes vive DENTRO del
+        // guard del override (RL-e65b-6 intacto — el dueño manda SIEMPRE;
+        // test 7 ancla ambos literales byte a byte).
+        if (!saltaSondeoPorBytes) {
+          sondeo = await sondearQrPrecoz(entrada.archivo);
+        }
         if (sondeo) {
           logger.info(
             `[e14] sondeo-qr fila=${entrada.id} tier=${sondeo.tier ?? "null"} ms=${sondeo.ms}`,
