@@ -19,6 +19,10 @@ import {
 } from "@/lib/e14/masiva/store";
 import type { FilaMasiva } from "@/lib/e14/masiva/tipos";
 import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
+// KIT e107-prescan-qr-cola-v1 (§D.3): el botón PROCESAR COLA delega en el
+// pre-scan QR (fases 1-2 del dueño) y el orquestador llama iniciar() con la
+// lista ya filtrada (flag OFF ⇒ iniciar() byte-idéntico — kill-switch).
+import { prescanYIniciar, usePrescanQrEstado } from "@/lib/e14/masiva/prescan-qr";
 import { CheckIcon, StitchStackIcon } from "../icons";
 
 /** Píldora de estado de una fila — paleta de estado del repo
@@ -152,11 +156,13 @@ export function MasivaView() {
   // — derivados de las filas; jamás tocan la cola ni el runner).
   const sondeadas = filas.filter((f) => f.sondeoQrMs != null).length;
   const conPayload = filas.filter((f) => f.sondeoQrTier != null).length;
+  // KIT e107-prescan-qr-cola-v1 (§D.3): estado del banner del pre-scan
+  // («SONDEANDO QR… k/N») — SOLO-LECTURA, como el chip del sondeo e73.
+  const prescan = usePrescanQrEstado();
   const {
     cargarFilas,
     sincronizarAlVolver,
     agregarFiles,
-    iniciar,
     pausar,
     abrirActa,
     quitar,
@@ -441,7 +447,7 @@ export function MasivaView() {
           </div>
 
           {/* Acciones principales fijas: PROCESAR / PAUSAR + VACIAR */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="relative flex items-center gap-2 shrink-0">
             {corriendo ? (
               <button
                 type="button"
@@ -455,8 +461,11 @@ export function MasivaView() {
             ) : (
               <button
                 type="button"
-                onClick={iniciar}
-                disabled={!colaDisponible || (pendientes === 0 && duplicadas === 0)}
+                // KIT e107 (§D.3): el clic pasa por el pre-scan QR —
+                // prescanYIniciar llama iniciar() con la lista filtrada
+                // (flag OFF/abort honesto ⇒ byte-idéntico al de hoy).
+                onClick={() => void prescanYIniciar()}
+                disabled={!colaDisponible || (pendientes === 0 && duplicadas === 0) || prescan.corriendo}
                 aria-label="Procesar la cola"
                 className="min-h-[44px] px-4 md:px-5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-[11px] md:text-xs font-black uppercase tracking-wider shadow-md shadow-[#10b981]/25 hover:shadow-[#10b981]/40 active:scale-[0.98] transition cursor-pointer disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed flex items-center gap-1.5"
               >
@@ -492,6 +501,33 @@ export function MasivaView() {
             >
               {vaciarArmado ? "¿SEGURO?" : "VACIAR"}
             </button>
+
+            {/* KIT e107-prescan-qr-cola-v1 (§D.3): banner del pre-scan —
+                hermano visual del chip «Sondeo QR» de e73 (overlay sobre el
+                header, SIN mover el layout). fase "boot" → «Preparando
+                lector…»; al "fin" desaparece (el % por-fila de la Fase 3 es
+                el sistema de siempre — cero trabajo extra). */}
+            {prescan.corriendo && (
+              <div
+                className="absolute right-0 top-full mt-2 z-40 min-w-[230px] rounded-xl border border-[#10b981]/40 bg-[#090d12]/95 px-3.5 py-2 shadow-lg shadow-black/40 backdrop-blur-md"
+                role="status"
+                aria-live="polite"
+                aria-label={
+                  prescan.fase === "boot"
+                    ? "Preparando lector de códigos QR"
+                    : `Sondeando QR: ${prescan.listo} de ${prescan.total}`
+                }
+              >
+                <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-[#10b981] whitespace-nowrap">
+                  {prescan.fase === "boot"
+                    ? "PREPARANDO LECTOR…"
+                    : `SONDEANDO QR… ${prescan.listo}/${prescan.total}`}
+                </p>
+                <p className="font-mono text-[9px] uppercase tracking-wider text-slate-400 whitespace-nowrap">
+                  {prescan.leidos} leídos · los no leídos pasan al OCR
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </header>

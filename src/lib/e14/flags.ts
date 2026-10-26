@@ -38,6 +38,10 @@ export const FLAGS_DEFAULT: FlagsApp = {
   sondeoQrPrecoz: true,
   sondeoQrPresupuestoMs: 2500,
   hangEnCurso: true,
+  // KIT e107-prescan-qr-cola-v1 (§D.4): pre-scan QR en «PROCESAR COLA» —
+  // kill-switch del dueño (flag OFF ⇒ prescanYIniciar = iniciar()
+  // byte-idéntico, sin instanciar worker ni emitir estado).
+  prescanQrCola: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -67,6 +71,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   }
   // KIT e14-obs-hang-atribucion-v1 (§D) — whitelist aditiva (booleano).
   if (typeof p.hangEnCurso === "boolean") limpio.hangEnCurso = p.hangEnCurso;
+  // KIT e107-prescan-qr-cola-v1 (§D.4) — whitelist aditiva (booleano).
+  if (typeof p.prescanQrCola === "boolean") limpio.prescanQrCola = p.prescanQrCola;
   return limpio;
 }
 

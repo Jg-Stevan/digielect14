@@ -132,6 +132,8 @@ export interface FlagsApp {
   sondeoQrPresupuestoMs: number; // default 2500 — presupuesto del reló del ladder del worker (jamás extender — kit §I)
   // ─── KIT e14-obs-hang-atribucion-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
   hangEnCurso: boolean; // default true — sensor hang-en-curso (worker heartbeat + WAL); false = byte-idéntico a b688fbc
+  // ─── KIT e107-prescan-qr-cola-v1 (§D.4) — campo ADITIVO AL FINAL (D57) ───
+  prescanQrCola: boolean; // default true — pre-scan QR en «PROCESAR COLA» (quad+warp → BarcodeDetector/jsQR); false = byte-idéntico a 3f1cc17
 }
 
 export interface ReporteSesion {
