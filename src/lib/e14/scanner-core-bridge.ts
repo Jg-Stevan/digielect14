@@ -128,6 +128,11 @@ import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
 // (escaneo y pipelineRecorte). SIM OMITIDO (guard — chips 8.2/7.0/4.3
 // intactos, §2.2); JAMÁS lanza (catch interno — el pipeline no depende, §5).
 import { probeOrientacion, rotarDataUrl } from "./orientacion";
+// KIT e14-orientacion-qr-v1 — la brújula QR decide la rotación por el
+// cuadrante del QR (bench v8.3: 4/4); el sondeo OCR queda como red de
+// seguridad cuando el QR no lee. leerFlags = kill-switch del dueño (§D).
+import { brujulaQrOrientacion, type BrujulaQr } from "./orientacion-qr";
+import { leerFlags } from "./flags";
 // WAVE2 A1 — tipo del resultado del probe (para el diag de la mini descartada por el fallo seguro).
 import type { ProbeOrientacion } from "./orientacion";
 // KIT e14-ocr-escalonado-v1 (§2): caps del det-preprocess (op4) expuestos por
@@ -1385,7 +1390,41 @@ export class RealCoreBridge implements E14Bridge {
     // sondea (mismo guard §2.2 de siempre — SIM nunca trae origenSenales).
     // Flujos individual/video sin la señal → rama de abajo (probe de
     // siempre); recorte manual (pipelineRecorte) INTACTO (sin señal ahí).
-    if (!opciones.simular && opciones.origenSenales === "exif-camara") {
+    // KIT e14-orientacion-qr-v1 (T-A) — QR-BRÚJULA PRIMERO: el cuadrante del
+    // QR (hogar del E-14: TL del acta derecha) manda la rotación SIN OCR
+    // (bench v8.3 del dueño: 4/4 con fotos arrugadas/blotchy donde jsQR
+    // sobre el warp daba 0/4 — el rescate hi-res guiado por el quad con
+    // ZXing rescató TODAS). El sondeo OCR de abajo SOLO corre si la brújula
+    // NO decidió (red de seguridad — comportamiento de HOY byte a byte).
+    // Kill-switch: flags.qrBrujulaOrientacion (OFF = byte-idéntico a hoy).
+    // Guards: SIM jamás (§2.2 — chips 8.2/7.0/4.3 intactos) · sinRecorte no
+    // tiene warp/quad real (SIM-only en esta base → cubierto igualmente).
+    let brujula: BrujulaQr | null = null;
+    if (!opciones.simular && !sinRecorte && leerFlags().qrBrujulaOrientacion) {
+      brujula = await brujulaQrOrientacion(fotoOcr, fotoOriginal, quad);
+      if (brujula) {
+        if (brujula.rot !== 0) {
+          // Misma aplicación del probe (T-A2 §2.1 paso 4): se giran fotoOcr Y
+          // fotoProcesada (re-encode q0.92) para que el acta visible/guardada
+          // quede derecha. rotarDataUrl JAMÁS lanza (catch interno, §5).
+          fotoOcr = await rotarDataUrl(fotoOcr, brujula.rot);
+          fotoProcesada = await rotarDataUrl(fotoProcesada, brujula.rot);
+        }
+        // e64-qr T-2.1 — señal de identidad ADITIVA SOLO para flujos
+        // NO-masiva (cámara/individual): si la capa base no leyó y la
+        // brújula sí, el payload OPACA viaja como qrCam (mismo contrato de
+        // construirActa — SOLO presencia, red line 10). MASIVA intacto (la
+        // capa 0 del runner manda — guard del bloque qrCam de arriba).
+        if (!esMasiva && !parcial.qrCam) {
+          parcial.qrCam = { payload: brujula.payload };
+        }
+      }
+    }
+    if (
+      brujula === null &&
+      !opciones.simular &&
+      opciones.origenSenales === "exif-camara"
+    ) {
       const probe = await probeOrientacion(fotoOcr, {
         confirmar: { quadWorker: quadOrigen === "worker" },
       });
@@ -1395,7 +1434,7 @@ export class RealCoreBridge implements E14Bridge {
         fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
         fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
       }
-    } else if (!opciones.simular) {
+    } else if (brujula === null && !opciones.simular) {
       const probe = await probeOrientacion(fotoOcr);
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
       probeMiniOrientacion = probe?.orientacionProbeMini ?? null; // WAVE2 A1 — la mini que el fallo seguro descartó

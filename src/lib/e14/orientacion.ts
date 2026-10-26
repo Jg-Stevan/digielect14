@@ -229,8 +229,11 @@ function anilloGanadorLeer(): DesenlaceRot[] {
 /** Ganador actual del anillo (más frecuente; empate ⇒ más reciente) o null.
  *  La recencia se deriva de la POSICIÓN en el anillo (el último índice es el
  *  desenlace más nuevo) — robusta aunque dos desenlaces caigan en el mismo
- *  ms (Date.now()). */
-function ganadorPersistente(): Rotacion | null {
+ *  ms (Date.now()).
+ *  KIT e14-orientacion-qr-v1 — EXPORTADO ADITIVO: la brújula QR lo lee para
+ *  ORDENAR las esquinas del rescate (lección bench v8.3: el orden fijo por
+ *  forma del warp erró 4/4; el anillo es señal de campo real). */
+export function ganadorPersistente(): Rotacion | null {
   try {
     const anillo = anilloGanadorLeer();
     if (anillo.length === 0) return null;
@@ -260,8 +263,11 @@ function ganadorPersistente(): Rotacion | null {
 }
 
 /** Registrar UN desenlace aplicado (aplicado=1). Un fallo del probe (catch →
- * null), el caso vacío o aplicado=0 NUNCA escriben (kit T1.4). */
-function anilloGanadorRegistrar(rot: Rotacion): void {
+ * null), el caso vacío o aplicado=0 NUNCA escriben (kit T1.4).
+ * KIT e14-orientacion-qr-v1 — EXPORTADO ADITIVO: la brújula QR registra SU
+ * rotación aplicada (mismo contrato «aplicado=1» — alimenta el orden del
+ * sondeo y de las esquinas del rescate). */
+export function anilloGanadorRegistrar(rot: Rotacion): void {
   try {
     const anillo = anilloGanadorLeer();
     anillo.push({ rot, ts: Date.now() });

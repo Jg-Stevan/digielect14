@@ -282,8 +282,13 @@ let modZxing: ModZxing | null | undefined;
  * `${NEXT_PUBLIC_BASE_PATH ?? ""}/wasm/`). Una sola tentativa por sesión
  * (caché); falla → null CON traza de indisponibilidad (T-0.1 del e64 —
  * doc hermano F-0.2) y el pipeline degrada a solo-jsQR. Jamás throw.
+ *
+ * KIT e14-orientacion-qr-v1 — EXPORTADO ADITIVO: la brújula QR de
+ * orientación REUTILIZA este loader (mismo módulo, MISMA instancia de wasm
+ * en caché — cero costo extra de memoria/bundle). El contrato no cambia:
+ * caché de una tentativa, jamás throw.
  */
-async function moduloZxingDe(): Promise<ModZxing | null> {
+export async function moduloZxingDe(): Promise<ModZxing | null> {
   if (modZxing !== undefined) return modZxing;
   try {
     const mod = await import("zxing-wasm/reader");

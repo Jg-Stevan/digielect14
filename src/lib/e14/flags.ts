@@ -42,6 +42,12 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // kill-switch del dueño (flag OFF ⇒ prescanYIniciar = iniciar()
   // byte-idéntico, sin instanciar worker ni emitir estado).
   prescanQrCola: true,
+  // KIT e14-orientacion-qr-v1 (§D): QR-brújula de orientación — el cuadrante
+  // del QR manda la rotación y el rescate hi-res (ZXing) solo corre si
+  // jsQR@warp falla (bench v8.3: 4/4 con fotos arrugadas/blotchy donde
+  // jsQR 0/4). Kill-switch del dueño: OFF = sondeo OCR de siempre byte a
+  // byte (el probe D56 queda como red de seguridad).
+  qrBrujulaOrientacion: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -73,6 +79,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.hangEnCurso === "boolean") limpio.hangEnCurso = p.hangEnCurso;
   // KIT e107-prescan-qr-cola-v1 (§D.4) — whitelist aditiva (booleano).
   if (typeof p.prescanQrCola === "boolean") limpio.prescanQrCola = p.prescanQrCola;
+  // KIT e14-orientacion-qr-v1 (§D) — whitelist aditiva (booleano).
+  if (typeof p.qrBrujulaOrientacion === "boolean") limpio.qrBrujulaOrientacion = p.qrBrujulaOrientacion;
   return limpio;
 }
 
