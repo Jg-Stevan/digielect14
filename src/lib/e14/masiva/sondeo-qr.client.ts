@@ -101,6 +101,13 @@ const cola: { archivo: Blob; presupuestoMs: number; resolve: (r: SondeoQr | null
   [];
 let corriendo = false;
 
+// KIT e14-sondeo-burst-v1 (P1a — diagnóstico): kills en la ÚLTIMA minute.
+// La ventana llena delata HAMBRUNA de CPU (burst de ingesta: dhash/decode en
+// main + OCR WASM compitiendo por 4 hilos — el worker NO está zombi, está
+// lento) vs un zombi real (kill aislado). El remedio de la hambruna es
+// dhash→worker (P1b), NO extender este presupuesto (§I — jamás extender).
+let killsRecientes: number[] = [];
+
 /** Presupuesto saneado del flag (§D — default 2500; jamás extender — §I). */
 function presupuestoDeFlags(): number {
   const bruto = leerFlags().sondeoQrPresupuestoMs;
@@ -180,8 +187,15 @@ async function ejecutar(tarea: {
     // Hard-kill anti-zombi (§A.4): presupuesto + 1000 ms → terminate + respawn
     // + null. El worker colgado jamás frena la ingesta.
     hardKill = setTimeout(() => {
+      // Diagnóstico hambruna-vs-zombi (e14-sondeo-burst-v1): ≥3 kills/min
+      // se etiquetan aparte — el grouping de observabilidad los separa de
+      // los kills aislados y la próxima sesión distingue burst de zombi.
+      const ahora = Date.now();
+      killsRecientes = killsRecientes.filter((t) => ahora - t < 60_000);
+      killsRecientes.push(ahora);
+      const hambruna = killsRecientes.length >= 3 ? killsRecientes.length : 0;
       logger.warn(
-        `[e14] sondeo-qr hard-kill presupuesto=${presupuestoMs}+1000 — worker colgado (respawn)`,
+        `[e14] sondeo-qr hard-kill presupuesto=${presupuestoMs}+1000 — worker colgado (respawn)${hambruna ? ` — ${hambruna} kills/min: hambruna de CPU sospechada (contención de burst), no zombi` : ""}`,
       );
       terminarWorker();
       terminar(null);
@@ -220,4 +234,5 @@ export function __setFabricaWorkerSondeoParaTest(f: FabricaWorkerSondeo | null):
   terminarWorker();
   cola.length = 0;
   corriendo = false;
+  killsRecientes = []; // ventana de diagnóstico limpia entre tests
 }
