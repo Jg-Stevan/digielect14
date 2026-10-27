@@ -66,6 +66,13 @@ import {
   type ClientePrescan,
 } from "./prescan-qr.client";
 import { BANDA_A, intentoSobrePixeles, type PixelesQr } from "./qr-pixeles";
+// KIT e14-prescan-rescate-qr-v1 (ENMIENDA §F.3 — orden del dueño): el
+// rescate del QR difícil vive en SU módulo (main thread, import dinámico
+// de identidad-qr) — este orquestador no menciona al decodificador pesado
+// (QA §F.3: 0 matches de su token — frontera intacta) y el worker del
+// pre-scan JAMÁS lo ve (dictamen e73). Sin flag (default OFF) el módulo
+// ni se intenta: byte-idéntico a hoy.
+import { rescateQrDeWarped } from "./prescan-qr-rescate";
 import {
   enviadaPorPayload as enviadaPorPayloadStore,
   marcarYaEnviada,
@@ -373,6 +380,10 @@ export async function prescanYIniciar(): Promise<void> {
   // del worker); 1920 = remedio de los hard-kill «warp» (el coste del
   // warpPerspective escala con los píxeles de salida, no de entrada).
   const warpLado = leerFlags().prescanWarpLado;
+  // KIT e14-prescan-rescate-qr-v1 — rescate del QR difícil SOLO tras
+  // fallo de BarcodeDetector/jsQR. Leído UNA vez por corrida (mismo gesto
+  // P4/P5: corrida atómica frente a flags). Default OFF = byte-idéntico.
+  const rescateOn = leerFlags().prescanQrRescate === true;
   // R1 — kill-switch del dueño: flag OFF ⇒ byte-idéntico a hoy
   if (!leerFlags().prescanQrCola) {
     if (soloWarpQr) {
@@ -530,6 +541,16 @@ export async function prescanYIniciar(): Promise<void> {
                 if (warped) {
                   try {
                     payload = await leerQrDeWarped(warped);
+                    // ENMIENDA §F.3 (KIT e14-prescan-rescate-qr-v1) — SOLO
+                    // tras un null EXPLÍCITO del camino rápido: escalera
+                    // difícil sobre el MISMO warped (esquina-600 → barrido
+                    // presupuestado del rescate). Jamás empeora el camino
+                    // rápido; null honesto del rescate → fila sigue
+                    // PENDIENTE (regla de oro 4 — QR no leído jamás se
+                    // descarta).
+                    if (payload == null && rescateOn) {
+                      payload = await rescateQrDeWarped(warped);
+                    }
                   } finally {
                     try {
                       warped.close();

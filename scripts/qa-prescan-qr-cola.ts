@@ -15,7 +15,9 @@
  *      y `PENDIENTE`; usa `marcarYaEnviada(..., "payload", ...)`,
  *      `registrarQrPayload`, `originalQrDePayload`, `leerRegistro`/
  *      `guardarRegistro`, `intentoSobrePixeles`, `BarcodeDetector` con
- *      fallback jsQR; 0 matches `zxing` (case-insensitive); hard-kill
+ *      fallback jsQR; 0 matches `zxing` en el ORQUESTADOR (case-insensitive
+ *      — ENMIENDA e14-prescan-rescate-qr-v1: el zxing del pre-scan vive
+ *      SOLO en prescan-qr-rescate.ts, check §7); hard-kill
  *      presente; `imageOrientation: "from-image"` presente.
  *   3. prescan-qr.client.ts: URLs del detection-worker (?v=8 + fallback);
  *      serial FIFO; hard-kill (presupuesto + extra → terminate); bitmaps
@@ -127,7 +129,7 @@ async function main(): Promise<void> {
   );
   ok(
     contar(orquestador, /zxing/gi) === 0,
-    "prescan-qr: 0 matches 'zxing' (§F.3 — ZXing eliminado del pre-scan por construcción)",
+    "prescan-qr: 0 matches 'zxing' en el ORQUESTADOR (§F.3 ENMIENDADO por e14-prescan-rescate-qr-v1 — el zxing del pre-scan vive SOLO en prescan-qr-rescate.ts, check §7; la frontera del orquestador se conserva)",
   );
   ok(
     orquestador.includes('imageOrientation: "from-image"'),
@@ -363,6 +365,52 @@ async function main(): Promise<void> {
       bridgeTxt.includes("rotacionIngestaAplicada") &&
       bridgeTxt.includes("[e14] rotacion-ingesta"),
     "scanner-core-bridge.ts: rotación de ingesta post-warp pre-OCR + plausibilidad + traza propia (D51)",
+  );
+
+  // ── 7 · KIT e14-prescan-rescate-qr-v1 — rescate del QR difícil ─────────
+  // ENMIENDA §F.3 (orden del dueño): «intentar leer rápido con jsQR, y
+  // dejar lo último y difícil para zxing». El rescate vive en SU módulo
+  // (main thread, import DINÁMICO de identidad-qr — cero import estático
+  // de zxing-wasm: el chunk solo baja si hay rescate real) — el orquestador
+  // sigue sin mencionar zxing (check §2 intacto) y el worker sigue
+  // jsQR-only (dictamen e73 intacto, smoke del gate lo escanea).
+  const rescate = (await leer("src/lib/e14/masiva/prescan-qr-rescate.ts")) ?? "";
+  ok(
+    rescate.length > 0 && rescate.includes("rescateQrDeWarped"),
+    "prescan-qr-rescate.ts: módulo NUEVO del rescate (rescateQrDeWarped presente)",
+  );
+  ok(
+    contar(rescate, /from ["']zxing-wasm/g) === 0 &&
+      rescate.includes('import("./identidad-qr")'),
+    "prescan-qr-rescate: SIN import estático de zxing-wasm — identidad-qr por import DINÁMICO cacheado (el wasm solo baja si hay rescate)",
+  );
+  ok(
+    rescate.includes("decodificarQrDeRecorte") &&
+      rescate.includes("barridoQrZxingDePixeles"),
+    "prescan-qr-rescate: reusa tiers YA TESTEADOS de la capa 0 (esquina-600 + barrido presupuestado 4 s) — identidad-qr.ts INTACTO",
+  );
+  ok(
+    rescate.includes("QR_RESCATE_LADO_TOPE = 1600"),
+    "prescan-qr-rescate: raster cap ≤1600 (paridad exacta con el intento jsQR de leerQrDeWarped)",
+  );
+  ok(
+    orquestador.includes('from "./prescan-qr-rescate"') &&
+      orquestador.includes("rescateQrDeWarped") &&
+      orquestador.includes("prescanQrRescate"),
+    "prescan-qr: rescate cableado tras null de leerQrDeWarped, gated por prescanQrRescate (default OFF = byte-idéntico)",
+  );
+  // KIT e14-prescan-zxing-rescate-v1 — flags del dueño (D57 + DOBLE whitelist).
+  ok(
+    flags.includes("prescanQrRescate: false,") &&
+      flags.includes("limpio.prescanQrRescate = p.prescanQrRescate;"),
+    "flags.ts: FLAGS_DEFAULT + whitelist aditiva de prescanQrRescate (default OFF)",
+  );
+  ok(
+    flagsTipo.includes("prescanQrRescate: boolean;") &&
+      ((await leer("src/lib/e14/obs/politica.ts")) ?? "").includes(
+        "limpio.prescanQrRescate = o.prescanQrRescate;",
+      ),
+    "obs/tipos.ts + obs/politica.ts: FlagsApp AL FINAL (D57) + DOBLE whitelist de prescanQrRescate",
   );
 
   // ── resultado ────────────────────────────────────────────────────────────
