@@ -126,6 +126,10 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       masivaSondeoCrudo: true,
       // KIT e14-ocr-cascada-v1 (K3 fase 2) — aditivo AL FINAL (contrato D57):
       masivaOcrTesseract: false,
+      // KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — aditivo AL FINAL
+      // (contrato D57): el ANCLA literal se amplía EN EL MISMO commit que
+      // añade el flag (protocolo #3 — precedente qa-prescan §G/P5).
+      masivaSoloWarpQr: false,
     });
   });
 
