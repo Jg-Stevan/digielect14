@@ -113,6 +113,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       masivaStreaming: false,
       // KIT e14-dhash-resize-v1 (§D) — aditivo AL FINAL (contrato D57):
       dhashResize: false,
+      // KIT e14-ocr-cascada-v1 (K3 fase 2) — aditivo AL FINAL (contrato D57):
+      masivaOcrTesseract: false,
     });
   });
 
@@ -332,5 +334,38 @@ describe("flags · dhashResize (decode chico del dhash — kill-switch P3)", () 
     expect(sanearFlags({ dhashResize: null })).toEqual({});
     stubWindow();
     expect(leerFlags().dhashResize).toBe(false); // cae al default conservador
+  });
+});
+
+// ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — flag masivaOcrTesseract ──────────
+describe("flags · masivaOcrTesseract (cascada OCR — kill-switch K3)", () => {
+  it("default OFF → byte-idéntico al OCR escalonado de siempre", () => {
+    stubWindow();
+    expect(leerFlags().masivaOcrTesseract).toBe(false); // FLAGS_DEFAULT
+  });
+
+  it("saneo acepta booleano (true/false); leerFlags lo aplica sobre defaults", () => {
+    expect(sanearFlags({ masivaOcrTesseract: true })).toEqual({ masivaOcrTesseract: true });
+    expect(sanearFlags({ masivaOcrTesseract: false })).toEqual({ masivaOcrTesseract: false });
+    stubWindow();
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ masivaOcrTesseract: true }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().masivaOcrTesseract).toBe(true); // override manual del dueño (D6 — pasa por los DOS whitelists: sanearFlags + leerOverridesFlags)
+  });
+
+  it("tipo inválido (no-booleano) → default (ausente del whitelist)", () => {
+    expect(sanearFlags({ masivaOcrTesseract: "on" })).toEqual({});
+    expect(sanearFlags({ masivaOcrTesseract: 1 })).toEqual({});
+    expect(sanearFlags({ masivaOcrTesseract: null })).toEqual({});
+    stubWindow();
+    expect(leerFlags().masivaOcrTesseract).toBe(false); // cae al default conservador
   });
 });
