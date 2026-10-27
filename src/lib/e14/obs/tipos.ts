@@ -141,6 +141,8 @@ export interface FlagsApp {
   // ─── KIT e14-quad-streaming-v1 (§D) — campos ADITIVOS AL FINAL (D57) ───
   masivaQuad: boolean; // default false — P4: quad del pre-scan viaja al bridge (salta la re-detección, desviación D66 resuelta); false = byte-idéntico a 5d08dd6
   masivaStreaming: boolean; // default false — P5: el runner arranca con el 1.er pre-scan-OK (consumo por turno de clasificación); false = prescan serial de siempre byte a byte
+  // ─── KIT e14-dhash-resize-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
+  dhashResize: boolean; // default false — decode chico del dhash (resize 64×64 a nivel de decode, anti-hambruna P3); false = decode FULL byte-idéntico a 5d08dd6 (GO/NO-GO: bench-dedup-tolerancia/bench-resize.html)
 }
 
 export interface ReporteSesion {

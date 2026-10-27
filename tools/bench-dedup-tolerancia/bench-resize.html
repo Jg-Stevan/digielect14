@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banco P3 — dhash full-res vs resize64 (KIT e14-dhash-resize-v1 — SOLO EVIDENCIA, CERO PRODUCCIÓN)</title>
+<!--
+  BANCO P3 — tolerancia del dhash al CAMINO DE DECODE (full-res vs resize64)
+  KIT e14-dhash-resize-v1 (parche P3 del plan maestro masiva) — SOLO EVIDENCIA.
+  Este banco NO cambia nada de producción: src/ y public/ quedan intactos.
+
+  Pregunta que responde (brief Agente B, Task 2-b):
+    ¿Cambiar el decode del dhash de FULL (12 MP ≈ 48 MB) a resize 64×64 a
+    nivel de createImageBitmap (resizeQuality "medium") conserva el matching
+    de gemelas (Hamming ≤ 6, con margen ≤ 4) y mantiene a las NO-gemelas
+    lejos (> 12)? — el riesgo es D65/T2.1: el hash histórico full-res
+    persistido (hashDedup) dejaría de matchear si el camino nuevo voltea
+    bits cerca de gradientes.
+
+  Métricas (obligatorias del brief):
+    A. Gemela consigo misma ENTRE CAMINOS: hamming(hashFull(x), hashResize64(x))
+       — ideal 0; aceptable ≤ 4 (margen 2 contra el umbral 6).
+    B. Gemelas por construcción ENTRE CAMINOS (histórico full vs nueva resize):
+       hamming(hashFull(a_i), hashResize64(a_j)), i≠j.
+    C. NO-gemelas ENTRE CAMINOS: hamming entre actas distintas — debe seguir > 12.
+    D. Timing + RAM decode FULL vs RESIZE64 sobre foto-like 12 MP.
+    E. Sensibilidad al color con cruce de caminos (δ canales 1..12).
+
+  CORPUS (dos niveles, veredicto sobre el REALISTA):
+    · fotoActa (PRIMARIO — veredicto): FOTO de documento 3024×4032 (12 MP
+      retrato de cámara — como las actas REALES del dueño, contenido de
+      frecuencia moderada donde el dhash FULL funciona: «gemelas caen 0-2»,
+      dedup.ts:25). Sanity interno: intra-gemela FULL ≤ 6 — si el corpus
+      patina en el camino de HOY, el corpus está invalidado, no el parche.
+    · actaLike (STRESS — límite): render vectorial 1000×2920 con líneas
+      finas 1-2 px (banco B7 seeds 0xe14d5e01/02/03) — patológico para el
+      downscale en un paso (aliasing); se reporta como caso de estrés, NO
+      decide el veredicto.
+  Vía extra evidence-only RESIZEPROP64 (aspect preservado 64×⌈64·H/W⌉) para
+  diagnosticar si el daño viene del aspect-ratio cuadrado del spec P3.
+
+  Copia CONGELADA del dhash EXACTO del pipeline (kit T2: «NO reimplementes
+  un dhash distinto»): canvas 9×8, grises 0.299/0.587/0.114, bit=1 cuando
+  gray[x] > gray[x+1], 8 bits × 8 filas → hex 16. hamming64 y HAMMING_MAX=6
+  verbatim de src/lib/e14/masiva/dedup.ts @ 5d08dd6 (mismo patrón del banco
+  B7 bench.html). Las vías de decode replican VERBATIM el parche P3.
+
+  Corpus real: botón «CARGAR FOTOS REALES» — agrupa por stem numérico
+  (171454.jpg + 171454.HEIC = par, igual que B7) y tabula la MISMA matriz
+  cruzada. Outputs a resultados/ (NUNCA las fotos).
+-->
+<style>
+  :root { color-scheme: light; }
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 16px; background: #f7f5f0; color: #1a1a1a; }
+  h1 { font-size: 18px; } h2 { font-size: 15px; margin-top: 22px; }
+  .estado { padding: 8px 12px; border: 2px solid #1a1a1a; background: #fff; font-weight: bold; }
+  .estado.ok { border-color: #1a7f37; color: #1a7f37; }
+  .estado.malo { border-color: #b42318; color: #b42318; }
+  button, input[type="file"]::file-selector-button { font: inherit; padding: 8px 14px; border: 2px solid #1a1a1a; background: #fff; cursor: pointer; font-weight: bold; }
+  button:hover { background: #eceae4; }
+  #log { white-space: pre-wrap; background: #fff; border: 2px solid #1a1a1a; padding: 10px; max-height: 420px; overflow-y: auto; margin-top: 10px; }
+  table { border-collapse: collapse; margin-top: 8px; background: #fff; }
+  td, th { border: 1px solid #999; padding: 3px 8px; text-align: left; font-size: 12px; }
+  code { background: #eceae4; padding: 0 4px; }
+  .warn { color: #92400e; }
+</style>
+</head>
+<body>
+<h1>Banco P3 — dhash FULL vs RESIZE64 · KIT e14-dhash-resize-v1 (SOLO EVIDENCIA)</h1>
+<p>
+  Vías replicadas verbatim del parche P3 (<code>bitmapNormalizado</code>, dedup.ts @ 5d08dd6):
+  <code>FULL</code> = <code>{ imageOrientation: "from-image" }</code> ·
+  <code>RESIZE64</code> = <code>{ imageOrientation: "from-image", resizeWidth: 64, resizeHeight: 64, resizeQuality: "medium" }</code>
+  (spec del plan) · <code>RESIZEPROP64</code> = aspect preservado (evidence-only, diagnostico).
+  Umbral vigente <code>DEDUP_HAMMING_MAX = 6</code> · meta GO: gemelas ≤ 4 · NO-gemelas &gt; 12 ·
+  <strong>veredicto sobre el corpus REALISTA (fotoActa 12 MP)</strong>; actaLike = estrés.
+</p>
+<p>
+  <button id="btn-sintetico">CORRER SINTÉTICO A/B</button>
+  <button id="btn-reales">CARGAR FOTOS REALES</button>
+  <input type="file" id="input-fotos" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" style="display:none">
+  <button id="btn-descargar" disabled>DESCARGAR JSON+MD</button>
+  <span id="estado" class="estado">listo</span>
+</p>
+<div id="log"></div>
+<div id="tablas"></div>
+
+<script type="module">
+// ═══ COPIA CONGELADA — src/lib/e14/masiva/dedup.ts @ 5d08dd6 (dhash 64-bit).
+//     Canvas 9×8, grises 0.299/0.587/0.114, bit=1 cuando gray[x] > gray[x+1]
+//     → 8 bits × 8 filas → hex 16. NADA se re-implementa distinto (kit T2).
+//     hamming64 y HAMMING_MAX verbatim. ═════════════════════════════════════
+const HAMMING_MAX = 6;
+
+function dhashDeBitmap(fuente) {
+  try {
+    const W = 9;
+    const H = 8;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(fuente, 0, 0, W, H);
+    if (typeof ImageBitmap !== "undefined" && fuente instanceof ImageBitmap) {
+      fuente.close(); // D65 — RAM: el bitmap normalizado ya no hace falta
+    }
+    const { data } = ctx.getImageData(0, 0, W, H);
+    const gris = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        gris[y * W + x] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      }
+    }
+    let hex = "";
+    for (let y = 0; y < H; y++) {
+      let byte = 0;
+      for (let x = 0; x < 8; x++) {
+        byte = (byte << 1) | (gris[y * W + x] > gris[y * W + x + 1] ? 1 : 0);
+      }
+      hex += byte.toString(16).padStart(2, "0");
+    }
+    return hex;
+  } catch {
+    return null;
+  }
+}
+
+function hamming64(a, b) {
+  if (!a || !b || a.length !== b.length) return 64;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) {
+    let x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+    while (x) {
+      d += x & 1;
+      x >>= 1;
+    }
+  }
+  return d;
+}
+
+// ═══ VÍAS DE DECODE — verbatim del parche P3 (bitmapNormalizado, dedup.ts).
+//     La vía RESIZE64 usa EXACTAMENTE las opciones del parche (el guard del
+//     flag vive en producción; aquí todas las vías corren siempre — es el
+//     banco). RESIZEPROP64 es EVIDENCE-ONLY (no está en el parche). ═════════
+async function bitmapFull(fuente) {
+  return await createImageBitmap(fuente, { imageOrientation: "from-image" });
+}
+async function bitmapResize64(fuente) {
+  return await createImageBitmap(fuente, {
+    imageOrientation: "from-image",
+    resizeWidth: 64,
+    resizeHeight: 64,
+    resizeQuality: "medium",
+  });
+}
+async function bitmapResizeProp64(fuente, alto, ancho) {
+  // evidence-only: aspect preservado — 64 de lado mayor, el otro proporcional.
+  const prop = alto >= ancho
+    ? { resizeWidth: Math.max(1, Math.round((64 * ancho) / alto)), resizeHeight: 64 }
+    : { resizeWidth: 64, resizeHeight: Math.max(1, Math.round((64 * alto) / ancho)) };
+  return await createImageBitmap(fuente, { imageOrientation: "from-image", resizeQuality: "medium", ...prop });
+}
+const VIAS = ["full", "resize64", "resizeProp64"];
+async function dhashVia(fuente, via, dims) {
+  const bmp =
+    via === "resize64" ? await bitmapResize64(fuente)
+    : via === "resizeProp64" ? await bitmapResizeProp64(fuente, dims.alto, dims.ancho)
+    : await bitmapFull(fuente);
+  return dhashDeBitmap(bmp); // cierra el ImageBitmap adentro (D65 — RAM)
+}
+
+// ─── PRNG determinista (mismo patrón del banco B7 — seeds fijas) ────────────
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const entero = (rnd, min, max) => min + Math.floor(rnd() * (max - min + 1));
+
+// ─── Corpus 2 (PRIMARIO — veredicto): FOTO de documento 3024×4032 (12 MP
+//     retrato) — papel con gradiente suave + viñeta, texto y grilla de
+//     frecuencia MODERADA (como una foto real de un acta E-14; sin líneas de
+//     1 px que aliasen el downscale). Gemelas = mismo píxel-set re-encodeado. ══
+const W_FOTO = 3024;
+const H_FOTO = 4032;
+
+function renderizarFotoActa(seed) {
+  const rnd = mulberry32(seed);
+  const cv = document.createElement("canvas");
+  cv.width = W_FOTO;
+  cv.height = H_FOTO;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  // papel:
+  const papel = ctx.createLinearGradient(0, 0, W_FOTO, H_FOTO);
+  papel.addColorStop(0, "#efe9db");
+  papel.addColorStop(1, "#ddd5c2");
+  ctx.fillStyle = papel;
+  ctx.fillRect(0, 0, W_FOTO, H_FOTO);
+  // viñeta/illuminación de cámara (gradiente radial suave):
+  const luz = ctx.createRadialGradient(W_FOTO * 0.42, H_FOTO * 0.4, W_FOTO * 0.2, W_FOTO / 2, H_FOTO / 2, H_FOTO * 0.75);
+  luz.addColorStop(0, "rgba(255,255,255,0.10)");
+  luz.addColorStop(1, "rgba(40,30,15,0.22)");
+  ctx.fillStyle = luz;
+  ctx.fillRect(0, 0, W_FOTO, H_FOTO);
+  // la hoja (leve rotación de cámara — 0.6°):
+  ctx.save();
+  ctx.translate(W_FOTO / 2, H_FOTO / 2);
+  ctx.rotate(0.6 * Math.PI / 180);
+  const hojaW = W_FOTO * 0.86;
+  const hojaH = hojaW * 2.92; // proporción del acta 1000×2920
+  const x0 = -hojaW / 2;
+  const y0 = -hojaH / 2;
+  ctx.fillStyle = "#f7f5f0";
+  ctx.fillRect(x0, y0, hojaW, hojaH);
+  ctx.strokeStyle = "#1a1a1a";
+  ctx.lineWidth = 14; // gruesa a esta escala (≈1 px tras el downscale)
+  ctx.strokeRect(x0 + 60, y0 + 60, hojaW - 120, hojaH - 120);
+  ctx.fillStyle = "#111111";
+  ctx.textAlign = "center";
+  ctx.font = "bold 190px Arial, sans-serif";
+  ctx.fillText("TARJETA ELECTORAL E-14", 0, y0 + 330);
+  ctx.font = "bold 120px Arial, sans-serif";
+  ctx.fillText("REGISTRADURIA NACIONAL", 0, y0 + 500);
+  const consulado = entero(rnd, 1, 99);
+  const pais = entero(rnd, 1, 99);
+  const zona = entero(rnd, 1, 99);
+  const puesto = entero(rnd, 10000, 99999);
+  const mesa = entero(rnd, 1, 99);
+  ctx.font = "bold 132px Arial, sans-serif";
+  ctx.fillText(`CONSULADO ${consulado}  PAIS ${pais}`, 0, y0 + 680);
+  ctx.fillText(`ZONA ${zona}  PUESTO ${puesto}`, 0, y0 + 830);
+  ctx.fillText(`MESA ${mesa}`, 0, y0 + 980);
+  // grilla 5×6 de votos (trazos gruesos, dígitos manuscritos-like):
+  const gx0 = x0 + 175;
+  const gy0 = y0 + 1260;
+  const cw = (hojaW - 350) / 5;
+  const ch = 890;
+  for (let c = 0; c < 30; c++) {
+    const x = gx0 + (c % 5) * cw;
+    const y = gy0 + Math.floor(c / 5) * ch;
+    ctx.strokeStyle = "#8a8a8a";
+    ctx.lineWidth = 7;
+    ctx.strokeRect(x + 18, y + 18, cw - 36, ch - 36);
+    ctx.fillStyle = "#333333";
+    ctx.font = "bold 78px Arial, sans-serif";
+    ctx.fillText(String(entero(rnd, 101, 899)), x + cw / 2, y + 120);
+    ctx.save();
+    ctx.translate(x + cw / 2 + (((Math.floor(c / 5) * 31 + (c % 5) * 17) % 16) - 8), y + 520);
+    ctx.rotate((((Math.floor(c / 5) * 13 + (c % 5) * 7) % 9) - 4) * Math.PI / 180);
+    ctx.font = "italic bold 170px Georgia, 'Times New Roman', serif";
+    ctx.fillStyle = "#1a2a6b";
+    ctx.fillText(String(entero(rnd, 2, 499)), 0, 0);
+    ctx.restore();
+  }
+  ctx.fillStyle = "#111111";
+  ctx.font = "bold 132px Arial, sans-serif";
+  ctx.fillText(`KIT ${entero(rnd, 100, 999)}  TIPO 1  PAG 1/2`, 0, gy0 + 6 * ch + 240);
+  ctx.font = "bold 144px 'Courier New', monospace";
+  ctx.fillText(`7100${entero(rnd, 100, 999)}3010${entero(rnd, 1000, 9999)}`.slice(0, 15), 0, gy0 + 6 * ch + 435);
+  ctx.restore();
+  return cv;
+}
+
+// ─── Corpus 1 (STRESS — límite): acta-like vectorial 1000×2920 del banco B7
+//     (seeds 0xe14d5e01/02/03) — líneas finas 1-2 px: patológica para el
+//     downscale en un paso (aliasing). NO decide el veredicto. ═══════════════
+const W_ACTA = 1000;
+const H_ACTA = 2920;
+
+function renderizarActa(seed) {
+  const rnd = mulberry32(seed);
+  const cv = document.createElement("canvas");
+  cv.width = W_ACTA;
+  cv.height = H_ACTA;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#f7f5f0";
+  ctx.fillRect(0, 0, W_ACTA, H_ACTA);
+  ctx.strokeStyle = "#1a1a1a";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(24, 24, W_ACTA - 48, H_ACTA - 48);
+  ctx.fillStyle = "#111111";
+  ctx.textAlign = "center";
+  ctx.font = "bold 64px Arial, sans-serif";
+  ctx.fillText("TARJETA ELECTORAL E-14", W_ACTA / 2, 110);
+  ctx.font = "bold 40px Arial, sans-serif";
+  ctx.fillText("REGISTRADURIA NACIONAL DEL ESTADO CIVIL", W_ACTA / 2, 165);
+  const consulado = entero(rnd, 1, 99);
+  const pais = entero(rnd, 1, 99);
+  const zona = entero(rnd, 1, 99);
+  const puesto = entero(rnd, 10000, 99999);
+  const mesa = entero(rnd, 1, 99);
+  ctx.font = "bold 44px Arial, sans-serif";
+  ctx.fillText(`CONSULADO ${consulado}  PAIS ${pais}`, W_ACTA / 2, 225);
+  ctx.fillText(`ZONA ${zona}  PUESTO ${puesto}`, W_ACTA / 2, 275);
+  ctx.fillText(`MESA ${mesa}`, W_ACTA / 2, 325);
+  const gx0 = 60;
+  const gy0 = 420;
+  const cw = (W_ACTA - 120) / 5;
+  const ch = 300;
+  ctx.font = "26px Arial, sans-serif";
+  for (let c = 0; c < 30; c++) {
+    const x = gx0 + (c % 5) * cw;
+    const y = gy0 + Math.floor(c / 5) * ch;
+    ctx.strokeStyle = "#8a8a8a";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 6, y + 6, cw - 12, ch - 12);
+    ctx.fillStyle = "#333333";
+    ctx.textAlign = "center";
+    ctx.fillText(String(entero(rnd, 101, 899)), x + cw / 2, y + 40);
+    ctx.save();
+    ctx.translate(x + cw / 2 + (((Math.floor(c / 5) * 31 + (c % 5) * 17) % 11) - 5), y + 175);
+    ctx.rotate((((Math.floor(c / 5) * 13 + (c % 5) * 7) % 9) - 4) * Math.PI / 180);
+    ctx.font = "italic bold 56px Georgia, 'Times New Roman', serif";
+    ctx.fillStyle = "#1a2a6b";
+    ctx.fillText(String(entero(rnd, 2, 499)), 0, 0);
+    ctx.restore();
+  }
+  ctx.fillStyle = "#111111";
+  ctx.font = "bold 44px Arial, sans-serif";
+  ctx.fillText(`KIT ${entero(rnd, 100, 999)}  TIPO 1  VER 1  PAG 1/2`, W_ACTA / 2, gy0 + 6 * ch + 80);
+  ctx.font = "bold 48px 'Courier New', monospace";
+  ctx.fillText(`7100${entero(rnd, 100, 999)}3010${entero(rnd, 1000, 9999)}`.slice(0, 15), W_ACTA / 2, gy0 + 6 * ch + 145);
+  ctx.font = "bold 40px Arial, sans-serif";
+  ctx.fillText(`SUMA TOTAL ${entero(rnd, 200, 499)}`, W_ACTA / 2, H_ACTA - 160);
+  return cv;
+}
+
+function canvasABlob(cv, tipo, calidad) {
+  return new Promise((resolve, reject) => {
+    cv.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob falló"))), tipo, calidad);
+  });
+}
+
+// ─── Utilidades de reporte ──────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const log = (msg) => {
+  const linea = document.createElement("div");
+  linea.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $("log").appendChild(linea);
+  $("log").scrollTop = $("log").scrollHeight;
+};
+const setEstado = (msg, cls = "info") => {
+  $("estado").textContent = msg;
+  $("estado").className = `estado ${cls}`;
+};
+function percentil(vals, p) {
+  const s = [...vals].sort((a, b) => a - b);
+  if (!s.length) return null;
+  const i = Math.min(s.length - 1, Math.max(0, Math.ceil((p / 100) * s.length) - 1));
+  return s[i];
+}
+const redondeo = (x, d = 1) => (x == null ? null : +x.toFixed(d));
+
+function tabla(id, headers, filas) {
+  const t = document.createElement("table");
+  t.innerHTML =
+    `<tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>` +
+    filas.map((f) => `<tr>${f.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("");
+  $(id).appendChild(t);
+}
+
+// ═══ ESTADO GLOBAL del resultado (window.__benchJson — lectura programática
+//     y descarga, mismo patrón del banco B7). ════════════════════════════════
+const RESULT = {
+  kit: "e14-dhash-resize-v1",
+  banco: "bench-resize.html (P3 — full-res vs resize64)",
+  fecha: null,
+  entorno: {
+    userAgent: navigator.userAgent,
+    hardwareConcurrency: navigator.hardwareConcurrency ?? null,
+    deviceMemoryGB: navigator.deviceMemory ?? null,
+    dpr: window.devicePixelRatio ?? null,
+  },
+  parametros: {
+    dhash: "copia congelada de dedup.ts @ 5d08dd6 (canvas 9×8, hex 16)",
+    viaFull: 'createImageBitmap(b, { imageOrientation: "from-image" })',
+    viaResize64: 'createImageBitmap(b, { imageOrientation: "from-image", resizeWidth: 64, resizeHeight: 64, resizeQuality: "medium" }) — spec P3',
+    viaResizeProp64: "evidence-only: aspect preservado 64×⌈64·H/W⌉ (diagnóstico de aspect-ratio)",
+    DEDUP_HAMMING_MAX: HAMMING_MAX,
+    metaGemelas: "≤ 4 (margen 2 contra el umbral 6)",
+    metaNoGemelas: "> 12 (comentario dedup.ts:24)",
+    corpusVeredicto: "fotoActa 12 MP (realista) — actaLike 1000×2920 = estrés (no decide)",
+  },
+  sintetico: null,
+  reales: null,
+  veredicto: null,
+};
+
+// ─── NÚCLEO: matriz de Hamming de una colección {nombre, grupo, blob, dims}
+//     en las 3 vías + todos los cruces. Devuelve filas por par y resúmenes. ══
+async function medirColeccion(items, etiquetaOrigen) {
+  const hashes = [];
+  for (const it of items) {
+    const hs = {};
+    const ms = {};
+    for (const via of VIAS) {
+      const t0 = performance.now();
+      hs[via] = await dhashVia(it.blob, via, it.dims);
+      ms[via] = +(performance.now() - t0).toFixed(1);
+    }
+    hashes.push({
+      nombre: it.nombre,
+      grupo: it.grupo ?? null,
+      hashFull: hs.full,
+      hashResize64: hs.resize64,
+      hashResizeProp64: hs.resizeProp64,
+      msFull: ms.full,
+      msResize64: ms.resize64,
+      msResizeProp64: ms.resizeProp64,
+    });
+    log(`  ${it.nombre}: full=${hs.full} (${ms.full}ms) · resize64=${hamming64(hs.full, hs.resize64)} bits del full (${ms.resize64}ms) · resizeProp64=${hamming64(hs.full, hs.resizeProp64)} bits del full (${ms.resizeProp64}ms)`);
+  }
+
+  const paresGemelas = [];
+  const grupos = new Map();
+  for (const h of hashes) {
+    if (!grupos.has(h.grupo)) grupos.set(h.grupo, []);
+    grupos.get(h.grupo).push(h);
+  }
+  for (const [grupo, memb] of grupos) {
+    if (grupo == null) continue;
+    for (let i = 0; i < memb.length; i++) {
+      for (let j = 0; j < memb.length; j++) {
+        if (i === j) continue;
+        paresGemelas.push({
+          grupo,
+          a: memb[i].nombre,
+          b: memb[j].nombre,
+          hammingIntraFull: hamming64(memb[i].hashFull, memb[j].hashFull),
+          hammingIntraResize64: hamming64(memb[i].hashResize64, memb[j].hashResize64),
+          hammingIntraResizeProp64: hamming64(memb[i].hashResizeProp64, memb[j].hashResizeProp64),
+          hammingCruceFullVsResize: hamming64(memb[i].hashFull, memb[j].hashResize64),
+          hammingCruceFullVsResizeProp: hamming64(memb[i].hashFull, memb[j].hashResizeProp64),
+        });
+      }
+    }
+  }
+
+  const paresNoGemelas = [];
+  const uniqGrupos = [...grupos.keys()].filter((g) => g != null);
+  for (let gi = 0; gi < uniqGrupos.length; gi++) {
+    for (let gj = gi + 1; gj < uniqGrupos.length; gj++) {
+      for (const a of grupos.get(uniqGrupos[gi])) {
+        for (const b of grupos.get(uniqGrupos[gj])) {
+          paresNoGemelas.push({
+            grupoA: uniqGrupos[gi],
+            grupoB: uniqGrupos[gj],
+            a: a.nombre,
+            b: b.nombre,
+            hammingIntraFull: hamming64(a.hashFull, b.hashFull),
+            hammingCruceFullVsResize: hamming64(a.hashFull, b.hashResize64),
+            hammingCruceFullVsResizeProp: hamming64(a.hashFull, b.hashResizeProp64),
+          });
+        }
+      }
+    }
+  }
+
+  const maxSelf = (via) => Math.max(...hashes.map((h) => hamming64(h.hashFull, h[`hash${via}`])));
+  const maxDe = (arr, k) => (arr.length ? Math.max(...arr.map((p) => p[k])) : null);
+  const minDe = (arr, k) => (arr.length ? Math.min(...arr.map((p) => p[k])) : null);
+
+  return {
+    origen: etiquetaOrigen,
+    items: hashes,
+    paresGemelas,
+    paresNoGemelas,
+    resumen: {
+      maxHammingSelfCruce: maxSelf("Resize64"),
+      maxHammingSelfCruceProp: maxSelf("ResizeProp64"),
+      maxHammingGemelasCruce: maxDe(paresGemelas, "hammingCruceFullVsResize"),
+      maxHammingGemelasCruceProp: maxDe(paresGemelas, "hammingCruceFullVsResizeProp"),
+      maxHammingGemelasIntraFull: maxDe(paresGemelas, "hammingIntraFull"),
+      maxHammingGemelasIntraResize64: maxDe(paresGemelas, "hammingIntraResize64"),
+      maxHammingGemelasIntraResizeProp64: maxDe(paresGemelas, "hammingIntraResizeProp64"),
+      minHammingNoGemelasCruce: minDe(paresNoGemelas, "hammingCruceFullVsResize"),
+      minHammingNoGemelasCruceProp: minDe(paresNoGemelas, "hammingCruceFullVsResizeProp"),
+      minHammingNoGemelasIntraFull: minDe(paresNoGemelas, "hammingIntraFull"),
+      sanityFullSano: maxDe(paresGemelas, "hammingIntraFull") <= HAMMING_MAX,
+      mecanismoAtrapaGemelasResize64: paresGemelas.length
+        ? paresGemelas.every((p) => p.hammingIntraResize64 <= HAMMING_MAX)
+        : null,
+      mecanismoAtrapaGemelasResizeProp64: paresGemelas.length
+        ? paresGemelas.every((p) => p.hammingIntraResizeProp64 <= HAMMING_MAX)
+        : null,
+    },
+  };
+}
+
+// ─── SINTÉTICO A/B completo (brief: métricas A-D + sensibilidad color) ══════
+async function correrSintetico() {
+  setEstado("corriendo sintético…");
+  log("Corpus PRIMARIO (veredicto): 3 fotoActa 12 MP (3024×4032, seeds fijas) × {jpg-q92, jpg-q50, png} — foto realista de documento");
+  const seeds = [0xe14d5e01, 0xe14d5e02, 0xe14d5e03];
+
+  const itemsFoto = [];
+  for (let i = 0; i < seeds.length; i++) {
+    const cv = renderizarFotoActa(seeds[i]);
+    const stem = `fotoacta-${i + 1}`;
+    const variantes = [
+      { etiqueta: "jpg-q92", blob: await canvasABlob(cv, "image/jpeg", 0.92) },
+      { etiqueta: "jpg-q50", blob: await canvasABlob(cv, "image/jpeg", 0.5) },
+      { etiqueta: "png", blob: await canvasABlob(cv, "image/png") },
+    ];
+    for (const v of variantes) {
+      itemsFoto.push({ nombre: `${stem}.${v.etiqueta}`, grupo: stem, blob: v.blob, dims: { ancho: W_FOTO, alto: H_FOTO } });
+    }
+  }
+  const fotoActa = await medirColeccion(itemsFoto, "sintetico-fotoacta-12mp");
+
+  log("Corpus de ESTRÉS (no decide): 3 actaLike 1000×2920 (banco B7, seeds 0xe14d5e01/02/03) × {png, jpg-q92, jpg-q50} — líneas finas 1-2 px");
+  const itemsActa = [];
+  for (let i = 0; i < seeds.length; i++) {
+    const cv = renderizarActa(seeds[i]);
+    const stem = `sintetica-${i + 1}`;
+    const variantes = [
+      { etiqueta: "png", blob: await canvasABlob(cv, "image/png") },
+      { etiqueta: "jpg-q92", blob: await canvasABlob(cv, "image/jpeg", 0.92) },
+      { etiqueta: "jpg-q50", blob: await canvasABlob(cv, "image/jpeg", 0.5) },
+    ];
+    for (const v of variantes) {
+      itemsActa.push({ nombre: `${stem}.${v.etiqueta}`, grupo: stem, blob: v.blob, dims: { ancho: W_ACTA, alto: H_ACTA } });
+    }
+  }
+  const actaLike = await medirColeccion(itemsActa, "sintetico-actalike-stress");
+
+  // Sensibilidad al color CON CRUCE de caminos (δ canales — hipótesis
+  // HEIC→RGB ≠ JPG→RGB del banco B7, ahora sobre el cambio de decode),
+  // sobre el corpus PRIMARIO (fotoActa):
+  log("Sensibilidad al color (shift lineal por canal δ ∈ {1,2,3,5,8,12}) con cruce FULL↔RESIZE64 sobre fotoActa…");
+  const sensibilidad = [];
+  {
+    const cvBase = renderizarFotoActa(seeds[0]);
+    const ctx = cvBase.getContext("2d", { willReadFrequently: true });
+    const img = ctx.getImageData(0, 0, cvBase.width, cvBase.height);
+    const base = img.data.slice();
+    const blobBase = await canvasABlob(cvBase, "image/jpeg", 0.92);
+    const hashBaseFull = await dhashVia(blobBase, "full", { ancho: W_FOTO, alto: H_FOTO });
+    const hashBaseResize = await dhashVia(blobBase, "resize64", { ancho: W_FOTO, alto: H_FOTO });
+    const hashBaseResizeProp = await dhashVia(blobBase, "resizeProp64", { ancho: W_FOTO, alto: H_FOTO });
+    for (const delta of [1, 2, 3, 5, 8, 12]) {
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        d[i] = Math.min(255, base[i] + delta);
+        d[i + 1] = Math.min(255, base[i + 1] + delta * 0.7);
+        d[i + 2] = Math.min(255, base[i + 2] + delta * 0.4);
+      }
+      ctx.putImageData(img, 0, 0);
+      const blob = await canvasABlob(cvBase, "image/jpeg", 0.92);
+      const hFull = await dhashVia(blob, "full", { ancho: W_FOTO, alto: H_FOTO });
+      const hResize = await dhashVia(blob, "resize64", { ancho: W_FOTO, alto: H_FOTO });
+      const hResizeProp = await dhashVia(blob, "resizeProp64", { ancho: W_FOTO, alto: H_FOTO });
+      sensibilidad.push({
+        deltaCanalR: delta,
+        hammingFullBaseVsFullShift: hamming64(hashBaseFull, hFull),
+        hammingResizeBaseVsResizeShift: hamming64(hashBaseResize, hResize),
+        hammingCruceFullBaseVsResizeShift: hamming64(hashBaseFull, hResize),
+        hammingCruceFullBaseVsResizePropShift: hamming64(hashBaseFull, hResizeProp),
+      });
+      // restaurar para el siguiente δ:
+      img.data.set(base);
+      ctx.putImageData(img, 0, 0);
+    }
+  }
+
+  // Timing + RAM sobre FOTO-LIKE 12 MP JPEG q0.9 (como el ORIGINAL de cámara;
+  // 1 warmup excluido + 7 rondas intercaladas por vía; heap = performance.memory):
+  log("Timing+RAM decode+hash sobre fotoActa 12 MP (3024×4032 JPEG q0.9)…");
+  const cvFoto = renderizarFotoActa(0xe14f07e5);
+  const blobFoto = await canvasABlob(cvFoto, "image/jpeg", 0.9);
+  cvFoto.width = 0; cvFoto.height = 0; // liberar canvas
+  const heapMB = () =>
+    performance.memory && performance.memory.usedJSHeapSize
+      ? performance.memory.usedJSHeapSize / 1048576
+      : null;
+  const t = { full: [], resize64: [], resizeProp64: [] };
+  const h = { full: [], resize64: [], resizeProp64: [] };
+  for (const via of VIAS) await dhashVia(blobFoto, via, { ancho: W_FOTO, alto: H_FOTO }); // warmup
+  for (let r = 0; r < 7; r++) {
+    for (const via of VIAS) {
+      const antes = heapMB();
+      const t0 = performance.now();
+      const bmp =
+        via === "resize64" ? await bitmapResize64(blobFoto)
+        : via === "resizeProp64" ? await bitmapResizeProp64(blobFoto, H_FOTO, W_FOTO)
+        : await bitmapFull(blobFoto);
+      const msDecode = performance.now() - t0;
+      const despues = heapMB();
+      dhashDeBitmap(bmp); // cierra el bitmap
+      t[via].push(msDecode);
+      if (antes != null && despues != null) h[via].push(despues - antes);
+    }
+  }
+  const resumen = (arr) => ({
+    rondas: arr.length,
+    mediaMs: redondeo(arr.reduce((a, b) => a + b, 0) / arr.length),
+    p50Ms: redondeo(percentil(arr, 50)),
+    p95Ms: redondeo(percentil(arr, 95)),
+    minMs: redondeo(Math.min(...arr)),
+    maxMs: redondeo(Math.max(...arr)),
+  });
+  const heapResumen = (arr) => {
+    if (!arr.length) return null;
+    const media = arr.reduce((a, b) => a + b, 0) / arr.length;
+    const max = Math.max(...arr);
+    // performance.memory cuantiza y actualiza perezosamente: un Δ de 0 en
+    // TODAS las rondas = no medible en este entorno (honesto > inventado).
+    if (max <= 0) return null;
+    return { mediaMB: redondeo(media), maxMB: redondeo(max) };
+  };
+  const timing12MP = {
+    bytes: blobFoto.size,
+    megapixeles: 12.2,
+    full: resumen(t.full),
+    resize64: resumen(t.resize64),
+    resizeProp64: resumen(t.resizeProp64),
+    heapDeltaDecode: {
+      full: heapResumen(h.full),
+      resize64: heapResumen(h.resize64),
+      resizeProp64: heapResumen(h.resizeProp64),
+      nota: "performance.memory.usedJSHeapSize antes/después del createImageBitmap. Δ=0 en todas las rondas → performance.memory cuantiza/actualiza perezosamente y el Δ del bitmap NO es medible aquí (n/d) — la afirmación 48 MB→KB queda teórica (física del bitmap), no medida en este sandbox",
+    },
+    ahorroMedioPctResize64: redondeo(
+      100 * (1 - (t.resize64.reduce((a, b) => a + b, 0) / t.resize64.length) / (t.full.reduce((a, b) => a + b, 0) / t.full.length)),
+    ),
+    ahorroMedioPctResizeProp64: redondeo(
+      100 * (1 - (t.resizeProp64.reduce((a, b) => a + b, 0) / t.resizeProp64.length) / (t.full.reduce((a, b) => a + b, 0) / t.full.length)),
+    ),
+  };
+  log(`Timing 12 MP — full p50=${timing12MP.full.p50Ms}ms · resize64 p50=${timing12MP.resize64.p50Ms}ms · resizeProp64 p50=${timing12MP.resizeProp64.p50Ms}ms`);
+
+  RESULT.fecha = new Date().toISOString();
+  RESULT.sintetico = { fotoActa, actaLike, sensibilidadColorCruce: sensibilidad, timing12MP };
+
+  // ─── VEREDICTO (regla del brief) — sobre el corpus PRIMARIO (fotoActa).
+  // GO si toda gemela (self-cruce + pares cruzados) ≤ 4 Y toda NO-gemela
+  // (cruce incluido) > 12. Honestidad: corpus SINTÉTICO — las gemelas
+  // HEIC/JPG reales del dueño quedan pendientes (botón «CARGAR FOTOS REALES»).
+  const s = fotoActa.resumen;
+  const go =
+    s.maxHammingSelfCruce <= 4 &&
+    (s.maxHammingGemelasCruce ?? 0) <= 4 &&
+    (s.minHammingNoGemelasCruce ?? 64) > 12 &&
+    s.mecanismoAtrapaGemelasResize64 === true;
+  RESULT.veredicto = {
+    go,
+    corpusVeredicto: "fotoActa 12 MP (realista)",
+    regla: "GO ⇔ max gemelas (self-cruce + pares cruzados) ≤ 4 ∧ min NO-gemelas cruce > 12 ∧ mecanismoResize64 atrapa gemelas",
+    razones: [
+      `[PRIMARIO fotoActa] maxHammingSelfCruce=${s.maxHammingSelfCruce} (≤ 4: ${s.maxHammingSelfCruce <= 4})`,
+      `[PRIMARIO fotoActa] maxHammingGemelasCruce=${s.maxHammingGemelasCruce} (≤ 4: ${(s.maxHammingGemelasCruce ?? 0) <= 4})`,
+      `[PRIMARIO fotoActa] minHammingNoGemelasCruce=${s.minHammingNoGemelasCruce} (> 12: ${(s.minHammingNoGemelasCruce ?? 64) > 12})`,
+      `[PRIMARIO fotoActa] sanity camino FULL de hoy sano (intra-gemela ≤ 6): ${s.sanityFullSano}`,
+      `[STRESS actaLike] maxHammingSelfCruce=${actaLike.resumen.maxHammingSelfCruce} · sanity FULL sano: ${actaLike.resumen.sanityFullSano} (corpus patológico para el downscale en un paso — NO decide)`,
+      `[DIAGNÓSTICO] aspect preservado (resizeProp64, evidence-only): self-cruce=${s.maxHammingSelfCruceProp} · gemelas cruce=${s.maxHammingGemelasCruceProp} — ` +
+        ((s.maxHammingSelfCruceProp ?? 64) <= 4
+          ? "quedó ≤ 4 mientras resize64 falla → el daño viene del aspect CUADRADO del spec (64×64 aplasta el acta)."
+          : "TAMBIÉN falla → el daño viene del DOBLE REMUESTREO en sí (64 intermedio + drawImage 9×8 ≠ downscale directo FULL→9×8), no solo del aspect cuadrado. Ninguna variante de resize intermedio es compatible con los hashes full-res históricos."),
+    ],
+    caveats: [
+      "Corpus SINTÉTICO (gemelas por construcción png/jpg — sin HEIC real: canvas no encodea HEIC).",
+      "La gemela HEIC/JPG REAL del dueño debe confirmar el veredicto con «CARGAR FOTOS REALES» antes del rollout.",
+      "Timing/RAM medidos en DESKTOP headless — NO representan el dispositivo del dueño (main-thread contendido); la métrica de decisión es la DETERMINISTICIDAD (Hamming), no el tiempo.",
+      "Sin EXIF en el corpus sintético; producción usa imageOrientation from-image en todas las vías (igual riesgo relativo).",
+      "Un browser que ignore las opciones de resize produce el bitmap FULL → hash idéntico al de hoy (degradación segura).",
+    ],
+  };
+  pintaResultados();
+  setEstado(go ? "SINTÉTICO (fotoActa): GO — pendiente de confirmar con fotos reales del dueño" : "SINTÉTICO (fotoActa): NO-GO", go ? "ok" : "malo");
+  window.__listo = true;
+}
+
+// ─── Corpus REAL (pendiente del dueño): MISMA matriz cruzada, agrupado por
+//     stem numérico del nombre (171454.jpg + 171454.HEIC = par — banco B7). ══
+async function correrReales(files) {
+  setEstado("corriendo fotos reales…");
+  const items = [];
+  for (const f of files) {
+    const stem = (f.name.replace(/\.[^.]+$/, "").match(/(\d+)\s*$/) || [null, null])[1];
+    items.push({ nombre: f.name, grupo: stem ? `stem-${stem}` : f.name, blob: f, dims: null });
+  }
+  // dims de cada archivo (para resizeProp64):
+  for (const it of items) {
+    try {
+      const b = await bitmapFull(it.blob);
+      it.dims = { ancho: b.width, alto: b.height };
+      b.close();
+    } catch {
+      it.dims = { ancho: 0, alto: 0 };
+    }
+  }
+  log(`Fotos reales: ${items.length} archivos · grupos por stem: ${new Set(items.map((i) => i.grupo)).size}`);
+  RESULT.fecha = new Date().toISOString();
+  RESULT.reales = await medirColeccion(items, "reales");
+  const r = RESULT.reales.resumen;
+  const go =
+    (r.maxHammingGemelasCruce ?? 0) <= 4 &&
+    (r.minHammingNoGemelasCruce ?? 64) > 12 &&
+    r.mecanismoAtrapaGemelasResize64 === true;
+  RESULT.veredicto = {
+    go,
+    corpusVeredicto: "fotos REALES del dueño",
+    regla: RESULT.veredicto?.regla ?? "GO ⇔ max gemelas ≤ 4 ∧ min NO-gemelas > 12",
+    razones: [
+      `maxHammingSelfCruce=${r.maxHammingSelfCruce}`,
+      `maxHammingGemelasCruce=${r.maxHammingGemelasCruce}`,
+      `minHammingNoGemelasCruce=${r.minHammingNoGemelasCruce}`,
+      `sanity FULL sano: ${r.sanityFullSano}`,
+    ],
+    caveats: (RESULT.veredicto?.caveats ?? []).filter((c) => !c.startsWith("Corpus SINTÉTICO")),
+  };
+  pintaResultados();
+  setEstado(go ? "REALES: GO" : "REALES: NO-GO", go ? "ok" : "malo");
+}
+
+function pintaResultados() {
+  $("tablas").innerHTML = "";
+  const bloques = [
+    ["PRIMARIO fotoActa 12 MP (veredicto)", RESULT.sintetico?.fotoActa],
+    ["STRESS actaLike 1000×2920 (no decide)", RESULT.sintetico?.actaLike],
+    ["REALES del dueño", RESULT.reales],
+  ];
+  for (const [titulo, data] of bloques) {
+    if (!data) continue;
+    $("tablas").appendChild(Object.assign(document.createElement("h2"), { textContent: `Resumen — ${titulo} (${data.origen})` }));
+    tabla("tablas", ["métrica", "valor", "meta", "cumple"], [
+      ["maxHammingSelfCruce (gemela consigo misma FULL vs RESIZE64)", data.resumen.maxHammingSelfCruce, "≤ 4", String(data.resumen.maxHammingSelfCruce <= 4)],
+      ["maxHammingGemelasCruce (histórico full vs nueva resize64)", data.resumen.maxHammingGemelasCruce, "≤ 4", String((data.resumen.maxHammingGemelasCruce ?? 0) <= 4)],
+      ["maxHammingGemelasIntraFull (sanity camino de hoy)", data.resumen.maxHammingGemelasIntraFull, "≤ 6", String((data.resumen.maxHammingGemelasIntraFull ?? 0) <= 6)],
+      ["maxHammingGemelasIntraResize64", data.resumen.maxHammingGemelasIntraResize64, "≤ 6", String((data.resumen.maxHammingGemelasIntraResize64 ?? 0) <= 6)],
+      ["minHammingNoGemelasCruce", data.resumen.minHammingNoGemelasCruce, "> 12", String((data.resumen.minHammingNoGemelasCruce ?? 64) > 12)],
+      ["minHammingNoGemelasIntraFull (sanity)", data.resumen.minHammingNoGemelasIntraFull, "> 12", String((data.resumen.minHammingNoGemelasIntraFull ?? 64) > 12)],
+      ["— DIAGNÓSTICO resizeProp64 (evidence-only) — self-cruce", data.resumen.maxHammingSelfCruceProp, "≤ 4", String(data.resumen.maxHammingSelfCruceProp <= 4)],
+      ["— DIAGNÓSTICO resizeProp64 — gemelas cruce", data.resumen.maxHammingGemelasCruceProp, "≤ 4", String((data.resumen.maxHammingGemelasCruceProp ?? 0) <= 4)],
+      ["— DIAGNÓSTICO resizeProp64 — min NO-gemelas cruce", data.resumen.minHammingNoGemelasCruceProp, "> 12", String((data.resumen.minHammingNoGemelasCruceProp ?? 64) > 12)],
+    ]);
+  }
+  if (RESULT.sintetico?.timing12MP) {
+    const t = RESULT.sintetico.timing12MP;
+    $("tablas").appendChild(Object.assign(document.createElement("h2"), { textContent: "Timing+RAM decode — fotoActa 12 MP JPEG q0.9 (DESKTOP headless — no representativo del dueño)" }));
+    tabla("tablas", ["vía", "p50 ms", "p95 ms", "media ms", "min ms", "heap Δ medio MB"], [
+      ["FULL (hoy)", t.full.p50Ms, t.full.p95Ms, t.full.mediaMs, t.full.minMs, t.heapDeltaDecode.full?.mediaMB ?? "n/d"],
+      ["RESIZE64 (spec P3)", t.resize64.p50Ms, t.resize64.p95Ms, t.resize64.mediaMs, t.resize64.minMs, t.heapDeltaDecode.resize64?.mediaMB ?? "n/d"],
+      ["RESIZEPROP64 (evidence-only)", t.resizeProp64.p50Ms, t.resizeProp64.p95Ms, t.resizeProp64.mediaMs, t.resizeProp64.minMs, t.heapDeltaDecode.resizeProp64?.mediaMB ?? "n/d"],
+    ]);
+  }
+  if (RESULT.sintetico?.sensibilidadColorCruce) {
+    $("tablas").appendChild(Object.assign(document.createElement("h2"), { textContent: "Sensibilidad al color (fotoActa — cruce FULL base ↔ RESIZE64/PROP shift)" }));
+    tabla("tablas", ["δ canal R", "full↔full", "resize64↔resize64", "CRUCE full↔resize64", "CRUCE full↔resizeProp64"], RESULT.sintetico.sensibilidadColorCruce.map((f) => [f.deltaCanalR, f.hammingFullBaseVsFullShift, f.hammingResizeBaseVsResizeShift, f.hammingCruceFullBaseVsResizeShift, f.hammingCruceFullBaseVsResizePropShift]));
+  }
+  if (RESULT.veredicto) {
+    $("tablas").appendChild(Object.assign(document.createElement("h2"), { textContent: `VEREDICTO: ${RESULT.veredicto.go ? "GO" : "NO-GO"} (corpus: ${RESULT.veredicto.corpusVeredicto})` }));
+    const pre = document.createElement("pre");
+    pre.textContent = JSON.stringify(RESULT.veredicto, null, 2);
+    $("tablas").appendChild(pre);
+  }
+  $("btn-descargar").disabled = false;
+}
+
+// ─── Descarga JSON + MD (kit: outputs a resultados/, NUNCA las fotos) ═══════
+function descargar() {
+  const stamp = RESULT.fecha.replace(/[:.]/g, "-").slice(0, 19);
+  const json = JSON.stringify(RESULT, null, 2);
+  const md = generarMd(RESULT);
+  for (const [nombre, contenido, tipo] of [
+    [`bench-dhash-resize-resultado-${stamp}.json`, json, "application/json"],
+    [`bench-dhash-resize-resultado-${stamp}.md`, md, "text/markdown"],
+  ]) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+    a.download = nombre;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+}
+
+function filaResumenMd(nombre, r) {
+  return `| maxHammingSelfCruce | ${nombre} | ${r.maxHammingSelfCruce} | ≤ 4 | ${r.maxHammingSelfCruce <= 4} |
+| maxHammingGemelasCruce | ${nombre} | ${r.maxHammingGemelasCruce} | ≤ 4 | ${(r.maxHammingGemelasCruce ?? 0) <= 4} |
+| maxHammingGemelasIntraFull (sanity) | ${nombre} | ${r.maxHammingGemelasIntraFull} | ≤ 6 | ${(r.maxHammingGemelasIntraFull ?? 0) <= 6} |
+| maxHammingGemelasIntraResize64 | ${nombre} | ${r.maxHammingGemelasIntraResize64} | ≤ 6 | ${(r.maxHammingGemelasIntraResize64 ?? 0) <= 6} |
+| minHammingNoGemelasCruce | ${nombre} | ${r.minHammingNoGemelasCruce} | > 12 | ${(r.minHammingNoGemelasCruce ?? 64) > 12} |
+| minHammingNoGemelasIntraFull (sanity) | ${nombre} | ${r.minHammingNoGemelasIntraFull} | > 12 | ${(r.minHammingNoGemelasIntraFull ?? 64) > 12} |
+| maxHammingSelfCruceProp (evidence-only) | ${nombre} | ${r.maxHammingSelfCruceProp} | ≤ 4 | ${r.maxHammingSelfCruceProp <= 4} |
+| maxHammingGemelasCruceProp (evidence-only) | ${nombre} | ${r.maxHammingGemelasCruceProp} | ≤ 4 | ${(r.maxHammingGemelasCruceProp ?? 0) <= 4} |
+| minHammingNoGemelasCruceProp (evidence-only) | ${nombre} | ${r.minHammingNoGemelasCruceProp} | > 12 | ${(r.minHammingNoGemelasCruceProp ?? 64) > 12} |`;
+}
+
+function generarMd(R) {
+  const lineas = [
+    `# Banco P3 — dhash full-res vs resize64 (KIT e14-dhash-resize-v1 — SOLO EVIDENCIA)`,
+    ``,
+    `- Fecha: ${R.fecha}`,
+    `- Entorno: ${R.entorno.userAgent}`,
+    `- Cores: ${R.entorno.hardwareConcurrency} · DPR: ${R.entorno.dpr}`,
+    `- dhash: copia congelada de \`src/lib/e14/masiva/dedup.ts\` @ 5d08dd6 (canvas 9×8, hex 16)`,
+    `- Vías: FULL = \`{imageOrientation:"from-image"}\` · RESIZE64 = \`{imageOrientation:"from-image",resizeWidth:64,resizeHeight:64,resizeQuality:"medium"}\` (verbatim del parche P3) · RESIZEPROP64 = aspect preservado (evidence-only)`,
+    `- Umbral vigente: \`DEDUP_HAMMING_MAX = 6\` · meta GO: gemelas ≤ 4 · NO-gemelas > 12`,
+    `- **Veredicto sobre el corpus REALISTA (fotoActa 12 MP)**; actaLike 1000×2920 = estrés (líneas finas → aliasing del downscale en un paso — NO decide)`,
+    ``,
+    `## Resumen de Hamming (gemelas = mismo píxel-set re-encodeado {png, jpg-q92, jpg-q50})`,
+    ``,
+    `| métrica | corpus | valor | meta | cumple |`,
+    `|---|---|---|---|---|`,
+  ];
+  if (R.sintetico?.fotoActa) lineas.push(filaResumenMd("fotoActa 12MP (PRIMARIO)", R.sintetico.fotoActa.resumen).replace(/\| ([^|]+)\| ([^|]+)\|/g, "| $1| $2|"));
+  if (R.sintetico?.actaLike) lineas.push(filaResumenMd("actaLike (STRESS)", R.sintetico.actaLike.resumen));
+  if (R.reales) lineas.push(filaResumenMd("REALES del dueño", R.reales.resumen));
+  if (R.sintetico?.timing12MP) {
+    const t = R.sintetico.timing12MP;
+    lineas.push(
+      ``,
+      `## Timing+RAM — fotoActa 12 MP (3024×4032 JPEG q0.9; ${t.full.rondas} rondas intercaladas + warmup; DESKTOP headless — NO representativo del dispositivo del dueño)`,
+      ``,
+      `| vía | p50 ms | p95 ms | media ms | min ms | heap Δ medio MB |`,
+      `|---|---|---|---|---|---|`,
+      `| FULL (hoy) | ${t.full.p50Ms} | ${t.full.p95Ms} | ${t.full.mediaMs} | ${t.full.minMs} | ${t.heapDeltaDecode.full?.mediaMB ?? "n/d"} |`,
+      `| RESIZE64 (spec P3) | ${t.resize64.p50Ms} | ${t.resize64.p95Ms} | ${t.resize64.mediaMs} | ${t.resize64.minMs} | ${t.heapDeltaDecode.resize64?.mediaMB ?? "n/d"} |`,
+      `| RESIZEPROP64 (evidence-only) | ${t.resizeProp64.p50Ms} | ${t.resizeProp64.p95Ms} | ${t.resizeProp64.mediaMs} | ${t.resizeProp64.minMs} | ${t.heapDeltaDecode.resizeProp64?.mediaMB ?? "n/d"} |`,
+      ``,
+      `Ahorro medio resize64: **${t.ahorroMedioPctResize64}%** p50 · resizeProp64: **${t.ahorroMedioPctResizeProp64}%** p50 (proyección del plan: ~300-800 ms/acta en el dispositivo del dueño — aquí solo el ORDEN DE MAGNITUD y el Δ de RAM son exportables).`,
+      ``,
+    );
+  }
+  if (R.sintetico?.sensibilidadColorCruce) {
+    lineas.push(
+      `## Sensibilidad al color (fotoActa — cruce FULL base ↔ RESIZE64/PROP shift)`,
+      ``,
+      `| δ canal R | full↔full | resize64↔resize64 | CRUCE full↔resize64 | CRUCE full↔resizeProp64 |`,
+      `|---|---|---|---|---|`,
+      ...R.sintetico.sensibilidadColorCruce.map((f) => `| ${f.deltaCanalR} | ${f.hammingFullBaseVsFullShift} | ${f.hammingResizeBaseVsResizeShift} | ${f.hammingCruceFullBaseVsResizeShift} | ${f.hammingCruceFullBaseVsResizePropShift} |`),
+      ``,
+    );
+  }
+  lineas.push(
+    `## Veredicto: ${R.veredicto?.go ? "**GO**" : "**NO-GO**"} (corpus: ${R.veredicto?.corpusVeredicto})`,
+    ``,
+    ...(R.veredicto?.razones ?? []).map((r) => `- ${r}`),
+    ``,
+    `### Caveats (honestidad del instrumento)`,
+    ``,
+    ...(R.veredicto?.caveats ?? []).map((c) => `- ${c}`),
+    ``,
+  );
+  return lineas.join("\n");
+}
+
+$("btn-sintetico").addEventListener("click", () => void correrSintetico());
+$("btn-reales").addEventListener("click", () => $("input-fotos").click());
+$("input-fotos").addEventListener("change", (e) => void correrReales([...e.target.files]));
+$("btn-descargar").addEventListener("click", descargar);
+
+window.__benchJson = RESULT;
+window.__correrSintetico = correrSintetico;
+window.__generarMd = generarMd;
+log("Banco P3 listo — CORRER SINTÉTICO A/B (o carga fotos reales). window.__benchJson = lectura programática.");
+</script>
+</body>
+</html>
