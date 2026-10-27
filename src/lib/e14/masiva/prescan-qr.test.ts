@@ -79,6 +79,24 @@ vi.mock("./cola", () => ({
   guardarRegistro: mocksCola.guardarRegistro,
 }));
 
+// KIT flujo-dueno-v1 (K2) — warp-ingesta mockeado: prescan-qr.ts lo importa
+// (registrador de deps + objetivo/drenaje) y el módulo real arrastra
+// orientacion-qr → image-utils → @jg-stevan/scanner-core (NO resuelve en
+// node — patrón orientacion.mini.test). Aquí el prescan no ejercita la
+// ingesta (sus propios tests viven en warp-ingesta.test.ts): fakes inertes.
+const mocksWarpIngesta = vi.hoisted(() => ({
+  encolar: vi.fn(),
+  bajo: vi.fn(() => false), // ninguna fila bajo la cola — objetivo intacto
+  esperar: vi.fn(async () => true), // drenada al instante
+  registrarDeps: vi.fn(),
+}));
+vi.mock("./warp-ingesta", () => ({
+  ESPERA_COLA_TOPE_MS: 60_000,
+  filaBajoWarpIngesta: mocksWarpIngesta.bajo,
+  esperarColaWarpIngesta: mocksWarpIngesta.esperar,
+  __registrarDepsWarpIngesta: mocksWarpIngesta.registrarDeps,
+}));
+
 import {
   aplicarVeredictoPrescan,
   clasificarPayloadPrescan,

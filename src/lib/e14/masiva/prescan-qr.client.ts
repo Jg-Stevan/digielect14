@@ -32,6 +32,9 @@
  * SERIALIZADO (un race paralelo bootearía OpenCV 2× — pico de RAM móvil).
  */
 import { logger } from "../../logger";
+// KIT flujo-dueno-v1 (K2): forma canónica del quad del core (solo tipo —
+// se borra en compile: cero dependencia runtime).
+import type { Quad } from "@jg-stevan/scanner-core/types";
 
 /** Base pública de assets — MISMO patrón del repo (sondeo-qr.client.ts:54/
  * flags.ts/rapidocr.ts): assets servidos desde public/ con prefijo
@@ -289,4 +292,53 @@ export function crearClientePrescan(): ClientePrescan {
  *  la de producción (patrón e73 __setFabricaWorkerSondeoParaTest). */
 export function __setFabricaWorkerDeteccionParaTest(f: FabricaWorkerDeteccion | null): void {
   fabrica = f ?? fabricaProduccion;
+}
+
+// ─── KIT flujo-dueno-v1 (K2) — helpers MOVIDOS aquí desde prescan-qr.ts ─────
+// Misma doctrina §A.2 del kit e73 (módulo compartido re-exportado — cero
+// diffs en consumidores): ambos helpers viven donde vive el CONTRATO del
+// worker (clase 400 / fracciones 0-1) y ahora sirven a DOS consumidores
+// (el pre-scan de «PROCESAR COLA» y el warp de ingesta — warp-ingesta.ts,
+// que no puede importar prescan-qr.ts sin un ciclo). prescan-qr.ts los
+// re-exporta — prescan-qr.test.ts y demás consumidores no cambian.
+
+/** (MOVIDO — KIT e14-quad-streaming-v1 P4) Float32Array(8) del worker
+ *  (fracciones 0-1, TL,TR,BR,BL — contrato del cliente) → Quad del core
+ *  ([{x,y}×4]). null ante CUALQUIER duda (longitud/NaN — conservador: el
+ *  stamp jamás inventa; sin quad la fila procesa con detección propia como
+ *  siempre). El bridge RE-VALIDA la plausibilidad por su lado (guard doble).
+ *  Export SOLO-TEST-friendly (knip tiene los *.test.ts como entry). */
+export function quadDeFracciones(a: Float32Array | null | undefined): Quad | null {
+  try {
+    if (!a || a.length !== 8) return null;
+    const v = Array.from(a);
+    if (v.some((n) => !Number.isFinite(n))) return null;
+    return [
+      { x: v[0]!, y: v[1]! },
+      { x: v[2]!, y: v[3]! },
+      { x: v[4]!, y: v[5]! },
+      { x: v[6]!, y: v[7]! },
+    ];
+  } catch {
+    return null; // jamás throw — doctrina del conservador
+  }
+}
+
+/** (MOVIDO — e107 §D.2) Downscale a la clase 400 del core (mismo gesto del
+ *  harness): proporcional al lado mayor, resizeQuality "low" — velocidad
+ *  sobre nitidez. Ya chico → se transfiere tal cual. */
+export async function downscaleLado(
+  bitmap: ImageBitmap,
+  ladoObjetivo: number,
+): Promise<ImageBitmap> {
+  const lado = Math.max(bitmap.width, bitmap.height);
+  if (lado <= ladoObjetivo) return bitmap; // ya chico — se transfiere tal cual
+  const escala = ladoObjetivo / lado;
+  const w = Math.max(1, Math.round(bitmap.width * escala));
+  const h = Math.max(1, Math.round(bitmap.height * escala));
+  return await createImageBitmap(bitmap, {
+    resizeWidth: w,
+    resizeHeight: h,
+    resizeQuality: "low", // clase 400 del core — velocidad sobre nitidez
+  });
 }
