@@ -142,6 +142,16 @@ export interface FilaMasiva {
    *  inventar). RAM del lote (NUNCA viaja a IDB — sobrevivir recarga no
    *  es requisito; el asegurador (e107) re-decide tras recargar). */
   rotacionSugerida?: 0 | 90 | 180 | 270 | null;
+  // ---------- KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — campo ADITIVO AL FINAL (contrato D57) ----------
+  /** Veredicto QR del PRE-SCAN en modo DRY RUN (flag masivaSoloWarpQr ON):
+   *  true = el warp produjo un payload legible (BarcodeDetector → jsQR);
+   *  false = el pre-scan llegó a la lectura y el QR no salió (o el warp no
+   *  se produjo); AUSENTE = el pre-scan no llegó a leer (sin bytes/decode/
+   *  corrupto/abort honesto del worker — jamás inventar, regla de oro 4).
+   *  Es el ESPEJO del payload del veredicto — SOLO-VISUAL (la UI pinta el
+   *  chip QR ✓/✗); cero OCR, cero envío. RAM del lote — NUNCA viaja a IDB
+   *  (mismo trato que prescanOk: sobrevivir recarga no es requisito). */
+  qrLeido?: boolean;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */

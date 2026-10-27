@@ -92,6 +92,13 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // TRANSMISIÓN blanco-sobre-negro + MESA IMPOSIBLE 001→004 de Tesseract,
   // dos fallos documentados).
   masivaOcrTesseract: false,
+  // KIT e14-solo-warp-qr-v1 (DRY RUN del dueño): PRUEBA EN SECO — el botón
+  // «PROCESAR COLA» hace SOLO el pre-scan (decode→quad→warp→QR) con stamp
+  // qrLeido por fila y JAMÁS llama iniciar() (cero OCR, cero envío). El
+  // dedup del pre-scan (DUPLICADA/YA-ENVIADA por payload) SÍ corre — pedido
+  // explícito del dueño. Toggle visual en MASIVA (escribe el override
+  // localStorage e14-flags-overrides). Default OFF ⇒ byte-idéntico a hoy.
+  masivaSoloWarpQr: false,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -140,6 +147,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.masivaSondeoCrudo === "boolean") limpio.masivaSondeoCrudo = p.masivaSondeoCrudo;
   // KIT e14-ocr-cascada-v1 (K3 fase 2) — whitelist aditiva (booleano).
   if (typeof p.masivaOcrTesseract === "boolean") limpio.masivaOcrTesseract = p.masivaOcrTesseract;
+  // KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — whitelist aditiva (booleano).
+  if (typeof p.masivaSoloWarpQr === "boolean") limpio.masivaSoloWarpQr = p.masivaSoloWarpQr;
   return limpio;
 }
 

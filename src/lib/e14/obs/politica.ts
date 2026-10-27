@@ -150,6 +150,10 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // KIT e14-ocr-cascada-v1 (K3 fase 2) — mismo criterio: sin esta línea
     // el override localStorage de `masivaOcrTesseract` sería inalcanzable.
     if (typeof o.masivaOcrTesseract === "boolean") limpio.masivaOcrTesseract = o.masivaOcrTesseract;
+    // KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — mismo criterio: sin esta
+    // línea el override localStorage de `masivaSoloWarpQr` (toggle SOLO QR de
+    // MASIVA) sería inalcanzable (DOBLE whitelist — cada puerta su línea).
+    if (typeof o.masivaSoloWarpQr === "boolean") limpio.masivaSoloWarpQr = o.masivaSoloWarpQr;
     return limpio;
   } catch {
     return {};

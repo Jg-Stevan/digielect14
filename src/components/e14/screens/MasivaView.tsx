@@ -23,6 +23,12 @@ import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
 // pre-scan QR (fases 1-2 del dueño) y el orquestador llama iniciar() con la
 // lista ya filtrada (flag OFF ⇒ iniciar() byte-idéntico — kill-switch).
 import { prescanYIniciar, usePrescanQrEstado } from "@/lib/e14/masiva/prescan-qr";
+// KIT e14-solo-warp-qr-v1 — DRY RUN: el toggle del dueño escribe el override
+// de flags (localStorage e14-flags-overrides — cadena DEFAULTS←json←overrides
+// de flags.ts; política.ts es la puerta del override, mismo gesto del kill
+// switch del PanelDev).
+import { guardarOverridesFlags } from "@/lib/e14/obs/politica";
+import { leerFlags } from "@/lib/e14/flags";
 import { CheckIcon, StitchStackIcon } from "../icons";
 
 /** Píldora de estado de una fila — paleta de estado del repo
@@ -177,6 +183,15 @@ export function MasivaView() {
   const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
   const dragCounterRef = useRef(0);
   const [vaciarArmado, setVaciarArmado] = useState(false);
+  // KIT e14-solo-warp-qr-v1 — DRY RUN: valor efectivo del flag (default OFF).
+  // El toggle escribe el override + refresca el estado local — la próxima
+  // corrida del pre-scan lo lee UNA vez (corrida atómica frente a flags).
+  const [dryRun, setDryRun] = useState(() => leerFlags().masivaSoloWarpQr === true);
+  const toggleDryRun = () => {
+    const siguiente = !dryRun;
+    guardarOverridesFlags({ masivaSoloWarpQr: siguiente });
+    setDryRun(siguiente);
+  };
 
   // Al montar: cargarFilas() (incluye recuperarCola — zombis fuera) +
   // sincronizarAlVolver() al regresar de REVISIÓN (kit §6). Acciones de
@@ -470,7 +485,7 @@ export function MasivaView() {
                 className="min-h-[44px] px-4 md:px-5 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-[11px] md:text-xs font-black uppercase tracking-wider shadow-md shadow-[#10b981]/25 hover:shadow-[#10b981]/40 active:scale-[0.98] transition cursor-pointer disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <span className="w-2 h-2 rounded-full bg-[#090d12]" />
-                PROCESAR COLA
+                {dryRun ? "SONDEAR QR" : "PROCESAR COLA"}
                 {pendientes + duplicadas > 0 && (
                   <span className="ml-1 px-1.5 py-0.5 rounded-md bg-[#090d12]/20 font-extrabold text-[10px]">
                     {pendientes + duplicadas}
@@ -478,6 +493,26 @@ export function MasivaView() {
                 )}
               </button>
             )}
+
+            {/* KIT e14-solo-warp-qr-v1 — DRY RUN: toggle del dueño (D6 — la
+                app nunca sola: default OFF, siempre visible). ON = «PROCESAR
+                COLA» pasa a SONDEAR QR: pre-scan (quad+warp+QR) con chips
+                QR ✓/✗ y JAMÁS iniciar() — cero OCR, cero envío. */}
+            <button
+              type="button"
+              onClick={toggleDryRun}
+              aria-pressed={dryRun}
+              aria-label="Modo solo Warp y QR (prueba en seco)"
+              title="PRUEBA EN SECO: sondea quad + warp + QR de toda la cola y NADA más — cero OCR, cero envío. El dedup por QR sigue marcando duplicadas."
+              className={`min-h-[44px] px-3 rounded-xl border font-mono text-[10px] md:text-[11px] font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-1.5 ${
+                dryRun
+                  ? "border-amber-400/70 bg-amber-400/15 text-amber-300 shadow-sm shadow-amber-400/20"
+                  : "border-slate-800 bg-[#10161f] text-slate-400 hover:border-slate-700 hover:text-white"
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${dryRun ? "bg-amber-400" : "bg-slate-600"}`} />
+              SOLO QR
+            </button>
 
             <button
               type="button"
@@ -524,7 +559,28 @@ export function MasivaView() {
                     : `SONDEANDO QR… ${prescan.listo}/${prescan.total}`}
                 </p>
                 <p className="font-mono text-[9px] uppercase tracking-wider text-slate-400 whitespace-nowrap">
-                  {prescan.leidos} leídos · los no leídos pasan al OCR
+                  {dryRun
+                    ? `${prescan.leidos} leídos · prueba en seco — cero OCR`
+                    : `${prescan.leidos} leídos · los no leídos pasan al OCR`}
+                </p>
+              </div>
+            )}
+            {/* KIT e14-solo-warp-qr-v1 — DRY RUN: resumen PERSISTENTE tras el
+                sondeo (el banner de e107 desaparece al "fin" — el dueño pidió
+                ver cuántos QR se leyeron). Solo-lectura del store del prescan;
+                se oculta si la cola normal llega a correr (corriendo). */}
+            {!prescan.corriendo && !corriendo && dryRun && prescan.fase === "fin" && prescan.total > 0 && (
+              <div
+                className="absolute right-0 top-full mt-2 z-40 min-w-[230px] rounded-xl border border-amber-400/50 bg-[#090d12]/95 px-3.5 py-2 shadow-lg shadow-black/40 backdrop-blur-md"
+                role="status"
+                aria-live="polite"
+                aria-label={`Prueba en seco terminada: ${prescan.leidos} de ${prescan.total} códigos QR leídos`}
+              >
+                <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-amber-300 whitespace-nowrap">
+                  DRY RUN — QR {prescan.leidos}/{prescan.total}
+                </p>
+                <p className="font-mono text-[9px] uppercase tracking-wider text-slate-400 whitespace-nowrap">
+                  cero OCR · cero envío · cola intacta
                 </p>
               </div>
             )}
@@ -802,6 +858,28 @@ export function MasivaView() {
                         <span
                           className="rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide text-slate-400"
                           aria-label="QR no decodificado"
+                        >
+                          QR ✗
+                        </span>
+                      )}
+                      {/* KIT e14-solo-warp-qr-v1 — DRY RUN: veredicto del
+                          pre-scan QR (stamp qrLeido — RAM del lote). QR ✓ =
+                          el warp produjo payload; QR ✗ = la lectura no pudo;
+                          AUSENTE = el pre-scan no llegó a leer (sin bytes/
+                          decode — jamás inventar, regla de oro 4). Mismo
+                          estilo del chip QR de e64 — SOLO-VISUAL, cero OCR. */}
+                      {f.qrLeido === true && (
+                        <span
+                          className="rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide text-emerald-300/90"
+                          aria-label="QR leído por el pre-scan (prueba en seco)"
+                        >
+                          QR ✓
+                        </span>
+                      )}
+                      {f.qrLeido === false && (
+                        <span
+                          className="rounded px-1 py-0.5 text-[9px] font-semibold tracking-wide text-red-300/90"
+                          aria-label="QR no leído por el pre-scan (prueba en seco)"
                         >
                           QR ✗
                         </span>

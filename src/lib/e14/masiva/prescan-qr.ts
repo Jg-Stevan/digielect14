@@ -354,13 +354,30 @@ let corriendoModulo = false;
  * vivas → marcar DUPLICADA / YA-ENVIADA / registrar payloads → iniciar().
  * Kill-switch OFF (prescanQrCola=false) ⇒ `iniciar()` byte-idéntico a hoy
  * (sin instanciar worker ni emitir estado — R1).
+ *
+ * DRY RUN (KIT e14-solo-warp-qr-v1 — flag masivaSoloWarpQr): fases 1-2
+ * INTACTAS — incluye marcar DUPLICADA / YA-ENVIADA por payload (pedido
+ * explícito del dueño: la dup es señal de QR bien leído) — más el stamp
+ * qrLeido por fila (verdadero/falso), y NINGUNA llamada iniciar() (cero
+ * OCR, cero envío — la cola queda PENDIENTE, viva para el flujo normal).
  */
 export async function prescanYIniciar(): Promise<void> {
   // R0 — re-entrada: doble clic / clic durante pre-scan → no-op
   if (corriendoModulo || usePrescanStore.getState().corriendo) return;
   const store = useMasivaStore.getState();
+  // DRY RUN (KIT e14-solo-warp-qr-v1) — flag del dueño, leído UNA vez por
+  // corrida (mismo gesto P4/P5: corrida atómica frente a flags).
+  const soloWarpQr = leerFlags().masivaSoloWarpQr === true;
   // R1 — kill-switch del dueño: flag OFF ⇒ byte-idéntico a hoy
   if (!leerFlags().prescanQrCola) {
+    if (soloWarpQr) {
+      // DRY RUN sin pre-scan ⇒ no hay nada de dry run que hacer: JAMÁS
+      // arrancar el pool (el contrato del modo es cero OCR, cero envío).
+      logger.warn(
+        "[e14] prescan-qr: DRY RUN exige prescanQrCola ON — cola intacta (cero OCR)",
+      );
+      return;
+    }
     store.iniciar();
     return;
   }
@@ -396,7 +413,8 @@ export async function prescanYIniciar(): Promise<void> {
   );
   if (objetivo.length === 0) {
     if (streamingOn) cerrarTurnoClasificacion(); // sin objetivo — turno inerte
-    store.iniciar(); // idempotente, como hoy
+    // DRY RUN: nada que sondear ⇒ cola intacta (el pool JAMÁS arranca).
+    if (!soloWarpQr) store.iniciar(); // idempotente, como hoy
     return;
   }
   if (streamingOn) {
@@ -462,9 +480,18 @@ export async function prescanYIniciar(): Promise<void> {
               const vivaStampH = useMasivaStore
                 .getState()
                 .filas.find((f) => f.id === fila.id);
-              if (vivaStampH && vivaStampH.estado === "PENDIENTE" && streamingOn) {
-                useMasivaStore.getState().actualizarFila(fila.id, { prescanOk: true });
-                useMasivaStore.getState().iniciar(); // P5 — arranque temprano
+              if (vivaStampH && vivaStampH.estado === "PENDIENTE") {
+                // DRY RUN: la herencia del payload del sondeo TAMBIÉN es «QR
+                // leído» (el dato ya existía — el stamp es un espejo, jamás
+                // inventa). prescanOk sigue atado a streaming como hoy.
+                if (soloWarpQr) {
+                  useMasivaStore.getState().actualizarFila(fila.id, { qrLeido: true });
+                }
+                if (streamingOn) {
+                  useMasivaStore.getState().actualizarFila(fila.id, { prescanOk: true });
+                  // P5 — arranque temprano (dry run JAMÁS arranca el pool).
+                  if (!soloWarpQr) useMasivaStore.getState().iniciar();
+                }
               }
             }
             continue; // el finally de abajo hace procesadas++ (contador honesto)
@@ -548,7 +575,16 @@ export async function prescanYIniciar(): Promise<void> {
                 ? 1
                 : 2
               : null;
-            if (streamingOn || quadFila || prioridadFila != null) {
+            // DRY RUN (KIT e14-solo-warp-qr-v1): veredicto QR por fila para
+            // la UI — espejo del payload del pre-scan (true = leído, false =
+            // la lectura no produjo payload). Con dry run ON la fila JAMÁS
+            // entra al pool: el bloque de abajo (prescanOk/quad/prioridad +
+            // iniciar()) queda SOLO para el flujo normal (byte-idéntico).
+            if (soloWarpQr) {
+              useMasivaStore.getState().actualizarFila(fila.id, {
+                qrLeido: payload != null,
+              });
+            } else if (streamingOn || quadFila || prioridadFila != null) {
               useMasivaStore.getState().actualizarFila(fila.id, {
                 ...(streamingOn ? { prescanOk: true } : {}),
                 ...(quadFila ? { quad: quadFila } : {}),
@@ -602,5 +638,13 @@ export async function prescanYIniciar(): Promise<void> {
   }
   // R7 — FASE 3: tM() con la lista ya filtrada. ÚNICO punto de contacto
   // (flag OFF / abort honesto: iniciar() del flujo de hoy byte-idéntico).
-  useMasivaStore.getState().iniciar();
+  // DRY RUN: PUNTO DE CORTE — el pool JAMÁS arranca (cero OCR, cero envío;
+  // la cola queda PENDIENTE con los stamps qrLeido de la fase 1-2).
+  if (!soloWarpQr) {
+    useMasivaStore.getState().iniciar();
+  } else {
+    logger.info(
+      "[e14] prescan-qr: DRY RUN masivaSoloWarpQr ON — cola intacta (cero OCR, cero envío)",
+    );
+  }
 }
