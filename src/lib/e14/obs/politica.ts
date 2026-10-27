@@ -131,6 +131,11 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // (§G.3.d del smoke) sería inalcanzable — mismo criterio de
     // colaPersistente arriba (el override MANUAL es la máxima prioridad, D6).
     if (typeof o.hangEnCurso === "boolean") limpio.hangEnCurso = o.hangEnCurso;
+    // KIT e14-dhash-resize-v1 (§D — parche P3) — mismo criterio: sin esta
+    // línea el override localStorage de `dhashResize` sería inalcanzable
+    // (el whitelist de leerOverridesFlags es INDEPENDIENTE del de
+    // sanearFlags en flags.ts — cada puerta necesita su línea).
+    if (typeof o.dhashResize === "boolean") limpio.dhashResize = o.dhashResize;
     return limpio;
   } catch {
     return {};

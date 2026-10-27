@@ -56,6 +56,18 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // leído). Kill-switch del dueño: OFF = byte-idéntico a 5d08dd6 (sondeo,
   // prescan y CAPA 0 cada uno lee por su lado, como hoy).
   masivaQrHandoff: false,
+  // KIT e14-quad-streaming-v1 (§D) — kill-switches del dueño (P4/P5).
+  // OFF = byte-idéntico a 5d08dd6 (quad precomputado ignorado; prescan
+  // serial con iniciar() al final — sin consumo por turno).
+  masivaQuad: false,
+  masivaStreaming: false,
+  // KIT e14-dhash-resize-v1 (§D — parche P3 del plan masiva): decode CHICO
+  // del dhash (resize 64×64 a nivel de createImageBitmap) — anti-hambruna
+  // de main-thread (12 MP ≈ 48 MB → KB). Default OFF ⇒ decode FULL
+  // byte-idéntico a 5d08dd6. GO/NO-GO: bench obligatorio
+  // tools/bench-dedup-tolerancia/bench-resize.html (riesgo D65/T2.1 —
+  // hashes históricos full-res).
+  dhashResize: false,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -91,6 +103,11 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.qrBrujulaOrientacion === "boolean") limpio.qrBrujulaOrientacion = p.qrBrujulaOrientacion;
   // P1 (brief Agente A) — whitelist aditiva (booleano).
   if (typeof p.masivaQrHandoff === "boolean") limpio.masivaQrHandoff = p.masivaQrHandoff;
+  // KIT e14-quad-streaming-v1 (§D) — whitelist aditiva (booleanos P4/P5).
+  if (typeof p.masivaQuad === "boolean") limpio.masivaQuad = p.masivaQuad;
+  if (typeof p.masivaStreaming === "boolean") limpio.masivaStreaming = p.masivaStreaming;
+  // KIT e14-dhash-resize-v1 (§D) — whitelist aditiva (booleano).
+  if (typeof p.dhashResize === "boolean") limpio.dhashResize = p.dhashResize;
   return limpio;
 }
 

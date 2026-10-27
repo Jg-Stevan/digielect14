@@ -432,6 +432,36 @@ ok(
   "Opt-3: bucle del runner con pool (Promise.race libera slot · Promise.all al terminar — el finally apaga solo cuando TODO aterrizó)",
 );
 
+// ---------- e14-dhash-resize-v1 (P3) — decode chico SOLO detrás del flag ----------
+
+console.log("\n── Bloque 7 · e14-dhash-resize-v1 — dhashResize default OFF (source-scan) ──");
+
+const flagsTs = await readFile("src/lib/e14/flags.ts", "utf8");
+const obsTipos = await readFile("src/lib/e14/obs/tipos.ts", "utf8");
+
+ok(
+  flagsTs.includes("dhashResize: false,") && obsTipos.includes("dhashResize: boolean;"),
+  "P3: flag dhashResize existe con DEFAULT OFF (byte-idéntico a 5d08dd6 con el flag apagado) y su campo vive en FlagsApp (AL FINAL — D57)",
+);
+
+ok(
+  flagsTs.includes('if (typeof p.dhashResize === "boolean") limpio.dhashResize = p.dhashResize;'),
+  "P3: whitelist aditiva del saneo acepta SOLO booleanos (patrón qrBrujulaOrientacion/hangEnCurso)",
+);
+
+ok(
+  dedup.includes("if (leerFlags().dhashResize) {") &&
+    dedup.indexOf("resizeWidth: 64") > dedup.indexOf("if (leerFlags().dhashResize) {") &&
+    dedup.indexOf("resizeQuality: \"medium\"") > dedup.indexOf("if (leerFlags().dhashResize) {"),
+  "P3: el resize 64×64 del decode SOLO es alcanzable detrás del guard del flag (con flag OFF no existe código de resize en el camino)",
+);
+
+ok(
+  dedup.includes("catch {") &&
+    dedup.indexOf("resizeWidth: 64") < dedup.indexOf("createImageBitmap(fuente, { imageOrientation: \"from-image\" });"),
+  "P3: conservador — si el resize lanza (browser sin soporte) cae al decode FULL de siempre (semántica D65 intacta, jamás tumba el encolado)",
+);
+
 // ---------- resultado ----------
 
 console.log(`\nQA dedup-enviadas: ${pasadas - fallos}/${pasadas} OK`);

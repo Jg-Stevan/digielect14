@@ -930,6 +930,81 @@ export type OpcionesEscaneoConTimeout = OpcionesEscaneo & {
   desdeMasiva?: boolean;
 };
 
+/** KIT e14-quad-streaming-v1 (P4): intersección LOCAL con el quad
+ *  PRECOMPUTADO del pre-scan de la masiva (patrón OpcionesEscaneoConTimeout
+ *  de arriba — kit §1 prohíbe tocar bridge.ts, casa de OpcionesEscaneo).
+ *  Fracciones 0-1 (TL,TR,BR,BL) — la MISMA convención de Quad: el pre-scan
+ *  detectó sobre el bitmap de la clase 400 (downscale PROPORCIONAL del
+ *  full) y las fracciones viajan sin re-escalar. Opcional → retro-
+ *  compatible: flujos individual/SIM JAMÁS lo traen (campo nuevo AL FINAL
+ *  de la intersección — contrato D57). El pipeline lo consume SOLO con el
+ *  flag masivaQuad ON y SOLO si pasa la validación de plausibilidad (guard
+ *  conservador — cualquier duda → detección propia de siempre). */
+export type OpcionesEscaneoConQuad = OpcionesEscaneoConTimeout & {
+  quadPrecomputado?: Quad;
+};
+
+/** KIT e14-quad-streaming-v1 (P4) — DECISIÓN DOCUMENTADA (plan §3-P4 punto
+ *  5): el quad precomputado viaja como SEMILLA (QUAD_PRECOMPUTADO_MANUAL =
+ *  false): el warp del core REFINA el quad sobre el FULL (refineQuad /
+ *  RANSAC del worker — ganancia real vs la detección a 400px del pre-scan).
+ *  El camino `manual: true` (respeta el quad al píxel, SIN refine —
+ *  :2127) queda como TODO del dueño: decidir con los benches
+ *  tools/bench-det960/ y tools/bench-det1280/ antes de voltear esta
+ *  constante. */
+const QUAD_PRECOMPUTADO_MANUAL = false;
+
+/** Piso de área (fracción del marco) bajo el cual un quad precomputado se
+ *  considera degenerado (un acta que ocupe <5% de la foto es sospechosa —
+ *  conservador: detección propia). */
+const QUAD_PRECOMPUTADO_AREA_MIN = 0.05;
+
+/** KIT e14-quad-streaming-v1 (P4) — validación de plausibilidad del quad
+ *  precomputado (guard conservador del plan §3-P4): 4 puntos finitos dentro
+ *  del marco, polígono convexo no degenerado (área por shoelace + signo
+ *  constante de los productos cruzados). Cualquier duda → false → el bridge
+ *  corre SU detección de siempre (el parche JAMÁS tumba el pipeline —
+ *  doctrina §5; el detección-worker del pre-scan es el mismo OpenCV, pero
+ *  aquí NO se confía: se re-valida). */
+function quadPrecomputadoPlausible(q: Quad): boolean {
+  try {
+    if (!Array.isArray(q) || q.length !== 4) return false;
+    for (const p of q) {
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
+      if (p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) return false;
+    }
+    // Área por shoelace (orden del contrato Quad: TL,TR,BR,BL).
+    const area2 =
+      Math.abs(
+        q[0]!.x * q[1]!.y -
+          q[1]!.x * q[0]!.y +
+          q[1]!.x * q[2]!.y -
+          q[2]!.x * q[1]!.y +
+          q[2]!.x * q[3]!.y -
+          q[3]!.x * q[2]!.y +
+          q[3]!.x * q[0]!.y -
+          q[0]!.x * q[3]!.y,
+      ) / 2;
+    if (area2 < QUAD_PRECOMPUTADO_AREA_MIN) return false;
+    // Convexidad: productos cruzados de aristas consecutivas con el MISMO
+    // signo (un quad torcido/auto-intersectado produce warps basura —
+    // colineal estricto → false también).
+    let signo = 0;
+    for (let i = 0; i < 4; i += 1) {
+      const a = q[i]!;
+      const b = q[(i + 1) % 4]!;
+      const c = q[(i + 2) % 4]!;
+      const cruz = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+      if (!Number.isFinite(cruz) || Math.abs(cruz) < 1e-9) return false;
+      if (signo === 0) signo = Math.sign(cruz);
+      else if (Math.sign(cruz) !== signo) return false;
+    }
+    return true;
+  } catch {
+    return false; // jamás tumba — detección propia de siempre
+  }
+}
+
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
 interface ResultadoGate {
   status: ActaStatus;
@@ -1207,6 +1282,18 @@ export class RealCoreBridge implements E14Bridge {
     // fotos (identidad ya es la convención de sinRecorte que consume el
     // editor — plan F2.4).
     const escaneoIdentidad = origenActa === "escaneo" && !sinRecorte;
+    // KIT e14-quad-streaming-v1 (P4): quad precomputado del pre-scan de la
+    // masiva (intersección LOCAL — se lee como timeoutMs en :1516). SOLO se
+    // usa con el flag masivaQuad ON, SOLO para NO-escaneos (la identidad
+    // F2.1 de arriba manda: página completa) y SOLO si pasa la plausibilidad
+    // de abajo — cualquier duda → rama de detección de siempre.
+    const quadPrecomputado = (opciones as OpcionesEscaneoConQuad).quadPrecomputado ?? null;
+    const usaQuadPrecomputado =
+      !sinRecorte &&
+      !escaneoIdentidad &&
+      quadPrecomputado != null &&
+      leerFlags().masivaQuad === true &&
+      quadPrecomputadoPlausible(quadPrecomputado);
     let quad: Quad;
     // KIT e14-quad-sobel-v1 (P1 §4-B): quién fabricó el quad de verdad —
     // "worker" (la cascada ganó) o "sobel" (el fallback, incluido el catch del
@@ -1227,6 +1314,30 @@ export class RealCoreBridge implements E14Bridge {
       // La clase entera de quads falsos queda eliminada POR CONSTRUCCIÓN,
       // no por parche.
       quad = QUAD_IDENTITY;
+    } else if (usaQuadPrecomputado && quadPrecomputado) {
+      // KIT e14-quad-streaming-v1 (P4): el pre-scan YA detectó el quad
+      // (el MISMO detection-worker.js OpenCV, sobre la clase 400 — la misma
+      // clase de detección que corre el core) y el dueño autorizó reusarlo
+      // (masivaQuad ON). La detección de aquí abajo se OMITE — resuelve la
+      // desviación D66 (precalor.ts:26-31: «el bridge no acepta un quad
+      // precomputado... sería trabajo muerto» — desde hoy SÍ lo acepta).
+      // quadOrigen = "worker": el quad SÍ lo fabricó el worker OpenCV (vía
+      // pre-scan) — vocabulario EXISTENTE del diagnóstico (D57 intacto: no
+      // se extiende la unión de src/lib/e14/types.ts). SEMILLA por defecto
+      // (QUAD_PRECOMPUTADO_MANUAL=false): los processImage de abajo refinan
+      // el quad sobre el FULL — TODO(dueño) en la constante.
+      quad = quadPrecomputado;
+      quadOrigen = "worker";
+      logger.info(
+        `[e14] quad-precomputado=1 fuente=pre-scan masivaQuad=1 area=${(
+          Math.abs(
+            quad[0]!.x * quad[1]!.y - quad[1]!.x * quad[0]!.y +
+              quad[1]!.x * quad[2]!.y - quad[2]!.x * quad[1]!.y +
+              quad[2]!.x * quad[3]!.y - quad[3]!.x * quad[2]!.y +
+              quad[3]!.x * quad[0]!.y - quad[0]!.x * quad[3]!.y,
+          ) / 2
+        ).toFixed(3)} manual=${QUAD_PRECOMPUTADO_MANUAL ? 1 : 0} — detección propia omitida`,
+      );
     } else {
       try {
         // T1.1: worker frío → esperar su warm-up con tope de 5 s (mecanismo
@@ -1337,15 +1448,25 @@ export class RealCoreBridge implements E14Bridge {
       // si processImage("original") rechaza, Promise.all NO rechaza — decide
       // con el resultado null → bw-fallback (§5). El pipeline NUNCA muere por
       // la variante nueva.
+      // KIT e14-quad-streaming-v1 (P4): opts del warp — SOLO difiere de hoy
+      // cuando el quad vino del pre-scan Y la decisión del dueño es
+      // manual:true (hoy SEMILLA → opts OMITIDOS, llamadas byte-idénticas
+      // con el camino de detección propia; el worker refina el quad igual).
+      const optsWarpP4: { manual: true } | undefined =
+        usaQuadPrecomputado && QUAD_PRECOMPUTADO_MANUAL ? { manual: true } : undefined;
       const [resultado, resultadoOcr] = await conRampa(
         Promise.all([
           // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L602-604
           // (captura arranca en B/N adaptativo) + types.ts L50 (default del
           // producto) — D36: e14 no tiene ajustes → el default fijo es "bw".
-          processImage(fotoOriginal, quad, "bw"),
+          optsWarpP4
+            ? processImage(fotoOriginal, quad, "bw", undefined, optsWarpP4)
+            : processImage(fotoOriginal, quad, "bw"),
           // PROD-1: la misma geometría (mismo warp, MISMA convención
           // POST-warp — pitfall §9.5), solo cambia el filtro final.
-          processImage(fotoOriginal, quad, "original").catch(() => null),
+          optsWarpP4
+            ? processImage(fotoOriginal, quad, "original", undefined, optsWarpP4).catch(() => null)
+            : processImage(fotoOriginal, quad, "original").catch(() => null),
         ]),
         // msEstimados 1400→2200 (§4.1): el segundo warp (~0.6-1.3 s, §1.4)
         // se cubre con la MISMA rampa (el core serializa en su worker).
