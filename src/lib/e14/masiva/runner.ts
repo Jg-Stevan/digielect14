@@ -24,7 +24,9 @@ import { leerFlags } from "../flags";
 // el MASTER) sino que asegura el master de N+1 vía el precalor (T3.6/T3.1).
 // KIT e14-quad-streaming-v1 (P4): ídem con el quad precomputado del pre-scan
 // (OpcionesEscaneoConQuad extiende ConTimeout — el tipo del runner).
-import { type OpcionesEscaneoConQuad } from "../scanner-core-bridge";
+// KIT flujo-dueno-v1 (K2 — sub-commit 3): OpcionesEscaneoConRotacion extiende
+// OpcionesEscaneoConQuad — la rotación de ingesta viaja junto al quad.
+import { type OpcionesEscaneoConRotacion } from "../scanner-core-bridge";
 // D66 — KIT e14-decode-unico-precalor-v1 (T1/T3): maestro único a escala de
 // trabajo + precalor de la cola (consumo T3.3 + prefetch re-apuntado).
 import { maestroDeImagen, type MaestroImagen } from "./archivos";
@@ -807,10 +809,12 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         // el parámetro de la interfaz E14Bridge sigue siendo OpcionesEscaneo).
         // KIT e14-quad-streaming-v1 (P4): OpcionesEscaneoConQuad extiende
         // ConTimeout — mismo patrón de intersección LOCAL.
+        // KIT flujo-dueno-v1 (K2): OpcionesEscaneoConRotacion extiende
+        // OpcionesEscaneoConQuad (la rotación de ingesta viaja junto al quad).
         // D65 (T1): presupuesto del INTENTO — lo RESTANTE de WATCHDOG_MS (el
         // pre-proceso ya gastó lo suyo; el timeout del bridge dispara SU acta
         // de timeout exactamente en la frontera del intento).
-        const opcionesMasiva: OpcionesEscaneoConQuad = {
+        const opcionesMasiva: OpcionesEscaneoConRotacion = {
           objetivo: null, // A4 — la clasificación REAL manda (viene del OCR)
           intento: 1, // A6 — semántica de PRIMERA captura (el watchdog NO es re-captura)
           maxIntentos: 4, // fallos → RECHAZADA repetible / rescate por recorte manual
@@ -847,6 +851,25 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           //    convexidad, rango) — cualquier duda → detección propia.
           ...(leerFlags().masivaQuad === true && fila.quad && !preProceso?.aplicado
             ? { quadPrecomputado: fila.quad }
+            : {}),
+          // KIT flujo-dueno-v1 (K2 — sub-commit 3): rotación de ingesta
+          // (flag masivaRotacionQr, default OFF — sin flag: sin la llave,
+          // llamadas byte-idénticas a acf181f). El cuadrante del QR en el
+          // warp de INGESTA manda la rotación post-warp del bridge (que
+          // además OMITE su sondeo de orientación). Guard conservador DOBLE
+          // aquí, mismo patrón del quad de arriba:
+          //  · !preProceso?.aplicado — la sugerencia nació del ORIGINAL; si
+          //    el deskew D63-B corrigió la imagen, la geometría ya no cuadra
+          //    (el master es el CORREGIDO) → no viaja.
+          //  · el bridge RE-VALIDA por su lado (rotacionPrecomputadaPlausible
+          //    — entero del set {0,90,180,270}) — cualquier duda → probe.
+          //  · rotacionSugerida null (warp corrió, QR no leyó) ⇒ != null
+          //    falla → no viaja (jamás inventar). rot=0 SÍ viaja: el
+          //    cuadrante dice "ya derecha" — el ahorro es omitir el probe.
+          ...(leerFlags().masivaRotacionQr === true &&
+            fila.rotacionSugerida != null &&
+            !preProceso?.aplicado
+            ? { rotacionPrecomputada: fila.rotacionSugerida }
             : {}),
         };
         const resultado = await correrIntento(
