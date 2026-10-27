@@ -17,11 +17,39 @@
  *
  * Reglas de oro → cumplimiento mecánico (§E):
  *  · No tocar tM(): 0 edits en runner.ts/store.ts (QA lo escanea).
+ *    — ENMIENDA KIT e14-quad-streaming-v1 (P5, orden del dueño): el runner
+ *    ahora CONSUME por turno de clasificación (flag masivaStreaming, default
+ *    OFF): `siguientePendiente` filtra por prescanOk mientras el turno está
+ *    abierto y `iniciarRunner` re-chequea tras el drenaje. El QA
+ *    qa-prescan-qr-cola.ts §G se actualiza EN ESTE MISMO kit (permite
+ *    exactamente el token prescanOk en runner.ts/tipos.ts — el contrato
+ *    e107 «cero edits» queda ampliado, todo lo demás intacto).
  *  · UI de progreso: «SONDEANDO QR… k/N» vía usePrescanQrEstado (D.3).
  *  · No bloquear main thread: detect/warp viven en el worker REAL; FIFO
  *    serial + hard-kill en prescan-qr.client.ts.
  *  · Sin pérdida de datos: cualquier fallo ⇒ fila queda PENDIENTE ⇒ Fase 3
  *    la procesa como hoy (try/catch por fila + guards anti-zombi).
+ *
+ * KIT e14-quad-streaming-v1 (P4): el quad detectado por el pre-scan ya NO
+ * se tira — se estampa en la fila (RAM del lote) y el runner lo pasa al
+ * bridge como quadPrecomputado (flag masivaQuad, default OFF) para saltar
+ * la re-detección (desviación D66 resuelta — precalor.ts:26-31).
+ * KIT e14-quad-streaming-v1 (P5, flag masivaStreaming, default OFF):
+ * streaming seguro prescan→runner — variante SEGURA del plan §3-P5:
+ *  · El turno se ABRE al empezar y se CIERRA en el finally (tras el
+ *    barrido de cierre) — mientras está abierto, el filtro del runner
+ *    solo consume filas decididas (prescanOk / DUPLICADA / nacidas después
+ *    del arranque del turno). Sin turno abierto el filtro queda inerte:
+ *    sin hambruna posible.
+ *  · Arranque TEMPRANO: `iniciar()` tras el PRIMER stamp (el runner FIFO
+ *    consume por agregadaEn a medida que las filas se deciden).
+ *  · Barrido de cierre en el finally: toda fila del objetivo que siga
+ *    PENDIENTE sin stamp (abort honesto, continue, catch) queda decidida
+ *    aquí — JAMÁS una fila colgada.
+ *  · PROCESAR IGUAL (forzarDedupOff — RL-e65b-6, el escape del dueño es
+ *    sagrado): stamp UPFRONT — va directo al runner sin pre-scan.
+ *  · Las guardas existentes (re-chequeo post-reserva runner.ts,
+ *    esperarDesenlaceOriginal) quedan intactas — defensa en profundidad.
  *
  * El decodificador wasm lento: NO importado aquí (§F.3 — QA: 0 matches del
  * token). El tier correspondiente de la capa 0 (identidad-qr.ts) queda
@@ -48,6 +76,14 @@ import {
 } from "./store";
 import { guardarRegistro, leerRegistro } from "./cola";
 import type { FilaMasiva } from "./tipos";
+// KIT e14-quad-streaming-v1 (P5): semáforo del turno — runner.ts lo consulta
+// en su filtro; aquí solo se abre/cierra (módulo sin imports — sin ciclos).
+import {
+  abrirTurnoClasificacion,
+  cerrarTurnoClasificacion,
+} from "./turno-clasificacion";
+// KIT e14-quad-streaming-v1 (P4): forma canónica del quad del core (solo tipo).
+import type { Quad } from "@jg-stevan/scanner-core/types";
 
 // ─── Clasificador PURO (testeable — deps inyectadas, patrón e73) ────────────
 
@@ -287,6 +323,32 @@ async function downscaleLado(bitmap: ImageBitmap, ladoObjetivo: number): Promise
   });
 }
 
+// ─── KIT e14-quad-streaming-v1 (P4) — quad del pre-scan ya NO se tira ───────
+
+/**
+ * Float32Array(8) del worker (fracciones 0-1, TL,TR,BR,BL — contrato del
+ * cliente prescan-qr.client.ts) → Quad del core ([{x,y}×4]). null ante
+ * CUALQUIER duda (longitud/NaN — conservador: el stamp jamás inventa; sin
+ * quad la fila procesa con detección propia como siempre). El bridge
+ * RE-VALIDA la plausibilidad por su lado (guard doble).
+ * Export SOLO-TEST (knip tiene los *.test.ts como entry — cero export muerto).
+ */
+export function quadDeFracciones(a: Float32Array | null | undefined): Quad | null {
+  try {
+    if (!a || a.length !== 8) return null;
+    const v = Array.from(a);
+    if (v.some((n) => !Number.isFinite(n))) return null;
+    return [
+      { x: v[0]!, y: v[1]! },
+      { x: v[2]!, y: v[3]! },
+      { x: v[4]!, y: v[5]! },
+      { x: v[6]!, y: v[7]! },
+    ];
+  } catch {
+    return null; // jamás throw — doctrina del conservador
+  }
+}
+
 // ─── Orquestador (impuro — D.1 + export de §C) ──────────────────────────────
 
 // Re-entrada R0 (doble protección con el flag del store — kit §D.2).
@@ -313,10 +375,31 @@ export async function prescanYIniciar(): Promise<void> {
     return;
   }
   // R3 — objetivo: solo PENDIENTE vivas; PROCESAR IGUAL manda SIEMPRE
+  // KIT e14-quad-streaming-v1 (P5): los kill-switches y el TURNO se
+  // resuelven AQUÍ, en el tramo 100% SÍNCRONO anterior al primer await —
+  // el snapshot del objetivo y la marca del turno ven la MISMA tienda:
+  // toda fila del objetivo nació con agregadaEn <= inicioTurno (el filtro
+  // del runner no la exenta jamás: protegida hasta SU stamp); las que
+  // lleguen después nacen exentas (nadie las va a clasificar). Los flags
+  // se leen UNA vez por corrida (corrida atómica frente a flags).
+  const quadOn = leerFlags().masivaQuad === true; // P4 — estampar el quad
+  const streamingOn = leerFlags().masivaStreaming === true; // P5 — por turno
+  if (streamingOn) abrirTurnoClasificacion(Date.now());
   const objetivo = objetivoPrescan(useMasivaStore.getState().filas);
   if (objetivo.length === 0) {
+    if (streamingOn) cerrarTurnoClasificacion(); // sin objetivo — turno inerte
     store.iniciar(); // idempotente, como hoy
     return;
+  }
+  if (streamingOn) {
+    // RL-e65b-6 — el escape del dueño es sagrado: las PROCESAR IGUAL van
+    // DIRECTO al pool sin pre-scan (stamp upfront — sin carrera posible:
+    // nadie las va a clasificar jamás).
+    for (const f of useMasivaStore.getState().filas) {
+      if (f.estado === "PENDIENTE" && f.forzarDedupOff) {
+        useMasivaStore.getState().actualizarFila(f.id, { prescanOk: true });
+      }
+    }
   }
   corriendoModulo = true;
   emitir({ corriendo: true, total: objetivo.length, listo: 0, leidos: 0, fase: "boot" });
@@ -360,6 +443,21 @@ export async function prescanYIniciar(): Promise<void> {
               logger.info(
                 `[e14] prescan-qr hereda payload (handoff) fila=${fila.id} veredicto=${veredictoH.accion}`,
               );
+              // INTEGRACIÓN P1×P5 (e14-quad-streaming-v1): el camino heredado
+              // TAMBIÉN es «fila decidida» — stamp prescanOk AQUÍ, no en el
+              // barrido de cierre (sin esto, la fila más barata de clasificar
+              // — sondeo-OK, lectura saltada — no llegaba al pool hasta el
+              // FINAL del pase: P5 perdía a sus mejores clientes). Sin quad:
+              // este camino no decodifica nada (el bridge detecta por su
+              // lado, igual que hoy). Re-lectura fresca anti-zombi — mismo
+              // gesto del stamp del camino lento.
+              const vivaStampH = useMasivaStore
+                .getState()
+                .filas.find((f) => f.id === fila.id);
+              if (vivaStampH && vivaStampH.estado === "PENDIENTE" && streamingOn) {
+                useMasivaStore.getState().actualizarFila(fila.id, { prescanOk: true });
+                useMasivaStore.getState().iniciar(); // P5 — arranque temprano
+              }
             }
             continue; // el finally de abajo hace procesadas++ (contador honesto)
           }
@@ -375,6 +473,9 @@ export async function prescanYIniciar(): Promise<void> {
           }).catch(() => null);
           if (!bitmapFull) continue; // corrupto/HEIC raro → PENDIENTE (§G)
           let payload: string | null = null;
+          // P4 — el quad detectado ya NO se tira (stamp aditivo abajo —
+          // solo si masivaQuad ON; sin flag el trabajo es el de hoy).
+          let quadVisto: Float32Array | null = null;
           try {
             const bitmap400 = await downscaleLado(bitmapFull, DETECT_LONG_SIDE).catch(
               () => null,
@@ -382,6 +483,7 @@ export async function prescanYIniciar(): Promise<void> {
             if (bitmap400) {
               const quad = await cliente.detectar(bitmap400); // bitmap400 transferido
               if (quad) {
+                quadVisto = quad; // P4 — captura para el stamp (no altera el flujo)
                 // bitmapFull TRANSFERIDO aquí (detached — close() de abajo
                 // es no-op honesto); el warp sale SIN rotar (Anexo 1).
                 const warped = await cliente.warpar(bitmapFull, quad);
@@ -412,6 +514,25 @@ export async function prescanYIniciar(): Promise<void> {
           const veredicto = await clasificarPayloadPrescan(payload, fila.id, DEPS_CLASIFICADOR);
           await aplicarVeredictoPrescan(fila.id, veredicto, payload, DEPS_ESCRITURA);
           if (payload) leidos++;
+          // KIT e14-quad-streaming-v1 (P4/P5) — stamp de la fila decidida.
+          // Sin awaits entre el veredicto aplicado y este stamp (re-lectura
+          // fresca anti-zombi): el pool jamás ve la fila a medio decidir —
+          // sin stamp el filtro del runner la retiene (streaming ON).
+          // · prescanOk (P5): la fila entra al FIFO del pool YA (arranque
+          //   temprano — iniciar() idempotente, no-op mientras corre).
+          // · quad (P4): fracciones del worker — solo con flag ON y lectura
+          //   del pre-scan; quadDeFracciones valida la forma (jamás inventa).
+          const vivaStamp = useMasivaStore.getState().filas.find((f) => f.id === fila.id);
+          if (vivaStamp && vivaStamp.estado === "PENDIENTE") {
+            const quadFila = quadOn ? quadDeFracciones(quadVisto) : null;
+            if (streamingOn || quadFila) {
+              useMasivaStore.getState().actualizarFila(fila.id, {
+                ...(streamingOn ? { prescanOk: true } : {}),
+                ...(quadFila ? { quad: quadFila } : {}),
+              });
+              if (streamingOn) useMasivaStore.getState().iniciar(); // P5 — temprano
+            }
+          }
         } catch {
           /* fila sigue PENDIENTE — JAMÁS descartar (regla de oro 4) */
         } finally {
@@ -423,6 +544,19 @@ export async function prescanYIniciar(): Promise<void> {
   } finally {
     // R6 — el worker del pre-scan muere SIEMPRE al terminar (RAM).
     cliente.destruir();
+    if (streamingOn) {
+      // P5 — BARRIDO DE CIERRE: TODA fila PENDIENTE sin stamp (abort
+      // honesto, continue por fila sin bytes/decode, catch, llegada a mitad
+      // del turno) queda DECIDIDA aquí — la fase de clasificación de este
+      // ciclo terminó y nadie la va a marcar ya. Después el turno CIERRA y
+      // el filtro del runner queda INERTE: sin hambruna por construcción.
+      for (const f of useMasivaStore.getState().filas) {
+        if (f.estado === "PENDIENTE" && f.prescanOk !== true) {
+          useMasivaStore.getState().actualizarFila(f.id, { prescanOk: true });
+        }
+      }
+      cerrarTurnoClasificacion();
+    }
     emitir({ corriendo: false, fase: "fin", leidos });
     corriendoModulo = false;
   }
