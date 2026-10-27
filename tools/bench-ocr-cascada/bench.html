@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KIT e14-bench-ocr-cascada-v1 — banco A/B/C cascadas OCR (SOLO banco, cero producción)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: #0c0c0d; color: #e4e4e7;
+    font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 22px 0 8px; color: #a1a1aa; text-transform: uppercase; letter-spacing: .06em; }
+  .sub { color: #a1a1aa; margin: 0 0 18px; font-size: 12.5px; }
+  .caja { border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; background: #131316; margin-bottom: 14px; }
+  .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; padding: 10px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #3f3f46; background: #1f1f23; color: #e4e4e7; min-height: 44px;
+  }
+  button:hover:not(:disabled) { background: #2d2d33; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #btn-correr { border-color: #3f6212; background: #1a2e05; color: #bef264; }
+  #btn-descargar { border-color: #713f12; background: #2e2305; color: #fbbf24; }
+  input[type="number"], input[type="text"] {
+    font: inherit; padding: 8px 10px; border-radius: 6px; border: 1px solid #3f3f46;
+    background: #0f0f11; color: #e4e4e7; min-height: 36px;
+  }
+  input[type="number"] { width: 110px; }
+  input[type="text"] { width: 90px; }
+  .estado { margin: 10px 0 0; white-space: pre-wrap; }
+  .ok { color: #a3e635; } .mal { color: #f87171; } .info { color: #d4d4d8; } .warn { color: #fbbf24; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { border: 1px solid #27272a; padding: 6px 10px; text-align: left; font-size: 13px; }
+  th { background: #18181b; color: #a1a1aa; font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .detalle-tabla { max-height: 460px; overflow-y: auto; }
+  pre#log {
+    max-height: 240px; overflow-y: auto; font-size: 12px; color: #a1a1aa;
+    background: #0f0f11; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin: 8px 0 0;
+  }
+  pre#log::-webkit-scrollbar { width: 8px; }
+  pre#log::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  code { color: #bef264; }
+  .ver-ok { color: #a3e635; } .ver-falso { color: #f87171; } .ver-noauto { color: #fbbf24; } .ver-na { color: #71717a; }
+  .criterio-ok { color: #a3e635; font-weight: 700; } .criterio-mal { color: #f87171; font-weight: 700; }
+  @media (max-width: 720px) { body { padding: 12px; } .detalle-tabla { overflow-x: auto; } table { min-width: 640px; } }
+</style>
+<!-- tesseract.js SOLO para la cascada B (tools/ — NUNCA producción). Worker
+     propio de la lib (JAMÁS main thread) + spa.traineddata desde el CDN de
+     tessdata. crossorigin=anonymous + CORS de jsdelivr = compatible con el
+     COEP require-corp del servidor de bancos. -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" crossorigin="anonymous"></script>
+<!-- Bundle CONGELADO de los módulos REALES de prod — formato ESM (el proxy
+     worker de onnxruntime-web necesita import.meta.url; en IIFE rompe con
+     «cannot determine the script source URL»). El import expone
+     window.BenchKit y avisa con el evento benchkit-listo (los módulos ESM
+     corren DESPUÉS del script clásico de abajo). -->
+<script type="module">
+  import * as B from "./vendor/bench-kit.congelado.js";
+  window.BenchKit = B;
+  window.dispatchEvent(new Event("benchkit-listo"));
+</script>
+</head>
+<body>
+<h1>KIT e14-bench-ocr-cascada-v1 — banco A/B/C de cascadas OCR (paso 6 del flujo del dueño)</h1>
+<p class="sub">
+  SOLO banco de pruebas (instrumento de medición — cero producción). Las 3 cascadas corren sobre
+  <strong>LA MISMA entrada</strong>: el warp SIN rotar del <code>detection-worker</code> REAL
+  (el mismo asset y budgets del pre-scan de prod), para aislar el OCR. Motor y juez REALES de
+  prod congelados en <code>vendor/bench-kit.congelado.js</code> (RapidOCR PP-OCRv4 + clasificador
+  DIVIPOL @ commit fuente — ver cabecera del bundle). Ver <code>README.md</code> del directorio.
+</p>
+
+<div class="caja">
+  <div class="fila">
+    <button id="btn-fotos" type="button">CARGAR FOTOS DEL LOTE</button>
+    <input type="file" id="input-fotos" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" style="display:none">
+    <label for="inp-tess-budget">budget Tesseract (ms):</label>
+    <input type="number" id="inp-tess-budget" value="60000" min="5000" step="5000">
+    <button id="btn-correr" type="button" disabled>CORRER BENCH (A · B · C)</button>
+    <button id="btn-descargar" type="button" disabled>DESCARGAR JSON+MD</button>
+  </div>
+  <p class="estado info" id="estado">cargando bundle congelado…</p>
+  <pre id="log"></pre>
+</div>
+
+<h2>1 · Verdad terrena (editable — la aporta el dueño, UNA fila por foto)</h2>
+<div class="caja">
+  <p class="sub">
+    Códigos DIVIPOL esperados por foto (los que la clasificación de prod debe deducir):
+    <code>dep</code> (2d) · <code>mun</code> (3d) · <code>zon</code> · <code>std/puesto</code> · <code>mesa</code>.
+    Campos vacíos = sin verdad para ese campo (no participan del veredicto). Sin NINGUNA verdad,
+    la fila cuenta AUTO como «AUTO (sin verdad)» — no entra al criterio duro.
+  </p>
+  <div class="detalle-tabla">
+    <table id="tabla-verdad">
+      <thead><tr><th>#</th><th>archivo</th><th>dep</th><th>mun</th><th>zon</th><th>std</th><th>mesa</th></tr></thead>
+      <tbody id="tb-verdad"><tr><td colspan="7" class="ver-na">— carga fotos para editar la verdad —</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<h2>2 · Resultado por acta</h2>
+<div class="caja detalle-tabla">
+  <table id="tabla-actas">
+    <thead>
+      <tr><th>archivo</th><th>WxH warp</th><th colspan="4">A — escalonado de hoy (1280→1920)</th><th colspan="4">B — Tesseract→gate→ROI</th><th colspan="4">C — RapidOCR 1280→gate→ROI</th></tr>
+      <tr><th></th><th></th><th>veredicto</th><th>ms</th><th>campos</th><th>anclas</th><th>veredicto</th><th>ms</th><th>campos</th><th>anclas</th><th>veredicto</th><th>ms</th><th>campos</th><th>anclas</th></tr>
+    </thead>
+    <tbody id="tb-actas"><tr><td colspan="14" class="ver-na">— sin corrida —</td></tr></tbody>
+  </table>
+</div>
+
+<h2>3 · Agregados + criterio (evidencia — el GO lo declara el dueño)</h2>
+<div class="caja">
+  <div class="detalle-tabla">
+    <table id="tabla-agregados">
+      <thead><tr><th>cascada</th><th>n</th><th>AUTO-OK</th><th>FALSO-AUTO</th><th>no-AUTO</th><th>rescates ROI</th><th>fallos</th><th>p50 ms</th><th>p95 ms</th></tr></thead>
+      <tbody id="tb-agg"><tr><td colspan="9" class="ver-na">— sin corrida —</td></tr></tbody>
+    </table>
+  </div>
+  <div id="criterios" style="margin-top:14px"></div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+function log(msg, clase) {
+  const linea = document.createElement("div");
+  if (clase) linea.className = clase;
+  linea.textContent = msg;
+  logEl.appendChild(linea);
+  logEl.scrollTop = logEl.scrollHeight;
+  console.log(`[bench-ocr-cascada] ${msg}`);
+}
+function setEstado(msg, clase) { $("estado").textContent = msg; $("estado").className = `estado ${clase ?? "info"}`; }
+
+// ─── estado del banco ────────────────────────────────────────────────────────
+const FILES = []; // { nombre, file, truth:{dep,mun,zon,std,mesa}, canvas?, dataUrl?, w?, h?, error? }
+let BASE = null; // base DIVIPOL cargada del asset REAL (cargarDivipol de prod)
+let RESULTADO = null;
+let corriendo = false;
+
+// ─── GATE = el clasificador REAL de prod (mismo juez que el pipeline) ───────
+function clasifDe(texto) {
+  try { return BenchKit.clasificarCabecera(texto, BASE); } catch { return null; }
+}
+function nivelDe(texto) { const c = clasifDe(texto); return c ? c.nivel : "MANUAL"; }
+function camposDe(c) {
+  if (!c) return null;
+  return {
+    dep: c.departamento?.codigo ?? null,
+    mun: c.municipio?.codigo ?? null,
+    zon: c.zona?.codigo ?? null,
+    std: c.puesto?.codigo ?? null,
+    mesa: c.mesa,
+  };
+}
+const camposStr = (campos) => !campos ? "-" : `dep:${campos.dep ?? "?"} mun:${campos.mun ?? "?"} zon:${campos.zon ?? "?"} std:${campos.std ?? "?"} mesa:${campos.mesa ?? "?"}`;
+
+// ─── verdad terrena ──────────────────────────────────────────────────────────
+function normaCodigo(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return "";
+  return /^\d+$/.test(s) ? String(Number(s)) : s.toUpperCase();
+}
+function compararConVerdad(campos, truth) {
+  if (!campos) return { revisados: 0, malos: ["sin-clasificar"] };
+  const pares = [["dep", campos.dep], ["mun", campos.mun], ["zon", campos.zon], ["std", campos.std]];
+  let revisados = 0; const malos = [];
+  for (const [k, leido] of pares) {
+    const esperado = normaCodigo(truth[k]);
+    if (!esperado) continue;
+    revisados += 1;
+    if (normaCodigo(leido) !== esperado) malos.push(k);
+  }
+  const mesaEsp = String(truth.mesa ?? "").trim();
+  if (mesaEsp) {
+    revisados += 1;
+    const leida = campos.mesa != null ? String(campos.mesa) : "";
+    if (/^\d+$/.test(mesaEsp) && /^\d+$/.test(leida)) {
+      if (Number(leida) !== Number(mesaEsp)) malos.push("mesa");
+    } else if (leida !== mesaEsp) malos.push("mesa");
+  }
+  return { revisados, malos };
+}
+function veredictoDe(cascada, truth) {
+  if (!cascada || cascada.error) return { tipo: "error", nota: cascada?.error ?? "" };
+  if (cascada.nivel !== "AUTO") return { tipo: "no-AUTO", nota: cascada.nivel };
+  const cmp = compararConVerdad(cascada.campos, truth);
+  if (cmp.revisados === 0) return { tipo: "AUTO-sin-verdad", nota: "sin verdad terrena" };
+  if (cmp.malos.length === 0) return { tipo: "AUTO-OK", nota: "todos los campos" };
+  return { tipo: "FALSO-AUTO", nota: `mal: ${cmp.malos.join("+")}` };
+}
+
+// ─── carga de fotos + tabla de verdad ────────────────────────────────────────
+$("btn-fotos").addEventListener("click", () => $("input-fotos").click());
+$("input-fotos").addEventListener("change", async (ev) => {
+  const files = Array.from(ev.target.files ?? []);
+  if (!files.length) return;
+  FILES.length = 0;
+  for (const f of files) FILES.push({ nombre: f.name, file: f, truth: { dep: "", mun: "", zon: "", std: "", mesa: "" } });
+  pintaVerdad();
+  $("btn-correr").disabled = false;
+  $("btn-descargar").disabled = true;
+  setEstado(`${FILES.length} fotos cargadas — edita la verdad terrena y corre el bench`, "ok");
+});
+function pintaVerdad() {
+  const tb = $("tb-verdad");
+  tb.innerHTML = "";
+  FILES.forEach((it, i) => {
+    const tr = document.createElement("tr");
+    const celda = (campo) => `<td><input type="text" data-idx="${i}" data-campo="${campo}" value="${it.truth[campo] ?? ""}" aria-label="${campo} de ${it.nombre}"></td>`;
+    tr.innerHTML = `<td class="num">${i + 1}</td><td>${it.nombre}</td>${celda("dep")}${celda("mun")}${celda("zon")}${celda("std")}${celda("mesa")}`;
+    tb.appendChild(tr);
+  });
+}
+$("tb-verdad").addEventListener("input", (ev) => {
+  const t = ev.target;
+  if (t?.dataset?.idx != null && t?.dataset?.campo) FILES[Number(t.dataset.idx)].truth[t.dataset.campo] = t.value;
+});
+
+// ─── decode + warp (UNA vez por foto — la MISMA entrada para A/B/C) ─────────
+async function decodificarFull(file) {
+  try {
+    return await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch (e) {
+    const tipo = (file.type || "").toLowerCase();
+    const esHeic = tipo.includes("heic") || tipo.includes("heif") || /\.hei[cf]$/i.test(file.name);
+    if (!esHeic) throw e;
+    log(`HEIC → heic2any: ${file.name}`, "warn");
+    const blob = await BenchKit.heic2any(file, { toType: "image/jpeg", quality: 0.92 });
+    const b = Array.isArray(blob) ? blob[0] : blob;
+    return await createImageBitmap(b, { imageOrientation: "from-image" });
+  }
+}
+async function warpDe(item, cliente) {
+  const bmp = await decodificarFull(item.file);
+  // clase 400 del pre-scan (DETECT_LONG_SIDE=400, resizeQuality "low" — misma vía)
+  const longSide = Math.max(bmp.width, bmp.height);
+  const escala = 400 / longSide;
+  const bmp400 = await createImageBitmap(bmp, {
+    resizeWidth: Math.max(1, Math.round(bmp.width * escala)),
+    resizeHeight: Math.max(1, Math.round(bmp.height * escala)),
+    resizeQuality: "low",
+  });
+  const corners = await cliente.detectar(bmp400); // bmp400 va TRANSFERIDO
+  if (!corners) { bmp.close(); return null; }
+  const warped = await cliente.warpar(bmp, corners); // bmp va TRANSFERIDO (full)
+  if (!warped) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = warped.width;
+  canvas.height = warped.height;
+  canvas.getContext("2d").drawImage(warped, 0, 0);
+  warped.close();
+  return canvas;
+}
+
+// ─── ROI de rescate (top 0-25% · bottom 75-100%, cap 1920 — brief K3) ───────
+function recorteRoi(canvas, y0, y1) {
+  const W = canvas.width;
+  const H = canvas.height;
+  const y0px = Math.round(y0 * H);
+  const y1px = Math.round(y1 * H);
+  const hSrc = Math.max(1, y1px - y0px);
+  const escala = Math.min(1, BenchKit.DET_CAP_PROD / Math.max(W, hSrc));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(W * escala));
+  c.height = Math.max(1, Math.round(hSrc * escala));
+  c.getContext("2d").drawImage(canvas, 0, y0px, W, hSrc, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.92);
+}
+async function rescateRoi(canvas) {
+  const rt = await BenchKit.rapidOcrInit();
+  const partes = [];
+  // MISMA constante que prod (ROI_FRACCIONES de ocr-cascada.ts): top 0-25% ·
+  // bottom 75-100% — el cap del det del ROI es el default del motor (1920).
+  const franjas = [[0, 0.25], [0.75, 1]];
+  for (const [y0, y1] of franjas) {
+    try {
+      const roi = recorteRoi(canvas, y0, y1);
+      const r = await BenchKit.rapidOcrReconocer(rt, roi); // sin opts = detCap DET_CAP_PROD (1920)
+      partes.push(r);
+    } catch {
+      /* ese ROI se descarta — jamás tumba (patrón del módulo puro) */
+    }
+  }
+  const utiles = partes.filter((r) => r && r.texto.trim().length > 0);
+  if (!utiles.length) return null;
+  return {
+    texto: utiles.map((r) => r.texto.trim()).join("\n"),
+    conf: utiles.reduce((s, r) => s + r.confMedia, 0) / utiles.length,
+  };
+}
+
+// ─── Tesseract (solo cascada B — tools/; worker de la lib, JAMÁS main thread)
+let tessWorker = null;
+async function tesseractReconocer(dataUrl, presupuestoMs) {
+  if (typeof Tesseract === "undefined") throw new Error("tesseract.js CDN no disponible (¿sin red?)");
+  if (!tessWorker) {
+    tessWorker = await Tesseract.createWorker("spa", 1, {
+      logger: (m) => { if (m.status === "recognizing text") setEstado(`tesseract: ${(m.progress * 100).toFixed(0)}%`, "info"); },
+    });
+  }
+  const t = performance.now();
+  const res = await Promise.race([
+    tessWorker.recognize(dataUrl),
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`tesseract presupuesto vencido (${presupuestoMs} ms)`)), presupuestoMs)),
+  ]);
+  return { texto: res.data?.text ?? "", conf: (res.data?.confidence ?? 0) / 100, ms: Math.round(performance.now() - t) };
+}
+
+// ─── las 3 cascadas (mismas reglas que prod: necesitaSegunda/elegirMejor) ───
+async function cascadaA(dataUrl) {
+  const rt = await BenchKit.rapidOcrInit();
+  const t1 = performance.now();
+  const r1 = await BenchKit.rapidOcrReconocer(rt, dataUrl, null, { detCap: BenchKit.DET_CAP_RAPIDO });
+  const ms1 = Math.round(performance.now() - t1);
+  let elegido = { texto: r1.texto, conf: r1.confMedia, cap: BenchKit.DET_CAP_RAPIDO };
+  let ms2 = null;
+  // §2.3 del kit escalonado — la MISMA decisión de prod (sin presupuesto del
+  // pipeline aquí: el banco mide OCR puro; el reloj del dueño es el real).
+  if (BenchKit.necesitaSegunda(r1.texto)) {
+    const t2 = performance.now();
+    const r2 = await BenchKit.rapidOcrReconocer(rt, dataUrl, null, { detCap: BenchKit.DET_CAP_PROD });
+    ms2 = Math.round(performance.now() - t2);
+    elegido = BenchKit.elegirMejor(
+      { texto: r1.texto, conf: r1.confMedia, cap: BenchKit.DET_CAP_RAPIDO },
+      { texto: r2.texto, conf: r2.confMedia, cap: BenchKit.DET_CAP_PROD },
+    );
+  }
+  return { texto: elegido.texto, conf: elegido.conf, elegidoCap: elegido.cap, rescate: false, msTotal: ms1 + (ms2 ?? 0), desglose: { ms1280: ms1, ms1920: ms2, msRoi: null } };
+}
+async function cascadaB(dataUrl, canvas, tessBudgetMs) {
+  const tess = await tesseractReconocer(dataUrl, tessBudgetMs);
+  let res = { texto: tess.texto, conf: tess.conf, elegidoCap: "tess", rescate: false, msTotal: tess.ms, desglose: { msTess: tess.ms, msRoi: null } };
+  if (nivelDe(tess.texto) !== "AUTO") {
+    const t = performance.now();
+    const compuesta = await rescateRoi(canvas);
+    res.desglose.msRoi = Math.round(performance.now() - t);
+    if (compuesta) {
+      res.rescate = true;
+      res.texto = compuesta.texto;
+      res.conf = compuesta.conf;
+      res.elegidoCap = "roi";
+    }
+    res.msTotal = tess.ms + res.desglose.msRoi;
+  }
+  return res;
+}
+async function cascadaC(dataUrl, canvas) {
+  const rt = await BenchKit.rapidOcrInit();
+  const t1 = performance.now();
+  const r1 = await BenchKit.rapidOcrReconocer(rt, dataUrl, null, { detCap: BenchKit.DET_CAP_RAPIDO });
+  const ms1 = Math.round(performance.now() - t1);
+  let res = { texto: r1.texto, conf: r1.confMedia, elegidoCap: BenchKit.DET_CAP_RAPIDO, rescate: false, msTotal: ms1, desglose: { ms1280: ms1, msRoi: null } };
+  if (nivelDe(r1.texto) !== "AUTO") {
+    const t = performance.now();
+    const compuesta = await rescateRoi(canvas);
+    res.desglose.msRoi = Math.round(performance.now() - t);
+    if (compuesta) {
+      res.rescate = true;
+      res.texto = compuesta.texto;
+      res.conf = compuesta.conf;
+      res.elegidoCap = "roi";
+    }
+    res.msTotal = ms1 + res.desglose.msRoi;
+  }
+  return res;
+}
+async function conCatch(fn) {
+  try { return await fn(); } catch (e) { return { error: String(e?.message ?? e) }; }
+}
+
+// ─── agregados + criterio ────────────────────────────────────────────────────
+function agregadoDe(filas, k) {
+  const celdas = filas.map((f) => f[k]).filter(Boolean);
+  const ms = celdas.filter((c) => typeof c.msTotal === "number").map((c) => c.msTotal).sort((a, b) => a - b);
+  const p = (q) => (ms.length ? ms[Math.min(ms.length - 1, Math.floor(q * ms.length))] : null);
+  const tipos = celdas.map((c) => veredictoDe(c, c.__truth ?? { dep: "", mun: "", zon: "", std: "", mesa: "" }).tipo);
+  return {
+    n: filas.length,
+    autoOk: tipos.filter((t) => t === "AUTO-OK").length,
+    autoSinVerdad: tipos.filter((t) => t === "AUTO-sin-verdad").length,
+    falsosAuto: tipos.filter((t) => t === "FALSO-AUTO").length,
+    noAuto: tipos.filter((t) => t === "no-AUTO").length,
+    errores: tipos.filter((t) => t === "error").length,
+    rescates: celdas.filter((c) => c.rescate).length,
+    p50: p(0.5),
+    p95: p(0.95),
+  };
+}
+function criteriosDe(aggA, aggX) {
+  const div = (a, b) => (a != null && b != null ? `${a} vs ${b}` : "n/d");
+  return [
+    { regla: "AUTO-OK ≥ A (no perder NI UNA)", ok: aggX.autoOk >= aggA.autoOk, detalle: div(aggX.autoOk, aggA.autoOk) },
+    { regla: "falsos AUTO = 0", ok: aggX.falsosAuto === 0, detalle: `${aggX.falsosAuto}` },
+    { regla: "p50 ≤ A × 1.2", ok: aggX.p50 != null && aggA.p50 != null ? aggX.p50 <= aggA.p50 * 1.2 : false, detalle: div(aggX.p50, aggA.p50 != null ? Math.round(aggA.p50 * 1.2) : null) },
+    { regla: "no-AUTO ≤ A (menos filas a revisión/rescate)", ok: aggX.noAuto <= aggA.noAuto, detalle: div(aggX.noAuto, aggA.noAuto) },
+  ];
+}
+
+// ─── pintado ────────────────────────────────────────────────────────────────
+function celdaVeredicto(c) {
+  if (!c) return `<td class="ver-na">n/d</td><td class="num">-</td><td>-</td><td class="num">-</td>`;
+  if (c.error) return `<td class="ver-falso">ERROR</td><td class="num">-</td><td>${c.error}</td><td class="num">-</td>`;
+  const v = c.__veredicto;
+  const clase = { "AUTO-OK": "ver-ok", "AUTO-sin-verdad": "ver-ok", "FALSO-AUTO": "ver-falso", "no-AUTO": "ver-noauto", error: "ver-falso" }[v.tipo] ?? "ver-na";
+  const rescate = c.rescate ? " ·ROI" : "";
+  return `<td class="${clase}">${v.tipo}${rescate}<br><small>${v.nota}</small></td><td class="num">${c.msTotal}</td><td>${camposStr(c.campos)}</td><td class="num">${c.anclas}</td>`;
+}
+function pintaActas(filas) {
+  const tb = $("tb-actas");
+  tb.innerHTML = "";
+  for (const f of filas) {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td>${f.nombre}</td><td class="num">${f.warp ?? "-"}</td>` +
+      celdaVeredicto(f.A) + celdaVeredicto(f.B) + celdaVeredicto(f.C);
+    tb.appendChild(tr);
+  }
+}
+function pintaAgg(aggA, aggB, aggC) {
+  const fila = (nombre, a) =>
+    `<tr><td>${nombre}</td><td class="num">${a.n}</td><td class="num">${a.autoOk}${a.autoSinVerdad ? ` (+${a.autoSinVerdad} sin verdad)` : ""}</td><td class="num ${a.falsosAuto ? "ver-falso" : "ver-ok"}">${a.falsosAuto}</td><td class="num">${a.noAuto}</td><td class="num">${a.rescates}</td><td class="num ${a.errores ? "ver-falso" : ""}">${a.errores}</td><td class="num">${a.p50 ?? "-"}</td><td class="num">${a.p95 ?? "-"}</td></tr>`;
+  $("tb-agg").innerHTML = fila("A — escalonado de hoy", aggA) + fila("B — Tesseract→gate→ROI", aggB) + fila("C — RapidOCR 1280→gate→ROI", aggC);
+}
+function pintaCriterios(critB, critC) {
+  const tabla = (nombre, criterios) => `
+    <h2>Criterio ${nombre} vs A</h2>
+    <table><thead><tr><th>regla del brief K3</th><th>estado</th><th>detalle</th></tr></thead><tbody>
+    ${criterios.map((c) => `<tr><td>${c.regla}</td><td class="${c.ok ? "criterio-ok" : "criterio-mal"}">${c.ok ? "✓" : "✗"}</td><td>${c.detalle}</td></tr>`).join("")}
+    </tbody></table>`;
+  $("criterios").innerHTML = tabla("B (Tesseract)", critB) + tabla("C (control RapidOCR)", critC);
+}
+
+// ─── corrida principal ───────────────────────────────────────────────────────
+$("btn-correr").addEventListener("click", () => void correr());
+async function correr() {
+  if (corriendo || !FILES.length) return;
+  corriendo = true;
+  $("btn-correr").disabled = true;
+  $("btn-fotos").disabled = true;
+  try {
+    setEstado("cargando DIVIPOL (asset real de prod)…");
+    BASE = await BenchKit.cargarDivipol();
+    log(`DIVIPOL cargada (${Object.keys(BASE).length} departamentos)`, "ok");
+
+    // detection-worker REAL (mismo asset y budgets del pre-scan de prod)
+    setEstado("boot del detection-worker (OpenCV)…");
+    const cliente = BenchKit.crearClientePrescan();
+    const listo = await cliente.listo();
+    if (!listo) throw new Error("detection-worker no booteó — ¿sirviendo la RAÍZ del repo con tools/serve-coop-coep.js?");
+    log("detection-worker listo (OpenCV)", "ok");
+
+    // warp UNA vez por foto — LA MISMA entrada para A/B/C
+    const conWarp = [];
+    for (const it of FILES) {
+      setEstado(`warp: ${it.nombre}…`);
+      try {
+        const canvas = await warpDe(it, cliente);
+        if (!canvas) {
+          it.error = "sin-quad (el pre-scan de prod tampoco lo tendría — excluida del OCR)";
+          log(`⚠ ${it.nombre}: ${it.error}`, "warn");
+          continue;
+        }
+        it.canvas = canvas;
+        it.dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+        it.w = canvas.width;
+        it.h = canvas.height;
+        conWarp.push(it);
+        log(`warp ${it.nombre}: ${it.w}×${it.h}`, "info");
+      } catch (e) {
+        it.error = `decode/warp: ${String(e?.message ?? e)}`;
+        log(`⚠ ${it.nombre}: ${it.error}`, "warn");
+      }
+    }
+    cliente.destruir();
+    if (!conWarp.length) throw new Error("ninguna foto produjo warp (sin quad) — nada que medir");
+
+    // warm-up (descartado — protocolo del banco: pasada caliente 1.ª)
+    setEstado("warm-up RapidOCR (descartado)…");
+    await BenchKit.rapidOcrPrecalentar();
+    setEstado("warm-up Tesseract (descartado — descarga spa.traineddata la 1.ª vez)…");
+    const tessBudget = Math.max(5000, Number($("inp-tess-budget").value) || 60000);
+    await conCatch(() => tesseractReconocer(conWarp[0].dataUrl, tessBudget));
+
+    // corrida medida: por acta, A → B → C sobre LA MISMA entrada
+    const filas = [];
+    for (const it of conWarp) {
+      setEstado(`OCR ${it.nombre}: A (escalonado de hoy)…`);
+      const fila = { nombre: it.nombre, warp: `${it.w}×${it.h}`, verdad: { ...it.truth }, A: null, B: null, C: null };
+      fila.A = await conCatch(() => cascadaA(it.dataUrl));
+      setEstado(`OCR ${it.nombre}: B (Tesseract→gate→ROI)…`);
+      fila.B = await conCatch(() => cascadaB(it.dataUrl, it.canvas, tessBudget));
+      setEstado(`OCR ${it.nombre}: C (RapidOCR 1280→gate→ROI)…`);
+      fila.C = await conCatch(() => cascadaC(it.dataUrl, it.canvas));
+      for (const k of ["A", "B", "C"]) {
+        const c = fila[k];
+        if (c && !c.error) {
+          c.nivel = nivelDe(c.texto);
+          c.campos = camposDe(clasifDe(c.texto));
+          c.anclas = BenchKit.anclasDe(c.texto);
+          c.senal = BenchKit.senalDeLectura(c.texto).nivel;
+          c.__truth = it.truth; // para los agregados (veredicto vs verdad)
+          c.__veredicto = veredictoDe(c, it.truth);
+        }
+      }
+      filas.push(fila);
+      pintaActas(filas);
+    }
+
+    // agregados + criterio (evidencia — el GO lo declara el dueño)
+    const aggA = agregadoDe(filas, "A");
+    const aggB = agregadoDe(filas, "B");
+    const aggC = agregadoDe(filas, "C");
+    pintaAgg(aggA, aggB, aggC);
+    const critB = criteriosDe(aggA, aggB);
+    const critC = criteriosDe(aggA, aggC);
+    pintaCriterios(critB, critC);
+
+    RESULTADO = {
+      kit: "e14-bench-ocr-cascada-v1",
+      fase: "K3 fase 1 (plan flujo-dueño — paso 6)",
+      fecha: new Date().toISOString(),
+      entrada: {
+        fotosCargadas: FILES.length,
+        conWarp: conWarp.length,
+        sinWarp: FILES.filter((f) => f.error).map((f) => ({ nombre: f.nombre, motivo: f.error })),
+        budgetTesseractMs: tessBudget,
+        motor: "vendor/bench-kit.congelado.js (RapidOCR PP-OCRv4 + clasificador DIVIPOL de prod — ver COMMIT FUENTE en su cabecera)",
+        rois: "top 0-25% · bottom 75-100% re-escalados a cap 1920 (brief K3)",
+      },
+      verdad: FILES.map((f) => ({ nombre: f.nombre, ...f.truth })),
+      filas: filas.map((f) => ({
+        nombre: f.nombre,
+        warp: f.warp,
+        verdad: f.verdad,
+        A: limpiarCelda(f.A),
+        B: limpiarCelda(f.B),
+        C: limpiarCelda(f.C),
+      })),
+      agregados: { A: aggA, B: aggB, C: aggC },
+      criterios: { B: critB, C: critC },
+      criterioGoDelBrief: "B gana si: AUTO-OK ≥ A (no perder NI UNA) · falsos AUTO = 0 · p50 ≤ A×1.2 · menos filas no-AUTO. Si B pierde pero C gana ⇒ implementar C (misma arquitectura, cero deps). Si ni B ni C ⇒ NO-GO documentado y la fase 2 queda en scaffold flag-OFF.",
+      pendienteDelDueno: "correr con fotos del lote REAL + verdad terrena; el GO lo declara el dueño (el banco solo muestra la evidencia).",
+    };
+    window.__benchJson = RESULTADO;
+    $("btn-descargar").disabled = false;
+    setEstado(`listo — ${filas.length} actas medidas · usa DESCARGAR JSON+MD (window.__benchJson disponible)`, "ok");
+  } catch (e) {
+    setEstado(`ERROR: ${String(e?.message ?? e)}`, "mal");
+    log(String(e?.stack ?? e), "mal");
+  } finally {
+    corriendo = false;
+    $("btn-correr").disabled = false;
+    $("btn-fotos").disabled = false;
+  }
+}
+function limpiarCelda(c) {
+  if (!c) return null;
+  // sin claves internas (__*) en el JSON — veredicto con nombre limpio
+  const limpio = {};
+  for (const [k, v] of Object.entries(c)) if (!k.startsWith("__")) limpio[k] = v;
+  return { ...limpio, veredicto: c.__veredicto?.tipo ?? null, notaVeredicto: c.__veredicto?.nota ?? null };
+}
+
+// ─── descarga JSON + MD ──────────────────────────────────────────────────────
+$("btn-descargar").addEventListener("click", () => {
+  if (!RESULTADO) return;
+  const md = construirMd(RESULTADO);
+  descargar(`bench-ocr-cascada-resultado-${Date.now()}.json`, JSON.stringify(RESULTADO, null, 2), "application/json");
+  descargar(`bench-ocr-cascada-resultado-${Date.now()}.md`, md, "text/markdown");
+});
+function descargar(nombre, contenido, tipo) {
+  const blob = new Blob([contenido], { type: tipo });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = nombre;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function construirMd(R) {
+  const cell = (c) => (!c ? "n/d" : c.error ? `ERROR (${c.error})` : `${c.veredicto ?? "?"}${c.rescate ? "·ROI" : ""} / ${c.msTotal}ms / ${c.senal ?? "?"} / a${c.anclas ?? "?"}`);
+  const filas = R.filas.map((f) =>
+    `| ${f.nombre} | ${cell(f.A)} | ${cell(f.B)} | ${cell(f.C)} |`,
+  ).join("\n");
+  const agg = (n, a) =>
+    `| ${n} | ${a.n} | ${a.autoOk}${a.autoSinVerdad ? ` (+${a.autoSinVerdad})` : ""} | ${a.falsosAuto} | ${a.noAuto} | ${a.rescates} | ${a.errores} | ${a.p50 ?? "-"} | ${a.p95 ?? "-"} |`;
+  const crit = (n, cs) =>
+    `**Criterio ${n}**\n\n${cs.map((c) => `- ${c.ok ? "✅" : "❌"} ${c.regla} — ${c.detalle}`).join("\n")}`;
+  return [
+    `# bench-ocr-cascada — resultados (${R.fecha})`,
+    "",
+    `- kit: \`${R.kit}\` (${R.fase})`,
+    `- entrada: ${R.entrada.conWarp}/${R.entrada.fotosCargadas} con warp · budget Tesseract ${R.entrada.budgetTesseractMs} ms`,
+    `- motor: ${R.entrada.motor}`,
+    `- ROIs: ${R.entrada.rois}`,
+    R.entrada.sinWarp.length ? `- excluidas sin quad: ${R.entrada.sinWarp.map((s) => `${s.nombre} (${s.motivo})`).join(", ")}` : null,
+    "",
+    "## Por acta (veredicto / ms / señal / anclas)",
+    "",
+    "| archivo | A escalonado (hoy) | B Tesseract→gate→ROI | C RapidOCR1280→gate→ROI |",
+    "|---|---|---|---|",
+    filas,
+    "",
+    "## Agregados",
+    "",
+    "| cascada | n | AUTO-OK | FALSO-AUTO | no-AUTO | rescates | fallos | p50 ms | p95 ms |",
+    "|---|---|---|---|---|---|---|---|---|",
+    agg("A — escalonado (hoy)", R.agregados.A),
+    agg("B — Tesseract→ROI", R.agregados.B),
+    agg("C — control RapidOCR", R.agregados.C),
+    "",
+    crit("B (Tesseract)", R.criterios.B),
+    "",
+    crit("C (control)", R.criterios.C),
+    "",
+    "## Criterio GO del brief K3",
+    "",
+    R.criterioGoDelBrief,
+    "",
+    `> ${R.pendienteDelDueno}`,
+    "",
+  ].filter((x) => x !== null).join("\n");
+}
+
+// ─── arranque ────────────────────────────────────────────────────────────────
+// El bundle ESM puede llegar DESPUÉS de este script clásico — el estado
+// «cargando» se resuelve en AMBOS órdenes (evento benchkit-listo).
+function arranque() {
+  if (typeof BenchKit === "undefined") {
+    setEstado("cargando bundle congelado… (¿falta vendor/bench-kit.congelado.js? — regen: ./generar-vendor.sh)", "warn");
+    window.addEventListener("benchkit-listo", arranque, { once: true });
+  } else {
+    setEstado("listo: bundle congelado cargado — CARGA FOTOS, edita la verdad y corre (ver README.md)", "ok");
+  }
+}
+arranque();
+</script>
+</body>
+</html>
