@@ -48,6 +48,14 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // jsQR 0/4). Kill-switch del dueño: OFF = sondeo OCR de siempre byte a
   // byte (el probe D56 queda como red de seguridad).
   qrBrujulaOrientacion: true,
+  // P1 (plan masiva — brief Agente A): hand-off del payload QR ya leído por
+  // el sondeo de ingesta (e73) → el prescan salta su lectura (decode FULL +
+  // OpenCV + warp + QR) y la CAPA 0 del runner salta su decode
+  // (fileToCaptureDataUrl + decodificarQrDeCapture). Precedente del patrón:
+  // burst P1a (omitir trabajo redundante cuando la identidad ya es dato
+  // leído). Kill-switch del dueño: OFF = byte-idéntico a 5d08dd6 (sondeo,
+  // prescan y CAPA 0 cada uno lee por su lado, como hoy).
+  masivaQrHandoff: false,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -81,6 +89,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.prescanQrCola === "boolean") limpio.prescanQrCola = p.prescanQrCola;
   // KIT e14-orientacion-qr-v1 (§D) — whitelist aditiva (booleano).
   if (typeof p.qrBrujulaOrientacion === "boolean") limpio.qrBrujulaOrientacion = p.qrBrujulaOrientacion;
+  // P1 (brief Agente A) — whitelist aditiva (booleano).
+  if (typeof p.masivaQrHandoff === "boolean") limpio.masivaQrHandoff = p.masivaQrHandoff;
   return limpio;
 }
 

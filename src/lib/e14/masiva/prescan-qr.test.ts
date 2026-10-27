@@ -22,9 +22,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Flags controlados por test (mock ANTES de importar — hoisted).
-const flagsState = vi.hoisted(() => ({ prescan: true }));
+const flagsState = vi.hoisted(() => ({ prescan: true, handoff: false }));
 vi.mock("../flags", () => ({
-  leerFlags: () => ({ prescanQrCola: flagsState.prescan }),
+  leerFlags: () => ({
+    prescanQrCola: flagsState.prescan,
+    masivaQrHandoff: flagsState.handoff,
+  }),
 }));
 
 // store.ts controlado por test — SOLO lo que prescan-qr.ts consume.
@@ -39,6 +42,8 @@ const mocksStore = vi.hoisted(() => ({
   originalQrDePayload: vi.fn<(p: string) => string | null>(() => null),
   enviadaPorPayload: vi.fn(async (_p: string) => null as { id: string } | null),
   registrarQrPayload: vi.fn(),
+  // P1 (brief Agente A) — herencia del payload del sondeo (default null).
+  qrPayloadDeFila: vi.fn<(id: string) => string | null>(() => null),
 }));
 vi.mock("./store", () => ({
   useMasivaStore: {
@@ -53,6 +58,7 @@ vi.mock("./store", () => ({
   originalQrDePayload: mocksStore.originalQrDePayload,
   enviadaPorPayload: mocksStore.enviadaPorPayload,
   registrarQrPayload: mocksStore.registrarQrPayload,
+  qrPayloadDeFila: mocksStore.qrPayloadDeFila,
 }));
 
 const mocksCola = vi.hoisted(() => ({
@@ -473,6 +479,7 @@ describe("e107 T5 · prescanYIniciar (re-entrada + flag OFF byte-idéntico)", ()
     ultimo = null;
     readyAuto = true;
     flagsState.prescan = true;
+    flagsState.handoff = false;
     storeState.corriendo = false;
     storeState.filas = [filaFixture("f1", "PENDIENTE")];
     vi.stubGlobal("Worker", class {});
@@ -518,6 +525,31 @@ describe("e107 T5 · prescanYIniciar (re-entrada + flag OFF byte-idéntico)", ()
     await prescanYIniciar();
     expect(mocksStore.iniciar).toHaveBeenCalledTimes(1);
     expect(fabricados.length).toBe(0);
+  });
+
+  it("29 · P1 handoff ON + payload heredado → SALTA la lectura (sin leerRegistro, sin detect) y clasifica con ese payload", async () => {
+    flagsState.handoff = true;
+    mocksStore.qrPayloadDeFila.mockReturnValue("PL-HEREDADO");
+    await prescanYIniciar();
+    // El bloque de lectura NUNCA corrió (el decode/OpenCV/warp/QR era solo
+    // para obtener el payload — ya es dato del sondeo de ingesta):
+    expect(mocksCola.leerRegistro).not.toHaveBeenCalled();
+    expect(ultimo?.enviados.length ?? 0).toBe(0); // cero detect/warp al worker
+    // El payload heredado clasificó (nuevo → registrar) y arrancó el runner:
+    expect(mocksStore.registrarQrPayload).toHaveBeenCalledWith("PL-HEREDADO", "f1");
+    expect(mocksStore.iniciar).toHaveBeenCalledTimes(1);
+    const st = usePrescanStore.getState();
+    expect(st.leidos).toBe(1);
+    expect(st.fase).toBe("fin");
+  });
+
+  it("30 · P1 handoff ON sin payload estampado → camino de hoy byte a byte (leerRegistro sí corre)", async () => {
+    flagsState.handoff = true;
+    mocksStore.qrPayloadDeFila.mockReturnValue(null); // el sondeo no leyó / flag estaba OFF
+    await prescanYIniciar();
+    expect(mocksCola.leerRegistro).toHaveBeenCalledTimes(1); // el decode continúa como hoy
+    expect(mocksStore.registrarQrPayload).not.toHaveBeenCalled();
+    expect(mocksStore.iniciar).toHaveBeenCalledTimes(1); // R7 único
   });
 });
 

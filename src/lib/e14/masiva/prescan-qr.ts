@@ -40,6 +40,9 @@ import {
   enviadaPorPayload as enviadaPorPayloadStore,
   marcarYaEnviada,
   originalQrDePayload as originalQrDePayloadStore,
+  // P1 (plan masiva — brief Agente A): herencia del payload del sondeo
+  // (flag masivaQrHandoff — default OFF; sin dato → camino de hoy).
+  qrPayloadDeFila as qrPayloadDeFilaStore,
   registrarQrPayload as registrarQrPayloadStore,
   useMasivaStore,
 } from "./store";
@@ -330,6 +333,36 @@ export async function prescanYIniciar(): Promise<void> {
       for (const fila of objetivo) {
         emitir({ listo: procesadas, leidos }); // «SONDEANDO QR… k/N»
         try {
+          // P1 (brief Agente A) — flag masivaQrHandoff: si el sondeo de
+          // ingesta (e73) YA leyó el QR de esta fila, TODO el bloque de
+          // lectura de abajo (decode FULL + OpenCV + warp + BarcodeDetector/
+          // jsQR) existía SOLO para obtener este payload → clasificar directo
+          // y saltar (el quad no viaja — eso es P4, otro parche). Anti-zombi
+          // IGUAL que el camino lento (fila VIVA y PENDIENTE en el instante
+          // del write); flag OFF / sin payload estampado → camino de hoy byte
+          // a byte. El estampado en mapaQrPayload lo hace aplicarVeredicto
+          // (veredicto "registrar") — el mapa queda como siempre.
+          const heredado = leerFlags().masivaQrHandoff
+            ? qrPayloadDeFilaStore(fila.id)
+            : null;
+          if (heredado != null) {
+            const vivaH = useMasivaStore
+              .getState()
+              .filas.find((f) => f.id === fila.id);
+            if (vivaH && vivaH.estado === "PENDIENTE") {
+              const veredictoH = await clasificarPayloadPrescan(
+                heredado,
+                fila.id,
+                DEPS_CLASIFICADOR,
+              );
+              await aplicarVeredictoPrescan(fila.id, veredictoH, heredado, DEPS_ESCRITURA);
+              leidos++;
+              logger.info(
+                `[e14] prescan-qr hereda payload (handoff) fila=${fila.id} veredicto=${veredictoH.accion}`,
+              );
+            }
+            continue; // el finally de abajo hace procesadas++ (contador honesto)
+          }
           // Bytes originales: duermen en IDB (RegistroMasiva.archivo) —
           // NO hay `fila.file` en RAM (kit R5 dice fila.file; el gesto real
           // del repo es leerRegistro — desviación M-e107-2 del REPORTE).
