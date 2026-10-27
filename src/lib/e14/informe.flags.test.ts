@@ -26,9 +26,12 @@ describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño
     // booleanos como 1/0 (formato fijo: clave=valor separado por espacios).
     // W1 añadió masivaPrioridad a FLAGS_DEFAULT — la línea lo incluye (el
     // test 43 de abajo ya anticipaba el gesto: crece por la COLA, jamás
-    // reordena).
+    // reordena). Integración K1+K2+K3: los flags K2 (masivaWarpIngesta/
+    // masivaRotacionQr/masivaSondeoCrudo) y K3 (masivaOcrTesseract) también
+    // viajan — ANCLA AMPLIADA en el commit de integración (protocolo #3 —
+    // precedente qa-prescan §G/P5; ramas paralelas no podían ver este test).
     expect(linea).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0",
     );
   });
 
@@ -36,19 +39,21 @@ describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño
     expect(
       lineaFlagsPipeline({ ...FLAGS_DEFAULT, masivaQuad: true, dhashResize: true }),
     ).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=1 masivaStreaming=0 dhashResize=1 masivaPrioridad=0",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=1 masivaStreaming=0 dhashResize=1 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0",
     );
   });
 
   it("43 · flag nuevo del pipeline (masiva*) entra SOLO en la línea, sin romper el formato", () => {
     // El flag de W1 (masivaPrioridad) viaja en la línea en cuanto exista en
     // FLAGS_DEFAULT — el parser del dueño lee clave=valor, no posiciones.
+    // Integración: el gesto se verifica contra masivaOcrTesseract (K3 — el
+    // flag más nuevo de la cola) para probar que la línea crece por la cola.
     const conPrioridad = lineaFlagsPipeline({
       ...FLAGS_DEFAULT,
-      masivaPrioridad: true,
+      masivaOcrTesseract: true,
     } as typeof FLAGS_DEFAULT);
     expect(conPrioridad).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=1",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=1",
     );
   });
 
