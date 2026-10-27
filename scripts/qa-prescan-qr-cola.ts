@@ -173,21 +173,68 @@ async function main(): Promise<void> {
   );
 
   // ── 4 · Integridad §G — zonas prohibidas SIN ninguna aparición ───────────
-  const intocables: [string, string][] = [
-    ["src/lib/e14/masiva/runner.ts", "runner.ts (tM — no tocar tM: regla de oro 1)"],
-    ["src/lib/e14/masiva/store.ts", "store.ts (cero edits — el filtrado son marcas previas)"],
-    ["src/lib/e14/masiva/sondeo-qr.worker.ts", "sondeo-qr.worker.ts (kit e73 INTACTO — §F.4)"],
-    ["src/lib/e14/masiva/identidad-qr.ts", "identidad-qr.ts (capa 0/identidad — §F.1)"],
-    ["src/lib/e14/masiva/qr-pixeles.ts", "qr-pixeles.ts (solo se IMPORTA — §C)"],
-    ["src/lib/e14/masiva/historico.ts", "historico.ts (ledger — §C)"],
-    ["src/lib/e14/masiva/cola.ts", "cola.ts (solo se IMPORTA — §C)"],
-    ["src/lib/e14/masiva/tipos.ts", "tipos.ts (masiva) — sin token 'qr-prescan' (§F.2)"],
-    ["src/lib/e14/informe.ts", "informe.ts (contrato D57 sin cambios — §F.2)"],
+  // KIT e14-quad-streaming-v1 (P5) — ENMIENDA del contrato e107: el runner
+  // consume por TURNO de clasificación (flag masivaStreaming, default OFF)
+  // y la fila lleva `prescanOk` — el token prescanOk está PERMITIDO
+  // EXACTAMENTE en runner.ts y masiva/tipos.ts (campo nuevo AL FINAL —
+  // contrato D57); se le retira del texto antes de contar. store.ts y el
+  // resto siguen INTACTOS (0 apariciones — la lógica del pre-scan vive
+  // SOLO en prescan-qr.ts / turno-clasificacion.ts).
+  const intocables: [string, string, boolean][] = [
+    ["src/lib/e14/masiva/runner.ts", "runner.ts (tM — no tocar tM: regla de oro 1)", true],
+    ["src/lib/e14/masiva/store.ts", "store.ts (cero edits — el filtrado son marcas previas)", false],
+    ["src/lib/e14/masiva/sondeo-qr.worker.ts", "sondeo-qr.worker.ts (kit e73 INTACTO — §F.4)", false],
+    ["src/lib/e14/masiva/identidad-qr.ts", "identidad-qr.ts (capa 0/identidad — §F.1)", false],
+    ["src/lib/e14/masiva/qr-pixeles.ts", "qr-pixeles.ts (solo se IMPORTA — §C)", false],
+    ["src/lib/e14/masiva/historico.ts", "historico.ts (ledger — §C)", false],
+    ["src/lib/e14/masiva/cola.ts", "cola.ts (solo se IMPORTA — §C)", false],
+    ["src/lib/e14/masiva/tipos.ts", "tipos.ts (masiva) — sin token 'qr-prescan' (§F.2)", true],
+    ["src/lib/e14/informe.ts", "informe.ts (contrato D57 sin cambios — §F.2)", false],
   ];
-  for (const [rel, etiqueta] of intocables) {
-    const txt = (await leer(rel)) ?? "";
-    ok(contar(txt, /prescan/gi) === 0, `Integridad §G: ${etiqueta} con 0 apariciones de 'prescan'`);
+  for (const [rel, etiqueta, permitePrescanOk] of intocables) {
+    let txt = (await leer(rel)) ?? "";
+    if (permitePrescanOk) {
+      const conPrescanOk = contar(txt, /prescanOk/g);
+      ok(
+        conPrescanOk > 0,
+        `Integridad §G (enmienda e14-quad-streaming): ${etiqueta} usa el token prescanOk (${conPrescanOk})`,
+      );
+      txt = txt.replace(/prescanOk/g, ""); // solo ese token — el resto PROHIBIDO
+    }
+    ok(contar(txt, /prescan/gi) === 0, `Integridad §G: ${etiqueta} sin 'prescan' más allá de prescanOk`);
   }
+  // e14-quad-streaming (P5) — la lógica del TURNO vive en su módulo propio
+  // (sin imports — sin ciclos runner→prescan) y el runner NO importa el
+  // módulo del pre-scan (imports unidireccionales — SPLIT C1).
+  const turno = (await leer("src/lib/e14/masiva/turno-clasificacion.ts")) ?? "";
+  ok(
+    turno.includes("abrirTurnoClasificacion") &&
+      turno.includes("cerrarTurnoClasificacion") &&
+      turno.includes("turnoClasificacionEnCurso"),
+    "turno-clasificacion.ts: semáforo del turno (abrir/cerrar/enCurso) presente",
+  );
+  const runnerTxt = (await leer("src/lib/e14/masiva/runner.ts")) ?? "";
+  ok(
+    !/from "\.\/prescan-qr"/.test(runnerTxt),
+    "runner.ts: SIN import del módulo del pre-scan (unidireccional — el turno viaja por turno-clasificacion.ts)",
+  );
+  ok(
+    runnerTxt.includes("masivaStreaming") &&
+      runnerTxt.includes("prescanOk") &&
+      runnerTxt.includes("turnoClasificacionEnCurso()"),
+    "runner.ts: filtro del turno en siguientePendiente (masivaStreaming + prescanOk + enCurso) presente",
+  );
+  ok(
+    runnerTxt.includes("OpcionesEscaneoConQuad") && runnerTxt.includes("quadPrecomputado"),
+    "runner.ts: quad del pre-scan viaja en opcionesMasiva (P4 — OpcionesEscaneoConQuad)",
+  );
+  const bridgeTxt = (await leer("src/lib/e14/scanner-core-bridge.ts")) ?? "";
+  ok(
+    bridgeTxt.includes("OpcionesEscaneoConQuad") &&
+      bridgeTxt.includes("quadPrecomputadoPlausible") &&
+      bridgeTxt.includes("QUAD_PRECOMPUTADO_MANUAL"),
+    "scanner-core-bridge.ts: quadPrecomputado + validación de plausibilidad + decisión SEMILLA documentada (P4)",
+  );
 
   // ── 5 · Hunks D.4 exactos (kill-switch del dueño) ────────────────────────
   ok(

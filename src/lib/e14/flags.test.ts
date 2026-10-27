@@ -71,6 +71,18 @@ describe("flags · sanearFlags", () => {
     expect(sanearFlags({ masivaQrHandoff: "on" })).toEqual({});
     expect(sanearFlags({ masivaQrHandoff: 1 })).toEqual({});
   });
+
+  // KIT e14-quad-streaming-v1 (§D) — whitelist aditiva (booleanos P4/P5):
+  it("quad-streaming · masivaQuad/masivaStreaming: overrides válidos aceptan; tipos inválidos → default", () => {
+    // Overrides válidos — aceptados (kill switches del dueño):
+    expect(sanearFlags({ masivaQuad: true, masivaStreaming: true })).toEqual({
+      masivaQuad: true,
+      masivaStreaming: true,
+    });
+    expect(sanearFlags({ masivaQuad: false })).toEqual({ masivaQuad: false });
+    // Tipos inválidos → ausentes (el caller conserva el default — jamás inventar):
+    expect(sanearFlags({ masivaQuad: "sí", masivaStreaming: 1 })).toEqual({});
+  });
 });
 
 describe("flags · leerFlags (cadena de prioridad)", () => {
@@ -95,6 +107,10 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       qrBrujulaOrientacion: true,
       // P1 (plan masiva — brief Agente A) — aditivo AL FINAL (contrato D57):
       masivaQrHandoff: false,
+      // KIT e14-quad-streaming-v1 (§D) — aditivos AL FINAL (contrato D57):
+      // defaults OFF — byte-idéntico a 5d08dd6 (kill-switches del dueño).
+      masivaQuad: false,
+      masivaStreaming: false,
     });
   });
 

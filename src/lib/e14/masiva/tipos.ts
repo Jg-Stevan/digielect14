@@ -2,6 +2,9 @@
  *  alimenta al bridge REAL (mismo pipeline §5, mismo gate). Sin duplicación:
  *  aquí SOLO vive la orquestación. */
 import type { Acta } from "../types";
+// KIT e14-quad-streaming-v1 (P4): forma canónica del quad del core — SOLO
+// tipo (se borra en compile: cero dependencia runtime desde los tipos).
+import type { Quad } from "@jg-stevan/scanner-core/types";
 
 /** KIT e14-masiva-tiempos-v1 (PR-1): DUPLICADA = gemela por hash perceptual
  *  (dhash Hamming ≤ 6, dedup.ts) — estado SOLO visual: al procesar REUTILIZA
@@ -91,6 +94,28 @@ export interface FilaMasiva {
   sondeoQrMs?: number;
   /** (§E) tier que leyó el payload — SOLO cuando hubo lectura (jamás inventar). */
   sondeoQrTier?: string;
+  // ---------- KIT e14-quad-streaming-v1 (P4/P5) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** (P5) ESTADO-VIVO del pre-scan en «PROCESAR COLA» (e107): esta fila YA
+   *  fue decidida por él — veredicto aplicado (registrar/nada) o lectura
+   *  imposible (stamp del barrido de cierre). Mientras el TURNO de
+   *  clasificación está abierto, el runner con masivaStreaming ON solo
+   *  consume filas con esta marca (DUPLICADA/nacidas-después del arranque
+   *  están exentas por sí solas — ver siguientePendiente): cierra la carrera
+   *  clasificación-vs-pool (la gemela que el pre-scan va a marcar jamás
+   *  reserva slot ni paga OCR). RAM del lote — NUNCA viaja a IDB
+   *  (sobrevivir recarga no es requisito; el turno muere con la corrida).
+   *  Ausente = fila que el pre-scan no vio (nueva / streaming OFF). */
+  prescanOk?: boolean;
+  /** (P4) quad del acta detectado por el pre-scan sobre el bitmap de la
+   *  clase 400 — MISMA convención del core (4 puntos normalizados 0-1,
+   *  TL,TR,BR,BL — tipo Quad de @jg-stevan/scanner-core; el bitmap es un
+   *  downscale PROPORCIONAL del full, las fracciones viajan sin re-escalar).
+   *  El runner lo pasa al bridge como quadPrecomputado (flag masivaQuad ON)
+   *  para saltar la re-detección (resuelve la desviación D66 — precalor.ts:
+   *  «el bridge no acepta un quad precomputado»); el bridge RE-VALIDA
+   *  (plausibilidad — guard conservador, jamás confiar). Ausente = el
+   *  pre-scan no detectó quad (o el flag estaba OFF). RAM del lote. */
+  quad?: Quad;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */

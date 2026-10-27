@@ -22,11 +22,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Flags controlados por test (mock ANTES de importar — hoisted).
-const flagsState = vi.hoisted(() => ({ prescan: true, handoff: false }));
+const flagsState = vi.hoisted(() => ({
+  prescan: true,
+  handoff: false, // P1 (brief Agente A) — masivaQrHandoff
+  quad: false, // KIT e14-quad-streaming-v1 (P4) — masivaQuad
+  streaming: false, // KIT e14-quad-streaming-v1 (P5) — masivaStreaming
+}));
 vi.mock("../flags", () => ({
   leerFlags: () => ({
     prescanQrCola: flagsState.prescan,
     masivaQrHandoff: flagsState.handoff,
+    masivaQuad: flagsState.quad,
+    masivaStreaming: flagsState.streaming,
   }),
 }));
 
@@ -78,6 +85,7 @@ import {
   leerQrDeWarped,
   objetivoPrescan,
   prescanYIniciar,
+  quadDeFracciones,
   usePrescanStore,
   type DepsClasificadorPrescan,
 } from "./prescan-qr";
@@ -89,6 +97,13 @@ import {
   crearClientePrescan,
   type WorkerDeteccion,
 } from "./prescan-qr.client";
+import {
+  __resetTurnoClasificacionParaTest,
+  abrirTurnoClasificacion,
+  cerrarTurnoClasificacion,
+  turnoClasificacionEnCurso,
+  turnoClasificacionInicioMs,
+} from "./turno-clasificacion";
 
 type FakeWorker = WorkerDeteccion & {
   enviados: { msg: Record<string, unknown>; transfer: Transferable[] }[];
@@ -499,6 +514,8 @@ describe("e107 T5 · prescanYIniciar (re-entrada + flag OFF byte-idéntico)", ()
     expect(mocksStore.iniciar).toHaveBeenCalledTimes(1);
     expect(fabricados.length).toBe(0); // SIN worker — byte-idéntico a hoy
     expect(usePrescanStore.getState().corriendo).toBe(false);
+    // e14-quad-streaming (P4/P5): sin flags → CERO stamps (byte-idéntico).
+    expect(mocksStore.actualizarFila).not.toHaveBeenCalled();
   });
 
   it("23 · re-entrada: doble llamada concurrente ⇒ 1 corrida (1 worker, 1 iniciar)", async () => {
@@ -550,6 +567,213 @@ describe("e107 T5 · prescanYIniciar (re-entrada + flag OFF byte-idéntico)", ()
     expect(mocksCola.leerRegistro).toHaveBeenCalledTimes(1); // el decode continúa como hoy
     expect(mocksStore.registrarQrPayload).not.toHaveBeenCalled();
     expect(mocksStore.iniciar).toHaveBeenCalledTimes(1); // R7 único
+  });
+});
+
+// ── 5-b · KIT e14-quad-streaming-v1 (P4/P5) — quad + streaming seguro ───────
+
+describe("e14-quad-streaming T6 · quadDeFracciones (puro — jamás inventa)", () => {
+  it("29 · Float32Array(8) válido → Quad del core (4 puntos en orden)", () => {
+    // 0.25/0.75 son EXACTOS en float32 (0.1 no lo es — comparación bit a bit).
+    const q = quadDeFracciones(Float32Array.of(0.25, 0.25, 0.75, 0.25, 0.75, 0.75, 0.25, 0.75));
+    expect(q).toEqual([
+      { x: 0.25, y: 0.25 },
+      { x: 0.75, y: 0.25 },
+      { x: 0.75, y: 0.75 },
+      { x: 0.25, y: 0.75 },
+    ]);
+  });
+
+  it("30 · forma/NaN/null → null (conservador — sin quad el runner usa detección propia)", () => {
+    expect(quadDeFracciones(null)).toBeNull();
+    expect(quadDeFracciones(undefined)).toBeNull();
+    expect(quadDeFracciones(Float32Array.of(1, 2, 3))).toBeNull(); // longitud
+    expect(
+      quadDeFracciones(Float32Array.of(0.1, 0.1, 0.9, Number.NaN, 0.9, 0.9, 0.1, 0.9)),
+    ).toBeNull(); // NaN
+  });
+});
+
+describe("e14-quad-streaming T6 · turno-clasificacion (semáforo del filtro del runner)", () => {
+  beforeEach(() => {
+    __resetTurnoClasificacionParaTest();
+  });
+
+  afterEach(() => {
+    __resetTurnoClasificacionParaTest();
+  });
+
+  it("31 · abrir/cerrar: enCurso refleja el turno; inicioMs queda; reset limpia", () => {
+    expect(turnoClasificacionEnCurso()).toBe(false); // nunca abrió
+    expect(turnoClasificacionInicioMs()).toBe(0);
+    abrirTurnoClasificacion(1234);
+    expect(turnoClasificacionEnCurso()).toBe(true);
+    expect(turnoClasificacionInicioMs()).toBe(1234);
+    cerrarTurnoClasificacion();
+    expect(turnoClasificacionEnCurso()).toBe(false); // filtro inerte
+    expect(turnoClasificacionInicioMs()).toBe(1234); // el instante queda (informativo)
+    __resetTurnoClasificacionParaTest();
+    expect(turnoClasificacionInicioMs()).toBe(0);
+  });
+});
+
+describe("e14-quad-streaming T6 · prescanYIniciar (stamps P4/P5 — flags ON)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // clearAllMocks NO limpia IMPLEMENTACIONES (solo llamadas) — tests
+    // previos del archivo dejan mockRejectedValue ("IDB caída", test 11) /
+    // mockReturnValue — re-poner los caminos felices para este describe.
+    mocksCola.leerRegistro.mockResolvedValue({ archivo: new Blob(["x"]) });
+    mocksCola.guardarRegistro.mockResolvedValue(undefined);
+    mocksStore.originalQrDePayload.mockReturnValue(null);
+    mocksStore.enviadaPorPayload.mockResolvedValue(null);
+    mocksStore.marcarYaEnviada.mockResolvedValue(true);
+    fabricados = [];
+    ultimo = null;
+    readyAuto = true;
+    flagsState.prescan = true;
+    flagsState.quad = false;
+    flagsState.streaming = false;
+    storeState.corriendo = false;
+    storeState.filas = [filaFixture("f1", "PENDIENTE")];
+    vi.stubGlobal("Worker", class {});
+    vi.stubGlobal("createImageBitmap", class {});
+    vi.stubGlobal("OffscreenCanvas", class {});
+    __setFabricaWorkerDeteccionParaTest(() => fabricaFalsa());
+    __resetTurnoClasificacionParaTest();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    __setFabricaWorkerDeteccionParaTest(null);
+    __resetTurnoClasificacionParaTest();
+    flagsState.quad = false;
+    flagsState.streaming = false;
+  });
+
+  it("32 · streaming ON + fila que falla temprano → barrido de cierre estampa prescanOk + turno cierra", async () => {
+    flagsState.streaming = true;
+    storeState.filas = [
+      { id: "f1", estado: "PENDIENTE" }, // createImageBitmap stub (class) TIRA → catch → sin veredicto
+    ];
+    await prescanYIniciar();
+    // Barrido de cierre: la fila quedó decidida (JAMÁS colgada).
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f1", { prescanOk: true });
+    expect(turnoClasificacionEnCurso()).toBe(false); // turno CERRADO al terminar
+    expect(mocksStore.iniciar).toHaveBeenCalled(); // R7 (el runner consume todo)
+  });
+
+  it("33 · streaming ON + PROCESAR IGUAL → stamp UPFRONT (RL-e65b-6 — va directo al pool)", async () => {
+    flagsState.streaming = true;
+    storeState.filas = [
+      { id: "f-owner", estado: "PENDIENTE", forzarDedupOff: true },
+      { id: "f1", estado: "PENDIENTE" },
+    ];
+    await prescanYIniciar();
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f-owner", { prescanOk: true });
+    // f1 (objetivo normal): el barrido de cierre la decide (el stub tira).
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f1", { prescanOk: true });
+    expect(turnoClasificacionEnCurso()).toBe(false);
+  });
+
+  it("34 · abort honesto (fábrica null) + streaming ON → TODO el objetivo decide en el barrido", async () => {
+    flagsState.streaming = true;
+    __setFabricaWorkerDeteccionParaTest(() => null); // ni una URL bootea → listo()=false inmediato
+    await prescanYIniciar();
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f1", { prescanOk: true });
+    expect(mocksStore.iniciar).toHaveBeenCalledTimes(1); // R7 con TODO decidido
+    expect(turnoClasificacionEnCurso()).toBe(false);
+  });
+
+  it("35 · flujo completo (worker auto-responde) + streaming+quad ON → stamp prescanOk + quad EXACTO, iniciar temprano", async () => {
+    flagsState.streaming = true;
+    flagsState.quad = true;
+    const warpedFalso = {
+      width: 1200,
+      height: 900,
+      close: () => {},
+    } as unknown as ImageBitmap;
+    // Worker auto-responde: detect → QUAD_OK · warp → bitmap (sin timing frágil).
+    __setFabricaWorkerDeteccionParaTest(() => {
+      const w = fabricaFalsa();
+      const basePost = w.postMessage.bind(w);
+      w.postMessage = (msg: unknown, transfer?: Transferable[]) => {
+        basePost(msg, transfer);
+        const m = msg as { type?: string; ts?: number };
+        queueMicrotask(() => {
+          if (m.type === "detect") {
+            w.onmessage?.({
+              data: { type: "result", corners: QUAD_OK, ts: m.ts },
+            } as MessageEvent);
+          } else if (m.type === "warp") {
+            w.onmessage?.({
+              data: { type: "warped", bitmap: warpedFalso, ts: m.ts },
+            } as MessageEvent);
+          }
+        });
+      };
+      return w;
+    });
+    // Decode del blob OK (el stub class TIRABA — ahora devuelve bitmap con close).
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () =>
+        ({ width: 400, height: 300, close: () => {} }) as unknown as ImageBitmap),
+    );
+    await prescanYIniciar();
+    // Stamp EXACTO: prescanOk (P5) + quad del worker (P4 — fracciones 0-1;
+    // closeTo — el Float32Array del worker trae precisión float32).
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f1", {
+      prescanOk: true,
+      quad: [
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.9) },
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.9) },
+      ],
+    });
+    expect(mocksStore.iniciar).toHaveBeenCalledTimes(2); // temprano (1.er stamp) + R7
+    expect(turnoClasificacionEnCurso()).toBe(false);
+  });
+
+  it("36 · quad ON sin streaming → stamp SOLO del quad; iniciar SOLO el R7 de siempre", async () => {
+    flagsState.quad = true;
+    const warpedFalso = { width: 1200, height: 900, close: () => {} } as unknown as ImageBitmap;
+    __setFabricaWorkerDeteccionParaTest(() => {
+      const w = fabricaFalsa();
+      const basePost = w.postMessage.bind(w);
+      w.postMessage = (msg: unknown, transfer?: Transferable[]) => {
+        basePost(msg, transfer);
+        const m = msg as { type?: string; ts?: number };
+        queueMicrotask(() => {
+          if (m.type === "detect") {
+            w.onmessage?.({
+              data: { type: "result", corners: QUAD_OK, ts: m.ts },
+            } as MessageEvent);
+          } else if (m.type === "warp") {
+            w.onmessage?.({
+              data: { type: "warped", bitmap: warpedFalso, ts: m.ts },
+            } as MessageEvent);
+          }
+        });
+      };
+      return w;
+    });
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () =>
+        ({ width: 400, height: 300, close: () => {} }) as unknown as ImageBitmap),
+    );
+    await prescanYIniciar();
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f1", {
+      quad: [
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.9) },
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.9) },
+      ],
+    });
+    expect(mocksStore.iniciar).toHaveBeenCalledTimes(1); // SOLO R7 — sin streaming
   });
 });
 

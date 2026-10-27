@@ -138,6 +138,9 @@ export interface FlagsApp {
   qrBrujulaOrientacion: boolean; // default true — QR-brújula de orientación (cuadrante del QR manda + rescate hi-res ZXing; bench v8.3 4/4); false = sondeo OCR de siempre byte a byte
   // ─── P1 (plan masiva — brief Agente A) — campo ADITIVO AL FINAL (D57) ───
   masivaQrHandoff: boolean; // default false — hand-off del payload QR del sondeo de ingesta (prescan salta su lectura; CAPA 0 salta su decode); false = byte-idéntico a 5d08dd6
+  // ─── KIT e14-quad-streaming-v1 (§D) — campos ADITIVOS AL FINAL (D57) ───
+  masivaQuad: boolean; // default false — P4: quad del pre-scan viaja al bridge (salta la re-detección, desviación D66 resuelta); false = byte-idéntico a 5d08dd6
+  masivaStreaming: boolean; // default false — P5: el runner arranca con el 1.er pre-scan-OK (consumo por turno de clasificación); false = prescan serial de siempre byte a byte
 }
 
 export interface ReporteSesion {
