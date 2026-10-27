@@ -127,7 +127,7 @@ export interface FilaMasiva {
    *  instrumento llegó, no decidió — honesto). AUSENTE = el warp de
    *  ingesta no llegó a producirse (sin bytes/decode/detect/warp — jamás
    *  inventar). RAM del lote (NUNCA viaja a IDB — sobrevivir recarga no
-   *  es requisito; el prescan asegurador re-decide tras recargar). */
+   *  es requisito; el asegurador (e107) re-decide tras recargar). */
   rotacionSugerida?: 0 | 90 | 180 | 270 | null;
 }
 

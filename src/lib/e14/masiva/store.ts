@@ -43,6 +43,11 @@ import { leerFlags } from "../flags";
 // (worker e73: lee la identidad QR ANTES del pool — gemelas jamás pagan
 // slot/probe/OCR; null honesto = la vía de HOY — doctrina del conservador).
 import { sondearQrPrecoz } from "./sondeo-qr.client";
+// KIT flujo-dueno-v1 (K2 — brief Agente B): el warp de INGESTA. store.ts SOLO
+// ENCOLA y marca su cadena de fondo — el módulo de la ingesta JAMÁS importa
+// store.ts (inyección de deps desde el módulo del clic PROCESAR — cero
+// ciclos, doctrina turno-clasificacion).
+import { encolarWarpIngesta, marcarCadenaDedupEnVuelo } from "./warp-ingesta";
 // (responsabilidad de render — movimiento puro del runner).
 import { hacerThumb } from "./runner-thumbs";
 import { iniciarRunner, pausarRunner, rearrancarTrasEncolar } from "./runner";
@@ -527,6 +532,11 @@ async function cadenaDedup(
   // delante; filas ≠ PENDIENTE excluidas). Memoria del LOTE (muere con la
   // cadena — mismo ciclo de vida del mapaQrPayload de la capa 0, kit §5).
   const mapaSondeoPayload = new Map<string, string>();
+  // KIT flujo-dueno-v1 (K2): cortesía de CPU del warp-de-ingesta — la señal
+  // dice al bombeo serial cuándo ceder (la subida nueva tiene prioridad
+  // sobre el warp de la anterior; tope corto en el bombeo — nunca bloquea
+  // esta cadena). El catch por iteración traga TODO → sin fuga del contador.
+  marcarCadenaDedupEnVuelo(true);
   for (const entrada of lote) {
     try {
       // e65 — CAPA BYTES primero (D-e65-5): barata (~50-200 ms, SIN decode).
@@ -603,7 +613,12 @@ async function cadenaDedup(
         // KIT e14-sondeo-burst-v1 (P1a): el skip por bytes vive DENTRO del
         // guard del override (RL-e65b-6 intacto — el dueño manda SIEMPRE;
         // test 7 ancla ambos literales byte a byte).
-        if (!saltaSondeoPorBytes) {
+        // KIT flujo-dueno-v1 (K2 — masivaSondeoCrudo, default TRUE = camino
+        // de hoy): en OFF se OMITE el sondeo crudo (el guard fuerza
+        // sondeo=null) y la fila sigue a dhash COMO HOY — corrida de
+        // control del dueño (el sondeo crudo alimenta el hand-off P1 y el
+        // dedup temprano, por eso default ON).
+        if (!saltaSondeoPorBytes && leerFlags().masivaSondeoCrudo === true) {
           sondeo = await sondearQrPrecoz(entrada.archivo);
         }
         if (sondeo) {
@@ -872,6 +887,10 @@ async function cadenaDedup(
       /* un fallo de la cadena JAMÁS tumba el encolado — la fila queda normal */
     }
   }
+  // KIT flujo-dueno-v1 (K2): fin de la cadena — la cortesía del warp de
+  // ingesta se levanta (sin finally: el catch por iteración ya garantiza
+  // que ningún throw escapa del bucle).
+  marcarCadenaDedupEnVuelo(false);
 }
 
 /** e71 (Opt-1) — DEDUP EXACTO INSTANTÁNEO en la ingesta (kit e71-
@@ -1251,6 +1270,27 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
             }))
             .filter((e) => e.id !== undefined && !huerfanos.includes(e.id)),
         );
+        // KIT flujo-dueno-v1 (K2 — brief Agente B, sub-commit 1): WARP DE
+        // INGESTA — la detección+warp+sondeo-QR del clic PROCESAR (e107)
+        // sube a la INGESTA (flag masivaWarpIngesta, default OFF =
+        // byte-idéntico a acf181f). Encola filas PENDIENTE vivas (no
+        // DUPLICADA/YA-ENVIADA — el dedup exacto de arriba ya decidió;
+        // forzarDedupOff JAMÁS — RL-e65b-6, el escape del dueño es sagrado).
+        // El bombeo es SERIAL (1 a la vez) con cortesía de CPU hacia
+        // cadenaDedup y re-chequeo anti-zombi por fila (warp-ingesta.ts).
+        // PROCESAR IGUAL queda intacto y el botón PROCESAR como ASEGURADOR
+        // idempotente (punto 7 del brief — el objetivo del asegurador salta
+        // filas con dueño).
+        if (leerFlags().masivaWarpIngesta === true) {
+          const vivasAhora = get().filas;
+          for (const id of ids) {
+            if (id === undefined || huerfanos.includes(id)) continue;
+            const filaViva = vivasAhora.find((f) => f.id === id);
+            if (filaViva && filaViva.estado === "PENDIENTE" && !filaViva.forzarDedupOff) {
+              encolarWarpIngesta(id);
+            }
+          }
+        }
       } else {
         set({ guardando: Math.max(0, get().guardando - imagenes.length) });
       }
