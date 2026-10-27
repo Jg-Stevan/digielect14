@@ -35,6 +35,9 @@ import { logger } from "../../logger";
 // KIT flujo-dueno-v1 (K2): forma canónica del quad del core (solo tipo —
 // se borra en compile: cero dependencia runtime).
 import type { Quad } from "@jg-stevan/scanner-core/types";
+// KIT e14-prescan-warp-lado-v1: válvulas del dueño (presupuesto de fila
+// configurable + maxWarpLongSide del warp) — mismo patrón e73 (sondeo).
+import { leerFlags } from "../flags";
 
 /** Base pública de assets — MISMO patrón del repo (sondeo-qr.client.ts:54/
  * flags.ts/rapidocr.ts): assets servidos desde public/ con prefijo
@@ -50,6 +53,21 @@ export const BOOT_TIMEOUT_MS = 8000; // OpenCV carga ~1-3 s primera vez
 export const PRESUPUESTO_FILA_MS = 4000; // detect+warp+QR por fila (reló local)
 export const HARD_KILL_EXTRA_MS = 1500; // terminate + respawn perezoso + null
 export const DETECT_LONG_SIDE = 400; // clase 400 del core (PROCESS_LONG_SIDE, resizeQuality "low")
+
+/** KIT e14-prescan-warp-lado-v1: presupuesto de fila saneado del flag
+ *  (default 4000 = PRESUPUESTO_FILA_MS — byte-idéntico). Clamp 1000..30000
+ *  (jamás por debajo de 1 s: el hard-kill anti-zombi sigue existiendo). */
+function presupuestoFilaDeFlags(): number {
+  try {
+    const n = leerFlags().prescanQrPresupuestoMs;
+    if (typeof n === "number" && Number.isFinite(n)) {
+      return Math.max(1000, Math.min(30_000, Math.round(n)));
+    }
+  } catch {
+    /* silencioso — default */
+  }
+  return PRESUPUESTO_FILA_MS;
+}
 
 /** Contrato mínimo del worker clásico que este cliente maneja (tests lo
  *  falsifican — patrón WorkerSondeo e73). */
@@ -77,8 +95,15 @@ export interface ClientePrescan {
    *  orden TL,TR,BR,BL) | null. bitmap400 va TRANSFERIDO. */
   detectar(bitmap400: ImageBitmap): Promise<Float32Array | null>;
   /** {type:'warp'} → 'warped'.bitmap | null. bitmapFull va TRANSFERIDO
-   *  (queda detached — jamás close() después); quad en fracciones. */
-  warpar(bitmapFull: ImageBitmap, quad: Float32Array): Promise<ImageBitmap | null>;
+   *  (queda detached — jamás close() después); quad en fracciones.
+   *  KIT e14-prescan-warp-lado-v1: `maxWarpLado` opcional (≥256) →
+   *  msg.maxWarpLongSide (config caliente del worker); omitido = default
+   *  del worker (4032) byte-idéntico. */
+  warpar(
+    bitmapFull: ImageBitmap,
+    quad: Float32Array,
+    maxWarpLado?: number,
+  ): Promise<ImageBitmap | null>;
   /** terminate — fin del pre-scan (R6). Resuelve null cualquier op en vuelo. */
   destruir(): void;
 }
@@ -213,13 +238,16 @@ export function crearClientePrescan(): ClientePrescan {
           terminarActivo = () => terminar(null);
           // Hard-kill anti-zombi POR PETICIÓN (§D.1): presupuesto + extra →
           // terminate + respawn perezoso + resolve null.
+          // KIT e14-prescan-warp-lado-v1: presupuesto del flag (default 4000
+          // — byte-idéntico; el dueño lo sube en equipos lentos).
+          const presupuestoFila = presupuestoFilaDeFlags();
           relodHardKill = setTimeout(() => {
             logger.warn(
-              `[e14] prescan-qr hard-kill ${kind} presupuesto=${PRESUPUESTO_FILA_MS}+${HARD_KILL_EXTRA_MS} — worker colgado (respawn perezoso)`,
+              `[e14] prescan-qr hard-kill ${kind} presupuesto=${presupuestoFila}+${HARD_KILL_EXTRA_MS} — worker colgado (respawn perezoso)`,
             );
             terminarWorker();
             terminar(null);
-          }, PRESUPUESTO_FILA_MS + HARD_KILL_EXTRA_MS);
+          }, presupuestoFila + HARD_KILL_EXTRA_MS);
           w.onmessage = (ev: MessageEvent) => {
             const d = ev.data as
               | { type?: string; ts?: number; corners?: unknown; bitmap?: unknown }
@@ -270,12 +298,30 @@ export function crearClientePrescan(): ClientePrescan {
         transfer: [bitmap400],
       }));
     },
-    warpar(bitmapFull: ImageBitmap, quad: Float32Array): Promise<ImageBitmap | null> {
+    // KIT e14-prescan-warp-lado-v1: `maxWarpLado` opcional (≥256) viaja como
+    // msg.maxWarpLongSide — el worker ya lo aceptaba como config CALIENTE
+    // por mensaje (detection-worker.js) sin que NADIE lo usara. OMITIDO ⇒
+    // default del worker (4032) byte-idéntico.
+    warpar(
+      bitmapFull: ImageBitmap,
+      quad: Float32Array,
+      maxWarpLado?: number,
+    ): Promise<ImageBitmap | null> {
       return pedir<ImageBitmap>("warp", (ts) => ({
         // Anexo 1: quad = Float32Array(8) EN FRACCIONES 0–1 (TL,TR,BR,BL —
         // llegan de `detect`); `manual` OMITIDO (default → refineQuad del
         // worker; defaults = los que el harness validó).
-        msg: { type: "warp", bitmap: bitmapFull, quad, ts },
+        msg: {
+          type: "warp",
+          bitmap: bitmapFull,
+          quad,
+          ts,
+          ...(typeof maxWarpLado === "number" &&
+          Number.isFinite(maxWarpLado) &&
+          maxWarpLado >= 256
+            ? { maxWarpLongSide: Math.round(maxWarpLado) }
+            : {}),
+        },
         transfer: [bitmapFull],
       }));
     },

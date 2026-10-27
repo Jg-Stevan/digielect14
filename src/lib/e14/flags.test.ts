@@ -130,6 +130,10 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       // (contrato D57): el ANCLA literal se amplía EN EL MISMO commit que
       // añade el flag (protocolo #3 — precedente qa-prescan §G/P5).
       masivaSoloWarpQr: false,
+      // KIT e14-prescan-warp-lado-v1 — aditivos AL FINAL (contrato D57):
+      // defaults = comportamiento de hoy (presupuesto 4000 + warp hasta 4032).
+      prescanQrPresupuestoMs: 4000,
+      prescanWarpLado: 4032,
     });
   });
 

@@ -153,6 +153,9 @@ export interface FlagsApp {
   masivaOcrTesseract: boolean; // default false — cascada OCR: intento 1 → gate → core RapidOCR como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte (GO/NO-GO: bench-ocr-cascada/)
   // ─── KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — campo ADITIVO AL FINAL (D57) ───
   masivaSoloWarpQr: boolean; // default false — PRUEBA EN SECO: «PROCESAR COLA» hace SOLO el pre-scan (decode→quad→warp→QR) con stamp qrLeido por fila y JAMÁS llama iniciar() (cero OCR, cero envío — la cola queda PENDIENTE, viva); el dedup del pre-scan (DUPLICADA/YA-ENVIADA por payload) SÍ corre (pedido del dueño); false = byte-idéntico al flujo de hoy
+  // ─── KIT e14-prescan-warp-lado-v1 — campos ADITIVOS AL FINAL (D57) ───
+  prescanQrPresupuestoMs: number; // default 4000 — presupuesto del hard-kill del pre-scan (PRESUPUESTO_FILA_MS); válvula del dueño para equipos lentos (clamp 1000..30000)
+  prescanWarpLado: number; // default 4032 — maxWarpLongSide de la SALIDA del warp del pre-scan (el worker ya aceptaba msg.maxWarpLongSide sin consumidor); 1920 recorta ~4.5x el coste del warpPerspective y la QR se lee igual (el core lee QR a 1280/1920); clamp 256..4032
 }
 
 export interface ReporteSesion {
