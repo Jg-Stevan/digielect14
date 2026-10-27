@@ -134,6 +134,10 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       // defaults = comportamiento de hoy (presupuesto 4000 + warp hasta 4032).
       prescanQrPresupuestoMs: 4000,
       prescanWarpLado: 4032,
+      // KIT e14-prescan-rescate-qr-v1 — aditivo AL FINAL (contrato D57):
+      // el ANCLA literal se amplía EN EL MISMO commit que añade el flag
+      // (protocolo #3 — precedente qa-prescan §G/P5).
+      prescanQrRescate: false,
     });
   });
 

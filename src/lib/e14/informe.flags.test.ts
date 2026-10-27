@@ -30,8 +30,13 @@ describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño
     // masivaRotacionQr/masivaSondeoCrudo) y K3 (masivaOcrTesseract) también
     // viajan — ANCLA AMPLIADA en el commit de integración (protocolo #3 —
     // precedente qa-prescan §G/P5; ramas paralelas no podían ver este test).
+    // KIT e14-prescan-rescate-qr-v1: ANCLA REPARADA ADESTRO — el DRY RUN
+    // (masivaSoloWarpQr, kit e14-solo-warp-qr-v1) entró a la línea por su
+    // prefijo masiva* y el ancla NO se amplió en su commit (la verificación
+    // de entonces solo corrió la suite masiva) — se repara EN este commit
+    // (protocolo #3: el ancla crece por la COLA, jamás reordena).
     expect(linea).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0 masivaSoloWarpQr=0",
     );
   });
 
@@ -39,7 +44,7 @@ describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño
     expect(
       lineaFlagsPipeline({ ...FLAGS_DEFAULT, masivaQuad: true, dhashResize: true }),
     ).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=1 masivaStreaming=0 dhashResize=1 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=1 masivaStreaming=0 dhashResize=1 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0 masivaSoloWarpQr=0",
     );
   });
 
@@ -53,7 +58,7 @@ describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño
       masivaOcrTesseract: true,
     } as typeof FLAGS_DEFAULT);
     expect(conPrioridad).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=1",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=1 masivaSoloWarpQr=0",
     );
   });
 

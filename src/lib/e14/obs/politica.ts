@@ -170,6 +170,11 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     if (typeof o.prescanWarpLado === "number" && Number.isFinite(o.prescanWarpLado)) {
       limpio.prescanWarpLado = Math.max(256, Math.min(4032, Math.round(o.prescanWarpLado)));
     }
+    // KIT e14-prescan-rescate-qr-v1 — mismo criterio: sin esta línea el
+    // override localStorage de `prescanQrRescate` (rescate del QR difícil
+    // del pre-scan) sería inalcanzable (DOBLE whitelist — cada puerta su
+    // línea, lección dhashResize/sondeoQrPrecoz).
+    if (typeof o.prescanQrRescate === "boolean") limpio.prescanQrRescate = o.prescanQrRescate;
     return limpio;
   } catch {
     return {};

@@ -156,6 +156,8 @@ export interface FlagsApp {
   // ─── KIT e14-prescan-warp-lado-v1 — campos ADITIVOS AL FINAL (D57) ───
   prescanQrPresupuestoMs: number; // default 4000 — presupuesto del hard-kill del pre-scan (PRESUPUESTO_FILA_MS); válvula del dueño para equipos lentos (clamp 1000..30000)
   prescanWarpLado: number; // default 4032 — maxWarpLongSide de la SALIDA del warp del pre-scan (el worker ya aceptaba msg.maxWarpLongSide sin consumidor); 1920 recorta ~4.5x el coste del warpPerspective y la QR se lee igual (el core lee QR a 1280/1920); clamp 256..4032
+  // ─── KIT e14-prescan-rescate-qr-v1 (ENMIENDA §F.3 — orden del dueño) ───
+  prescanQrRescate: boolean; // default false — RESCATE del QR difícil en el pre-scan: SOLO tras null de BarcodeDetector/jsQR en leerQrDeWarped corre la escalera difícil de la capa 0 (decodificarQrDeRecorte esquina-600 → barridoQrZxingDePixeles, presupuesto interno 4000 ms) sobre el MISMO raster del warp — en MAIN THREAD vía import DINÁMICO cacheado de identidad-qr (el worker JAMÁS ve zxing — dictamen e73 intacto); false = byte-idéntico (el módulo de rescate ni se intenta)
 }
 
 export interface ReporteSesion {

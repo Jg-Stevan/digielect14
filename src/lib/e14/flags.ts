@@ -108,6 +108,15 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // consumidor — la QR se lee igual a 1920 (el core lee QR a 1280/1920).
   prescanQrPresupuestoMs: 4000,
   prescanWarpLado: 4032,
+  // KIT e14-prescan-rescate-qr-v1 (ENMIENDA §F.3 — orden del dueño:
+  // «intentar leer rápido con jsQR, y dejar lo último y difícil para
+  // zxing»): el rescate corre SOLO tras un null explícito del camino
+  // rápido (BarcodeDetector → jsQR ≤1600) y reusa los tiers YA TESTEADOS
+  // de identidad-qr (esquina-600 → barrido zxing presupuestado 4 s) por
+  // import DINÁMICO cacheado en MAIN THREAD — el worker del pre-scan sigue
+  // jsQR-only (dictamen e73 intacto). Default OFF ⇒ byte-idéntico a hoy
+  // (el módulo de rescate ni se intenta).
+  prescanQrRescate: false,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -165,6 +174,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.prescanWarpLado === "number" && Number.isFinite(p.prescanWarpLado)) {
     limpio.prescanWarpLado = Math.max(256, Math.min(4032, Math.round(p.prescanWarpLado)));
   }
+  // KIT e14-prescan-rescate-qr-v1 — whitelist aditiva (booleano).
+  if (typeof p.prescanQrRescate === "boolean") limpio.prescanQrRescate = p.prescanQrRescate;
   return limpio;
 }
 
