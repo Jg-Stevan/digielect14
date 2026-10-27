@@ -74,6 +74,15 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // DUPLICADA derivada del estado) con FIFO de agregadaEn dentro de cada
   // prioridad. Default OFF ⇒ sort de hoy byte-idéntico (FIFO puro).
   masivaPrioridad: false,
+  // KIT flujo-dueno-v1 (K2 — brief Agente B) — kill-switches del dueño.
+  // masivaWarpIngesta/masivaRotacionQr default OFF ⇒ byte-idéntico a
+  // acf181f (el trabajo de detección/warp/QR sigue en «PROCESAR COLA» y la
+  // rotación la decide el probe de siempre). masivaSondeoCrudo default
+  // TRUE = camino de hoy (el sondeo crudo e73 alimenta hand-off P1 y dedup
+  // temprano — OFF solo para la corrida de control del dueño).
+  masivaWarpIngesta: false,
+  masivaRotacionQr: false,
+  masivaSondeoCrudo: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -116,6 +125,10 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.dhashResize === "boolean") limpio.dhashResize = p.dhashResize;
   // W1 (KIT k1-obs-prioridad — brief Agente A) — whitelist aditiva (booleano).
   if (typeof p.masivaPrioridad === "boolean") limpio.masivaPrioridad = p.masivaPrioridad;
+  // KIT flujo-dueno-v1 (K2 — brief Agente B) — whitelist aditiva (booleanos).
+  if (typeof p.masivaWarpIngesta === "boolean") limpio.masivaWarpIngesta = p.masivaWarpIngesta;
+  if (typeof p.masivaRotacionQr === "boolean") limpio.masivaRotacionQr = p.masivaRotacionQr;
+  if (typeof p.masivaSondeoCrudo === "boolean") limpio.masivaSondeoCrudo = p.masivaSondeoCrudo;
   return limpio;
 }
 

@@ -125,8 +125,23 @@ export interface FilaMasiva {
    *  NUNCA se estampa 3: la DUPLICADA se deriva del `estado` (una sola
    *  fuente de verdad — el sort la calcula). Estampado solo por el pre-scan
    *  con flag ON (estampado del camino lento; el barrido de cierre y las
-   *  filas sin decisión NO se estampan — jamás inventar). RAM del lote. */
+   *  filas sin decisión NO se estampan — jamás inventar). RAM del lote.
+   *  (Integración K1+K2: campo de K1 PRIMERO — orden temporal D57, ver
+   *  REPORTE-flujo-dueno-k2-v1 §7.) */
   prioridadProceso?: 1 | 2;
+  // ---------- KIT flujo-dueno-v1 (K2 — brief Agente B) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** (K2/paso 5) rotación SUGERIDA por el cuadrante del QR en el warp de
+   *  INGESTA (≤2048 — solo para decidir): centroide de la lectura →
+   *  orientacion-qr.rotacionDesdeCentroide (mapeo bench v8.3 4/4). El
+   *  runner la pasa al bridge como rotacionPrecomputada (flag
+   *  masivaRotacionQr ON) para rotar el warp full-res POST-warp y OMITIR
+   *  el sondeo de orientación (mismo trato que cuando la brújula decide).
+   *  null EXPLÍCITO = el warp corrió pero la lectura del QR falló (el
+   *  instrumento llegó, no decidió — honesto). AUSENTE = el warp de
+   *  ingesta no llegó a producirse (sin bytes/decode/detect/warp — jamás
+   *  inventar). RAM del lote (NUNCA viaja a IDB — sobrevivir recarga no
+   *  es requisito; el asegurador (e107) re-decide tras recargar). */
+  rotacionSugerida?: 0 | 90 | 180 | 270 | null;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */

@@ -145,6 +145,10 @@ export interface FlagsApp {
   dhashResize: boolean; // default false — decode chico del dhash (resize 64×64 a nivel de decode, anti-hambruna P3); false = decode FULL byte-idéntico a 5d08dd6 (GO/NO-GO: bench-dedup-tolerancia/bench-resize.html)
   // ─── W1 — KIT k1-obs-prioridad (brief Agente A) — campo ADITIVO AL FINAL (D57) ───
   masivaPrioridad: boolean; // default false — prioridad de fila (paso 4 del dueño): sort de siguientePendiente por prioridad efectiva (1=QR+quad OK · 2=resto · 3=DUPLICADA derivada del estado); false = FIFO de siempre byte a byte
+  // ─── KIT flujo-dueno-v1 (K2 — brief Agente B) — campos ADITIVOS AL FINAL (D57) ───
+  masivaWarpIngesta: boolean; // default false — K2/paso 2: detección+warp+sondeo-QR del pre-scan suben a la INGESTA (cola serial con cortesía de CPU); false = byte-idéntico a acf181f (el trabajo sigue en «PROCESAR COLA»)
+  masivaRotacionQr: boolean; // default false — K2/paso 5: la ROTACIÓN final la guía el cuadrante del QR en el warp de ingesta (rotacionSugerida viaja al bridge como rotacionPrecomputada y el sondeo de orientación se omite); false = byte-idéntico a acf181f (probe de siempre)
+  masivaSondeoCrudo: boolean; // default TRUE = camino de hoy — el sondeo QR crudo de la cadenaDedup (e73) alimenta hand-off P1 y dedup temprano; false = SOLO para la corrida de control del dueño (el guard fuerza sondeo=null, la fila sigue a dhash COMO HOY)
 }
 
 export interface ReporteSesion {

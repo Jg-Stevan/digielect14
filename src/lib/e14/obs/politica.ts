@@ -140,6 +140,13 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // línea el override localStorage de `masivaPrioridad` sería inalcanzable
     // (DOBLE whitelist — cada puerta necesita su línea, lección dhashResize).
     if (typeof o.masivaPrioridad === "boolean") limpio.masivaPrioridad = o.masivaPrioridad;
+    // KIT flujo-dueno-v1 (K2 — brief Agente B) — mismo criterio: sin estas
+    // líneas los overrides localStorage de los kill-switches K2 serían
+    // inalcanzables (el whitelist de leerOverridesFlags es INDEPENDIENTE del
+    // de sanearFlags en flags.ts — cada puerta necesita su línea).
+    if (typeof o.masivaWarpIngesta === "boolean") limpio.masivaWarpIngesta = o.masivaWarpIngesta;
+    if (typeof o.masivaRotacionQr === "boolean") limpio.masivaRotacionQr = o.masivaRotacionQr;
+    if (typeof o.masivaSondeoCrudo === "boolean") limpio.masivaSondeoCrudo = o.masivaSondeoCrudo;
     return limpio;
   } catch {
     return {};

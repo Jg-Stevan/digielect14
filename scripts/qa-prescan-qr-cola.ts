@@ -250,6 +250,121 @@ async function main(): Promise<void> {
     "flags.ts: sanearFlags con whitelist aditiva del flag (junto al bloque e73/hang)",
   );
 
+  // ── 6 · KIT flujo-dueno-v1 (K2 — brief Agente B) — warp de INGESTA ──────
+  // ENMIENDA K2 (justificación: el contrato e107 se amplía de nuevo — el
+  // trabajo del pre-scan SUBE a la ingesta tras el flag masivaWarpIngesta;
+  // store.ts sigue SIN el token (encola por el módulo nuevo) y el resto de
+  // intocables queda intacto — §G arriba verde 43/43 con el K2 incluido).
+  const warpIngesta = (await leer("src/lib/e14/masiva/warp-ingesta.ts")) ?? "";
+  ok(
+    warpIngesta.length > 0 && warpIngesta.includes("encolarWarpIngesta"),
+    "warp-ingesta.ts: módulo NUEVO del warp de ingesta (encolarWarpIngesta presente)",
+  );
+  ok(
+    warpIngesta.includes("marcarCadenaDedupEnVuelo") &&
+      warpIngesta.includes("CORTECIA_TOPE_MS") &&
+      warpIngesta.includes("CORTECIA_PASO_MS"),
+    "warp-ingesta: cortesía de CPU hacia cadenaDedup (marcar + tope/paso)",
+  );
+  ok(
+    warpIngesta.includes("filaBajoWarpIngesta") && warpIngesta.includes("esperarColaWarpIngesta"),
+    "warp-ingesta: propiedad de filas (bajo-cola) + drenaje acotado para el asegurador",
+  );
+  ok(
+    warpIngesta.includes("prescanOk: true") &&
+      warpIngesta.includes("rotacionSugerida") &&
+      warpIngesta.includes("quadDeFracciones"),
+    "warp-ingesta: estamps prescanOk + rotacionSugerida + quad (formato P4)",
+  );
+  ok(
+    warpIngesta.includes('from "./vendor/jsQR.js"') && contar(warpIngesta, /zxing/gi) === 0,
+    "warp-ingesta: sondeo con jsQR vendido — 0 matches 'zxing' (red line sondeos)",
+  );
+  ok(
+    warpIngesta.includes("rotacionDesdeCentroide") &&
+      warpIngesta.includes("QR_WARP_LADO_TOPE = 1600"),
+    "warp-ingesta: cuadrante→rotación reutilizado (orientacion-qr) + cap del warp ≤1600 (paridad e107)",
+  );
+  ok(
+    warpIngesta.includes("PRESUPUESTO_FILA_MS") === false &&
+      warpIngesta.includes("crearClientePrescan"),
+    "warp-ingesta: presupuestos vía el cliente del worker (mismos hard-kills del prescan — sin duplicación)",
+  );
+  ok(
+    !/from "\.\/store"/.test(warpIngesta),
+    "warp-ingesta: SIN import del store (deps inyectadas — cero ciclos, doctrina turno)",
+  );
+  ok(
+    orquestador.includes("masivaWarpIngesta") &&
+      orquestador.includes("filaBajoWarpIngesta") &&
+      orquestador.includes("esperarColaWarpIngesta") &&
+      orquestador.includes("__registrarDepsWarpIngesta"),
+    "prescan-qr: K2 — objetivo excluye filas con dueño + drenaje antes del barrido + registrador de deps",
+  );
+  ok(
+    !/from "\.\/warp-ingesta"/.test(runnerTxt),
+    "runner.ts: SIN import del warp-ingesta (el runner consume solo estamps de la fila)",
+  );
+  const storeTxt = (await leer("src/lib/e14/masiva/store.ts")) ?? "";
+  ok(
+    storeTxt.includes("encolarWarpIngesta") &&
+      storeTxt.includes("leerFlags().masivaWarpIngesta === true") &&
+      storeTxt.includes("marcarCadenaDedupEnVuelo(true)") &&
+      storeTxt.includes("marcarCadenaDedupEnVuelo(false)"),
+    "store.ts: disparo K2 (encolar bajo flag) + cortesía marcada alrededor de cadenaDedup",
+  );
+  ok(
+    storeTxt.includes("leerFlags().masivaSondeoCrudo === true") &&
+      storeTxt.includes("sondeo = await sondearQrPrecoz(entrada.archivo);"),
+    "store.ts: masivaSondeoCrudo default ON = camino de hoy (guard fuerza sondeo=null en OFF)",
+  );
+  // K2 — flags del dueño: defaults + DOBLE whitelist + FlagsApp AL FINAL.
+  ok(
+    flags.includes("masivaWarpIngesta: false,") &&
+      flags.includes("masivaRotacionQr: false,") &&
+      flags.includes("masivaSondeoCrudo: true,"),
+    "flags.ts: FLAGS_DEFAULT K2 (warp/rotación OFF · sondeo-crudo ON) AL FINAL (D57)",
+  );
+  ok(
+    flags.includes("limpio.masivaWarpIngesta = p.masivaWarpIngesta;") &&
+      flags.includes("limpio.masivaRotacionQr = p.masivaRotacionQr;") &&
+      flags.includes("limpio.masivaSondeoCrudo = p.masivaSondeoCrudo;"),
+    "flags.ts: whitelist aditiva K2 en sanearFlags (3 claves)",
+  );
+  ok(
+    (await leer("src/lib/e14/obs/politica.ts"))?.includes(
+      "limpio.masivaWarpIngesta = o.masivaWarpIngesta;",
+    ) === true,
+    "obs/politica.ts: DOBLE whitelist — overrides K2 alcanzables vía localStorage (D6)",
+  );
+  ok(
+    flagsTipo.includes("masivaWarpIngesta: boolean;") &&
+      flagsTipo.includes("masivaRotacionQr: boolean;") &&
+      flagsTipo.includes("masivaSondeoCrudo: boolean;"),
+    "obs/tipos.ts: FlagsApp + 3 flags K2 AL FINAL (D57 — patrón exacto)",
+  );
+  ok(
+    (await leer("src/lib/e14/orientacion-qr.ts"))?.includes(
+      "export function rotacionDesdeCentroide",
+    ) === true,
+    "orientacion-qr.ts: rotacionDesdeCentroide export ADITIVO (mapeo bench v8.3 4/4 — módulo intacto)",
+  );
+  // K2 — rotación de ingesta: runner (spread) + bridge (aplicación + guard).
+  ok(
+    runnerTxt.includes("OpcionesEscaneoConRotacion") &&
+      runnerTxt.includes("masivaRotacionQr") &&
+      runnerTxt.includes("rotacionPrecomputada"),
+    "runner.ts: spread condicional de rotacionPrecomputada en opcionesMasiva (mismo patrón P4)",
+  );
+  ok(
+    bridgeTxt.includes("OpcionesEscaneoConRotacion") &&
+      bridgeTxt.includes("rotacionPrecomputadaPlausible") &&
+      bridgeTxt.includes("masivaRotacionQr") &&
+      bridgeTxt.includes("rotacionIngestaAplicada") &&
+      bridgeTxt.includes("[e14] rotacion-ingesta"),
+    "scanner-core-bridge.ts: rotación de ingesta post-warp pre-OCR + plausibilidad + traza propia (D51)",
+  );
+
   // ── resultado ────────────────────────────────────────────────────────────
   console.log(`\nQA prescan-qr-cola: ${pasadas - fallos}/${pasadas} OK`);
   if (fallos > 0) process.exit(1);

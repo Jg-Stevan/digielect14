@@ -61,6 +61,8 @@ import { leerFlags } from "../flags";
 import {
   crearClientePrescan,
   DETECT_LONG_SIDE,
+  downscaleLado,
+  quadDeFracciones,
   type ClientePrescan,
 } from "./prescan-qr.client";
 import { BANDA_A, intentoSobrePixeles, type PixelesQr } from "./qr-pixeles";
@@ -82,8 +84,33 @@ import {
   abrirTurnoClasificacion,
   cerrarTurnoClasificacion,
 } from "./turno-clasificacion";
-// KIT e14-quad-streaming-v1 (P4): forma canónica del quad del core (solo tipo).
-import type { Quad } from "@jg-stevan/scanner-core/types";
+// KIT flujo-dueno-v1 (K2 — brief Agente B): el warp de INGESTA. Este módulo
+// es el REGISTRADOR de sus deps (aquí sí importa store.ts legítimamente —
+// el módulo de la ingesta NO lo hace: cero ciclos, doctrina turno).
+import {
+  ESPERA_COLA_TOPE_MS,
+  __registrarDepsWarpIngesta,
+  esperarColaWarpIngesta,
+  filaBajoWarpIngesta,
+} from "./warp-ingesta";
+// KIT e14-quad-streaming-v1 (P4): forma canónica del quad del core (solo
+// tipo) — MOVIDA a prescan-qr.client.ts junto a quadDeFracciones (K2), que
+// es quien la consume; aquí el tipo fluye por inferencia del helper.
+
+// KIT flujo-dueno-v1 (K2) — re-exports de los helpers MOVIDOS al cliente
+// (doctrina §A.2 del kit e73: módulo compartido, cero diffs en consumidores
+// — prescan-qr.test.ts y demás no cambian).
+export { downscaleLado, quadDeFracciones } from "./prescan-qr.client";
+
+// KIT flujo-dueno-v1 (K2) — REGISTRO de las deps del warp de ingesta: este
+// módulo carga con MasivaView (import estático del botón PROCESAR) ANTES de
+// que exista cualquier cola. El módulo de la ingesta JAMÁS importa store.ts
+// (store→warp-ingesta unidireccional — doctrina turno-clasificacion).
+__registrarDepsWarpIngesta({
+  storeState: () => useMasivaStore.getState(),
+  registrarQrPayload: registrarQrPayloadStore,
+  qrPayloadDeFila: qrPayloadDeFilaStore,
+});
 
 // ─── Clasificador PURO (testeable — deps inyectadas, patrón e73) ────────────
 
@@ -309,45 +336,13 @@ const DEPS_ESCRITURA: DepsEscrituraPrescan = {
 };
 
 // ─── Downscale a la clase 400 del core (mismo gesto del harness) ────────────
-
-async function downscaleLado(bitmap: ImageBitmap, ladoObjetivo: number): Promise<ImageBitmap> {
-  const lado = Math.max(bitmap.width, bitmap.height);
-  if (lado <= ladoObjetivo) return bitmap; // ya chico — se transfiere tal cual
-  const escala = ladoObjetivo / lado;
-  const w = Math.max(1, Math.round(bitmap.width * escala));
-  const h = Math.max(1, Math.round(bitmap.height * escala));
-  return await createImageBitmap(bitmap, {
-    resizeWidth: w,
-    resizeHeight: h,
-    resizeQuality: "low", // clase 400 del core — velocidad sobre nitidez
-  });
-}
+// KIT flujo-dueno-v1 (K2): MOVIDO a prescan-qr.client.ts (hogar del
+// contrato del worker — ahora sirve a DOS consumidores) — re-exportado
+// arriba. downscaleLado sigue importado aquí para el orquestador.
 
 // ─── KIT e14-quad-streaming-v1 (P4) — quad del pre-scan ya NO se tira ───────
-
-/**
- * Float32Array(8) del worker (fracciones 0-1, TL,TR,BR,BL — contrato del
- * cliente prescan-qr.client.ts) → Quad del core ([{x,y}×4]). null ante
- * CUALQUIER duda (longitud/NaN — conservador: el stamp jamás inventa; sin
- * quad la fila procesa con detección propia como siempre). El bridge
- * RE-VALIDA la plausibilidad por su lado (guard doble).
- * Export SOLO-TEST (knip tiene los *.test.ts como entry — cero export muerto).
- */
-export function quadDeFracciones(a: Float32Array | null | undefined): Quad | null {
-  try {
-    if (!a || a.length !== 8) return null;
-    const v = Array.from(a);
-    if (v.some((n) => !Number.isFinite(n))) return null;
-    return [
-      { x: v[0]!, y: v[1]! },
-      { x: v[2]!, y: v[3]! },
-      { x: v[4]!, y: v[5]! },
-      { x: v[6]!, y: v[7]! },
-    ];
-  } catch {
-    return null; // jamás throw — doctrina del conservador
-  }
-}
+// KIT flujo-dueno-v1 (K2): quadDeFracciones MOVIDA a prescan-qr.client.ts
+// (ídem downscaleLado) — re-exportada arriba.
 
 // ─── Orquestador (impuro — D.1 + export de §C) ──────────────────────────────
 
@@ -389,7 +384,16 @@ export async function prescanYIniciar(): Promise<void> {
   // por corrida (corrida atómica frente a flags).
   const prioridadOn = leerFlags().masivaPrioridad === true;
   if (streamingOn) abrirTurnoClasificacion(Date.now());
-  const objetivo = objetivoPrescan(useMasivaStore.getState().filas);
+  // KIT flujo-dueno-v1 (K2): el warp de INGESTA posee sus filas — el objetivo
+  // de este pase EXCLUYE las que están en SU cola (encoladas o en vuelo: su
+  // stamp llega con el bombeo). Punto 7 del brief: PROCESAR queda como
+  // ASEGURADOR — procesa filas SIN stamps y SIN dueño (agregadas mientras
+  // corría la corrida o filas que la ingesta no pudo decidir). Fuera del
+  // guard (flag OFF) el objetivo es el de hoy byte-idéntico.
+  const ingestaOn = leerFlags().masivaWarpIngesta === true;
+  const objetivo = objetivoPrescan(useMasivaStore.getState().filas).filter((f) =>
+    ingestaOn ? !filaBajoWarpIngesta(f.id) : true,
+  );
   if (objetivo.length === 0) {
     if (streamingOn) cerrarTurnoClasificacion(); // sin objetivo — turno inerte
     store.iniciar(); // idempotente, como hoy
@@ -567,6 +571,20 @@ export async function prescanYIniciar(): Promise<void> {
     // R6 — el worker del pre-scan muere SIEMPRE al terminar (RAM).
     cliente.destruir();
     if (streamingOn) {
+      // KIT flujo-dueno-v1 (K2): con el warp de ingesta activo, ESPERAR
+      // (acotado) a que su cola serial decida las filas que posee — el
+      // barrido de abajo NO puede releasear filas que la ingesta está por
+      // clasificar (la gemela pagaría OCR — peligro §3-P5 del plan).
+      // Timeout ⇒ abort honesto: el barrido decide igual (residual
+      // documentado en el REPORTE §P5-residual — defensas de fondo intactas).
+      if (ingestaOn) {
+        const drenada = await esperarColaWarpIngesta(ESPERA_COLA_TOPE_MS);
+        if (!drenada) {
+          logger.warn(
+            `[e14] prescan-qr: cola warp-ingesta NO drenó en ${ESPERA_COLA_TOPE_MS} ms — barrido de cierre decide (abort honesto)`,
+          );
+        }
+      }
       // P5 — BARRIDO DE CIERRE: TODA fila PENDIENTE sin stamp (abort
       // honesto, continue por fila sin bytes/decode, catch, llegada a mitad
       // del turno) queda DECIDIDA aquí — la fase de clasificación de este
