@@ -944,6 +944,20 @@ export type OpcionesEscaneoConQuad = OpcionesEscaneoConTimeout & {
   quadPrecomputado?: Quad;
 };
 
+/** KIT flujo-dueno-v1 (K2 — brief Agente B, sub-commit 3): rotación
+ *  PRECOMPUTADA por el warp de INGESTA (cuadrante del QR —
+ *  orientacion-qr.rotacionDesdeCentroide, bench v8.3 4/4). Intersección
+ *  LOCAL (packages/ INTOCABLE — patrón OpcionesEscaneoConQuad); campo AL
+ *  FINAL (contrato D57) — SIN colisión con quadPrecomputado de P4: se
+ *  aplica POST-warp del core y PRE-OCR (el warp ya terminó cuando rota).
+ *  El pipeline la consume SOLO con el flag masivaRotacionQr ON y SOLO si
+ *  pasa la validación local (guard conservador — cualquier duda → sondeo
+ *  de orientación de siempre). SOLO el runner MASIVA la construye (SIM y
+ *  el flujo individual jamás la traen). */
+export type OpcionesEscaneoConRotacion = OpcionesEscaneoConQuad & {
+  rotacionPrecomputada?: 0 | 90 | 180 | 270;
+};
+
 /** KIT e14-quad-streaming-v1 (P4) — DECISIÓN DOCUMENTADA (plan §3-P4 punto
  *  5): el quad precomputado viaja como SEMILLA (QUAD_PRECOMPUTADO_MANUAL =
  *  false): el warp del core REFINA el quad sobre el FULL (refineQuad /
@@ -1003,6 +1017,14 @@ function quadPrecomputadoPlausible(q: Quad): boolean {
   } catch {
     return false; // jamás tumba — detección propia de siempre
   }
+}
+
+/** KIT flujo-dueno-v1 (K2 — sub-commit 3) — validación LOCAL de la rotación
+ *  precomputada (guard conservador — patrón quadPrecomputadoPlausible): el
+ *  valor debe ser entero del set {0, 90, 180, 270}. Cualquier duda → false
+ *  → sondeo de orientación de siempre (el parche JAMÁS tumba el pipeline). */
+function rotacionPrecomputadaPlausible(r: number): boolean {
+  return r === 0 || r === 90 || r === 180 || r === 270;
 }
 
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
@@ -1493,6 +1515,48 @@ export class RealCoreBridge implements E14Bridge {
         ocrIn = "bw-fallback";
       }
     }
+    // KIT flujo-dueno-v1 (K2 — brief Agente B, sub-commit 3): ROTACIÓN DE
+    // INGESTA (paso 5 del flujo del dueño). La fila trae rotacionSugerida
+    // (cuadrante del QR en el warp de INGESTA — bench v8.3 4/4); con el
+    // flag masivaRotacionQr ON y la plausibilidad local OK, se giran fotoOcr
+    // Y fotoProcesada (mismo trato que cuando la brújula decide — rotar-
+    // DataUrl JAMÁS lanza, catch interno §5) y se OMITE el sondeo de
+    // orientación de abajo (el probe) — la decisión ya está tomada (rot=0
+    // incluido: el cuadrante dice "ya derecha" — el ahorro del probe OCR).
+    // POST-warp, PRE-OCR ⇒ SIN colisión con quadPrecomputado de P4. Fallo
+    // al rotar (rotarDataUrl devuelve la ENTRADA tal cual — identidad con
+    // rot≠0) ⇒ camino de hoy: el probe decide (patrón P4 — el bridge
+    // RE-VALIDA por su lado; el parche JAMÁS tumba el pipeline).
+    let rotacionIngestaAplicada = false;
+    const rotPre = (opciones as OpcionesEscaneoConRotacion).rotacionPrecomputada ?? null;
+    if (
+      !opciones.simular &&
+      !sinRecorte &&
+      rotPre != null &&
+      leerFlags().masivaRotacionQr === true &&
+      rotacionPrecomputadaPlausible(rotPre)
+    ) {
+      const tRot = performance.now();
+      let roto = true;
+      if (rotPre !== 0) {
+        const ocrRot = await rotarDataUrl(fotoOcr, rotPre);
+        const procRot = await rotarDataUrl(fotoProcesada, rotPre);
+        // Identidad con rot≠0 ⇒ fallo interno del giro (catch de rotar-
+        // DataUrl) ⇒ no omitir el probe (conservador).
+        if (ocrRot === fotoOcr || procRot === fotoProcesada) {
+          roto = false;
+        } else {
+          fotoOcr = ocrRot;
+          fotoProcesada = procRot;
+        }
+      }
+      if (roto) {
+        rotacionIngestaAplicada = true;
+        logger.info(
+          `[e14] rotacion-ingesta rot=${rotPre} via=cuadrante-ingesta ms=${(performance.now() - tRot).toFixed(0)} — sondeo de orientación omitido`,
+        );
+      }
+    }
     // KIT e14-orientacion-auto-v1 (T-A2): probe de orientación DESPUÉS de fijar
     // fotoOcr (tras el warp, §2.1) y ANTES del OCR completo y de TODA medición
     // downstream (esquinas/completitud/visor ven el acta YA derecha). SIM:
@@ -1568,6 +1632,7 @@ export class RealCoreBridge implements E14Bridge {
     }
     if (
       brujula === null &&
+      !rotacionIngestaAplicada && // K2 — la rotación de ingesta YA decidió
       !opciones.simular &&
       opciones.origenSenales === "exif-camara"
     ) {
@@ -1580,7 +1645,7 @@ export class RealCoreBridge implements E14Bridge {
         fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
         fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
       }
-    } else if (brujula === null && !opciones.simular) {
+    } else if (brujula === null && !rotacionIngestaAplicada && !opciones.simular) {
       const probe = await probeOrientacion(fotoOcr);
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
       probeMiniOrientacion = probe?.orientacionProbeMini ?? null; // WAVE2 A1 — la mini que el fallo seguro descartó
