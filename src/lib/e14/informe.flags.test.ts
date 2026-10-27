@@ -35,8 +35,10 @@ describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño
     // prefijo masiva* y el ancla NO se amplió en su commit (la verificación
     // de entonces solo corrió la suite masiva) — se repara EN este commit
     // (protocolo #3: el ancla crece por la COLA, jamás reordena).
+    // KIT e14-gama-adaptativa-v1 (D74): masivaAdaptativoGama entra por su
+    // prefijo masiva* — ancla ampliada EN el commit (protocolo #3).
     expect(linea).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0 masivaSoloWarpQr=0",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0 masivaSoloWarpQr=0 masivaAdaptativoGama=1",
     );
   });
 
@@ -44,7 +46,7 @@ describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño
     expect(
       lineaFlagsPipeline({ ...FLAGS_DEFAULT, masivaQuad: true, dhashResize: true }),
     ).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=1 masivaStreaming=0 dhashResize=1 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0 masivaSoloWarpQr=0",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=1 masivaStreaming=0 dhashResize=1 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=0 masivaSoloWarpQr=0 masivaAdaptativoGama=1",
     );
   });
 
@@ -58,7 +60,7 @@ describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño
       masivaOcrTesseract: true,
     } as typeof FLAGS_DEFAULT);
     expect(conPrioridad).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=1 masivaSoloWarpQr=0",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0 masivaWarpIngesta=0 masivaRotacionQr=0 masivaSondeoCrudo=1 masivaOcrTesseract=1 masivaSoloWarpQr=0 masivaAdaptativoGama=1",
     );
   });
 

@@ -138,6 +138,10 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       // el ANCLA literal se amplía EN EL MISMO commit que añade el flag
       // (protocolo #3 — precedente qa-prescan §G/P5).
       prescanQrRescate: false,
+      // KIT e14-gama-adaptativa-v1 (D74) — aditivo AL FINAL (contrato D57):
+      // default ON — capa adaptativa de gama (BAJO/MEDIO) con override
+      // manual del dueño por clave (D6) y kill-switch único (OFF = hoy).
+      masivaAdaptativoGama: true,
     });
   });
 

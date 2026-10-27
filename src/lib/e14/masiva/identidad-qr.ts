@@ -443,11 +443,26 @@ export async function decodificarQrDeRecorte(
  * zxing (wasm). La traza `tier=` sale por cada desenlace (también null —
  * T-0.3 del e64 la usa para verificar la versión desplegada). JAMÁS throw
  * (todas las sub-llamadas ya son a prueba de throw).
+ *
+ * KIT e14-gama-adaptativa-v1 (D74) — `opciones.presupuestoMs` (ADITIVO,
+ * default null = byte-idéntico a hoy): presupuesto de reló de PARED de la
+ * cadena. Los 3 barridos jsQR pesados (~15 s acumulados sin QR — el peor
+ * caso SYNC documentado abajo) se SALTAN si el reló ya venció y la cadena
+ * sigue directo al barrido zxing (con SU presupuesto propio de 4 s) y a
+ * las rotaciones (baratas). En gama BAJO/MEDIO esto acota el bloqueo del
+ * hilo UI sin perder la cobertura de rescate. La detección de pasada NO
+ * depende de esta cadena (es solo capa 0 — el OCR va río abajo).
  */
 export async function decodificarQrDePixeles(
   pix: PixelesQr,
+  opciones: { presupuestoMs?: number | null } = {},
 ): Promise<string | null> {
   const t0 = Date.now();
+  const presupuestoMs =
+    typeof opciones.presupuestoMs === "number" && opciones.presupuestoMs > 0
+      ? opciones.presupuestoMs
+      : null;
+  const vencido = () => presupuestoMs !== null && Date.now() - t0 > presupuestoMs;
   const base = ladderBaseDePixeles(pix);
   if (base != null) {
     trazaQr("base", base, t0);
@@ -464,26 +479,39 @@ export async function decodificarQrDePixeles(
     trazaQr("recorte-600", recorte, t0);
     return recorte;
   }
-  const barrido = barridoQrDePixeles(pix);
-  if (barrido != null) {
-    trazaQr("barrido", barrido, t0);
-    return barrido;
+  // KIT e14-gama-adaptativa-v1 — guard de presupuesto por tier pesado (las
+  // líneas `const barrido/nitido/binarizada = barridoQrDePixeles(...)` se
+  // conservan byte-idénticas — ancla source-scan qa-qr-identidad §T-1).
+  if (!vencido()) {
+    const barrido = barridoQrDePixeles(pix);
+    if (barrido != null) {
+      trazaQr("barrido", barrido, t0);
+      return barrido;
+    }
+  } else {
+    logger.info(
+      `[e14] qr-capa0 presupuesto=${presupuestoMs}ms vencido tras recorte — salta barridos jsQR (gama adaptativa)`,
+    );
   }
   // e64-qr T-1.1 — tier NITIDEZ: barrido sobre la imagen enfocada (doc
   // hermano R-1 — el remuestreo a 2048 suaviza los módulos; convolución
   // ~25 ms a 2048² + barrido acotado por nº de ventanas).
-  const nitido = barridoQrDePixeles(nitidezQrDePixeles(pix));
-  if (nitido != null) {
-    trazaQr("barrido-nitido", nitido, t0);
-    return nitido;
+  if (!vencido()) {
+    const nitido = barridoQrDePixeles(nitidezQrDePixeles(pix));
+    if (nitido != null) {
+      trazaQr("barrido-nitido", nitido, t0);
+      return nitido;
+    }
   }
   // e64-qr T-1.2 — tier BINARIZADA: barrido sobre el blanco-negro con
   // umbral LOCAL (doc hermano R-2 — sombra/iluminación dura donde el
   // binarizado interno de jsQR falla; imagen integral O(1) por píxel).
-  const binarizada = barridoQrDePixeles(binarizadaQrDePixeles(pix));
-  if (binarizada != null) {
-    trazaQr("barrido-binarizado", binarizada, t0);
-    return binarizada;
+  if (!vencido()) {
+    const binarizada = barridoQrDePixeles(binarizadaQrDePixeles(pix));
+    if (binarizada != null) {
+      trazaQr("barrido-binarizado", binarizada, t0);
+      return binarizada;
+    }
   }
   const zxing = await barridoQrZxingDePixeles(pix);
   if (zxing != null) {
@@ -565,18 +593,42 @@ export const QR_LADO_LARGO_RESCATE = 4096;
  */
 export async function decodificarQrDeCapture(
   dataUrl: string,
-  opciones: { tiers?: "completos" | "base" } = {},
+  opciones: {
+    tiers?: "completos" | "base";
+    // KIT e14-gama-adaptativa-v1 (D74) — ADITIVOS con default = comportamiento
+    // de hoy (los callers existentes sin estas claves quedan byte-idénticos):
+    /** Lado largo del canvas de trabajo (default QR_LADO_LARGO=2048). */
+    ladoLargo?: number;
+    /** Rescate hi-res 4096 permitido (default true). */
+    rescate4096?: boolean;
+    /** Presupuesto de la cadena completa (default null = sin reló). */
+    presupuestoMs?: number | null;
+  } = {},
 ): Promise<{ payload: string } | null> {
   const tiers = opciones.tiers ?? "completos";
+  const ladoLargo =
+    typeof opciones.ladoLargo === "number" && opciones.ladoLargo >= 256
+      ? Math.round(opciones.ladoLargo)
+      : QR_LADO_LARGO;
+  const rescateOn = opciones.rescate4096 !== false;
   try {
-    const pix = await pixelesDeCapture(dataUrl);
+    const pix = await pixelesDeCapture(dataUrl, ladoLargo);
     if (!pix) return null;
     if (tiers === "base") {
       const baseRapida = ladderBaseDePixeles(pix);
       return baseRapida != null ? { payload: baseRapida } : null;
     }
-    const payload = await decodificarQrDePixeles(pix);
+    const payload = await decodificarQrDePixeles(pix, {
+      presupuestoMs: opciones.presupuestoMs ?? null,
+    });
     if (payload != null) return { payload };
+    // KIT e14-gama-adaptativa-v1 — rescate 4096 OMITIDO en gama BAJO (64 MB
+    // puntual donde los abortos por memoria dominan — D74). Con flag OFF/
+    // ALTO/MEDIO rescateOn=true ⇒ byte-idéntico a hoy.
+    if (!rescateOn) {
+      logger.info(`[e14] qr-capa0 rescate4096 OMITIDO (gama adaptativa)`);
+      return null;
+    }
     // e64-qr T-1.4 — RESCATE a resolución mayor (ADAPTACIÓN DECLARADA: el
     // snippet del kit usa `>=` con comentario «ya era ≥4096», internamente
     // inconsistente — pix YA viene clampeado a 2048, así que `>= QR_LADO_

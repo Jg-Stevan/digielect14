@@ -21,6 +21,9 @@
  */
 
 import { canvasCon, decodeImagenLruDeBlob } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
+// KIT e14-gama-adaptativa-v1 (D74): el lado mayor EFECTIVO del master lo da
+// el plan de gama (BAJO 3072 · resto 4032).
+import { planGamaActual } from "../gama";
 
 /** Entradas de comprimido que son imágenes (por extensión — kit T2.2). */
 const EXT_IMAGEN = /\.(jpe?g|png|webp|bmp|gif|avif|heic|heif)$/i;
@@ -46,8 +49,20 @@ const PDF_ESCALA_MAX = 4;
  *  fotoProcesada, REVISIÓN) vive a ESA escala hoy; el master nace a la MISMA
  *  escala para que los píxeles que llegan a detección/OCR sean los de siempre
  *  (mismo cap — solo cambia UNA re-encode intermedia q0.90, gate del dueño
- *  ±0.3). Prohibido mover este número sin un kit propio (mueve scores). */
+ *  ±0.3). Prohibido mover este número sin un kit propio (mueve scores).
+ *  KIT e14-gama-adaptativa-v1 (D74) — ÚNICA excepción registrada: en gama
+ *  BAJO adaptativa el master de MASIVA nace a 3072 (pico de bitmap −42 %
+ *  donde los abortos por memoria dominan; el det trabaja a 1280/1920 y la
+ *  resolución de OCR/QR se conserva) — flag-gated vía ladoMaestroEfectivo()
+ *  y revocable con masivaAdaptativoGama=false o override manual. */
 const MAESTRO_LADO_MAYOR = 4032;
+
+/** KIT e14-gama-adaptativa-v1 (D74) — lado mayor EFECTIVO del master de la
+ *  cola (ver comentario de MAESTRO_LADO_MAYOR). Flag OFF/ALTO/MEDIO ⇒ 4032
+ *  byte-idéntico a hoy. */
+function ladoMaestroEfectivo(): number {
+  return Math.min(MAESTRO_LADO_MAYOR, planGamaActual().maestroLadoMayor);
+}
 /** D66 (T3.2) — calidad del JPEG del master (kit literal «q≈0.90»). */
 const MAESTRO_JPEG_CALIDAD = 0.9;
 
@@ -94,7 +109,9 @@ async function bitmapAMaestro(
 ): Promise<MaestroImagen | null> {
   try {
     const lado = Math.max(fuente.naturalWidth, fuente.naturalHeight) || 1;
-    const escala = Math.min(1, MAESTRO_LADO_MAYOR / lado);
+    // KIT e14-gama-adaptativa-v1 (D74): escala contra el lado EFECTIVO (3072
+    // en BAJO adaptativa — ver ladoMaestroEfectivo).
+    const escala = Math.min(1, ladoMaestroEfectivo() / lado);
     const ancho = Math.max(1, Math.round(fuente.naturalWidth * escala));
     const alto = Math.max(1, Math.round(fuente.naturalHeight * escala));
     const canvas = canvasCon(ancho, alto); // SPRINT-A A3 — factory

@@ -117,6 +117,14 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // jsQR-only (dictamen e73 intacto). Default OFF ⇒ byte-idéntico a hoy
   // (el módulo de rescate ni se intenta).
   prescanQrRescate: false,
+  // KIT e14-gama-adaptativa-v1 (D74) — capa adaptativa de GAMA para el
+  // pipeline masiva+OCR: el tier detectado (obs/dispositivo §4.4 — BAJO/
+  // MEDIO/ALTO) aplica SOLO presupuestos de recursos (pool/threads/warp/
+  // prescan/watchdog/master/QR/dhash — tabla completa en gama.ts) en
+  // BAJO/MEDIO. El override MANUAL del dueño manda clave a clave (D6: la
+  // app jamás pisa una mano explícita) y `false` = byte-idéntico a hoy en
+  // TODOS los dispositivos (kill-switch único).
+  masivaAdaptativoGama: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -176,6 +184,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   }
   // KIT e14-prescan-rescate-qr-v1 — whitelist aditiva (booleano).
   if (typeof p.prescanQrRescate === "boolean") limpio.prescanQrRescate = p.prescanQrRescate;
+  // KIT e14-gama-adaptativa-v1 — whitelist aditiva (booleano).
+  if (typeof p.masivaAdaptativoGama === "boolean") limpio.masivaAdaptativoGama = p.masivaAdaptativoGama;
   return limpio;
 }
 
