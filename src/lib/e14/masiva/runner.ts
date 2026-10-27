@@ -22,7 +22,9 @@ import { leerFlags } from "../flags";
 // D66 — KIT e14-decode-unico-precalor-v1: el prefetch (D61) se RE-APUNTA —
 // ya no calienta la memo del original (el pipeline ya no la consume: recibe
 // el MASTER) sino que asegura el master de N+1 vía el precalor (T3.6/T3.1).
-import { type OpcionesEscaneoConTimeout } from "../scanner-core-bridge";
+// KIT e14-quad-streaming-v1 (P4): ídem con el quad precomputado del pre-scan
+// (OpcionesEscaneoConQuad extiende ConTimeout — el tipo del runner).
+import { type OpcionesEscaneoConQuad } from "../scanner-core-bridge";
 // D66 — KIT e14-decode-unico-precalor-v1 (T1/T3): maestro único a escala de
 // trabajo + precalor de la cola (consumo T3.3 + prefetch re-apuntado).
 import { maestroDeImagen, type MaestroImagen } from "./archivos";
@@ -77,6 +79,15 @@ import {
 } from "./runner-watchdog";
 import { marcarFila, marcarVida, vidaDe, vidas } from "./runner-vida";
 import { logger } from "../../logger";
+// KIT e14-quad-streaming-v1 (P5): semáforo del TURNO de clasificación —
+// módulo sin imports (el orquestador del pre-scan importa store y store
+// importa runner: un import directo sería un ciclo). El filtro de
+// siguientePendiente solo exige filas decididas MIENTRAS el turno está
+// abierto; cerrado el turno, inerte (sin hambruna por construcción).
+import {
+  turnoClasificacionEnCurso,
+  turnoClasificacionInicioMs,
+} from "./turno-clasificacion";
 // e63f — KIT e63f-autoenvio-v1 (F2): re-lectura interna pre-«repetir-primero».
 // Lógica pura en masiva/relectura.ts (testeable headless); aquí solo la
 // orquestación: re-OCR del MISMO bitmap (reconocerTexto — cap fino) +
@@ -200,6 +211,25 @@ function motivoCorto(err: unknown): string {
  *  SOLO-VISUAL (sin acta propia, sin envío): el filtro de abajo solo toma
  *  PENDIENTE/DUPLICADA, verificación del kit (cero código de runner). */
 function siguientePendiente(): FilaMasiva | null {
+  // KIT e14-quad-streaming-v1 (P5 — masivaStreaming, default OFF): con el
+  // flag ON y el TURNO de clasificación ABIERTO (el pre-scan iterando), el
+  // pool solo consume filas YA decididas — cierra la carrera
+  // clasificación-vs-pool (la gemela que el pre-scan va a marcar jamás
+  // reserva slot ni paga OCR — peligro §3-P5 del plan):
+  //  · DUPLICADA — la decisión de dedup EXISTE (ingesta o pre-scan): el
+  //    reuso de siempre es seguro (la fila procesa como copia).
+  //  · prescanOk — el pre-scan YA decidió esta fila (veredicto aplicado,
+  //    lectura imposible o stamp upfront de PROCESAR IGUAL — nadie la va a
+  //    marcar más).
+  //  · agregadaEn >= inicioTurno — nació DESPUÉS del arranque del turno:
+  //    el objetivo se congeló antes de ella, nadie la va a clasificar en
+  //    este ciclo (sin carrera — llega al pool como siempre, sin hambruna).
+  // Turno CERRADO o flag OFF → filtro INERTE (byte-idéntico a 5d08dd6).
+  // Las guardas existentes (re-chequeo post-reserva :363, esperar-
+  // DesenlaceOriginal) quedan intactas — defensa en profundidad.
+  const filtroStreaming =
+    leerFlags().masivaStreaming === true && turnoClasificacionEnCurso();
+  const inicioTurno = turnoClasificacionInicioMs();
   const pendientes = useMasivaStore
     .getState()
     .filas.filter(
@@ -209,7 +239,12 @@ function siguientePendiente(): FilaMasiva | null {
         // e71 (Opt-3): una fila RESERVADA por otro worker del pool jamás
         // se toma dos veces (la reserva nace ANTES del pipeline y muere en
         // el finally del vuelo).
-        !reservadas.has(f.id),
+        !reservadas.has(f.id) &&
+        // P5 (arriba) — consumo por turno de clasificación.
+        (!filtroStreaming ||
+          f.estado === "DUPLICADA" ||
+          f.prescanOk === true ||
+          f.agregadaEn >= inicioTurno),
     )
     .sort((a, b) => a.agregadaEn - b.agregadaEn);
   return pendientes[0] ?? null;
@@ -770,10 +805,12 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
 
         // T4: variable tipada con la intersección (sin excess-check de literal —
         // el parámetro de la interfaz E14Bridge sigue siendo OpcionesEscaneo).
+        // KIT e14-quad-streaming-v1 (P4): OpcionesEscaneoConQuad extiende
+        // ConTimeout — mismo patrón de intersección LOCAL.
         // D65 (T1): presupuesto del INTENTO — lo RESTANTE de WATCHDOG_MS (el
         // pre-proceso ya gastó lo suyo; el timeout del bridge dispara SU acta
         // de timeout exactamente en la frontera del intento).
-        const opcionesMasiva: OpcionesEscaneoConTimeout = {
+        const opcionesMasiva: OpcionesEscaneoConQuad = {
           objetivo: null, // A4 — la clasificación REAL manda (viene del OCR)
           intento: 1, // A6 — semántica de PRIMERA captura (el watchdog NO es re-captura)
           maxIntentos: 4, // fallos → RECHAZADA repetible / rescate por recorte manual
@@ -797,6 +834,20 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
             marcarVida(fila.id, p); // señal de vida (T3 — throttle 250 ms)
           },
           timeoutMs: Math.max(5_000, WATCHDOG_MS - (Date.now() - tIntento)),
+          // KIT e14-quad-streaming-v1 (P4) — quad del pre-scan al bridge
+          // (flag masivaQuad, default OFF — sin flag: sin la llave, llamadas
+          // byte-idénticas a 5d08dd6). Guard conservador DOBLE aquí:
+          //  · !preProceso?.aplicado — el quad lo detectó el pre-scan sobre
+          //    el ORIGINAL; si el deskew D63-B corrigió la imagen, la
+          //    geometría ya no cuadra (el master es el CORREGIDO) → no viaja.
+          //    (Hoy el deskew solo aplica a escaneos y el bridge usa página
+          //    completa para ellos — defensa en profundidad ante cambios
+          //    futuros del D63-B.)
+          //  · el bridge RE-VALIDA la plausibilidad por su lado (área,
+          //    convexidad, rango) — cualquier duda → detección propia.
+          ...(leerFlags().masivaQuad === true && fila.quad && !preProceso?.aplicado
+            ? { quadPrecomputado: fila.quad }
+            : {}),
         };
         const resultado = await correrIntento(
           getBridge().escanearActa(opcionesMasiva),
@@ -1636,6 +1687,19 @@ export function iniciarRunner(): void {
   void bucle().finally(() => {
     corriendoFlag = false;
     useMasivaStore.setState({ corriendo: false, progreso: null });
+    // KIT e14-quad-streaming-v1 (P5 — masivaStreaming, default OFF): el
+    // DRENAJE pudo solapar el turno de clasificación — filas con prescanOk
+    // estampadas durante `await Promise.all(enVuelo)` vieron iniciar()
+    // no-op (corriendoFlag) y el bucle ya rompió. Re-chequeo DIFERIDO
+    // (macrotask — este finally ya corrió): mismos guardas del re-arranque
+    // e63g (pausa manual manda; solo corre si hay filas consumibles
+    // REALES — el filtro de siguientePendiente decide). Flag OFF → inerte
+    // (byte-idéntico a 5d08dd6). Termina solo: sin consumibles → no
+    // re-arranca (nada de bucles infinitos).
+    setTimeout(() => {
+      if (leerFlags().masivaStreaming !== true || stopFlag) return;
+      if (siguientePendiente()) iniciarRunner();
+    }, 0);
   });
 }
 

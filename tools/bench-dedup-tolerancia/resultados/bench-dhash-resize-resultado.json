@@ -1,0 +1,1198 @@
+{
+  "kit": "e14-dhash-resize-v1",
+  "banco": "bench-resize.html (P3 — full-res vs resize64)",
+  "fecha": "2026-10-27T02:56:14.202Z",
+  "entorno": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36",
+    "hardwareConcurrency": 2,
+    "deviceMemoryGB": 4,
+    "dpr": 1
+  },
+  "parametros": {
+    "dhash": "copia congelada de dedup.ts @ 5d08dd6 (canvas 9×8, hex 16)",
+    "viaFull": "createImageBitmap(b, { imageOrientation: \"from-image\" })",
+    "viaResize64": "createImageBitmap(b, { imageOrientation: \"from-image\", resizeWidth: 64, resizeHeight: 64, resizeQuality: \"medium\" }) — spec P3",
+    "viaResizeProp64": "evidence-only: aspect preservado 64×⌈64·H/W⌉ (diagnóstico de aspect-ratio)",
+    "DEDUP_HAMMING_MAX": 6,
+    "metaGemelas": "≤ 4 (margen 2 contra el umbral 6)",
+    "metaNoGemelas": "> 12 (comentario dedup.ts:24)",
+    "corpusVeredicto": "fotoActa 12 MP (realista) — actaLike 1000×2920 = estrés (no decide)"
+  },
+  "sintetico": {
+    "fotoActa": {
+      "origen": "sintetico-fotoacta-12mp",
+      "items": [
+        {
+          "nombre": "fotoacta-1.jpg-q92",
+          "grupo": "fotoacta-1",
+          "hashFull": "4545011111014545",
+          "hashResize64": "4d655db1554d4545",
+          "hashResizeProp64": "4d2555b3554d4d4d",
+          "msFull": 33.6,
+          "msResize64": 50.7,
+          "msResizeProp64": 40
+        },
+        {
+          "nombre": "fotoacta-1.jpg-q50",
+          "grupo": "fotoacta-1",
+          "hashFull": "4545031111414545",
+          "hashResize64": "4d655db1554d4d45",
+          "hashResizeProp64": "4d2555b3554d4d4d",
+          "msFull": 32.3,
+          "msResize64": 38.5,
+          "msResizeProp64": 36.8
+        },
+        {
+          "nombre": "fotoacta-1.png",
+          "grupo": "fotoacta-1",
+          "hashFull": "4505010111014145",
+          "hashResize64": "4d655db1554d4545",
+          "hashResizeProp64": "4d2555b3554d4d4d",
+          "msFull": 68.1,
+          "msResize64": 77.9,
+          "msResizeProp64": 71.7
+        },
+        {
+          "nombre": "fotoacta-2.jpg-q92",
+          "grupo": "fotoacta-2",
+          "hashFull": "4545011311014545",
+          "hashResize64": "4d775db2554d4545",
+          "hashResizeProp64": "4d2355b2554d4d4d",
+          "msFull": 32.2,
+          "msResize64": 39.7,
+          "msResizeProp64": 39.5
+        },
+        {
+          "nombre": "fotoacta-2.jpg-q50",
+          "grupo": "fotoacta-2",
+          "hashFull": "4545031311414545",
+          "hashResize64": "4d775db2554d4d45",
+          "hashResizeProp64": "4d235592554d4d4d",
+          "msFull": 29.8,
+          "msResize64": 37.1,
+          "msResizeProp64": 36.7
+        },
+        {
+          "nombre": "fotoacta-2.png",
+          "grupo": "fotoacta-2",
+          "hashFull": "4505010111014145",
+          "hashResize64": "4d775db2554d4545",
+          "hashResizeProp64": "4d2355b2554d4d4d",
+          "msFull": 63.2,
+          "msResize64": 70,
+          "msResizeProp64": 68.4
+        },
+        {
+          "nombre": "fotoacta-3.jpg-q92",
+          "grupo": "fotoacta-3",
+          "hashFull": "4545012211014545",
+          "hashResize64": "4d575d62554d4545",
+          "hashResizeProp64": "4d135567554d4d4d",
+          "msFull": 32.8,
+          "msResize64": 39.7,
+          "msResizeProp64": 39.3
+        },
+        {
+          "nombre": "fotoacta-3.jpg-q50",
+          "grupo": "fotoacta-3",
+          "hashFull": "4545032211414545",
+          "hashResize64": "4d575d62554d4d45",
+          "hashResizeProp64": "4d175567554d4d4d",
+          "msFull": 29.1,
+          "msResize64": 35.4,
+          "msResizeProp64": 34.7
+        },
+        {
+          "nombre": "fotoacta-3.png",
+          "grupo": "fotoacta-3",
+          "hashFull": "4505012211014145",
+          "hashResize64": "4d575d62554d4545",
+          "hashResizeProp64": "4d135567554d4d4d",
+          "msFull": 61.5,
+          "msResize64": 66.3,
+          "msResizeProp64": 65.2
+        }
+      ],
+      "paresGemelas": [
+        {
+          "grupo": "fotoacta-1",
+          "a": "fotoacta-1.jpg-q92",
+          "b": "fotoacta-1.jpg-q50",
+          "hammingIntraFull": 2,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 14,
+          "hammingCruceFullVsResizeProp": 16
+        },
+        {
+          "grupo": "fotoacta-1",
+          "a": "fotoacta-1.jpg-q92",
+          "b": "fotoacta-1.png",
+          "hammingIntraFull": 3,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 13,
+          "hammingCruceFullVsResizeProp": 16
+        },
+        {
+          "grupo": "fotoacta-1",
+          "a": "fotoacta-1.jpg-q50",
+          "b": "fotoacta-1.jpg-q92",
+          "hammingIntraFull": 2,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 13,
+          "hammingCruceFullVsResizeProp": 16
+        },
+        {
+          "grupo": "fotoacta-1",
+          "a": "fotoacta-1.jpg-q50",
+          "b": "fotoacta-1.png",
+          "hammingIntraFull": 5,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 13,
+          "hammingCruceFullVsResizeProp": 16
+        },
+        {
+          "grupo": "fotoacta-1",
+          "a": "fotoacta-1.png",
+          "b": "fotoacta-1.jpg-q92",
+          "hammingIntraFull": 3,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 16,
+          "hammingCruceFullVsResizeProp": 17
+        },
+        {
+          "grupo": "fotoacta-1",
+          "a": "fotoacta-1.png",
+          "b": "fotoacta-1.jpg-q50",
+          "hammingIntraFull": 5,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 17
+        },
+        {
+          "grupo": "fotoacta-2",
+          "a": "fotoacta-2.jpg-q92",
+          "b": "fotoacta-2.jpg-q50",
+          "hammingIntraFull": 2,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 17
+        },
+        {
+          "grupo": "fotoacta-2",
+          "a": "fotoacta-2.jpg-q92",
+          "b": "fotoacta-2.png",
+          "hammingIntraFull": 4,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 16,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupo": "fotoacta-2",
+          "a": "fotoacta-2.jpg-q50",
+          "b": "fotoacta-2.jpg-q92",
+          "hammingIntraFull": 2,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 16,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupo": "fotoacta-2",
+          "a": "fotoacta-2.jpg-q50",
+          "b": "fotoacta-2.png",
+          "hammingIntraFull": 6,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 16,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupo": "fotoacta-2",
+          "a": "fotoacta-2.png",
+          "b": "fotoacta-2.jpg-q92",
+          "hammingIntraFull": 4,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 20,
+          "hammingCruceFullVsResizeProp": 20
+        },
+        {
+          "grupo": "fotoacta-2",
+          "a": "fotoacta-2.png",
+          "b": "fotoacta-2.jpg-q50",
+          "hammingIntraFull": 6,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 21,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupo": "fotoacta-3",
+          "a": "fotoacta-3.jpg-q92",
+          "b": "fotoacta-3.jpg-q50",
+          "hammingIntraFull": 2,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 14,
+          "hammingCruceFullVsResizeProp": 17
+        },
+        {
+          "grupo": "fotoacta-3",
+          "a": "fotoacta-3.jpg-q92",
+          "b": "fotoacta-3.png",
+          "hammingIntraFull": 2,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 13,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupo": "fotoacta-3",
+          "a": "fotoacta-3.jpg-q50",
+          "b": "fotoacta-3.jpg-q92",
+          "hammingIntraFull": 2,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 13,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupo": "fotoacta-3",
+          "a": "fotoacta-3.jpg-q50",
+          "b": "fotoacta-3.png",
+          "hammingIntraFull": 4,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 13,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupo": "fotoacta-3",
+          "a": "fotoacta-3.png",
+          "b": "fotoacta-3.jpg-q92",
+          "hammingIntraFull": 2,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 0,
+          "hammingCruceFullVsResize": 15,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupo": "fotoacta-3",
+          "a": "fotoacta-3.png",
+          "b": "fotoacta-3.jpg-q50",
+          "hammingIntraFull": 4,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 16,
+          "hammingCruceFullVsResizeProp": 17
+        }
+      ],
+      "paresNoGemelas": [
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-2",
+          "a": "fotoacta-1.jpg-q92",
+          "b": "fotoacta-2.jpg-q92",
+          "hammingIntraFull": 1,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-2",
+          "a": "fotoacta-1.jpg-q92",
+          "b": "fotoacta-2.jpg-q50",
+          "hammingIntraFull": 3,
+          "hammingCruceFullVsResize": 18,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-2",
+          "a": "fotoacta-1.jpg-q92",
+          "b": "fotoacta-2.png",
+          "hammingIntraFull": 3,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-2",
+          "a": "fotoacta-1.jpg-q50",
+          "b": "fotoacta-2.jpg-q92",
+          "hammingIntraFull": 3,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-2",
+          "a": "fotoacta-1.jpg-q50",
+          "b": "fotoacta-2.jpg-q50",
+          "hammingIntraFull": 1,
+          "hammingCruceFullVsResize": 18,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-2",
+          "a": "fotoacta-1.jpg-q50",
+          "b": "fotoacta-2.png",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-2",
+          "a": "fotoacta-1.png",
+          "b": "fotoacta-2.jpg-q92",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 20,
+          "hammingCruceFullVsResizeProp": 20
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-2",
+          "a": "fotoacta-1.png",
+          "b": "fotoacta-2.jpg-q50",
+          "hammingIntraFull": 6,
+          "hammingCruceFullVsResize": 21,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-2",
+          "a": "fotoacta-1.png",
+          "b": "fotoacta-2.png",
+          "hammingIntraFull": 0,
+          "hammingCruceFullVsResize": 20,
+          "hammingCruceFullVsResizeProp": 20
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-1.jpg-q92",
+          "b": "fotoacta-3.jpg-q92",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 20
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-1.jpg-q92",
+          "b": "fotoacta-3.jpg-q50",
+          "hammingIntraFull": 6,
+          "hammingCruceFullVsResize": 18,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-1.jpg-q92",
+          "b": "fotoacta-3.png",
+          "hammingIntraFull": 6,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 20
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-1.jpg-q50",
+          "b": "fotoacta-3.jpg-q92",
+          "hammingIntraFull": 6,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 20
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-1.jpg-q50",
+          "b": "fotoacta-3.jpg-q50",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 18,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-1.jpg-q50",
+          "b": "fotoacta-3.png",
+          "hammingIntraFull": 8,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 20
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-1.png",
+          "b": "fotoacta-3.jpg-q92",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 18,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-1.png",
+          "b": "fotoacta-3.jpg-q50",
+          "hammingIntraFull": 7,
+          "hammingCruceFullVsResize": 19,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupoA": "fotoacta-1",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-1.png",
+          "b": "fotoacta-3.png",
+          "hammingIntraFull": 3,
+          "hammingCruceFullVsResize": 18,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-2",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-2.jpg-q92",
+          "b": "fotoacta-3.jpg-q92",
+          "hammingIntraFull": 3,
+          "hammingCruceFullVsResize": 16,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-2",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-2.jpg-q92",
+          "b": "fotoacta-3.jpg-q50",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupoA": "fotoacta-2",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-2.jpg-q92",
+          "b": "fotoacta-3.png",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 16,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-2",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-2.jpg-q50",
+          "b": "fotoacta-3.jpg-q92",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 16,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-2",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-2.jpg-q50",
+          "b": "fotoacta-3.jpg-q50",
+          "hammingIntraFull": 3,
+          "hammingCruceFullVsResize": 17,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupoA": "fotoacta-2",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-2.jpg-q50",
+          "b": "fotoacta-3.png",
+          "hammingIntraFull": 7,
+          "hammingCruceFullVsResize": 16,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-2",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-2.png",
+          "b": "fotoacta-3.jpg-q92",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 18,
+          "hammingCruceFullVsResizeProp": 19
+        },
+        {
+          "grupoA": "fotoacta-2",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-2.png",
+          "b": "fotoacta-3.jpg-q50",
+          "hammingIntraFull": 7,
+          "hammingCruceFullVsResize": 19,
+          "hammingCruceFullVsResizeProp": 18
+        },
+        {
+          "grupoA": "fotoacta-2",
+          "grupoB": "fotoacta-3",
+          "a": "fotoacta-2.png",
+          "b": "fotoacta-3.png",
+          "hammingIntraFull": 3,
+          "hammingCruceFullVsResize": 18,
+          "hammingCruceFullVsResizeProp": 19
+        }
+      ],
+      "resumen": {
+        "maxHammingSelfCruce": 20,
+        "maxHammingSelfCruceProp": 20,
+        "maxHammingGemelasCruce": 21,
+        "maxHammingGemelasCruceProp": 20,
+        "maxHammingGemelasIntraFull": 6,
+        "maxHammingGemelasIntraResize64": 1,
+        "maxHammingGemelasIntraResizeProp64": 1,
+        "minHammingNoGemelasCruce": 16,
+        "minHammingNoGemelasCruceProp": 18,
+        "minHammingNoGemelasIntraFull": 0,
+        "sanityFullSano": true,
+        "mecanismoAtrapaGemelasResize64": true,
+        "mecanismoAtrapaGemelasResizeProp64": true
+      }
+    },
+    "actaLike": {
+      "origen": "sintetico-actalike-stress",
+      "items": [
+        {
+          "nombre": "sintetica-1.png",
+          "grupo": "sintetica-1",
+          "hashFull": "0000000010000008",
+          "hashResize64": "51969629b22b6020",
+          "hashResizeProp64": "5596966996696921",
+          "msFull": 11.5,
+          "msResize64": 14.7,
+          "msResizeProp64": 12
+        },
+        {
+          "nombre": "sintetica-1.jpg-q92",
+          "grupo": "sintetica-1",
+          "hashFull": "004a000092000004",
+          "hashResize64": "51969629b22b6020",
+          "hashResizeProp64": "5596966996696961",
+          "msFull": 10.1,
+          "msResize64": 12.4,
+          "msResizeProp64": 11.8
+        },
+        {
+          "nombre": "sintetica-1.jpg-q50",
+          "grupo": "sintetica-1",
+          "hashFull": "0092000051000028",
+          "hashResize64": "51969629b22b6020",
+          "hashResizeProp64": "5596966996496921",
+          "msFull": 10.1,
+          "msResize64": 11.3,
+          "msResizeProp64": 11
+        },
+        {
+          "nombre": "sintetica-2.png",
+          "grupo": "sintetica-2",
+          "hashFull": "0000000012000008",
+          "hashResize64": "51969629b22b6020",
+          "hashResizeProp64": "5596966996696121",
+          "msFull": 11.6,
+          "msResize64": 18.9,
+          "msResizeProp64": 12
+        },
+        {
+          "nombre": "sintetica-2.jpg-q92",
+          "grupo": "sintetica-2",
+          "hashFull": "0080000092000004",
+          "hashResize64": "55969629b22b6020",
+          "hashResizeProp64": "5596966996496161",
+          "msFull": 9.6,
+          "msResize64": 14,
+          "msResizeProp64": 12.3
+        },
+        {
+          "nombre": "sintetica-2.jpg-q50",
+          "grupo": "sintetica-2",
+          "hashFull": "0080000052000028",
+          "hashResize64": "51969629b22b6020",
+          "hashResizeProp64": "5596966996496921",
+          "msFull": 9.1,
+          "msResize64": 11.1,
+          "msResizeProp64": 11
+        },
+        {
+          "nombre": "sintetica-3.png",
+          "grupo": "sintetica-3",
+          "hashFull": "0000000092000008",
+          "hashResize64": "55b6b629b22b6020",
+          "hashResizeProp64": "5596966996696121",
+          "msFull": 11.7,
+          "msResize64": 12.1,
+          "msResizeProp64": 11.9
+        },
+        {
+          "nombre": "sintetica-3.jpg-q92",
+          "grupo": "sintetica-3",
+          "hashFull": "0091000092000008",
+          "hashResize64": "5596b629b22b6020",
+          "hashResizeProp64": "5596966996696961",
+          "msFull": 10.9,
+          "msResize64": 12,
+          "msResizeProp64": 11.9
+        },
+        {
+          "nombre": "sintetica-3.jpg-q50",
+          "grupo": "sintetica-3",
+          "hashFull": "0092000092000028",
+          "hashResize64": "5596b629b22b6020",
+          "hashResizeProp64": "5596966996696921",
+          "msFull": 10.1,
+          "msResize64": 12.8,
+          "msResizeProp64": 11.1
+        }
+      ],
+      "paresGemelas": [
+        {
+          "grupo": "sintetica-1",
+          "a": "sintetica-1.png",
+          "b": "sintetica-1.jpg-q92",
+          "hammingIntraFull": 7,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 31
+        },
+        {
+          "grupo": "sintetica-1",
+          "a": "sintetica-1.png",
+          "b": "sintetica-1.jpg-q50",
+          "hammingIntraFull": 6,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupo": "sintetica-1",
+          "a": "sintetica-1.jpg-q92",
+          "b": "sintetica-1.png",
+          "hammingIntraFull": 7,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupo": "sintetica-1",
+          "a": "sintetica-1.jpg-q92",
+          "b": "sintetica-1.jpg-q50",
+          "hammingIntraFull": 11,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupo": "sintetica-1",
+          "a": "sintetica-1.jpg-q50",
+          "b": "sintetica-1.png",
+          "hammingIntraFull": 6,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 23,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupo": "sintetica-1",
+          "a": "sintetica-1.jpg-q50",
+          "b": "sintetica-1.jpg-q92",
+          "hammingIntraFull": 11,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 23,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupo": "sintetica-2",
+          "a": "sintetica-2.png",
+          "b": "sintetica-2.jpg-q92",
+          "hammingIntraFull": 4,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupo": "sintetica-2",
+          "a": "sintetica-2.png",
+          "b": "sintetica-2.jpg-q50",
+          "hammingIntraFull": 3,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupo": "sintetica-2",
+          "a": "sintetica-2.jpg-q92",
+          "b": "sintetica-2.png",
+          "hammingIntraFull": 4,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 22,
+          "hammingCruceFullVsResizeProp": 26
+        },
+        {
+          "grupo": "sintetica-2",
+          "a": "sintetica-2.jpg-q92",
+          "b": "sintetica-2.jpg-q50",
+          "hammingIntraFull": 5,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 22,
+          "hammingCruceFullVsResizeProp": 26
+        },
+        {
+          "grupo": "sintetica-2",
+          "a": "sintetica-2.jpg-q50",
+          "b": "sintetica-2.png",
+          "hammingIntraFull": 3,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 23,
+          "hammingCruceFullVsResizeProp": 27
+        },
+        {
+          "grupo": "sintetica-2",
+          "a": "sintetica-2.jpg-q50",
+          "b": "sintetica-2.jpg-q92",
+          "hammingIntraFull": 5,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 27
+        },
+        {
+          "grupo": "sintetica-3",
+          "a": "sintetica-3.png",
+          "b": "sintetica-3.jpg-q92",
+          "hammingIntraFull": 3,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupo": "sintetica-3",
+          "a": "sintetica-3.png",
+          "b": "sintetica-3.jpg-q50",
+          "hammingIntraFull": 4,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupo": "sintetica-3",
+          "a": "sintetica-3.jpg-q92",
+          "b": "sintetica-3.png",
+          "hammingIntraFull": 3,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 2,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 26
+        },
+        {
+          "grupo": "sintetica-3",
+          "a": "sintetica-3.jpg-q92",
+          "b": "sintetica-3.jpg-q50",
+          "hammingIntraFull": 3,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 27
+        },
+        {
+          "grupo": "sintetica-3",
+          "a": "sintetica-3.jpg-q50",
+          "b": "sintetica-3.png",
+          "hammingIntraFull": 4,
+          "hammingIntraResize64": 1,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 22,
+          "hammingCruceFullVsResizeProp": 23
+        },
+        {
+          "grupo": "sintetica-3",
+          "a": "sintetica-3.jpg-q50",
+          "b": "sintetica-3.jpg-q92",
+          "hammingIntraFull": 3,
+          "hammingIntraResize64": 0,
+          "hammingIntraResizeProp64": 1,
+          "hammingCruceFullVsResize": 21,
+          "hammingCruceFullVsResizeProp": 25
+        }
+      ],
+      "paresNoGemelas": [
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-2",
+          "a": "sintetica-1.png",
+          "b": "sintetica-2.png",
+          "hammingIntraFull": 1,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-2",
+          "a": "sintetica-1.png",
+          "b": "sintetica-2.jpg-q92",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 26,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-2",
+          "a": "sintetica-1.png",
+          "b": "sintetica-2.jpg-q50",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-2",
+          "a": "sintetica-1.jpg-q92",
+          "b": "sintetica-2.png",
+          "hammingIntraFull": 6,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-2",
+          "a": "sintetica-1.jpg-q92",
+          "b": "sintetica-2.jpg-q92",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-2",
+          "a": "sintetica-1.jpg-q92",
+          "b": "sintetica-2.jpg-q50",
+          "hammingIntraFull": 9,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-2",
+          "a": "sintetica-1.jpg-q50",
+          "b": "sintetica-2.png",
+          "hammingIntraFull": 7,
+          "hammingCruceFullVsResize": 23,
+          "hammingCruceFullVsResizeProp": 27
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-2",
+          "a": "sintetica-1.jpg-q50",
+          "b": "sintetica-2.jpg-q92",
+          "hammingIntraFull": 9,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 27
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-2",
+          "a": "sintetica-1.jpg-q50",
+          "b": "sintetica-2.jpg-q50",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 23,
+          "hammingCruceFullVsResizeProp": 27
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-1.png",
+          "b": "sintetica-3.png",
+          "hammingIntraFull": 2,
+          "hammingCruceFullVsResize": 28,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-1.png",
+          "b": "sintetica-3.jpg-q92",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 27,
+          "hammingCruceFullVsResizeProp": 31
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-1.png",
+          "b": "sintetica-3.jpg-q50",
+          "hammingIntraFull": 6,
+          "hammingCruceFullVsResize": 27,
+          "hammingCruceFullVsResizeProp": 30
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-1.jpg-q92",
+          "b": "sintetica-3.png",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 27,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-1.jpg-q92",
+          "b": "sintetica-3.jpg-q92",
+          "hammingIntraFull": 8,
+          "hammingCruceFullVsResize": 26,
+          "hammingCruceFullVsResizeProp": 30
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-1.jpg-q92",
+          "b": "sintetica-3.jpg-q50",
+          "hammingIntraFull": 7,
+          "hammingCruceFullVsResize": 26,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-1.jpg-q50",
+          "b": "sintetica-3.png",
+          "hammingIntraFull": 8,
+          "hammingCruceFullVsResize": 26,
+          "hammingCruceFullVsResizeProp": 27
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-1.jpg-q50",
+          "b": "sintetica-3.jpg-q92",
+          "hammingIntraFull": 7,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupoA": "sintetica-1",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-1.jpg-q50",
+          "b": "sintetica-3.jpg-q50",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupoA": "sintetica-2",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-2.png",
+          "b": "sintetica-3.png",
+          "hammingIntraFull": 1,
+          "hammingCruceFullVsResize": 27,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupoA": "sintetica-2",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-2.png",
+          "b": "sintetica-3.jpg-q92",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 26,
+          "hammingCruceFullVsResizeProp": 30
+        },
+        {
+          "grupoA": "sintetica-2",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-2.png",
+          "b": "sintetica-3.jpg-q50",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 26,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupoA": "sintetica-2",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-2.jpg-q92",
+          "b": "sintetica-3.png",
+          "hammingIntraFull": 3,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 26
+        },
+        {
+          "grupoA": "sintetica-2",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-2.jpg-q92",
+          "b": "sintetica-3.jpg-q92",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 28
+        },
+        {
+          "grupoA": "sintetica-2",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-2.jpg-q92",
+          "b": "sintetica-3.jpg-q50",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 24,
+          "hammingCruceFullVsResizeProp": 27
+        },
+        {
+          "grupoA": "sintetica-2",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-2.jpg-q50",
+          "b": "sintetica-3.png",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 26,
+          "hammingCruceFullVsResizeProp": 27
+        },
+        {
+          "grupoA": "sintetica-2",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-2.jpg-q50",
+          "b": "sintetica-3.jpg-q92",
+          "hammingIntraFull": 5,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 29
+        },
+        {
+          "grupoA": "sintetica-2",
+          "grupoB": "sintetica-3",
+          "a": "sintetica-2.jpg-q50",
+          "b": "sintetica-3.jpg-q50",
+          "hammingIntraFull": 4,
+          "hammingCruceFullVsResize": 25,
+          "hammingCruceFullVsResizeProp": 28
+        }
+      ],
+      "resumen": {
+        "maxHammingSelfCruce": 26,
+        "maxHammingSelfCruceProp": 30,
+        "maxHammingGemelasCruce": 25,
+        "maxHammingGemelasCruceProp": 31,
+        "maxHammingGemelasIntraFull": 11,
+        "maxHammingGemelasIntraResize64": 1,
+        "maxHammingGemelasIntraResizeProp64": 2,
+        "minHammingNoGemelasCruce": 23,
+        "minHammingNoGemelasCruceProp": 26,
+        "minHammingNoGemelasIntraFull": 1,
+        "sanityFullSano": false,
+        "mecanismoAtrapaGemelasResize64": true,
+        "mecanismoAtrapaGemelasResizeProp64": true
+      }
+    },
+    "sensibilidadColorCruce": [
+      {
+        "deltaCanalR": 1,
+        "hammingFullBaseVsFullShift": 0,
+        "hammingResizeBaseVsResizeShift": 0,
+        "hammingCruceFullBaseVsResizeShift": 13,
+        "hammingCruceFullBaseVsResizePropShift": 16
+      },
+      {
+        "deltaCanalR": 2,
+        "hammingFullBaseVsFullShift": 2,
+        "hammingResizeBaseVsResizeShift": 1,
+        "hammingCruceFullBaseVsResizeShift": 14,
+        "hammingCruceFullBaseVsResizePropShift": 16
+      },
+      {
+        "deltaCanalR": 3,
+        "hammingFullBaseVsFullShift": 3,
+        "hammingResizeBaseVsResizeShift": 1,
+        "hammingCruceFullBaseVsResizeShift": 14,
+        "hammingCruceFullBaseVsResizePropShift": 16
+      },
+      {
+        "deltaCanalR": 5,
+        "hammingFullBaseVsFullShift": 1,
+        "hammingResizeBaseVsResizeShift": 0,
+        "hammingCruceFullBaseVsResizeShift": 13,
+        "hammingCruceFullBaseVsResizePropShift": 16
+      },
+      {
+        "deltaCanalR": 8,
+        "hammingFullBaseVsFullShift": 4,
+        "hammingResizeBaseVsResizeShift": 1,
+        "hammingCruceFullBaseVsResizeShift": 14,
+        "hammingCruceFullBaseVsResizePropShift": 16
+      },
+      {
+        "deltaCanalR": 12,
+        "hammingFullBaseVsFullShift": 0,
+        "hammingResizeBaseVsResizeShift": 0,
+        "hammingCruceFullBaseVsResizeShift": 13,
+        "hammingCruceFullBaseVsResizePropShift": 16
+      }
+    ],
+    "timing12MP": {
+      "bytes": 560468,
+      "megapixeles": 12.2,
+      "full": {
+        "rondas": 7,
+        "mediaMs": 30.5,
+        "p50Ms": 30.9,
+        "p95Ms": 31.4,
+        "minMs": 29,
+        "maxMs": 31.4
+      },
+      "resize64": {
+        "rondas": 7,
+        "mediaMs": 38.5,
+        "p50Ms": 39.1,
+        "p95Ms": 39.7,
+        "minMs": 37.3,
+        "maxMs": 39.7
+      },
+      "resizeProp64": {
+        "rondas": 7,
+        "mediaMs": 38.1,
+        "p50Ms": 37.9,
+        "p95Ms": 39.4,
+        "minMs": 36.9,
+        "maxMs": 39.4
+      },
+      "heapDeltaDecode": {
+        "full": null,
+        "resize64": null,
+        "resizeProp64": null,
+        "nota": "performance.memory.usedJSHeapSize antes/después del createImageBitmap. Δ=0 en todas las rondas → performance.memory cuantiza/actualiza perezosamente y el Δ del bitmap NO es medible aquí (n/d) — la afirmación 48 MB→KB queda teórica (física del bitmap), no medida en este sandbox"
+      },
+      "ahorroMedioPctResize64": -26.3,
+      "ahorroMedioPctResizeProp64": -25.1
+    }
+  },
+  "reales": null,
+  "veredicto": {
+    "go": false,
+    "corpusVeredicto": "fotoActa 12 MP (realista)",
+    "regla": "GO ⇔ max gemelas (self-cruce + pares cruzados) ≤ 4 ∧ min NO-gemelas cruce > 12 ∧ mecanismoResize64 atrapa gemelas",
+    "razones": [
+      "[PRIMARIO fotoActa] maxHammingSelfCruce=20 (≤ 4: false)",
+      "[PRIMARIO fotoActa] maxHammingGemelasCruce=21 (≤ 4: false)",
+      "[PRIMARIO fotoActa] minHammingNoGemelasCruce=16 (> 12: true)",
+      "[PRIMARIO fotoActa] sanity camino FULL de hoy sano (intra-gemela ≤ 6): true",
+      "[STRESS actaLike] maxHammingSelfCruce=26 · sanity FULL sano: false (corpus patológico para el downscale en un paso — NO decide)",
+      "[DIAGNÓSTICO] aspect preservado (resizeProp64, evidence-only): self-cruce=20 · gemelas cruce=20 — TAMBIÉN falla → el daño viene del DOBLE REMUESTREO en sí (64 intermedio + drawImage 9×8 ≠ downscale directo FULL→9×8), no solo del aspect cuadrado. Ninguna variante de resize intermedio es compatible con los hashes full-res históricos."
+    ],
+    "caveats": [
+      "Corpus SINTÉTICO (gemelas por construcción png/jpg — sin HEIC real: canvas no encodea HEIC).",
+      "La gemela HEIC/JPG REAL del dueño debe confirmar el veredicto con «CARGAR FOTOS REALES» antes del rollout.",
+      "Timing/RAM medidos en DESKTOP headless — NO representan el dispositivo del dueño (main-thread contendido); la métrica de decisión es la DETERMINISTICIDAD (Hamming), no el tiempo.",
+      "Sin EXIF en el corpus sintético; producción usa imageOrientation from-image en todas las vías (igual riesgo relativo).",
+      "Un browser que ignore las opciones de resize produce el bitmap FULL → hash idéntico al de hoy (degradación segura)."
+    ]
+  }
+}

@@ -71,6 +71,18 @@ describe("flags · sanearFlags", () => {
     expect(sanearFlags({ masivaQrHandoff: "on" })).toEqual({});
     expect(sanearFlags({ masivaQrHandoff: 1 })).toEqual({});
   });
+
+  // KIT e14-quad-streaming-v1 (§D) — whitelist aditiva (booleanos P4/P5):
+  it("quad-streaming · masivaQuad/masivaStreaming: overrides válidos aceptan; tipos inválidos → default", () => {
+    // Overrides válidos — aceptados (kill switches del dueño):
+    expect(sanearFlags({ masivaQuad: true, masivaStreaming: true })).toEqual({
+      masivaQuad: true,
+      masivaStreaming: true,
+    });
+    expect(sanearFlags({ masivaQuad: false })).toEqual({ masivaQuad: false });
+    // Tipos inválidos → ausentes (el caller conserva el default — jamás inventar):
+    expect(sanearFlags({ masivaQuad: "sí", masivaStreaming: 1 })).toEqual({});
+  });
 });
 
 describe("flags · leerFlags (cadena de prioridad)", () => {
@@ -95,6 +107,12 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       qrBrujulaOrientacion: true,
       // P1 (plan masiva — brief Agente A) — aditivo AL FINAL (contrato D57):
       masivaQrHandoff: false,
+      // KIT e14-quad-streaming-v1 (§D) — aditivos AL FINAL (contrato D57):
+      // defaults OFF — byte-idéntico a 5d08dd6 (kill-switches del dueño).
+      masivaQuad: false,
+      masivaStreaming: false,
+      // KIT e14-dhash-resize-v1 (§D) — aditivo AL FINAL (contrato D57):
+      dhashResize: false,
     });
   });
 
@@ -282,5 +300,37 @@ describe("flags · hangEnCurso (kill-switch del sensor hang-en-curso, §D)", () 
     expect(sanearFlags({ hangEnCurso: 0 })).toEqual({});
     expect(sanearFlags({ hangEnCurso: null })).toEqual({});
     expect(leerFlags().hangEnCurso).toBe(true); // FLAGS_DEFAULT.hangEnCurso
+  });
+});
+
+// ─── KIT e14-dhash-resize-v1 (§D, T4 ≥ 2) — flag dhashResize (parche P3) ───
+describe("flags · dhashResize (decode chico del dhash — kill-switch P3)", () => {
+  it("default OFF → byte-idéntico a 5d08dd6 (decode FULL del dhash)", () => {
+    stubWindow();
+    expect(leerFlags().dhashResize).toBe(false); // FLAGS_DEFAULT.dhashResize
+  });
+
+  it("saneo acepta booleano (true/false); leerFlags lo aplica sobre defaults", () => {
+    expect(sanearFlags({ dhashResize: true })).toEqual({ dhashResize: true });
+    expect(sanearFlags({ dhashResize: false })).toEqual({ dhashResize: false });
+    stubWindow();
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) => (k === "e14-flags-overrides" ? JSON.stringify({ dhashResize: true }) : null),
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().dhashResize).toBe(true); // override manual del dueño (D6 — pasa por los DOS whitelists: sanearFlags + leerOverridesFlags)
+  });
+
+  it("tipo inválido (no-booleano) → default (ausente del whitelist)", () => {
+    expect(sanearFlags({ dhashResize: "sí" })).toEqual({});
+    expect(sanearFlags({ dhashResize: 1 })).toEqual({});
+    expect(sanearFlags({ dhashResize: null })).toEqual({});
+    stubWindow();
+    expect(leerFlags().dhashResize).toBe(false); // cae al default conservador
   });
 });

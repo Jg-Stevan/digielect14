@@ -18,6 +18,7 @@
  */
 import { fileToCaptureDataUrl } from "@jg-stevan/scanner-core/image-processor";
 import { canvasCon } from "../image-utils"; // SPRINT-A A3 — factory de canvas
+import { leerFlags } from "../flags"; // e14-dhash-resize-v1 — flag del parche P3 (default OFF)
 
 /** D65 (T2.2) — umbral del kit, documentado: DEDUP_HAMMING_MAX = 6 (de 64
  *  bits). Distancia ≤ umbral → reutilizarResultado EXACTAMENTE como hoy
@@ -36,9 +37,45 @@ type FuenteBitmap = ImageBitmap | HTMLImageElement;
  * fuentes (JPG/PNG/WebP/página-PDF directo del File; HEIC vía la conversión
  * del core) deben producir el bitmap reorientado. Fallback <img> vía object
  * URL (los navegadores modernos ya aplican EXIF al <img>).
+ *
+ * KIT e14-dhash-resize-v1 (P3, plan §3-P3) — decode CHICO detrás del flag
+ * `dhashResize` (default OFF → este camino es byte-idéntico a 5d08dd6). Con
+ * el flag ON el decode FULL del original (12 MP ≈ 48 MB — comentario del
+ * dhash: "La escala del master es irrelevante", el drawImage a 9×8 la
+ * absorbe) pasa a resize A NIVEL DE DECODE (64×64, resizeQuality
+ * "medium") — la contención de main-thread que ahogaba al sondeo
+ * (evidencia run 4 en store.ts: 14 hard-kills/2 min) baja de ~48 MB a KB.
+ * RIESGO D65/T2.1 (encabezado de este archivo): un camino de decode distinto
+ * puede voltear bits cerca de gradientes → gemelas con hashDedup HISTÓRICO
+ * (full-res persistido) dejarían de matchear con Hamming ≤ 6. El GO/NO-GO
+ * lo decide el bench OBLIGATORIO tools/bench-dedup-tolerancia/bench-resize.html
+ * (resultados en resultados/bench-dhash-resize-resultado.{json,md}).
+ * CONSERVADOR (red line §5 del plan): si el createImageBitmap con resize
+ * lanza (browser sin soporte de opciones de resize) → cae al decode FULL
+ * de abajo (semántica D65 intacta) — jamás tumba el encolado. Un browser
+ * que IGNORE las opciones de resize en silencio produce el bitmap FULL →
+ * hash idéntico al de hoy (degradación segura, del lado conservador).
+ * El fallback <img> NO recibe resize (la API de <img> no lo ofrece a nivel
+ * de decode — queda FULL, documentado; mismo criterio del brief P3:
+ * "si no es trivial, déjalo en full y documéntalo"). El camino HEIC SÍ lo
+ * hereda entero: entra por fileToCaptureDataUrl → JPEG → bitmapNormalizado.
  */
 async function bitmapNormalizado(fuente: Blob): Promise<FuenteBitmap> {
   if (typeof createImageBitmap === "function") {
+    // e14-dhash-resize-v1 — SOLO detrás del flag (default OFF). Cualquier
+    // duda → el catch cae al decode FULL de siempre (dedup jamás inventa).
+    if (leerFlags().dhashResize) {
+      try {
+        return await createImageBitmap(fuente, {
+          imageOrientation: "from-image",
+          resizeWidth: 64,
+          resizeHeight: 64,
+          resizeQuality: "medium",
+        });
+      } catch {
+        /* resize no soportado/falló → decode FULL de siempre (camino D65) */
+      }
+    }
     try {
       return await createImageBitmap(fuente, { imageOrientation: "from-image" });
     } catch {
@@ -137,7 +174,9 @@ export function hamming64(a: string, b: string): number {
  *    intermedio con EXIF distinta al del HEIC) → hashes que no cuadraban.
  *  · HEIC/HEIF → el navegador NO decoda HEIC: la MISMA conversión del core
  *    que consume TODO el pipeline (fileToCaptureDataUrl — orientación ya
- *    horneada en el JPEG de salida), luego el mismo bitmap normalizado.
+ *    horneada en el JPEG de salida), luego el mismo bitmap normalizado
+ *    (e14-dhash-resize-v1: el JPEG convertido hereda el flag dhashResize —
+ *    mismo camino de decode que el resto, cero ramas nuevas).
  *  Cualquier fallo → null (la fila procesa normal — conservador).
  */
 export async function dhashDeArchivo(file: File): Promise<string | null> {
