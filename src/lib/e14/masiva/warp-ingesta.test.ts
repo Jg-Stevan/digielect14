@@ -64,7 +64,10 @@ import {
   esperarColaWarpIngesta,
   filaBajoWarpIngesta,
   marcarCadenaDedupEnVuelo,
+  type DecisionIngesta,
   type DepsWarpIngesta,
+  type EstampaIngesta,
+  type FlagsEstampa,
 } from "./warp-ingesta";
 // (mockeado arriba — la versión de prueba del flag abortar)
 import { __setFabricaWorkerDeteccionParaTest } from "./prescan-qr.client";
@@ -309,6 +312,16 @@ describe("K2 · estampaDeIngesta (pura)", () => {
     { x: 0.9, y: 0.9 },
     { x: 0.1, y: 0.9 },
   ];
+  // Tipos del contrato anclados por uso (knip limpio — mismos valores).
+  const _decision: DecisionIngesta = {
+    payloadWarp: null,
+    heredado: null,
+    quadFila: null,
+    rotacion: null,
+  };
+  const _flags: FlagsEstampa = { masivaQrHandoff: false };
+  const _salida: EstampaIngesta = estampaDeIngesta(_decision, _flags);
+  void _salida;
 
   it("lectura OK: prescanOk + quad + rotacionSugerida del centroide", () => {
     const { patch, payloadParaRegistrar } = estampaDeIngesta(
