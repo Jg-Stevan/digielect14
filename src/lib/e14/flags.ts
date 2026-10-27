@@ -48,6 +48,11 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // jsQR 0/4). Kill-switch del dueño: OFF = sondeo OCR de siempre byte a
   // byte (el probe D56 queda como red de seguridad).
   qrBrujulaOrientacion: true,
+  // KIT e14-quad-streaming-v1 (§D) — kill-switches del dueño (P4/P5).
+  // OFF = byte-idéntico a 5d08dd6 (quad precomputado ignorado; prescan
+  // serial con iniciar() al final — sin consumo por turno).
+  masivaQuad: false,
+  masivaStreaming: false,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -81,6 +86,9 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.prescanQrCola === "boolean") limpio.prescanQrCola = p.prescanQrCola;
   // KIT e14-orientacion-qr-v1 (§D) — whitelist aditiva (booleano).
   if (typeof p.qrBrujulaOrientacion === "boolean") limpio.qrBrujulaOrientacion = p.qrBrujulaOrientacion;
+  // KIT e14-quad-streaming-v1 (§D) — whitelist aditiva (booleanos P4/P5).
+  if (typeof p.masivaQuad === "boolean") limpio.masivaQuad = p.masivaQuad;
+  if (typeof p.masivaStreaming === "boolean") limpio.masivaStreaming = p.masivaStreaming;
   return limpio;
 }
 
