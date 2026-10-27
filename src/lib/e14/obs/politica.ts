@@ -150,6 +150,13 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // KIT e14-ocr-cascada-v1 (K3 fase 2) — mismo criterio: sin esta línea
     // el override localStorage de `masivaOcrTesseract` sería inalcanzable.
     if (typeof o.masivaOcrTesseract === "boolean") limpio.masivaOcrTesseract = o.masivaOcrTesseract;
+    // KIT e14-solo-warp-qr-v1 (prueba de consola del dueño) — mismo criterio:
+    // sin esta línea el override localStorage de `sondeoQrPrecoz` (kill-switch
+    // e73) sería inalcanzable — ya estaba en el whitelist de sanearFlags
+    // (flags.ts) pero FALTABA ESTA puerta (DOBLE whitelist — cada puerta su
+    // línea, lección dhashResize). Con el override en false el dueño apaga el
+    // sondeo de ingesta para aislar la hambruna de CPU en pruebas dry run.
+    if (typeof o.sondeoQrPrecoz === "boolean") limpio.sondeoQrPrecoz = o.sondeoQrPrecoz;
     // KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — mismo criterio: sin esta
     // línea el override localStorage de `masivaSoloWarpQr` (toggle SOLO QR de
     // MASIVA) sería inalcanzable (DOBLE whitelist — cada puerta su línea).
