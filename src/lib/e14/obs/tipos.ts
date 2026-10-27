@@ -149,6 +149,8 @@ export interface FlagsApp {
   masivaWarpIngesta: boolean; // default false — K2/paso 2: detección+warp+sondeo-QR del pre-scan suben a la INGESTA (cola serial con cortesía de CPU); false = byte-idéntico a acf181f (el trabajo sigue en «PROCESAR COLA»)
   masivaRotacionQr: boolean; // default false — K2/paso 5: la ROTACIÓN final la guía el cuadrante del QR en el warp de ingesta (rotacionSugerida viaja al bridge como rotacionPrecomputada y el sondeo de orientación se omite); false = byte-idéntico a acf181f (probe de siempre)
   masivaSondeoCrudo: boolean; // default TRUE = camino de hoy — el sondeo QR crudo de la cadenaDedup (e73) alimenta hand-off P1 y dedup temprano; false = SOLO para la corrida de control del dueño (el guard fuerza sondeo=null, la fila sigue a dhash COMO HOY)
+  // ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — campo ADITIVO AL FINAL (D57) ───
+  masivaOcrTesseract: boolean; // default false — cascada OCR: intento 1 → gate → core RapidOCR como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte (GO/NO-GO: bench-ocr-cascada/)
 }
 
 export interface ReporteSesion {

@@ -139,6 +139,15 @@ import type { ProbeOrientacion } from "./orientacion";
 // el motor + decisión/elegir del módulo PURO nuevo (testable headless — bun).
 import { DET_CAP_PROD, DET_CAP_RAPIDO } from "./ocr/rapidocr";
 import { anclasDe, elegirMejor, necesitaSegunda } from "./ocr-escalonado";
+// KIT e14-ocr-cascada-v1 (K3 fase 2): núcleo PURO de la cascada (gate entre
+// motores + rescate ROI) — flag masivaOcrTesseract (default OFF ⇒ escalonado
+// de siempre byte a byte). Decision/eleccion de siempre: NEEDS ocr-escalonado.
+import {
+  cascadaActiva,
+  correrCascadaOcr,
+  type DepsOcrCascada,
+  type PasadaCascada,
+} from "./ocr-cascada";
 // KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado justo
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
@@ -838,6 +847,120 @@ async function reconocerRapidOcrEscalonado(
         : ` ms1=${ms1}`),
   );
   return { texto: elegido.texto, conf: elegido.conf, detMs: elegido.detMs, recMs: elegido.recMs };
+}
+
+/**
+ * KIT e14-ocr-cascada-v1 (K3 fase 2 — plan flujo-dueño paso 6) — recorte de
+ * UN ROI del warp para el rescate OCR: franja horizontal [y0Frac, y1Frac]
+ * re-escalada a cap DET_CAP_PROD (1920 — brief K3: «re-escalado a cap 1920»)
+ * → dataUrl JPEG 0.92 (entrada de OCR, tolerante; el MISMO patrón de crop
+ * invertido de ocrBanda §5). SOLO corre tras el warp full-res (la entrada
+ * es fotoOcr — el recorte SIN filtro del PROD-1 §4.1). JAMÁS lanza: null =
+ * el ROI se descarta y la cascada continúa (doctrina del conservador).
+ */
+async function recortarRoiDataUrl(
+  foto: string,
+  y0Frac: number,
+  y1Frac: number,
+): Promise<string | null> {
+  try {
+    const img = await loadImageMemo(foto);
+    const W = img.naturalWidth;
+    const H = img.naturalHeight;
+    if (!W || !H) return null;
+    const y0 = Math.round(Math.max(0, Math.min(1, y0Frac)) * H);
+    const y1 = Math.round(Math.max(0, Math.min(1, y1Frac)) * H);
+    const hSrc = Math.max(1, y1 - y0);
+    // Re-escalado a cap 1920 del lado largo (el ROI lejos del cap remonta
+    // resolución de lectura — brief K3 fase 1, cascadas B/C).
+    const escala = Math.min(1, DET_CAP_PROD / Math.max(W, hSrc));
+    const wDst = Math.max(1, Math.round(W * escala));
+    const hDst = Math.max(1, Math.round(hSrc * escala));
+    const canvas = canvasCon(wDst, hDst); // SPRINT-A A3 — factory
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, y0, W, hSrc, 0, 0, wDst, hDst);
+    return canvas.toDataURL("image/jpeg", 0.92);
+  } catch {
+    return null; // jamás tumba — el rescate se descarta
+  }
+}
+
+/**
+ * KIT e14-ocr-cascada-v1 (K3 fase 2) — la CASCADA en el pipeline, SOLO con
+ * `leerFlags().masivaOcrTesseract` ON (default OFF ⇒ esta función nunca se
+ * invoca y el camino es `reconocerRapidOcrEscalonado` byte a byte):
+ *
+ *   intento 1 (RapidOCR 1280 HOY · Tesseract futuro si GO-B) → GATE
+ *   (clasificador puro, nivel AUTO) ⇒ listo; si no ⇒ core RapidOCR COMO
+ *   HOY (1280 → necesitaSegunda → 1920 → elegirMejor); si débil y sin AUTO
+ *   ⇒ rescate por ROIs top 0-25% / bottom 75-100% (cap 1920) → elegirMejor
+ *   SOLO entre pasadas RapidOCR (entre motores decidió el GATE).
+ *
+ * El GATE usa el clasificador REAL de producción (clasificarCabecera +
+ * cargarDivipol — el MISMO juez que decide el acta más abajo en el
+ * pipeline, FASE 6). TODO(GO-B): con el GO del bench
+ * `tools/bench-ocr-cascada/`, crear `masiva/ocr-tesseract.ts` (tesseract.js
+ * vendido, worker propio — JAMÁS main thread) y apuntar `intento1` a él con
+ * `mismoMotorIntento1: false` (su texto SOLO vale por el GATE — jamás
+ * elegirMejor) + budget/timeout propio (dato del bench; el core usa el
+ * TIMEOUT_MS de referencia). SIN GO ⇒ NO-GO documentado y este scaffold
+ * queda dormido (patrón P3-dhash).
+ */
+const OCR_CASCADA_TESSERACT_GO = false; // decisión del dueño tras el bench K3
+async function reconocerRapidOcrCascada(
+  fotoOcr: string,
+  onProgress: (p: number) => void,
+  cfg: { presupuestoMs: number; inicioMs: number },
+): Promise<OcrEscalonadoSalida> {
+  const rt = await rapidOcrInit(); // sesión ÚNICA (§2.1 — pre-warm en bg)
+  const base = await cargarDivipol(); // cacheada — 0 costo tras la 1.ª
+  // GATE = el clasificador REAL de prod (mismo juez, FASE 6 del pipeline).
+  const clasificarNivel = (texto: string): "AUTO" | "SUGERIDA" | "MANUAL" =>
+    clasificarCabecera(texto, base).nivel;
+  const aPasada = (
+    r: Awaited<ReturnType<typeof rapidOcrReconocer>>,
+    cap: number | "roi",
+  ): PasadaCascada => ({ texto: r.texto, conf: r.confMedia, cap, msDet: r.msDet, msRec: r.msRec });
+  const deps: DepsOcrCascada = {
+    intento1: async (foto) => {
+      // HOY: RapidOCR 1280 (la MISMA 1.ª pasada del escalonado — se reusa).
+      // TODO(GO-B): Tesseract completo (masiva/ocr-tesseract.ts, budget propio).
+      return aPasada(await rapidOcrReconocer(rt, foto, onProgress, { detCap: DET_CAP_RAPIDO }), DET_CAP_RAPIDO);
+    },
+    mismoMotorIntento1: !OCR_CASCADA_TESSERACT_GO,
+    ocr1280: async (foto) =>
+      aPasada(await rapidOcrReconocer(rt, foto, onProgress, { detCap: DET_CAP_RAPIDO }), DET_CAP_RAPIDO),
+    ocr1920: async (foto) =>
+      aPasada(await rapidOcrReconocer(rt, foto, onProgress, { detCap: DET_CAP_PROD }), DET_CAP_PROD),
+    // ROI a cap PROD (1920) — brief K3: «RapidOCR sobre ROIs re-escalados a
+    // cap 1920». Sin opts = detCap default DET_CAP_PROD (rapidocr.ts).
+    ocrRoi: async (roiDataUrl) => aPasada(await rapidOcrReconocer(rt, roiDataUrl, onProgress), DET_CAP_PROD),
+    recortarRoi: recortarRoiDataUrl,
+    clasificarNivel,
+    // Presupuesto EXISTENTE del pipeline (§3 del kit escalonado — sin
+    // presupuestos nuevos).
+    presupuestoVencido: () => performance.now() - cfg.inicioMs >= cfg.presupuestoMs,
+  };
+  const s = await correrCascadaOcr(fotoOcr, deps);
+  // Traza PROPIA (D51 — línea nueva, SOLO con flag ON; parseable).
+  const ms1 = s.ms1280 != null ? s.ms1280 + s.msIntento1 : s.msIntento1;
+  logger.info(
+    `[e14] ocr-cascada intento1=${OCR_CASCADA_TESSERACT_GO ? "tesseract" : DET_CAP_RAPIDO} ` +
+      `gate1=${s.paso === "intento1" ? "AUTO" : "NO"} elegido=${s.elegidoCap} ` +
+      `rescate=${s.rescate ? 1 : 0} ms1=${ms1}` +
+      (s.ms1920 != null ? ` ms2=${s.ms1920}` : " ms2=-") +
+      (s.msRoi != null ? ` msRoi=${s.msRoi}` : " msRoi=-"),
+  );
+  // El downstream (banda condicional, clasificación, gate, diagnóstico)
+  // consume SOLO el texto elegido — mismas métricas de la pasada elegida
+  // (0 = n/d honesto si el motor elegido no separa det/rec — Tesseract).
+  return {
+    texto: s.texto,
+    conf: s.conf,
+    detMs: s.detMs ?? 0,
+    recMs: s.recMs ?? 0,
+  };
 }
 
 async function ocrBanda(fotoProcesada: string): Promise<string> {
@@ -1715,19 +1838,24 @@ export class RealCoreBridge implements E14Bridge {
     //    RapidOCR PP-OCRv4 (PROD-2 §2-C2); progreso REAL por lotes de rec
     //    (§2-C4) — la 2.ª pasada reusa el MISMO emit (§3).
     const tOcr = performance.now();
-    const ocrEsc = await reconocerRapidOcrEscalonado(
-      fotoOcr,
-      (p) => {
-        emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
-      },
-      {
-        simular: opciones.simular === true,
-        // §3 presupuesto: el timeout EXISTENTE del pipeline manda (masiva
-        // pasa 120_000 por OpcionesEscaneoConTimeout; default 15 s).
-        presupuestoMs: (opciones as OpcionesEscaneoConTimeout).timeoutMs ?? TIMEOUT_MS,
-        inicioMs: inicio,
-      },
-    );
+    const onProgresoOcr = (p: number): void => {
+      emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
+    };
+    // §3 presupuesto: el timeout EXISTENTE del pipeline manda (masiva pasa
+    // 120_000 por OpcionesEscaneoConTimeout; default 15 s).
+    const cfgOcr = {
+      simular: opciones.simular === true,
+      presupuestoMs: (opciones as OpcionesEscaneoConTimeout).timeoutMs ?? TIMEOUT_MS,
+      inicioMs: inicio,
+    };
+    // KIT e14-ocr-cascada-v1 (K3 fase 2): SOLO con `masivaOcrTesseract` ON y
+    // fuera de SIM corre la cascada (gate entre motores + rescate ROI —
+    // ancla del brief: «tras SU warp full-res», fotoOcr ya existe); default
+    // OFF ⇒ el OCR ESCALONADO de siempre byte a byte (mismos args, misma
+    // closure de progreso — smoke flag-OFF).
+    const ocrEsc = cascadaActiva(leerFlags().masivaOcrTesseract, opciones.simular === true)
+      ? await reconocerRapidOcrCascada(fotoOcr, onProgresoOcr, cfgOcr)
+      : await reconocerRapidOcrEscalonado(fotoOcr, onProgresoOcr, cfgOcr);
     let texto = ocrEsc.texto;
     ms.ocr = performance.now() - tOcr;
     // PROD-2 (§4.2): conf/det/rec de la pasada ELEGIDA (SPRINT-A A4: la

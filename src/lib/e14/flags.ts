@@ -83,6 +83,15 @@ export const FLAGS_DEFAULT: FlagsApp = {
   masivaWarpIngesta: false,
   masivaRotacionQr: false,
   masivaSondeoCrudo: true,
+  // KIT e14-ocr-cascada-v1 (K3 fase 2 — plan flujo-dueño paso 6): CASCADA
+  // OCR — intento 1 → GATE (clasificador puro) → core RapidOCR como hoy →
+  // rescate por ROIs top/bottom. Default OFF ⇒ OCR ESCALONADO de siempre
+  // byte a byte (KIT e14-ocr-escalonado-v1 intacto). GO/NO-GO del intento
+  // Tesseract: bench obligatorio tools/bench-ocr-cascada/ (el GATE decide
+  // ENTRE motores; elegirMejor SOLO entre pasadas RapidOCR — riesgo: sello
+  // TRANSMISIÓN blanco-sobre-negro + MESA IMPOSIBLE 001→004 de Tesseract,
+  // dos fallos documentados).
+  masivaOcrTesseract: false,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -129,6 +138,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.masivaWarpIngesta === "boolean") limpio.masivaWarpIngesta = p.masivaWarpIngesta;
   if (typeof p.masivaRotacionQr === "boolean") limpio.masivaRotacionQr = p.masivaRotacionQr;
   if (typeof p.masivaSondeoCrudo === "boolean") limpio.masivaSondeoCrudo = p.masivaSondeoCrudo;
+  // KIT e14-ocr-cascada-v1 (K3 fase 2) — whitelist aditiva (booleano).
+  if (typeof p.masivaOcrTesseract === "boolean") limpio.masivaOcrTesseract = p.masivaOcrTesseract;
   return limpio;
 }
 
