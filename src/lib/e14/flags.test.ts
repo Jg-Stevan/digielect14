@@ -113,6 +113,13 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       masivaStreaming: false,
       // KIT e14-dhash-resize-v1 (§D) — aditivo AL FINAL (contrato D57):
       dhashResize: false,
+      // KIT flujo-dueno-v1 (K2 — brief Agente B) — aditivos AL FINAL (D57):
+      // defaults OFF/ON — byte-idéntico a acf181f (kill-switches del dueño;
+      // masivaSondeoCrudo ON = camino de hoy — el sondeo crudo alimenta
+      // hand-off P1 y dedup temprano; OFF solo para la corrida de control).
+      masivaWarpIngesta: false,
+      masivaRotacionQr: false,
+      masivaSondeoCrudo: true,
     });
   });
 
@@ -332,5 +339,43 @@ describe("flags · dhashResize (decode chico del dhash — kill-switch P3)", () 
     expect(sanearFlags({ dhashResize: null })).toEqual({});
     stubWindow();
     expect(leerFlags().dhashResize).toBe(false); // cae al default conservador
+  });
+});
+
+// ─── KIT flujo-dueno-v1 (K2 — brief Agente B) — kill-switches del dueño ───
+describe("flags · K2 flujo-dueno (masivaWarpIngesta/masivaRotacionQr/masivaSondeoCrudo)", () => {
+  it("defaults: warp-ingesta OFF · rotación OFF · sondeo-crudo ON (= camino de hoy)", () => {
+    stubWindow();
+    expect(leerFlags().masivaWarpIngesta).toBe(false);
+    expect(leerFlags().masivaRotacionQr).toBe(false);
+    expect(leerFlags().masivaSondeoCrudo).toBe(true);
+  });
+
+  it("sanearFlags: booleanos válidos aceptados; tipos inválidos → ausentes", () => {
+    expect(
+      sanearFlags({ masivaWarpIngesta: true, masivaRotacionQr: true, masivaSondeoCrudo: false }),
+    ).toEqual({ masivaWarpIngesta: true, masivaRotacionQr: true, masivaSondeoCrudo: false });
+    expect(sanearFlags({ masivaSondeoCrudo: true })).toEqual({ masivaSondeoCrudo: true });
+    expect(
+      sanearFlags({ masivaWarpIngesta: "sí", masivaRotacionQr: 1, masivaSondeoCrudo: null }),
+    ).toEqual({});
+  });
+
+  it("override localStorage del dueño pasa por los DOS whitelists (D6)", () => {
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides"
+            ? JSON.stringify({ masivaWarpIngesta: true, masivaRotacionQr: true, masivaSondeoCrudo: false })
+            : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().masivaWarpIngesta).toBe(true);
+    expect(leerFlags().masivaRotacionQr).toBe(true);
+    expect(leerFlags().masivaSondeoCrudo).toBe(false);
   });
 });

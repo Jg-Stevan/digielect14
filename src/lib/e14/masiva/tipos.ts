@@ -116,6 +116,19 @@ export interface FilaMasiva {
    *  (plausibilidad — guard conservador, jamás confiar). Ausente = el
    *  pre-scan no detectó quad (o el flag estaba OFF). RAM del lote. */
   quad?: Quad;
+  // ---------- KIT flujo-dueno-v1 (K2 — brief Agente B) — campos ADITIVOS AL FINAL (contrato D57) ----------
+  /** (K2/paso 5) rotación SUGERIDA por el cuadrante del QR en el warp de
+   *  INGESTA (≤2048 — solo para decidir): centroide de la lectura →
+   *  orientacion-qr.rotacionDesdeCentroide (mapeo bench v8.3 4/4). El
+   *  runner la pasa al bridge como rotacionPrecomputada (flag
+   *  masivaRotacionQr ON) para rotar el warp full-res POST-warp y OMITIR
+   *  el sondeo de orientación (mismo trato que cuando la brújula decide).
+   *  null EXPLÍCITO = el warp corrió pero la lectura del QR falló (el
+   *  instrumento llegó, no decidió — honesto). AUSENTE = el warp de
+   *  ingesta no llegó a producirse (sin bytes/decode/detect/warp — jamás
+   *  inventar). RAM del lote (NUNCA viaja a IDB — sobrevivir recarga no
+   *  es requisito; el prescan asegurador re-decide tras recargar). */
+  rotacionSugerida?: 0 | 90 | 180 | 270 | null;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
