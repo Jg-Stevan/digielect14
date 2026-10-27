@@ -151,6 +151,8 @@ export interface FlagsApp {
   masivaSondeoCrudo: boolean; // default TRUE = camino de hoy — el sondeo QR crudo de la cadenaDedup (e73) alimenta hand-off P1 y dedup temprano; false = SOLO para la corrida de control del dueño (el guard fuerza sondeo=null, la fila sigue a dhash COMO HOY)
   // ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — campo ADITIVO AL FINAL (D57) ───
   masivaOcrTesseract: boolean; // default false — cascada OCR: intento 1 → gate → core RapidOCR como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte (GO/NO-GO: bench-ocr-cascada/)
+  // ─── KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — campo ADITIVO AL FINAL (D57) ───
+  masivaSoloWarpQr: boolean; // default false — PRUEBA EN SECO: «PROCESAR COLA» hace SOLO el pre-scan (decode→quad→warp→QR) con stamp qrLeido por fila y JAMÁS llama iniciar() (cero OCR, cero envío — la cola queda PENDIENTE, viva); el dedup del pre-scan (DUPLICADA/YA-ENVIADA por payload) SÍ corre (pedido del dueño); false = byte-idéntico al flujo de hoy
 }
 
 export interface ReporteSesion {
