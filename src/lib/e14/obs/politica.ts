@@ -136,6 +136,9 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // (el whitelist de leerOverridesFlags es INDEPENDIENTE del de
     // sanearFlags en flags.ts — cada puerta necesita su línea).
     if (typeof o.dhashResize === "boolean") limpio.dhashResize = o.dhashResize;
+    // KIT e14-ocr-cascada-v1 (K3 fase 2) — mismo criterio: sin esta línea
+    // el override localStorage de `masivaOcrTesseract` sería inalcanzable.
+    if (typeof o.masivaOcrTesseract === "boolean") limpio.masivaOcrTesseract = o.masivaOcrTesseract;
     return limpio;
   } catch {
     return {};

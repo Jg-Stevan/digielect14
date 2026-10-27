@@ -143,6 +143,8 @@ export interface FlagsApp {
   masivaStreaming: boolean; // default false — P5: el runner arranca con el 1.er pre-scan-OK (consumo por turno de clasificación); false = prescan serial de siempre byte a byte
   // ─── KIT e14-dhash-resize-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
   dhashResize: boolean; // default false — decode chico del dhash (resize 64×64 a nivel de decode, anti-hambruna P3); false = decode FULL byte-idéntico a 5d08dd6 (GO/NO-GO: bench-dedup-tolerancia/bench-resize.html)
+  // ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — campo ADITIVO AL FINAL (D57) ───
+  masivaOcrTesseract: boolean; // default false — cascada OCR: intento 1 → gate → core RapidOCR como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte (GO/NO-GO: bench-ocr-cascada/)
 }
 
 export interface ReporteSesion {
