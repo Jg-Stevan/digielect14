@@ -18,14 +18,17 @@ afterEach(() => {
 });
 
 describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño)", () => {
-  it("41 · defaults → SOLO masiva*/dhash* con 1/0, en orden de FLAGS_DEFAULT", () => {
+  it("41 · defaults → SOLO masiva* y dhash* con 1/0, en orden de FLAGS_DEFAULT", () => {
     const linea = lineaFlagsPipeline(FLAGS_DEFAULT);
     // Prefijo propio (D51 — parsers por prefijo del dueño).
     expect(linea.startsWith("[e14] flags: ")).toBe(true);
     // SOLO los flags del pipeline masiva — en orden de declaración,
     // booleanos como 1/0 (formato fijo: clave=valor separado por espacios).
+    // W1 añadió masivaPrioridad a FLAGS_DEFAULT — la línea lo incluye (el
+    // test 43 de abajo ya anticipaba el gesto: crece por la COLA, jamás
+    // reordena).
     expect(linea).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=0 masivaStreaming=0 dhashResize=0 masivaPrioridad=0",
     );
   });
 
@@ -33,7 +36,7 @@ describe("W0 k1 · lineaFlagsPipeline (formato estable para el parser del dueño
     expect(
       lineaFlagsPipeline({ ...FLAGS_DEFAULT, masivaQuad: true, dhashResize: true }),
     ).toBe(
-      "[e14] flags: masivaQrHandoff=0 masivaQuad=1 masivaStreaming=0 dhashResize=1",
+      "[e14] flags: masivaQrHandoff=0 masivaQuad=1 masivaStreaming=0 dhashResize=1 masivaPrioridad=0",
     );
   });
 

@@ -143,6 +143,8 @@ export interface FlagsApp {
   masivaStreaming: boolean; // default false — P5: el runner arranca con el 1.er pre-scan-OK (consumo por turno de clasificación); false = prescan serial de siempre byte a byte
   // ─── KIT e14-dhash-resize-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
   dhashResize: boolean; // default false — decode chico del dhash (resize 64×64 a nivel de decode, anti-hambruna P3); false = decode FULL byte-idéntico a 5d08dd6 (GO/NO-GO: bench-dedup-tolerancia/bench-resize.html)
+  // ─── W1 — KIT k1-obs-prioridad (brief Agente A) — campo ADITIVO AL FINAL (D57) ───
+  masivaPrioridad: boolean; // default false — prioridad de fila (paso 4 del dueño): sort de siguientePendiente por prioridad efectiva (1=QR+quad OK · 2=resto · 3=DUPLICADA derivada del estado); false = FIFO de siempre byte a byte
 }
 
 export interface ReporteSesion {

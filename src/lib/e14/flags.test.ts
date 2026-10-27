@@ -113,6 +113,10 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       masivaStreaming: false,
       // KIT e14-dhash-resize-v1 (§D) — aditivo AL FINAL (contrato D57):
       dhashResize: false,
+      // W1 (KIT k1-obs-prioridad — brief Agente A) — aditivo AL FINAL
+      // (contrato D57): el ANCLA literal se amplía EN EL MISMO commit que
+      // añade el flag (protocolo #3 — precedente qa-prescan §G/P5).
+      masivaPrioridad: false,
     });
   });
 
