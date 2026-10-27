@@ -58,6 +58,19 @@ describe("flags · sanearFlags", () => {
     expect(sanearFlags({ qrBrujulaOrientacion: "sí" })).toEqual({});
     expect(sanearFlags({ qrBrujulaOrientacion: 1 })).toEqual({});
   });
+
+  it("P1 · masivaQrHandoff (brief Agente A) — whitelist aditiva, default OFF", () => {
+    stubWindow();
+    // Default OFF (byte-idéntico a 5d08dd6 — kill-switch del dueño):
+    expect(FLAGS_DEFAULT.masivaQrHandoff).toBe(false);
+    expect(leerFlags().masivaQrHandoff).toBe(false);
+    // El override del dueño pasa el saneo (booleano):
+    expect(sanearFlags({ masivaQrHandoff: true })).toEqual({ masivaQrHandoff: true });
+    expect(sanearFlags({ masivaQrHandoff: false })).toEqual({ masivaQrHandoff: false });
+    // Tipo inválido → ausente (el caller conserva el default — jamás inventar):
+    expect(sanearFlags({ masivaQrHandoff: "on" })).toEqual({});
+    expect(sanearFlags({ masivaQrHandoff: 1 })).toEqual({});
+  });
 });
 
 describe("flags · leerFlags (cadena de prioridad)", () => {
@@ -80,6 +93,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       prescanQrCola: true,
       // KIT e14-orientacion-qr-v1 (§D) — aditivo AL FINAL (contrato D57):
       qrBrujulaOrientacion: true,
+      // P1 (plan masiva — brief Agente A) — aditivo AL FINAL (contrato D57):
+      masivaQrHandoff: false,
     });
   });
 

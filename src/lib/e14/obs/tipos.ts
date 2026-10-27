@@ -136,6 +136,8 @@ export interface FlagsApp {
   prescanQrCola: boolean; // default true — pre-scan QR en «PROCESAR COLA» (quad+warp → BarcodeDetector/jsQR); false = byte-idéntico a 3f1cc17
   // ─── KIT e14-orientacion-qr-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
   qrBrujulaOrientacion: boolean; // default true — QR-brújula de orientación (cuadrante del QR manda + rescate hi-res ZXing; bench v8.3 4/4); false = sondeo OCR de siempre byte a byte
+  // ─── P1 (plan masiva — brief Agente A) — campo ADITIVO AL FINAL (D57) ───
+  masivaQrHandoff: boolean; // default false — hand-off del payload QR del sondeo de ingesta (prescan salta su lectura; CAPA 0 salta su decode); false = byte-idéntico a 5d08dd6
 }
 
 export interface ReporteSesion {

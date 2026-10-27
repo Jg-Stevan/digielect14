@@ -264,4 +264,30 @@ describe("WAVE2 B1 — re-chequeo post-reserva (carrera ingesta×pool)", () => {
     // el fallback e72 de abajo sigue presente (salvavidas honesto — PROHIBIDO tocar):
     expect(src).toContain("sin-original reprocesa-completo");
   });
+
+  it("P1/P2 · source-inspection — CAPA 0 consulta el hand-off ANTES del capture y opcionesMasiva viaja con desdeMasiva", () => {
+    const src = readFileSync(new URL("./runner.ts", import.meta.url), "utf8");
+    // P1: la consulta del hand-off (flag masivaQrHandoff) existe y va ANTES
+    // del fileToCaptureDataUrl de la CAPA 0 (flag OFF → capture de hoy):
+    const iHand = src.indexOf("leerFlags().masivaQrHandoff\n        ? qrPayloadDeFila(fila.id)");
+    const iCapture = src.indexOf("await fileToCaptureDataUrl(archivo)");
+    expect(iHand).toBeGreaterThan(-1);
+    expect(iCapture).toBeGreaterThan(iHand);
+    expect(src).toContain("capa0-qr heredado handoff");
+    // P2: el runner MASIVA declara desdeMasiva (el bridge omite su brújula):
+    expect(src).toContain("desdeMasiva: true,");
+    // El tipo local del bridge acepta el campo (intersección LOCAL — kit §1):
+    const bridge = readFileSync(
+      new URL("../scanner-core-bridge.ts", import.meta.url),
+      "utf8",
+    );
+    expect(bridge).toContain("desdeMasiva?: boolean;");
+    // El guard consume el campo con el cast local (mismo patrón del cast de
+    // timeoutMs en la etapa OCR — pipeline recibe la base OpcionesEscaneo):
+    expect(bridge).toContain("(opciones as OpcionesEscaneoConTimeout).desdeMasiva");
+    // El import de la brújula queda intacto (el flujo individual sigue usándola):
+    expect(bridge).toContain(
+      'import { brujulaQrOrientacion, type BrujulaQr } from "./orientacion-qr";',
+    );
+  });
 });

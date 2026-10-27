@@ -35,6 +35,9 @@ import {
   originalQrDePayload,
   registrarEnviadaHistorico, // e65b — KIT e65b-historico-enviadas-v1 (T-3): hooks de envío
   registrarQrPayload,
+  // P1 (plan masiva — brief Agente A): herencia del payload QR ya leído por
+  // el sondeo de ingesta (e73) — flag masivaQrHandoff (default OFF).
+  qrPayloadDeFila,
   useMasivaStore,
 } from "./store";
 import { clasificarOrigenDeArchivo, type OrigenVeredicto } from "./origen"; // D63-A — detector de origen (kit e63a-origen-escaneo-v1)
@@ -507,9 +510,28 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
     //   Dedup JAMÁS inventa: falso-positivo = NO-GO. La capa 0 JAMÁS throw
     //   (cualquier falla → sin-payload → normal).
     try {
-      const captureQr = await fileToCaptureDataUrl(archivo);
-      const qrQr = await decodificarQrDeCapture(captureQr);
-      qrPayload = qrQr?.payload ?? null;
+      // P1 (plan masiva — brief Agente A) — flag masivaQrHandoff: si el
+      // sondeo de ingesta (e73, cadenaDedup del store) YA decodificó el QR
+      // de ESTE archivo, la CAPA 0 HEREDA el payload sin re-decodificar
+      // (precedente burst P1a: omitir trabajo redundante cuando la identidad
+      // ya es DATO LEÍDO — el desenlace lo firman las capas de siempre y la
+      // llave sigue OPACA, igualdad exacta, RED LINE 10). El estado via
+      // "handoff" va en la traza de abajo; qrEstadoCapa0 = "leido" es
+      // HONESTO (el QR de este archivo SÍ fue leído — por el sondeo).
+      // null / flag OFF → camino de hoy byte a byte (capture + ladder e63m).
+      const heredado = leerFlags().masivaQrHandoff
+        ? qrPayloadDeFila(fila.id)
+        : null;
+      if (heredado) {
+        qrPayload = heredado;
+        logger.info(
+          `[e14] capa0-qr heredado handoff ${qrCorto(heredado)} fila=${fila.id}`,
+        );
+      } else {
+        const captureQr = await fileToCaptureDataUrl(archivo);
+        const qrQr = await decodificarQrDeCapture(captureQr);
+        qrPayload = qrQr?.payload ?? null;
+      }
     } catch {
       qrPayload = null; // la capa 0 jamás tumba el pipeline (fallback limpio)
     }
@@ -765,6 +787,11 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
           // omite el probe de rotaciones (orientación ya horneada por el
           // EXIF del core; aplicado=0 SIEMPRE — evidencia del dueño).
           origenSenales: veredictoOrigen.senales,
+          // P2 (plan masiva — brief Agente A): el caller es el runner MASIVA
+          // — el bridge OMITE la brújula QR (su payload no se consume aquí;
+          // la rotación la cubren deskew D63-B + probe e66/e70 + rescate §B).
+          // Intersección LOCAL OpcionesEscaneoConTimeout — bridge.ts intacto.
+          desdeMasiva: true,
           onProgreso: (p) => {
             senal = { etapa: p.etapa, fraccion: p.progreso }; // etapa al morir (T1.4)
             marcarVida(fila.id, p); // señal de vida (T3 — throttle 250 ms)

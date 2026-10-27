@@ -211,7 +211,12 @@ vi.mock("../../logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { registrarEnviadaHistorico, useMasivaStore } from "./store";
+import {
+  estamparQrPayloadDeFila, // P1 (brief Agente A) — hand-off id→payload
+  qrPayloadDeFila, // P1 (brief Agente A) — consulta del hand-off
+  registrarEnviadaHistorico,
+  useMasivaStore,
+} from "./store";
 import {
   __resetIndicePayloadParaTest,
   indiceEnviadasPorPayload,
@@ -357,6 +362,41 @@ describe("e73 T2 · capa SONDEO QR en cadenaDedup (§B)", () => {
     // la fila 2 ya no existe — NADA que marcar (el guard del mapa y del write):
     const muerta = colaEstado.registros.get("id-2") as RegistroMasiva | undefined;
     if (muerta) expect(muerta.estado).not.toBe("DUPLICADA");
+  });
+});
+
+// ── P1 (plan masiva — brief Agente A) · hand-off del payload QR ────────────
+
+describe("P1 · hand-off del payload QR (estampado del sondeo → consulta prescan/CAPA 0)", () => {
+  beforeEach(() => {
+    colaEstado.registros.clear();
+    useMasivaStore.setState({ filas: [], guardando: 0, avisoCola: null });
+  });
+
+  it("P1.1 · mutadores: roundtrip id→payload y null honesto (jamás inventar)", () => {
+    expect(qrPayloadDeFila("fila-x")).toBeNull(); // sin estampar → null
+    estamparQrPayloadDeFila("fila-x", PAYLOAD_P);
+    expect(qrPayloadDeFila("fila-x")).toBe(PAYLOAD_P); // igualdad EXACTA
+    expect(qrPayloadDeFila("fila-y")).toBeNull(); // otra fila → null
+    // Re-estampado (la fila re-procesada) → el último dato manda:
+    estamparQrPayloadDeFila("fila-x", PAYLOAD_P);
+    expect(qrPayloadDeFila("fila-x")).toBe(PAYLOAD_P);
+  });
+
+  it("P1.2 · source-inspection — el estampado del sondeo vive DENTRO del guard masivaQrHandoff y NO decide nada", () => {
+    const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+    // El estampado existe y está protegido por el kill-switch del dueño:
+    expect(store).toContain("if (sondeo.payload != null && leerFlags().masivaQrHandoff)");
+    expect(store).toContain("estamparQrPayloadDeFila(entrada.id, sondeo.payload);");
+    // Orden: el guard va ANTES del estampado (flag OFF → no-op byte-idéntico):
+    const iGuard = store.indexOf("leerFlags().masivaQrHandoff");
+    const iEstampa = store.indexOf("estamparQrPayloadDeFila(entrada.id, sondeo.payload);");
+    expect(iGuard).toBeGreaterThan(-1);
+    expect(iEstampa).toBeGreaterThan(iGuard);
+    // El mapa nuevo comparte el ciclo de vida del lote (mismas limpiezas e64p
+    // C-1/C-2 — las 2 de mapaQrPayload):
+    expect(store).toContain("const qrPayloadPorFila = new Map<string, string>();");
+    expect([...store.matchAll(/qrPayloadPorFila\.clear\(\)/g)].length).toBe(2);
   });
 });
 

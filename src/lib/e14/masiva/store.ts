@@ -295,6 +295,34 @@ export function originalQrDePayload(payload: string): string | null {
   return mapaQrPayload.get(payload) ?? null;
 }
 
+// ─── P1 (plan masiva — brief Agente A): HAND-OFF id→payload de la CAPA 0 ────
+// mapaQrPayload es REVERSO (payload→id — la CAPA 0 consulta «¿quién es el
+// original de este payload?» DESPUÉS de decodificar). Falta la dirección que
+// permite AHORRAR el decode: «esta fila YA tiene su payload leído por el
+// sondeo de ingesta (e73)». Mismo ciclo de vida del lote que mapaQrPayload
+// (memoria de la sesión — NO persiste en IDB, kit e63m §5; se limpia en los
+// MISMOS 2 sitios del modo pruebas e64p C-1/C-2). Llave OPACA ídem: la única
+// comparación es la IGUALDAD EXACTA del payload completo (RED LINE 10 — sin
+// prefijos, sin fuzzy) y el consumo es SOLO-LECTURA: el dato NO decide nada
+// por sí — las capas de siempre (pre-scan §D.2 / CAPA 0 e63m) firman los
+// desenlaces. Precedente del patrón: burst P1a (store.ts — omitir el sondeo
+// cuando los bytes ya prueban la identidad — trabajo redundante de menos).
+const qrPayloadPorFila = new Map<string, string>();
+
+/** P1 — estampa el payload que el sondeo de INGESTA ya leyó para esta fila
+ *  (solo se llama con el flag masivaQrHandoff ON). El pre-scan y la CAPA 0
+ *  del runner consultan qrPayloadDeFila ANTES de decodificar — si hay dato,
+ *  saltan su lectura/decode (el payload es de ESTE archivo — dato leído). */
+export function estamparQrPayloadDeFila(id: string, payload: string): void {
+  qrPayloadPorFila.set(id, payload);
+}
+
+/** P1 — payload QR ya leído para ESTA fila (null = el sondeo no corrió / no
+ *  leyó / el flag estaba OFF → el caller decodifica como hoy — conservador). */
+export function qrPayloadDeFila(id: string): string | null {
+  return qrPayloadPorFila.get(id) ?? null;
+}
+
 // ─── e65-dedup-enviadas-v1 — ÍNDICE DEL HISTÓRICO DE ENVIADAS (D-e65-3) ────
 // Carga LIVIANA una vez por sesión de encolado: listarMapeados con mapper
 // que NO retiene Blob ni acta (lección L7 / fix C6) — solo las llaves del
@@ -588,6 +616,17 @@ async function cadenaDedup(
             sondeoQrMs: sondeo.ms,
             ...(sondeo.payload != null ? { sondeoQrTier: sondeo.tier ?? undefined } : {}),
           });
+          // P1 (brief Agente A) — flag masivaQrHandoff: el payload que el
+          // sondeo YA leyó de ESTE archivo queda disponible (id→payload) para
+          // pre-scan y CAPA 0 — heredan sin re-decodificar. El estampado NO
+          // marca nada ni decide desenlaces (conservador — jamás inventar);
+          // flag OFF → no-op byte-idéntico.
+          if (sondeo.payload != null && leerFlags().masivaQrHandoff) {
+            estamparQrPayloadDeFila(entrada.id, sondeo.payload);
+            logger.info(
+              `[e14] qr-handoff sondeo estampa fila=${entrada.id} ms=${sondeo.ms}`,
+            );
+          }
         }
       }
       if (sondeo && sondeo.payload != null) {
@@ -1031,6 +1070,7 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
           /* conservador — el ledger se re-borra en el próximo vaciar/carga */
         }
         mapaQrPayload.clear();
+        qrPayloadPorFila.clear(); // P1 — mismo ciclo de vida del lote (e64p C-1)
         indiceEnviadas = null;
         set({ filas: [], colaDisponible: true, avisoCola: null });
         return;
@@ -1435,6 +1475,7 @@ export const useMasivaStore = create<MasivaStore>((set, get) => ({
     // (true) este bloque no existe y D-e65b-1 queda byte a byte.
     if (!COLA_PERSISTENTE) {
       mapaQrPayload.clear();
+      qrPayloadPorFila.clear(); // P1 — mismo ciclo de vida del lote (e64p C-2)
       try {
         await borrarHistorico();
       } catch {
