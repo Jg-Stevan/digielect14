@@ -209,8 +209,10 @@ function motivoCorto(err: unknown): string {
  *  DUPLICADAS ENTRAN al loop — su procesamiento es la copia rápida (<1 s).
  *  e65-dedup-enviadas-v1 (T-5, D-e65-7): YA-ENVIADA JAMÁS entra — es
  *  SOLO-VISUAL (sin acta propia, sin envío): el filtro de abajo solo toma
- *  PENDIENTE/DUPLICADA, verificación del kit (cero código de runner). */
-function siguientePendiente(): FilaMasiva | null {
+ *  PENDIENTE/DUPLICADA, verificación del kit (cero código de runner).
+ *  W1: export SOLO-TEST (runner-prioridad.test.ts) — mismo precedente del
+ *  export de procesarUno (WAVE2 B1); cero cambios de firma/comportamiento. */
+export function siguientePendiente(): FilaMasiva | null {
   // KIT e14-quad-streaming-v1 (P5 — masivaStreaming, default OFF): con el
   // flag ON y el TURNO de clasificación ABIERTO (el pre-scan iterando), el
   // pool solo consume filas YA decididas — cierra la carrera
@@ -230,6 +232,20 @@ function siguientePendiente(): FilaMasiva | null {
   const filtroStreaming =
     leerFlags().masivaStreaming === true && turnoClasificacionEnCurso();
   const inicioTurno = turnoClasificacionInicioMs();
+  // W1 (KIT k1-obs-prioridad — brief Agente A): prioridad de fila (paso 4
+  // del dueño). flag masivaPrioridad ON ⇒ el sort pasa a prioridad EFECTIVA:
+  //   p(f) = f.estado === "DUPLICADA" ? 3 : (f.prioridadProceso ?? 2)
+  // con desempate FIFO (agregadaEn) DENTRO de cada prioridad: las filas con
+  // QR leído + quad OK (prioridad 1 estampada por el pre-scan) pagan OCR
+  // primero; las sin QR / sin stamp valen 2 (default efectivo); las
+  // DUPLICADAS van AL FINAL (3 — derivada del ESTADO, jamás de un campo:
+  // una sola fuente de verdad — su copia rápida <1 s no compite por el
+  // pool). El filtro P5 (arriba) queda ENCIMA e intacto — solo cambia el
+  // orden de lo que ya pasó el filtro. flag OFF ⇒ el sort de hoy
+  // byte-idéntico (FIFO puro por agregadaEn).
+  const prioridadOn = leerFlags().masivaPrioridad === true;
+  const prioridadEfectiva = (f: FilaMasiva): number =>
+    f.estado === "DUPLICADA" ? 3 : (f.prioridadProceso ?? 2);
   const pendientes = useMasivaStore
     .getState()
     .filas.filter(
@@ -246,7 +262,12 @@ function siguientePendiente(): FilaMasiva | null {
           f.prescanOk === true ||
           f.agregadaEn >= inicioTurno),
     )
-    .sort((a, b) => a.agregadaEn - b.agregadaEn);
+    .sort((a, b) =>
+      prioridadOn
+        ? prioridadEfectiva(a) - prioridadEfectiva(b) ||
+          a.agregadaEn - b.agregadaEn
+        : a.agregadaEn - b.agregadaEn,
+    );
   return pendientes[0] ?? null;
 }
 
