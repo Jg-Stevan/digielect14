@@ -116,6 +116,17 @@ export interface FilaMasiva {
    *  (plausibilidad — guard conservador, jamás confiar). Ausente = el
    *  pre-scan no detectó quad (o el flag estaba OFF). RAM del lote. */
   quad?: Quad;
+  // ---------- W1 — KIT k1-obs-prioridad (brief Agente A) — campo ADITIVO AL FINAL (contrato D57) ----------
+  /** W1 (KIT k1-obs-prioridad — brief Agente A): PRIORIDAD de la fila para el
+   *  sort del runner (paso 4 del dueño — flag masivaPrioridad ON): 1 = la
+   *  fila quedó decidida CON QR leído + quad OK (las mejores — pagan OCR
+   *  primero); 2 = quedó sin QR (lectura imposible) o sin estampado (warp
+   *  falló / fila sin decisión). Default EFECTIVO 2 (ausente = 2 en el sort).
+   *  NUNCA se estampa 3: la DUPLICADA se deriva del `estado` (una sola
+   *  fuente de verdad — el sort la calcula). Estampado solo por el pre-scan
+   *  con flag ON (estampado del camino lento; el barrido de cierre y las
+   *  filas sin decisión NO se estampan — jamás inventar). RAM del lote. */
+  prioridadProceso?: 1 | 2;
 }
 
 /** Registro PERSISTENTE en IndexedDB — el Blob original + el acta completa. */
