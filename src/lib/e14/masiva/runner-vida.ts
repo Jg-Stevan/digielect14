@@ -15,10 +15,18 @@ import type { ProgresoAnalisis } from "../types";
 // actualiza la operación ACTIVA (module state, barato — sin tocar el
 // throttling). Precedente masiva→obs: runner.ts ya importa ../obs/dispositivo.
 import { marcarOperacion } from "../obs/operacion";
+// KIT e14-gama-adaptativa-v1 (D74): el throttle EFECTIVO lo da el plan de
+// gama (BAJO 500 · MEDIO 350 · base 250).
+import { planGamaActual } from "../gama";
 
 /** Throttle del progreso (250 ms — kit D65 T3.1 literal): el OCR emite decenas
- *  de eventos por etapa; la bandeja solo necesita el último. */
-const PROGRESO_MS = 250;
+ *  de eventos por etapa; la bandeja solo necesita el último.
+ *  KIT e14-gama-adaptativa-v1 (D74): EFECTIVO por gama — con bandejas grandes
+ *  cada setState re-pinta TODAS las filas y a 4 Hz eso es jank puro en los
+ *  dispositivos que menos lo aguantan (BAJO 500 · MEDIO 350 · base 250).
+ *  La detección de pasada OCR (caída fuerte de fracción — ver abajo) sigue
+ *  siendo evidente al muestreo: la caída es de ~1.0 a ~0.0 entre etapas. */
+const progresoMsEfectivo = (): number => planGamaActual().progresoMs;
 
 // ─── % ÚNICO DEL PROCESO COMPLETO POR ACTA (cambio pedido por el dueño) ───
 // Antes: el chip de la fila saltaba por tramos fijos por FASE (25→50→OCR
@@ -143,7 +151,7 @@ function marcarVida(id: string, p: ProgresoAnalisis): void {
   // la edad delata la obsolescencia.
   marcarOperacion(bucketDeVida(p).etapa);
   const ahora = Date.now();
-  if (ahora - vida.ultimoEn < PROGRESO_MS) return;
+  if (ahora - vida.ultimoEn < progresoMsEfectivo()) return;
   vida.ultimoEn = ahora;
   useMasivaStore
     .getState()

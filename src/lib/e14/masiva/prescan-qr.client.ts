@@ -37,7 +37,9 @@ import { logger } from "../../logger";
 import type { Quad } from "@jg-stevan/scanner-core/types";
 // KIT e14-prescan-warp-lado-v1: válvulas del dueño (presupuesto de fila
 // configurable + maxWarpLongSide del warp) — mismo patrón e73 (sondeo).
-import { leerFlags } from "../flags";
+// KIT e14-gama-adaptativa-v1 (D74): la lectura del presupuesto es EFECTIVA
+// (gama BAJO/MEDIO adaptativa lo sube — menos hard-kills por lentitud).
+import { flagsMasivaEfectivos } from "../gama";
 
 /** Base pública de assets — MISMO patrón del repo (sondeo-qr.client.ts:54/
  * flags.ts/rapidocr.ts): assets servidos desde public/ con prefijo
@@ -56,10 +58,13 @@ export const DETECT_LONG_SIDE = 400; // clase 400 del core (PROCESS_LONG_SIDE, r
 
 /** KIT e14-prescan-warp-lado-v1: presupuesto de fila saneado del flag
  *  (default 4000 = PRESUPUESTO_FILA_MS — byte-idéntico). Clamp 1000..30000
- *  (jamás por debajo de 1 s: el hard-kill anti-zombi sigue existiendo). */
+ *  (jamás por debajo de 1 s: el hard-kill anti-zombi sigue existiendo).
+ *  KIT e14-gama-adaptativa-v1 (D74): lectura EFECTIVA — en gama BAJO/MEDIO
+ *  adaptativa el plan lo SUBE (6000/5000): un hard-kill por LENTITUD cuesta
+ *  más que la espera (kill = respawn frío de OpenCV + re-do completo). */
 function presupuestoFilaDeFlags(): number {
   try {
-    const n = leerFlags().prescanQrPresupuestoMs;
+    const n = flagsMasivaEfectivos().prescanQrPresupuestoMs;
     if (typeof n === "number" && Number.isFinite(n)) {
       return Math.max(1000, Math.min(30_000, Math.round(n)));
     }

@@ -77,6 +77,9 @@ import {
 // pesado de la cadenaDedup (precedente masiva→obs: runner.ts importa
 // ../obs/dispositivo).
 import { marcarOperacion } from "../obs/operacion";
+// KIT e14-gama-adaptativa-v1 (D74): el guard del dhash de INGESTA (BAJO lo
+// omite — ver comentario en la capa dhash de cadenaDedup).
+import { planGamaActual } from "../gama";
 // e63k — KIT e63k-capa2-identidad-v1: la cinta CIERTA del dedup visual (≤ 2).
 // La banda 3..6 NO marca: la decide la capa 2 post-OCR (identidad.ts).
 import { DEDUP_CINTA_CIERTA } from "./identidad";
@@ -735,6 +738,24 @@ async function cadenaDedup(
       // KIT e14-obs-hang-atribucion-v1 (§A.3) — el cómputo del dhash es
       // trabajo main-thread REAL del pipeline: marcar la operación activa
       // ANTES (sin clear después — la edad delata la obsolescencia).
+      // KIT e14-gama-adaptativa-v1 (D74) — gama BAJO adaptativa: el dhash
+      // visual de INGESTA se OMITE — su decode FULL 12 MP (≈48 MB) en main
+      // thread compite con el sondeo worker y el hilo UI (evidencia run 4:
+      // 14 hard-kills/2 min — store.ts cabecera e73) justo en los
+      // dispositivos que menos lo aguantan. El dedup NO muere: bytes
+      // (SHA-256 — nace en agregarLote), payload QR (capa 0 e63m) e
+      // identidad impresa 13 dígitos (capa 2 e63k post-OCR) siguen
+      // íntegros; SOLO el match VISUAL pre-OCR se aplaza (la fila procesa
+      // normal). Tradeoff documentado en D74: sin hashDedup la fila tampoco
+      // es candidata visual para filas futuras y el pliegue de sondeoQrMs
+      // de este write no viaja (observabilidad, no comportamiento).
+      // Flag OFF / MEDIO / ALTO ⇒ camino de hoy byte-idéntico.
+      if (!planGamaActual().dhashIngesta) {
+        logger.info(
+          `[e14] dedup fila=${entrada.id} dhash OMITIDO (gama adaptativa — identidad post-OCR decide)`,
+        );
+        continue;
+      }
       marcarOperacion("dhash");
       const hash = await dhashDeArchivo(entrada.archivo);
       if (!hash) continue; // decode/hash falló → sin dedup para esta fila

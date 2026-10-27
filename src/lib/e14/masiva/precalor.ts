@@ -6,7 +6,7 @@
  * El tiempo muerto de la COLA trabaja: mientras hay filas PENDIENTES y el
  * pipeline está OCIOSO (ni lote activo, ni fila PROCESANDO, ni REVISIÓN
  * abierta, ni envío de lote), decodifica en background las próximas
- * `PRECALOR_COLA` (3) filas a MASTER (maestroDeImagen — T1: un solo
+ * `precalorColaEfectivo()` (3 base) filas a MASTER (maestroDeImagen — T1: un solo
  * decodificado a la escala de trabajo). DOCTRINA D45 INTACTA: precalentar NO
  * es procesar — sin OCR, sin veredicto, sin score; la fila sigue PENDIENTE
  * hasta que el dueño pulse PROCESAR (T3.1/T3 intro).
@@ -40,11 +40,17 @@ import { logger } from "../../logger";
 import { leerRegistro } from "./cola";
 import { warmUpScannerWorker } from "@jg-stevan/scanner-core/detector-client";
 import { useMasivaStore } from "./store";
+// KIT e14-gama-adaptativa-v1 (D74): el TOPE EFECTIVO del precalor lo da el
+// plan de gama (BAJO 1 · MEDIO 2 · base 3).
+import { planGamaActual } from "../gama";
 import type { FilaMasiva } from "./tipos";
 
-/** D66 (T3.1) — masters PRECALORADOS máximos en memoria (blobs ~1-4 MB c/u). */
-// knip C3: de-export — uso SOLO interno (tope del mapa de masters).
-const PRECALOR_COLA = 3;
+/** D66 (T3.1) — masters PRECALORADOS máximos en memoria (blobs ~1-4 MB c/u).
+ *  KIT e14-gama-adaptativa-v1 (D74): EFECTIVO por gama — cada master es el
+ *  decode a MAESTRO_LADO_MAYOR y en RAM justa 3 masters vivos son presión
+ *  de GC/abortos (en BAJO además pool 1 ⇒ prefetch único). Flag OFF /
+ *  ALTO ⇒ 3 = byte-idéntico a hoy. */
+const precalorColaEfectivo = (): number => planGamaActual().precalorCola;
 
 /** Entrada del mapa de masters (SOLO memoria — jamás IDB). */
 interface EntradaPrecalor {
@@ -55,7 +61,7 @@ interface EntradaPrecalor {
   abortada: boolean;
 }
 
-/** Mapa de masters vivos (tope PRECALOR_COLA). */
+/** Mapa de masters vivos (tope precalorColaEfectivo). */
 const entradas = new Map<string, EntradaPrecalor>();
 
 /** Filas cuyo precalor FALLÓ en esta sesión (no reintentar en cada evento —
@@ -144,7 +150,7 @@ async function ciclo(): Promise<void> {
         }
       }
       for (const id of fallidas) if (!vivos.has(id)) fallidas.delete(id);
-      if (entradas.size >= PRECALOR_COLA) return;
+      if (entradas.size >= precalorColaEfectivo()) return;
       const fila = siguientePendienteSinMaster();
       if (!fila) return;
       const ok = await precalentarUno(fila.id, { ignorarOciosidad: false });
@@ -199,8 +205,8 @@ async function precalentarUno(
     entrada.maestro = maestro;
     entrada.precalorMs = Math.max(1, Math.round(Date.now() - t0));
     // Tope por si la cola se movió más rápido que el bucle: expulsa al más
-    // viejo (FIFO del Map) para respetar PRECALOR_COLA (memoria acotada).
-    while (entradas.size >= PRECALOR_COLA) {
+    // viejo (FIFO del Map) para respetar el tope EFECTIVO (memoria acotada).
+    while (entradas.size >= precalorColaEfectivo()) {
       const masViejo = entradas.keys().next().value;
       if (masViejo === undefined) break;
       entradas.delete(masViejo);

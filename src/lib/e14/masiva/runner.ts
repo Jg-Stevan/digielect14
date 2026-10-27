@@ -116,6 +116,11 @@ import {
   esperarDesenlaceQr,
   qrCorto,
 } from "./identidad-qr";
+// KIT e14-gama-adaptativa-v1 (D74) — capa adaptativa de gama: el tier BAJO/
+// MEDIO detectado aplica SOLO presupuestos de recursos (pool/watchdog/QR);
+// el override manual del dueño manda y el flag masivaAdaptativoGama=false
+// vuelve todo byte-idéntico a hoy.
+import { flagsMasivaEfectivos, planGamaActual } from "../gama";
 
 // ─── D65 — KIT e14-progreso-watchdog-dedup-v1 (T1): WATCHDOG HUMANO ───
 // Antes (e14-masiva-ux-v1 T4): presupuesto ÚNICO de 120 s — un colgado moría
@@ -150,6 +155,21 @@ const WATCHDOG_GRACIA_MS = 5_000;
 // del watchdog), veredicto de la 1.ª lectura INTACTO y CERO reintentos.
 const RELECTURA_TOPE_MS = 45_000;
 
+/** KIT e14-gama-adaptativa-v1 (D74) — presupuesto del intento EFECTIVO:
+ *  WATCHDOG_MS (75 s) se calibró con el peor caso del dueño (PC — el p95
+ *  real de RECHAZADA-BAJO medía 30-46 s); en gama BAJO/MEDIA el p95 puede
+ *  rozarlo y un kill FALSO paga workers muertos + re-OCR completo (coste
+ *  doble) por «lentitud» que no era colgaje. Con el flag adaptativo ON el
+ *  presupuesto se escala por tier (MEDIO 90 s · BAJO 105 s); flag OFF /
+ *  ALTO ⇒ la base. La CONSTANTE queda byte-idéntica (ancla QA RED LINE 3
+ *  qa-watchdog-relectura/qa-qr-identidad) y manda como PISO — el plan solo
+ *  puede ESCALAR hacia arriba (jamás acorta el presupuesto histórico):
+ *  este wrapper escala los 2 puntos de consumo de abajo (timeoutMs del
+ *  bridge + carrera externa). */
+function watchdogMsEfectivo(): number {
+  return Math.max(WATCHDOG_MS, planGamaActual().watchdogMs);
+}
+
 let corriendoFlag = false;
 let stopFlag = false;
 // WAVE3 §B — rescate anti-falso-rechazo: rescates YA LANZADOS en ESTA
@@ -167,8 +187,16 @@ let colaSesionIniciada = false;
 /** Actas EN VUELO simultáneas (kit Opt-3: 2 workers — benchmark aprobado).
  *  Desde poolworkers-wiring-v1: kill switch del modo dev — el override
  *  `poolWorkers` del dueño (e14-flags-overrides) baja a 1 para RAM justa
- *  (comportamiento secuencial byte-idéntico al pre-e71). Default 2. */
-const PROCESAMIENTO_CONCURRENTE = leerFlags().poolWorkers ?? 2;
+ *  (comportamiento secuencial byte-idéntico al pre-e71). Default 2.
+ *  KIT e14-gama-adaptativa-v1 (D74): el valor es EFECTIVO y se lee POR
+ *  CORRIDA en bucle() (antes const de módulo — el plan puede refrescarse
+ *  al montar MASIVA): en gama BAJO adaptativa baja a 1 — dos OCR en
+ *  paralelo se reparten el mismo CPU (2-4 núcleos) sin ganancia y la UI
+ *  sí sufre (cabecera e71 de este archivo). El override manual del dueño
+ *  MANDA (flagsMasivaEfectivos no pisa claves de e14-flags-overrides). */
+function procesamientoConcurrenteEfectivo(): 1 | 2 {
+  return flagsMasivaEfectivos().poolWorkers;
+}
 
 /** Filas RESERVADAS por el pool: nace ANTES de disparar el pipeline y
  *  muere en el finally del vuelo — cierra la ventana entre
@@ -587,7 +615,18 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         );
       } else {
         const captureQr = await fileToCaptureDataUrl(archivo);
-        const qrQr = await decodificarQrDeCapture(captureQr);
+        // KIT e14-gama-adaptativa-v1 (D74) — la CAPA 0 recibe el plan de
+        // gama: flag OFF / ALTO ⇒ {2048, rescate ON, sin presupuesto} =
+        // llamada byte-idéntica a hoy. BAJO ⇒ 1600 + sin rescate 4096 +
+        // presupuesto 5 s; MEDIO ⇒ 2048 + rescate + presupuesto 8 s — el
+        // peor caso SIN QR (~15-17 s SYNC documentado en identidad-qr.ts)
+        // deja de congelar la UI en los dispositivos que menos lo aguantan.
+        const planQr = planGamaActual();
+        const qrQr = await decodificarQrDeCapture(captureQr, {
+          ladoLargo: planQr.qrLadoLargo,
+          rescate4096: planQr.qrRescate4096,
+          presupuestoMs: planQr.qrPresupuestoMs,
+        });
         qrPayload = qrQr?.payload ?? null;
       }
     } catch {
@@ -858,7 +897,7 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
             senal = { etapa: p.etapa, fraccion: p.progreso }; // etapa al morir (T1.4)
             marcarVida(fila.id, p); // señal de vida (T3 — throttle 250 ms)
           },
-          timeoutMs: Math.max(5_000, WATCHDOG_MS - (Date.now() - tIntento)),
+          timeoutMs: Math.max(5_000, watchdogMsEfectivo() - (Date.now() - tIntento)),
           // KIT e14-quad-streaming-v1 (P4) — quad del pre-scan al bridge
           // (flag masivaQuad, default OFF — sin flag: sin la llave, llamadas
           // byte-idénticas a 5d08dd6). Guard conservador DOBLE aquí:
@@ -895,7 +934,7 @@ export async function procesarUno(filaEntrante: FilaMasiva): Promise<void> {
         };
         const resultado = await correrIntento(
           getBridge().escanearActa(opcionesMasiva),
-          WATCHDOG_MS + WATCHDOG_GRACIA_MS,
+          watchdogMsEfectivo() + WATCHDOG_GRACIA_MS,
         );
         if (resultado.tipo === "acta") {
           actaBruta = resultado.acta;
@@ -1676,7 +1715,7 @@ async function bucle(): Promise<void> {
   // cuando TODO aterrizó — mismo contrato del secuencial).
   const enVuelo = new Set<Promise<void>>();
   while (!stopFlag) {
-    while (enVuelo.size >= PROCESAMIENTO_CONCURRENTE) {
+    while (enVuelo.size >= procesamientoConcurrenteEfectivo()) {
       await Promise.race(enVuelo);
     }
     const fila = siguientePendiente();

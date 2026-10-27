@@ -12,7 +12,10 @@
  */
 import { getScannerWorker, warmUpScannerWorker } from "@jg-stevan/scanner-core/detector-client";
 // D65 (T1): soltar el runtime OCR al matar los workers del intento vencido.
-import { rapidOcrReiniciar } from "../ocr/rapidocr";
+// KIT e14-gama-adaptativa-v1 (D74): re-warm del OCR tras el kill — sin él,
+// el reintento pagaba sesión+calor completos (~27 s fríos medidos).
+import { rapidOcrPrecalentar, rapidOcrReiniciar } from "../ocr/rapidocr";
+import { flagsMasivaEfectivos } from "../gama";
 // D65 (T1.3): semilla para el acta de timeout del watchdog — la MISMA que el
 // bridge usa en SU acta de timeout (solo lectura de la forma; cero criterios).
 import { ACTA_MOCK } from "../seed";
@@ -103,6 +106,22 @@ async function matarYRecrearWorkers(): Promise<void> {
     await rapidOcrReiniciar();
   } catch {
     /* jamás lanza — cinturón */
+  }
+  // KIT e14-gama-adaptativa-v1 (D74) — RE-WARM del OCR tras el kill:
+  // rapidOcrReiniciar() deja el runtime FRÍO (prewarmHecho=null — el
+  // pre-warm de MASIVA al montar se pierde) y el reintento pagaba la
+  // sesión + calor completos (~27 s fríos medidos, kit e14-prowarm-ocr-v1).
+  // Con el flag adaptativo ON el calor se re-dispara fire-and-forget EN
+  // PARALELO con el re-arranque del worker OpenCV — el reintento encuentra
+  // el OCR caliente (rapidOcrInit es singleton: la inferencia dummy no
+  // duplica sesiones, solo compite levemente con el arranque — compra
+  // clara frente a 27 s fríos). Flag OFF ⇒ byte-idéntico a hoy.
+  if (flagsMasivaEfectivos().masivaAdaptativoGama) {
+    try {
+      void rapidOcrPrecalentar();
+    } catch {
+      /* jamás lanza — el reintento ya tiene su propio init */
+    }
   }
 }
 

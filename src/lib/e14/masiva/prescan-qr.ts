@@ -58,6 +58,9 @@
 import { create } from "zustand";
 import { logger } from "../../logger";
 import { leerFlags } from "../flags";
+// KIT e14-gama-adaptativa-v1 (D74): warpLado/presupuesto de la corrida son
+// EFECTIVOS (gama BAJO 1920/6 s · MEDIO 2560/5 s · resto = flag puro).
+import { flagsMasivaEfectivos } from "../gama";
 import {
   crearClientePrescan,
   DETECT_LONG_SIDE,
@@ -379,7 +382,10 @@ export async function prescanYIniciar(): Promise<void> {
   // UNA vez por corrida (mismo gesto). Default 4032 = byte-idéntico (default
   // del worker); 1920 = remedio de los hard-kill «warp» (el coste del
   // warpPerspective escala con los píxeles de salida, no de entrada).
-  const warpLado = leerFlags().prescanWarpLado;
+  // KIT e14-gama-adaptativa-v1 (D74): lectura EFECTIVA — en gama BAJO/MEDIO
+  // adaptativa el plan baja el lado (1920/2560) SIN pisar un override manual
+  // del dueño; flag OFF ⇒ el flag puro de siempre.
+  const warpLado = flagsMasivaEfectivos().prescanWarpLado;
   // KIT e14-prescan-rescate-qr-v1 — rescate del QR difícil SOLO tras
   // fallo de BarcodeDetector/jsQR. Leído UNA vez por corrida (mismo gesto
   // P4/P5: corrida atómica frente a flags). Default OFF = byte-idéntico.
@@ -403,7 +409,7 @@ export async function prescanYIniciar(): Promise<void> {
   // está corriendo código viejo (pestaña sin recargar tras el deploy / SW en
   // waiting del banner E-04) — NO es un problema de flags ni del prescan.
   logger.info(
-    `[e14] prescan-qr corrida soloWarpQr=${soloWarpQr} warpLado=${warpLado} rescate=${rescateOn} presupuesto=${leerFlags().prescanQrPresupuestoMs}`,
+    `[e14] prescan-qr corrida soloWarpQr=${soloWarpQr} warpLado=${warpLado} rescate=${rescateOn} presupuesto=${flagsMasivaEfectivos().prescanQrPresupuestoMs}`,
   );
   // R2 — cola ya corriendo (iniciar() es singleton no-op, igual hoy)
   if (store.corriendo) {

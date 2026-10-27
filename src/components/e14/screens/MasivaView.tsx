@@ -29,6 +29,9 @@ import { prescanYIniciar, usePrescanQrEstado } from "@/lib/e14/masiva/prescan-qr
 // switch del PanelDev).
 import { guardarOverridesFlags } from "@/lib/e14/obs/politica";
 import { leerFlags } from "@/lib/e14/flags";
+// KIT e14-gama-adaptativa-v1 (D74): chip de gama adaptada — el tier detectado
+// consume presupuestos de recursos en BAJO/MEDIO (transparencia del dueño).
+import { planGamaActual, refrescarPlanGama, type PlanGama } from "@/lib/e14/gama";
 import { CheckIcon, StitchStackIcon } from "../icons";
 
 /** Píldora de estado de una fila — paleta de estado del repo
@@ -205,6 +208,14 @@ export function MasivaView() {
   // Fire-and-forget: sin UI, sin toasts (D2), sin estados (§0.7).
   useEffect(() => {
     void rapidOcrPrecalentar();
+  }, []);
+
+  // KIT e14-gama-adaptativa-v1 (D74): plan de gama para el chip — el sync
+  // manda al montar y `refrescarPlanGama()` re-clasifica con la versión
+  // COMPLETA (batería + storage — puede BAJAR el tier). Fire-and-forget.
+  const [gama, setGama] = useState<PlanGama>(() => planGamaActual());
+  useEffect(() => {
+    void refrescarPlanGama().then(setGama);
   }, []);
 
   // Confirmación inline de 2 toques — se desarma sola (kit §6, sin window.confirm).
@@ -434,13 +445,35 @@ export function MasivaView() {
               <StitchStackIcon className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              {/* KIT e14-gama-adaptativa-v1 — flex-wrap: en móvil el chip de
+                  gama ENVUELVE a la línea siguiente (jamás tapa el título ni
+                  desborda sobre los botones de la derecha). */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <h1 className="font-mono text-sm md:text-base font-black tracking-wider text-white uppercase truncate">
                   CARGA MASIVA
                 </h1>
                 {hayCola && (
                   <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full border border-slate-800 bg-[#10161f] font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400">
                     {terminadas}/{filas.length}
+                  </span>
+                )}
+                {/* KIT e14-gama-adaptativa-v1 (D74) — chip SOLO con
+                    adaptaciones activas (BAJO/MEDIO + flag ON): transparencia
+                    del dueño (el espíritu D6 — detectar Y reportar). Con el
+                    detalle completo en el title (ajustes aplicados + cómo
+                    desactivar). `hidden sm:inline-flex` — MISMO patrón del
+                    contador {terminadas}/{filas}: en móvil (<640 px) la fila
+                    de acciones derecha ya ocupa el ancho y el chip no cabe
+                    sin tapar el título/botón (verificado en 390 px); desde sm
+                    sí hay sitio. El detalle del plan SIEMPRE queda en la
+                    traza `[e14] gama plan …` de consola. */}
+                {gama.activo && (
+                  <span
+                    className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 font-mono text-[9px] font-bold uppercase tracking-wider text-amber-300 whitespace-nowrap"
+                    title={`Gama ${gama.tier} detectada${gama.tierInferido ? " (inferida)" : ""} — modo adaptado (KIT e14-gama-adaptativa-v1 · D74): ${gama.ajustes.join(" · ")}. Desactivable con el flag masivaAdaptativoGama=false.`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse mr-1" />
+                    GAMA {gama.tier} · ADAPTADO
                   </span>
                 )}
               </div>

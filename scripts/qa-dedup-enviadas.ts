@@ -404,10 +404,16 @@ ok(
 console.log("\n── Bloque 6 · e71 Opt-3 — pool + mutex (source-scan) ──");
 
 ok(
-  runner.includes("const PROCESAMIENTO_CONCURRENTE = leerFlags().poolWorkers ?? 2;") &&
+  // KIT e14-gama-adaptativa-v1 (D74): la concurrencia pasó de const de
+  // módulo a valor EFECTIVO leído por corrida (procesamientoConcurrente-
+  // Efectivo → flagsMasivaEfectivos().poolWorkers — el plan de gama BAJO
+  // baja a 1; el override manual del dueño manda). El INTENT del guard no
+  // cambia: concurrencia por flags + RESERVA de fila (sin doble-proceso).
+  runner.includes("function procesamientoConcurrenteEfectivo(): 1 | 2 {") &&
+    runner.includes("flagsMasivaEfectivos().poolWorkers") &&
     runner.includes("const reservadas = new Set<string>();") &&
     runner.includes("!reservadas.has(f.id)"),
-  "Opt-3: pool de 2 workers con RESERVA de fila (siguientePendiente jamás toma una fila reservada — sin doble-proceso)",
+  "Opt-3: pool con concurrencia EFECTIVA por flags (D74: BAJO adaptativo ⇒ 1) con RESERVA de fila (siguientePendiente jamás toma una fila reservada — sin doble-proceso)",
 );
 
 ok(

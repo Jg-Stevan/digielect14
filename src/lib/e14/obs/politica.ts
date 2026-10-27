@@ -175,6 +175,11 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // del pre-scan) sería inalcanzable (DOBLE whitelist — cada puerta su
     // línea, lección dhashResize/sondeoQrPrecoz).
     if (typeof o.prescanQrRescate === "boolean") limpio.prescanQrRescate = o.prescanQrRescate;
+    // KIT e14-gama-adaptativa-v1 — mismo criterio: sin esta línea el
+    // override localStorage del kill-switch `masivaAdaptativoGama` (OFF =
+    // byte-idéntico a hoy en TODOS los dispositivos — D74) sería
+    // inalcanzable (DOBLE whitelist — cada puerta su línea).
+    if (typeof o.masivaAdaptativoGama === "boolean") limpio.masivaAdaptativoGama = o.masivaAdaptativoGama;
     return limpio;
   } catch {
     return {};
