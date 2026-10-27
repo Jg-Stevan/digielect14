@@ -397,6 +397,14 @@ export async function prescanYIniciar(): Promise<void> {
     store.iniciar();
     return;
   }
+  // Observabilidad del dueño — eco de la config REAL de esta corrida (la
+  // lectura de overrides de localStorage ocurre AQUÍ, en vivo). Diagnóstico
+  // pactado: si esta línea no muestra los overrides del dueño, el navegador
+  // está corriendo código viejo (pestaña sin recargar tras el deploy / SW en
+  // waiting del banner E-04) — NO es un problema de flags ni del prescan.
+  logger.info(
+    `[e14] prescan-qr corrida soloWarpQr=${soloWarpQr} warpLado=${warpLado} rescate=${rescateOn} presupuesto=${leerFlags().prescanQrPresupuestoMs}`,
+  );
   // R2 — cola ya corriendo (iniciar() es singleton no-op, igual hoy)
   if (store.corriendo) {
     store.iniciar();
