@@ -143,6 +143,10 @@ export interface FlagsApp {
   masivaStreaming: boolean; // default false — P5: el runner arranca con el 1.er pre-scan-OK (consumo por turno de clasificación); false = prescan serial de siempre byte a byte
   // ─── KIT e14-dhash-resize-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
   dhashResize: boolean; // default false — decode chico del dhash (resize 64×64 a nivel de decode, anti-hambruna P3); false = decode FULL byte-idéntico a 5d08dd6 (GO/NO-GO: bench-dedup-tolerancia/bench-resize.html)
+  // ─── KIT flujo-dueno-v1 (K2 — brief Agente B) — campos ADITIVOS AL FINAL (D57) ───
+  masivaWarpIngesta: boolean; // default false — K2/paso 2: detección+warp+sondeo-QR del pre-scan suben a la INGESTA (cola serial con cortesía de CPU); false = byte-idéntico a acf181f (el trabajo sigue en «PROCESAR COLA»)
+  masivaRotacionQr: boolean; // default false — K2/paso 5: la ROTACIÓN final la guía el cuadrante del QR en el warp de ingesta (rotacionSugerida viaja al bridge como rotacionPrecomputada y el sondeo de orientación se omite); false = byte-idéntico a acf181f (probe de siempre)
+  masivaSondeoCrudo: boolean; // default TRUE = camino de hoy — el sondeo QR crudo de la cadenaDedup (e73) alimenta hand-off P1 y dedup temprano; false = SOLO para la corrida de control del dueño (el guard fuerza sondeo=null, la fila sigue a dhash COMO HOY)
 }
 
 export interface ReporteSesion {
