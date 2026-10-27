@@ -161,6 +161,15 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // línea el override localStorage de `masivaSoloWarpQr` (toggle SOLO QR de
     // MASIVA) sería inalcanzable (DOBLE whitelist — cada puerta su línea).
     if (typeof o.masivaSoloWarpQr === "boolean") limpio.masivaSoloWarpQr = o.masivaSoloWarpQr;
+    // KIT e14-prescan-warp-lado-v1 — mismo criterio: sin estas líneas los
+    // overrides localStorage de las válvulas del pre-scan serían
+    // inalcanzables (DOBLE whitelist — cada puerta su línea).
+    if (typeof o.prescanQrPresupuestoMs === "number" && Number.isFinite(o.prescanQrPresupuestoMs)) {
+      limpio.prescanQrPresupuestoMs = Math.max(1000, Math.min(30_000, Math.round(o.prescanQrPresupuestoMs)));
+    }
+    if (typeof o.prescanWarpLado === "number" && Number.isFinite(o.prescanWarpLado)) {
+      limpio.prescanWarpLado = Math.max(256, Math.min(4032, Math.round(o.prescanWarpLado)));
+    }
     return limpio;
   } catch {
     return {};

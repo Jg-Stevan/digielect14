@@ -99,6 +99,15 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // explícito del dueño. Toggle visual en MASIVA (escribe el override
   // localStorage e14-flags-overrides). Default OFF ⇒ byte-idéntico a hoy.
   masivaSoloWarpQr: false,
+  // KIT e14-prescan-warp-lado-v1 — válvulas del dueño para el pre-scan
+  // (defaults = comportamiento de hoy byte-idéntico: presupuesto 4000 +
+  // salida de warp hasta 4032). prescanWarpLado 1920 es el remedio REAL de
+  // los hard-kill «warp» en equipos lentos: el coste del warpPerspective
+  // escala con los píxeles de SALIDA (4032 ≈ 12MP; 1920 ≈ 2.7MP) y el
+  // worker ya aceptaba msg.maxWarpLongSide (detection-worker.js) sin
+  // consumidor — la QR se lee igual a 1920 (el core lee QR a 1280/1920).
+  prescanQrPresupuestoMs: 4000,
+  prescanWarpLado: 4032,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -149,6 +158,13 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.masivaOcrTesseract === "boolean") limpio.masivaOcrTesseract = p.masivaOcrTesseract;
   // KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — whitelist aditiva (booleano).
   if (typeof p.masivaSoloWarpQr === "boolean") limpio.masivaSoloWarpQr = p.masivaSoloWarpQr;
+  // KIT e14-prescan-warp-lado-v1 — whitelist aditiva (números con clamp).
+  if (typeof p.prescanQrPresupuestoMs === "number" && Number.isFinite(p.prescanQrPresupuestoMs)) {
+    limpio.prescanQrPresupuestoMs = Math.max(1000, Math.min(30_000, Math.round(p.prescanQrPresupuestoMs)));
+  }
+  if (typeof p.prescanWarpLado === "number" && Number.isFinite(p.prescanWarpLado)) {
+    limpio.prescanWarpLado = Math.max(256, Math.min(4032, Math.round(p.prescanWarpLado)));
+  }
   return limpio;
 }
 

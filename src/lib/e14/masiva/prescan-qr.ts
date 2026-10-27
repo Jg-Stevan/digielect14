@@ -368,6 +368,11 @@ export async function prescanYIniciar(): Promise<void> {
   // DRY RUN (KIT e14-solo-warp-qr-v1) — flag del dueño, leído UNA vez por
   // corrida (mismo gesto P4/P5: corrida atómica frente a flags).
   const soloWarpQr = leerFlags().masivaSoloWarpQr === true;
+  // KIT e14-prescan-warp-lado-v1: lado máximo de la SALIDA del warp — leído
+  // UNA vez por corrida (mismo gesto). Default 4032 = byte-idéntico (default
+  // del worker); 1920 = remedio de los hard-kill «warp» (el coste del
+  // warpPerspective escala con los píxeles de salida, no de entrada).
+  const warpLado = leerFlags().prescanWarpLado;
   // R1 — kill-switch del dueño: flag OFF ⇒ byte-idéntico a hoy
   if (!leerFlags().prescanQrCola) {
     if (soloWarpQr) {
@@ -521,7 +526,7 @@ export async function prescanYIniciar(): Promise<void> {
                 quadVisto = quad; // P4 — captura para el stamp (no altera el flujo)
                 // bitmapFull TRANSFERIDO aquí (detached — close() de abajo
                 // es no-op honesto); el warp sale SIN rotar (Anexo 1).
-                const warped = await cliente.warpar(bitmapFull, quad);
+                const warped = await cliente.warpar(bitmapFull, quad, warpLado);
                 if (warped) {
                   try {
                     payload = await leerQrDeWarped(warped);
