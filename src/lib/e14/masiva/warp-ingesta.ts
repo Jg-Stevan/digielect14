@@ -12,8 +12,9 @@
  * POR FILA (mismo alcance del pre-scan e107 — el warp de ingesta es ≤2048
  * y sirve SOLO para decidir; el OCR sigue sobre el warp full-res del
  * bridge): decode (EXIF ✓) → downscale clase 400 → detect (detection-worker
- * REAL, hard-kill PRESUPUESTO_FILA_MS+HARD_KILL_EXTRA_MS — LOS MISMOS
- * budgets del prescan de hoy) → warp SIN rotar (bitmapFull TRANSFERIDO) →
+ * REAL, hard-kill por operación con los MISMOS budgets del prescan de hoy
+ * — detect/warp 4000+1500 ms, viven en el cliente y NO se duplican aquí) →
+ * warp SIN rotar (bitmapFull TRANSFERIDO) →
  * lectura del QR sobre el warp (BarcodeDetector → jsQR — MISMO orden y el
  * MISMO cap ≤1600 del prescan) → estamps:
  *   · prescanOk — la fila quedó decidida por ESTE pase (veredicto aplicado
@@ -55,9 +56,10 @@
  *    prescan-qr.ts importa store.ts legítimamente). Sin registro (SSR/
  *    prerender/prueba) → conservador: la fila no se procesa aquí y queda
  *    para el prescan asegurador (comportamiento de hoy).
- *  · Sondeo QR con jsQR PURO vendido (masiva/vendor — red line) — zxing
- *    JAMÁS en sondeos; la extracción del cuadrante reutiliza la lógica de
- *    orientacion-qr.ts (rotacionDesdeCentroide — mapeo puro, sin zxing).
+ *  · Sondeo QR con jsQR PURO vendido (masiva/vendor — red line) — el
+ *    decodificador wasm lento JAMÁS en sondeos (§F.3); la extracción del
+ *    cuadrante reutiliza la lógica de orientacion-qr.ts (rotacion-
+ *    DesdeCentroide — mapeo puro, sin el lector wasm).
  */
 
 import { logger } from "../../logger";
@@ -262,8 +264,9 @@ declare const BarcodeDetector:
 
 /** Cap del prescan para rasterizar el warp en el fallback jsQR (mismo valor
  *  — QR_WARP_LADO_TOPE de prescan-qr.ts; duplicar la CONSTANTE aquí rompería
- *  la paridad si una cambia sola — se ancla por QA). */
-export const QR_WARP_LADO_TOPE = 1600;
+ *  la paridad si una cambia sola — se ancla por QA). Const interna — knip
+ *  limpio (la QA la ancla por literal). */
+const QR_WARP_LADO_TOPE = 1600;
 
 /** Lectura sobre el warp + centroide normalizado (0-1) del QR. */
 interface LecturaWarp {
