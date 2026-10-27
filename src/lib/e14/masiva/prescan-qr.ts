@@ -384,6 +384,10 @@ export async function prescanYIniciar(): Promise<void> {
   // se leen UNA vez por corrida (corrida atómica frente a flags).
   const quadOn = leerFlags().masivaQuad === true; // P4 — estampar el quad
   const streamingOn = leerFlags().masivaStreaming === true; // P5 — por turno
+  // W1 (KIT k1-obs-prioridad — brief Agente A): estampar la prioridad de
+  // fila (paso 4 del dueño). Mismo gesto P4/P5: los flags se leen UNA vez
+  // por corrida (corrida atómica frente a flags).
+  const prioridadOn = leerFlags().masivaPrioridad === true;
   if (streamingOn) abrirTurnoClasificacion(Date.now());
   const objetivo = objetivoPrescan(useMasivaStore.getState().filas);
   if (objetivo.length === 0) {
@@ -525,10 +529,28 @@ export async function prescanYIniciar(): Promise<void> {
           const vivaStamp = useMasivaStore.getState().filas.find((f) => f.id === fila.id);
           if (vivaStamp && vivaStamp.estado === "PENDIENTE") {
             const quadFila = quadOn ? quadDeFracciones(quadVisto) : null;
-            if (streamingOn || quadFila) {
+            // W1 (KIT k1-obs-prioridad — brief Agente A): estampado de la
+            // prioridad de fila — SOLO con flag masivaPrioridad ON:
+            //  · 1 — fila CON QR leído (payload del warp — warp OK por
+            //    construcción) + quad OK (el worker detectó el quad que
+            //    produjo el warp).
+            //  · 2 — fila sin QR (lectura imposible — el warp no rescató).
+            //  · Sin stamp (continue por fila sin bytes/decode, barrido de
+            //    cierre, camino hand-off) ⇒ prioridad EFECTIVA 2 por default
+            //    en el sort del runner (JAMÁS se estampa 3: la DUPLICADA se
+            //    deriva del estado — fuente única de verdad).
+            const prioridadFila = prioridadOn
+              ? payload != null && quadVisto != null
+                ? 1
+                : 2
+              : null;
+            if (streamingOn || quadFila || prioridadFila != null) {
               useMasivaStore.getState().actualizarFila(fila.id, {
                 ...(streamingOn ? { prescanOk: true } : {}),
                 ...(quadFila ? { quad: quadFila } : {}),
+                ...(prioridadFila != null
+                  ? { prioridadProceso: prioridadFila }
+                  : {}),
               });
               if (streamingOn) useMasivaStore.getState().iniciar(); // P5 — temprano
             }

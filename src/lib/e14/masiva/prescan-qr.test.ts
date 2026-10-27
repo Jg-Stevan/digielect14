@@ -27,6 +27,7 @@ const flagsState = vi.hoisted(() => ({
   handoff: false, // P1 (brief Agente A) — masivaQrHandoff
   quad: false, // KIT e14-quad-streaming-v1 (P4) — masivaQuad
   streaming: false, // KIT e14-quad-streaming-v1 (P5) — masivaStreaming
+  prioridad: false, // W1 (KIT k1-obs-prioridad — brief Agente A) — masivaPrioridad
 }));
 vi.mock("../flags", () => ({
   leerFlags: () => ({
@@ -34,6 +35,7 @@ vi.mock("../flags", () => ({
     masivaQrHandoff: flagsState.handoff,
     masivaQuad: flagsState.quad,
     masivaStreaming: flagsState.streaming,
+    masivaPrioridad: flagsState.prioridad,
   }),
 }));
 
@@ -825,5 +827,205 @@ describe("e107 T5 · leerQrDeWarped (BarcodeDetector → jsQR → null, jamás t
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+// ── 7 · W1 (KIT k1-obs-prioridad) — estampado de la prioridad de fila ───────
+
+/** Worker auto-responde (patrón del test 35): detect → QUAD_OK · warp → bitmap. */
+function fabricaAutoRespuesta(warpedFalso: ImageBitmap): void {
+  __setFabricaWorkerDeteccionParaTest(() => {
+    const w = fabricaFalsa();
+    const basePost = w.postMessage.bind(w);
+    w.postMessage = (msg: unknown, transfer?: Transferable[]) => {
+      basePost(msg, transfer);
+      const m = msg as { type?: string; ts?: number };
+      queueMicrotask(() => {
+        if (m.type === "detect") {
+          w.onmessage?.({
+            data: { type: "result", corners: QUAD_OK, ts: m.ts },
+          } as MessageEvent);
+        } else if (m.type === "warp") {
+          w.onmessage?.({
+            data: { type: "warped", bitmap: warpedFalso, ts: m.ts },
+          } as MessageEvent);
+        }
+      });
+    };
+    return w;
+  });
+}
+
+describe("k1-obs-prioridad W1 · prescanYIniciar — stamp prioridadProceso (flag masivaPrioridad)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocksCola.leerRegistro.mockResolvedValue({ archivo: new Blob(["x"]) });
+    mocksCola.guardarRegistro.mockResolvedValue(undefined);
+    mocksStore.originalQrDePayload.mockReturnValue(null);
+    mocksStore.enviadaPorPayload.mockResolvedValue(null);
+    mocksStore.marcarYaEnviada.mockResolvedValue(true);
+    mocksStore.qrPayloadDeFila.mockReturnValue(null);
+    fabricados = [];
+    ultimo = null;
+    readyAuto = true;
+    flagsState.prescan = true;
+    flagsState.handoff = false;
+    flagsState.quad = false;
+    flagsState.streaming = false;
+    flagsState.prioridad = false;
+    storeState.corriendo = false;
+    storeState.filas = [filaFixture("f1", "PENDIENTE")];
+    vi.stubGlobal("Worker", class {});
+    vi.stubGlobal("createImageBitmap", class {});
+    vi.stubGlobal("OffscreenCanvas", class {});
+    // Fábrica FALSA auto-ready (patrón del describe P4/P5): sin esto el
+    // cliente espera el BOOT real contra el stub de Worker y el test entero
+    // se cuelga (y el corriendo del store real mata al siguiente test por
+    // R0 — re-entrada).
+    __setFabricaWorkerDeteccionParaTest(() => fabricaFalsa());
+    __resetTurnoClasificacionParaTest();
+    usePrescanStore.setState({
+      corriendo: false,
+      total: 0,
+      listo: 0,
+      leidos: 0,
+      fase: "idle",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    __setFabricaWorkerDeteccionParaTest(null);
+    __resetTurnoClasificacionParaTest();
+    flagsState.quad = false;
+    flagsState.streaming = false;
+    flagsState.prioridad = false;
+    flagsState.handoff = false;
+  });
+
+  it("56 · prioridad+quad ON + QR leído → stamp EXACTO { quad, prioridadProceso: 1 }", async () => {
+    flagsState.prioridad = true;
+    flagsState.quad = true;
+    // BarcodeDetector nativo falso: lee el payload del warp → prioridad 1.
+    vi.stubGlobal(
+      "BarcodeDetector",
+      class {
+        async detect(): Promise<{ rawValue: string }[]> {
+          return [{ rawValue: "payload-k1" }];
+        }
+      },
+    );
+    fabricaAutoRespuesta({ width: 1200, height: 900, close: () => {} } as unknown as ImageBitmap);
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () =>
+        ({ width: 400, height: 300, close: () => {} }) as unknown as ImageBitmap),
+    );
+    await prescanYIniciar();
+    // Stamp EXACTO — quad (P4) + prioridadProceso 1 (W1: QR leído + quad OK).
+    // Sin prescanOk (streaming OFF — el stamp del turno no aplica aquí).
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f1", {
+      quad: [
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.9) },
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.9) },
+      ],
+      prioridadProceso: 1,
+    });
+  });
+
+  it("57 · prioridad+quad ON + QR NO leído (lectura imposible) → stamp EXACTO { quad, prioridadProceso: 2 }", async () => {
+    flagsState.prioridad = true;
+    flagsState.quad = true;
+    // BD presente pero SIN lectura → jsQR fallback (canvas stub) → null.
+    vi.stubGlobal(
+      "BarcodeDetector",
+      class {
+        async detect(): Promise<{ rawValue: string }[]> {
+          return [];
+        }
+      },
+    );
+    fabricaAutoRespuesta({ width: 1200, height: 900, close: () => {} } as unknown as ImageBitmap);
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () =>
+        ({ width: 400, height: 300, close: () => {} }) as unknown as ImageBitmap),
+    );
+    await prescanYIniciar();
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f1", {
+      quad: [
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.9) },
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.9) },
+      ],
+      prioridadProceso: 2,
+    });
+  });
+
+  it("58 · GUARD — flag OFF (default) ⇒ stamp de hoy SIN campo nuevo (smoke byte-idéntico)", async () => {
+    flagsState.quad = true; // mismo escenario del test 36 — prioridad OFF
+    vi.stubGlobal(
+      "BarcodeDetector",
+      class {
+        async detect(): Promise<{ rawValue: string }[]> {
+          return [{ rawValue: "payload-k1" }];
+        }
+      },
+    );
+    fabricaAutoRespuesta({ width: 1200, height: 900, close: () => {} } as unknown as ImageBitmap);
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () =>
+        ({ width: 400, height: 300, close: () => {} }) as unknown as ImageBitmap),
+    );
+    await prescanYIniciar();
+    // Match EXACTO del objeto ⇒ prioridadProceso AUSENTE por construcción.
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f1", {
+      quad: [
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.1) },
+        { x: expect.closeTo(0.9), y: expect.closeTo(0.9) },
+        { x: expect.closeTo(0.1), y: expect.closeTo(0.9) },
+      ],
+    });
+    // Doble red: NINGUNA llamada con el campo nuevo.
+    const conCampo = mocksStore.actualizarFila.mock.calls.filter((c) =>
+      Object.hasOwn(c[1] as object, "prioridadProceso"),
+    );
+    expect(conCampo).toHaveLength(0);
+  });
+
+  it("59 · prioridad+streaming ON + fila sin decisión (barrido de cierre) → { prescanOk: true } SIN prioridad (default 2 por derivación)", async () => {
+    flagsState.prioridad = true;
+    flagsState.streaming = true;
+    // createImageBitmap stub (class) TIRA → catch → sin veredicto: la fila
+    // solo queda decidida por el BARRIDO de cierre — sin stamp de prioridad
+    // (warp falló / fila sin decisión ⇒ default efectivo 2, jamás inventar).
+    await prescanYIniciar();
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f1", { prescanOk: true });
+    const conCampo = mocksStore.actualizarFila.mock.calls.filter((c) =>
+      Object.hasOwn(c[1] as object, "prioridadProceso"),
+    );
+    expect(conCampo).toHaveLength(0);
+  });
+
+  it("60 · prioridad+streaming ON + PROCESAR IGUAL → stamp UPFRONT { prescanOk: true } SIN prioridad (escape del dueño intacto)", async () => {
+    flagsState.prioridad = true;
+    flagsState.streaming = true;
+    storeState.filas = [
+      { id: "f-owner", estado: "PENDIENTE", forzarDedupOff: true },
+      { id: "f1", estado: "PENDIENTE" },
+    ];
+    await prescanYIniciar();
+    // RL-e65b-6: el escape del dueño va DIRECTO al pool — stamp upfront de
+    // hoy byte-idéntico (la prioridad la deriva el sort: default 2).
+    expect(mocksStore.actualizarFila).toHaveBeenCalledWith("f-owner", { prescanOk: true });
+    const conCampo = mocksStore.actualizarFila.mock.calls.filter((c) =>
+      Object.hasOwn(c[1] as object, "prioridadProceso"),
+    );
+    expect(conCampo).toHaveLength(0);
   });
 });

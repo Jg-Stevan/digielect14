@@ -136,6 +136,10 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // (el whitelist de leerOverridesFlags es INDEPENDIENTE del de
     // sanearFlags en flags.ts — cada puerta necesita su línea).
     if (typeof o.dhashResize === "boolean") limpio.dhashResize = o.dhashResize;
+    // W1 (KIT k1-obs-prioridad — brief Agente A) — mismo criterio: sin esta
+    // línea el override localStorage de `masivaPrioridad` sería inalcanzable
+    // (DOBLE whitelist — cada puerta necesita su línea, lección dhashResize).
+    if (typeof o.masivaPrioridad === "boolean") limpio.masivaPrioridad = o.masivaPrioridad;
     return limpio;
   } catch {
     return {};

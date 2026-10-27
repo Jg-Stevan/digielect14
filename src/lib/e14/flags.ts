@@ -68,6 +68,12 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // tools/bench-dedup-tolerancia/bench-resize.html (riesgo D65/T2.1 —
   // hashes históricos full-res).
   dhashResize: false,
+  // W1 (KIT k1-obs-prioridad — brief Agente A): prioridad de fila (paso 4
+  // del dueño) — con ON el sort de siguientePendiente() pasa a prioridad
+  // efectiva (1 = QR leído + quad OK · 2 = sin QR / sin stamp · 3 =
+  // DUPLICADA derivada del estado) con FIFO de agregadaEn dentro de cada
+  // prioridad. Default OFF ⇒ sort de hoy byte-idéntico (FIFO puro).
+  masivaPrioridad: false,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -108,6 +114,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.masivaStreaming === "boolean") limpio.masivaStreaming = p.masivaStreaming;
   // KIT e14-dhash-resize-v1 (§D) — whitelist aditiva (booleano).
   if (typeof p.dhashResize === "boolean") limpio.dhashResize = p.dhashResize;
+  // W1 (KIT k1-obs-prioridad — brief Agente A) — whitelist aditiva (booleano).
+  if (typeof p.masivaPrioridad === "boolean") limpio.masivaPrioridad = p.masivaPrioridad;
   return limpio;
 }
 
