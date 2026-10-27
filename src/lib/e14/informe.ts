@@ -26,6 +26,12 @@
  */
 import { listarMapeados, leerRegistro } from "./masiva/cola";
 import type { EstadoEntrada, RegistroMasiva } from "./masiva/tipos";
+// W0 (KIT k1-obs-prioridad — brief Agente A): snapshot de flags EFECTIVOS
+// del pipeline (leerFlags — defaults ← flags.json ← overrides del dueño)
+// para que TODA medición del informe sea atribuible a su configuración.
+// Observabilidad PURA (aditivo, sin flag): cero cambios de comportamiento.
+import { leerFlags } from "./flags";
+import { CLAVE_OVERRIDES } from "./obs/politica";
 // KIT e14-obs-hang-atribucion-v1 (§A.4) — hook D58: el export de la cola es
 // trabajo main-thread REAL (mappeo dentro del cursor + compilación + zip).
 import { marcarOperacion } from "./obs/operacion";
@@ -33,7 +39,7 @@ import { marcarOperacion } from "./obs/operacion";
 // reporta — jamás cambia reglas). obtenerDispositivo NO muta estado (las
 // firmas que mutan — muestreo/buffer — no se importan ni se llaman).
 import { obtenerDispositivo } from "./obs/dispositivo";
-import type { Tier } from "./obs/tipos";
+import type { FlagsApp, Tier } from "./obs/tipos";
 // WAVE2 C2 — forma del diagnóstico que el kit A1 expone (orientacion.ts
 // L119 del kit REPARTE-WAVE2): hoy AÚN no está en DiagnosticoActa
 // (branches paralelas) — la intersección tipa el passthrough SIN as any;
@@ -70,6 +76,19 @@ interface EntornoInforme {
   tier?: Tier;
   /** (C3) true = tier INFERIDO (sin deviceMemory — iOS: núcleos + heapLimit). */
   tierInferido?: boolean;
+}
+
+/** W0 (KIT k1-obs-prioridad — brief Agente A): snapshot de FLAGS para la
+ *  atribución de mediciones — bloque `flags` del informe.json (ADITIVO AL
+ *  FINAL, contrato D57: informes previos no cambian de forma).
+ *  · efectivos — leerFlags() tal cual (defaults ← flags.json remoto ←
+ *    overrides del dueño — la cadena completa de prioridad).
+ *  · overridesCrudos — el JSON de localStorage[CLAVE_OVERRIDES] SIN sanear
+ *    (try/catch → {} si falta o está corrupto): el contexto del kill switch
+ *    manual, incluidas claves que el saneo habría descartado. */
+export interface FlagsInforme {
+  efectivos: FlagsApp;
+  overridesCrudos: Record<string, unknown>;
 }
 
 /** Fila liviana de la cola — base del informe.json (T1.2) y del filtro de
@@ -329,6 +348,40 @@ function extensionDe(reg: RegistroMasiva): string {
     "image/heif": "heif",
   };
   return porMime[reg.archivo?.type ?? ""] ?? "bin";
+}
+
+/** W0 (KIT k1-obs-prioridad — brief Agente A): overrides CRUDOS de
+ *  localStorage (CLAVE_OVERRIDES) — JSON.parseado con try/catch; si no hay
+ *  o está corrupto, {}. NUNCA lanza (el informe jamás muere por esto).
+ *  Exportado PURO para tests (misma doctrina del renderTxt/filaLiviana). */
+export function overridesCrudosFlags(): Record<string, unknown> {
+  try {
+    if (typeof window === "undefined") return {};
+    const raw = window.localStorage.getItem(CLAVE_OVERRIDES);
+    if (!raw) return {};
+    const o = JSON.parse(raw) as unknown;
+    if (typeof o !== "object" || o === null || Array.isArray(o)) return {};
+    return o as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+/** W0 (KIT k1-obs-prioridad — brief Agente A): línea estable del txt con los
+ *  flags del pipeline — SOLO los `masiva*`/`dhash*` (los que alteran el
+ *  comportamiento de la corrida masiva), en el ORDEN de declaración de
+ *  FLAGS_DEFAULT (leerFlags conserva el orden del spread), booleanos como
+ *  1/0. Formato fijo para el parser del dueño (D51 — línea PROPIA con
+ *  prefijo `[e14] flags:`, jamás tocar las líneas existentes). Exportada
+ *  PURO para tests. */
+export function lineaFlagsPipeline(flags: FlagsApp): string {
+  const pares = Object.keys(flags)
+    .filter((k) => k.startsWith("masiva") || k.startsWith("dhash"))
+    .map((k) => {
+      const v = (flags as unknown as Record<string, unknown>)[k];
+      return `${k}=${typeof v === "boolean" ? (v ? 1 : 0) : String(v)}`;
+    });
+  return `[e14] flags: ${pares.join(" ")}`;
 }
 
 /** Mapa liviano de un registro (lectura del listado — CERO dataURLs aquí).
@@ -951,7 +1004,10 @@ export function actaLivianaJson(fila: FilaInforme) {
 
 /** informe.txt — render legible del MISMO contenido del informe.json (T1).
  *  D63-D: exportada PURO (sin side effects) para verificación por humo —
- *  misma razón que tituloDeActa en masiva/tipos.ts (D59REV). */
+ *  misma razón que tituloDeActa en masiva/tipos.ts (D59REV).
+ *  W0 (KIT k1-obs-prioridad — brief Agente A): parámetro opcional AL FINAL
+ *  (callers previos intactos — sin snapshot la línea de flags NO existe y
+ *  el txt queda byte-idéntico; el exportador real siempre lo pasa). */
 export function renderTxt(
   generado: string,
   entorno: EntornoInforme,
@@ -961,6 +1017,7 @@ export function renderTxt(
   tiemposMedios: ResumenInforme["tiemposMediosMs"],
   recortado: boolean,
   sinImagen: string[],
+  flags?: FlagsInforme,
 ): string {
   const L: string[] = [];
   const linea = (s = "") => L.push(s);
@@ -982,6 +1039,11 @@ export function renderTxt(
   }
   linea(`- crossOriginIsolated: ${entorno.crossOriginIsolated}`);
   linea(`- URL: ${entorno.url}`);
+  // W0 (KIT k1-obs-prioridad — brief Agente A): línea NUEVA AL FINAL de
+  // ENTORNO (aditiva — D51, parsers por prefijo: línea PROPIA con prefijo
+  // `[e14] flags:`). Solo flags masiva*/dhash* del pipeline (booleanos 1/0
+  // — formato estable). Sin snapshot (callers legacy del render) NO existe.
+  if (flags) linea(lineaFlagsPipeline(flags.efectivos));
   linea();
   linea("TOTALES");
   linea(`- Actas en la cola: ${filas.length}`);
@@ -1444,6 +1506,13 @@ export async function generarInformeZip(
   const filasConAhorro = filas.map((f) =>
     ahorros.porActa[f.id] != null ? { ...f, ahorroMs: ahorros.porActa[f.id] } : f,
   );
+  // W0 (KIT k1-obs-prioridad — brief Agente A): snapshot de flags EFECTIVOS
+  // + overrides CRUDOS (contexto del kill switch manual del dueño) — la
+  // atribución de TODA medición del informe (observabilidad, sin flag).
+  const snapshotFlags: FlagsInforme = {
+    efectivos: { ...leerFlags() },
+    overridesCrudos: overridesCrudosFlags(),
+  };
   const informe = {
     generado,
     fuente: "cola-masiva" as const,
@@ -1519,6 +1588,10 @@ export async function generarInformeZip(
     ...(recortado
       ? { imagenesRecortadasA: TOPE_ACTAS_CON_IMAGEN, actasSinImagen: sinImagen }
       : {}),
+    // W0 (KIT k1-obs-prioridad — brief Agente A): bloque `flags` ADITIVO AL
+    // FINAL del informe.json (D57 — informes previos no cambian de forma):
+    // flags EFECTIVOS (leerFlags) + overrides CRUDOS de localStorage.
+    flags: snapshotFlags,
   };
   const codificador = new TextEncoder();
   const contenidos: Record<string, Uint8Array> = {
@@ -1533,6 +1606,7 @@ export async function generarInformeZip(
         tiemposMedios,
         recortado,
         sinImagen,
+        snapshotFlags,
       ),
     ),
   };
