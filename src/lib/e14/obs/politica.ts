@@ -147,6 +147,9 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     if (typeof o.masivaWarpIngesta === "boolean") limpio.masivaWarpIngesta = o.masivaWarpIngesta;
     if (typeof o.masivaRotacionQr === "boolean") limpio.masivaRotacionQr = o.masivaRotacionQr;
     if (typeof o.masivaSondeoCrudo === "boolean") limpio.masivaSondeoCrudo = o.masivaSondeoCrudo;
+    // KIT e14-ocr-cascada-v1 (K3 fase 2) — mismo criterio: sin esta línea
+    // el override localStorage de `masivaOcrTesseract` sería inalcanzable.
+    if (typeof o.masivaOcrTesseract === "boolean") limpio.masivaOcrTesseract = o.masivaOcrTesseract;
     return limpio;
   } catch {
     return {};

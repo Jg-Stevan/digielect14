@@ -124,6 +124,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       masivaWarpIngesta: false,
       masivaRotacionQr: false,
       masivaSondeoCrudo: true,
+      // KIT e14-ocr-cascada-v1 (K3 fase 2) — aditivo AL FINAL (contrato D57):
+      masivaOcrTesseract: false,
     });
   });
 
@@ -346,6 +348,7 @@ describe("flags · dhashResize (decode chico del dhash — kill-switch P3)", () 
   });
 });
 
+
 // ─── KIT flujo-dueno-v1 (K2 — brief Agente B) — kill-switches del dueño ───
 describe("flags · K2 flujo-dueno (masivaWarpIngesta/masivaRotacionQr/masivaSondeoCrudo)", () => {
   it("defaults: warp-ingesta OFF · rotación OFF · sondeo-crudo ON (= camino de hoy)", () => {
@@ -381,5 +384,38 @@ describe("flags · K2 flujo-dueno (masivaWarpIngesta/masivaRotacionQr/masivaSond
     expect(leerFlags().masivaWarpIngesta).toBe(true);
     expect(leerFlags().masivaRotacionQr).toBe(true);
     expect(leerFlags().masivaSondeoCrudo).toBe(false);
+  });
+});
+
+// ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — flag masivaOcrTesseract ──────────
+describe("flags · masivaOcrTesseract (cascada OCR — kill-switch K3)", () => {
+  it("default OFF → byte-idéntico al OCR escalonado de siempre", () => {
+    stubWindow();
+    expect(leerFlags().masivaOcrTesseract).toBe(false); // FLAGS_DEFAULT
+  });
+
+  it("saneo acepta booleano (true/false); leerFlags lo aplica sobre defaults", () => {
+    expect(sanearFlags({ masivaOcrTesseract: true })).toEqual({ masivaOcrTesseract: true });
+    expect(sanearFlags({ masivaOcrTesseract: false })).toEqual({ masivaOcrTesseract: false });
+    stubWindow();
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ masivaOcrTesseract: true }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().masivaOcrTesseract).toBe(true); // override manual del dueño (D6 — pasa por los DOS whitelists: sanearFlags + leerOverridesFlags)
+  });
+
+  it("tipo inválido (no-booleano) → default (ausente del whitelist)", () => {
+    expect(sanearFlags({ masivaOcrTesseract: "on" })).toEqual({});
+    expect(sanearFlags({ masivaOcrTesseract: 1 })).toEqual({});
+    expect(sanearFlags({ masivaOcrTesseract: null })).toEqual({});
+    stubWindow();
+    expect(leerFlags().masivaOcrTesseract).toBe(false); // cae al default conservador
   });
 });
