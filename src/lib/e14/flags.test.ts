@@ -80,6 +80,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       prescanQrCola: true,
       // KIT e14-orientacion-qr-v1 (§D) — aditivo AL FINAL (contrato D57):
       qrBrujulaOrientacion: true,
+      // KIT e14-dhash-resize-v1 (§D) — aditivo AL FINAL (contrato D57):
+      dhashResize: false,
     });
   });
 
@@ -267,5 +269,37 @@ describe("flags · hangEnCurso (kill-switch del sensor hang-en-curso, §D)", () 
     expect(sanearFlags({ hangEnCurso: 0 })).toEqual({});
     expect(sanearFlags({ hangEnCurso: null })).toEqual({});
     expect(leerFlags().hangEnCurso).toBe(true); // FLAGS_DEFAULT.hangEnCurso
+  });
+});
+
+// ─── KIT e14-dhash-resize-v1 (§D, T4 ≥ 2) — flag dhashResize (parche P3) ───
+describe("flags · dhashResize (decode chico del dhash — kill-switch P3)", () => {
+  it("default OFF → byte-idéntico a 5d08dd6 (decode FULL del dhash)", () => {
+    stubWindow();
+    expect(leerFlags().dhashResize).toBe(false); // FLAGS_DEFAULT.dhashResize
+  });
+
+  it("saneo acepta booleano (true/false); leerFlags lo aplica sobre defaults", () => {
+    expect(sanearFlags({ dhashResize: true })).toEqual({ dhashResize: true });
+    expect(sanearFlags({ dhashResize: false })).toEqual({ dhashResize: false });
+    stubWindow();
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) => (k === "e14-flags-overrides" ? JSON.stringify({ dhashResize: true }) : null),
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().dhashResize).toBe(true); // override manual del dueño (D6 — pasa por los DOS whitelists: sanearFlags + leerOverridesFlags)
+  });
+
+  it("tipo inválido (no-booleano) → default (ausente del whitelist)", () => {
+    expect(sanearFlags({ dhashResize: "sí" })).toEqual({});
+    expect(sanearFlags({ dhashResize: 1 })).toEqual({});
+    expect(sanearFlags({ dhashResize: null })).toEqual({});
+    stubWindow();
+    expect(leerFlags().dhashResize).toBe(false); // cae al default conservador
   });
 });

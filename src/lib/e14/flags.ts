@@ -48,6 +48,13 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // jsQR 0/4). Kill-switch del dueño: OFF = sondeo OCR de siempre byte a
   // byte (el probe D56 queda como red de seguridad).
   qrBrujulaOrientacion: true,
+  // KIT e14-dhash-resize-v1 (§D — parche P3 del plan masiva): decode CHICO
+  // del dhash (resize 64×64 a nivel de createImageBitmap) — anti-hambruna
+  // de main-thread (12 MP ≈ 48 MB → KB). Default OFF ⇒ decode FULL
+  // byte-idéntico a 5d08dd6. GO/NO-GO: bench obligatorio
+  // tools/bench-dedup-tolerancia/bench-resize.html (riesgo D65/T2.1 —
+  // hashes históricos full-res).
+  dhashResize: false,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -81,6 +88,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.prescanQrCola === "boolean") limpio.prescanQrCola = p.prescanQrCola;
   // KIT e14-orientacion-qr-v1 (§D) — whitelist aditiva (booleano).
   if (typeof p.qrBrujulaOrientacion === "boolean") limpio.qrBrujulaOrientacion = p.qrBrujulaOrientacion;
+  // KIT e14-dhash-resize-v1 (§D) — whitelist aditiva (booleano).
+  if (typeof p.dhashResize === "boolean") limpio.dhashResize = p.dhashResize;
   return limpio;
 }
 
