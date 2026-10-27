@@ -915,6 +915,19 @@ export type OpcionesEscaneoConTimeout = OpcionesEscaneo & {
    *  byte — el watchdog D65 del runner manda igual). Firmas intactas.
    *  `tiempoRealMs` = ms reales del pipeline completo (dato, jamás inventado). */
   onRescateTardio?: (acta: Acta, tiempoRealMs: number) => void;
+  /** PARCHES P1/P2 del plan masiva (brief Agente A — kit de parches sobre
+   *  `5d08dd6`): true SOLO cuando el caller es el runner MASIVA
+   *  (`opcionesMasiva` del runner). La brújula QR (e14-orientacion-qr-v1)
+   *  queda OMITIDA en masiva: su payload ya NO se consume allí (guard qrCam
+   *  de arriba — `if (!esMasiva && !parcial.qrCam)`) y su rescate ZXing
+   *  cuesta 1.3–5.1 s en CADA foto donde jsQR falla (bench v8.3 del kit).
+   *  La rotación en masiva queda cubierta por: deskew D63-B (pre-proceso
+   *  escaneos) + probe de orientación e66/e70 (origenSenales — corre en el
+   *  else-if de abajo cuando la brújula no decidió) + rescate WAVE3 §B.
+   *  El flujo individual y SIM quedan byte-idénticos (campo ausente =
+   *  falsy). Intersección LOCAL — `bridge.ts` INTOCABLE (kit §1), mismo
+   *  patrón de `timeoutMs`/`OpcionesEscaneoConTimeout`. */
+  desdeMasiva?: boolean;
 };
 
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
@@ -1400,7 +1413,19 @@ export class RealCoreBridge implements E14Bridge {
     // Guards: SIM jamás (§2.2 — chips 8.2/7.0/4.3 intactos) · sinRecorte no
     // tiene warp/quad real (SIM-only en esta base → cubierto igualmente).
     let brujula: BrujulaQr | null = null;
-    if (!opciones.simular && !sinRecorte && leerFlags().qrBrujulaOrientacion) {
+    // PARCHES P1/P2 (brief Agente A): `desdeMasiva` OMITE la brújula QR en
+    // el runner MASIVA (su payload no se consume allí — guard qrCam de
+    // arriba; la rotación queda en manos de deskew D63-B + probe e66/e70).
+    // Guards SIM/sinRecorte/flag intactos — flujo individual byte-idéntico
+    // (el kill-switch global `qrBrujulaOrientacion` NO cambia de sentido).
+    if (
+      // El campo viaja en la intersección LOCAL (mismo patrón del cast de
+      // `timeoutMs` en la etapa OCR de abajo — pipeline recibe la base).
+      !(opciones as OpcionesEscaneoConTimeout).desdeMasiva &&
+      !opciones.simular &&
+      !sinRecorte &&
+      leerFlags().qrBrujulaOrientacion
+    ) {
       brujula = await brujulaQrOrientacion(fotoOcr, fotoOriginal, quad);
       if (brujula) {
         if (brujula.rot !== 0) {
