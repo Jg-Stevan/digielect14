@@ -35,7 +35,7 @@ interface DatosRegistroRemoto {
 
 export const LEDGER_RUTA = "/api/e14/envios";
 /** Timeout del check (kit §A.3: 3 s — fallo → seguir como hoy). */
-export const LEDGER_TIMEOUT_MS = 3_000;
+const LEDGER_TIMEOUT_MS = 3_000;
 
 /** SHA-256 de un TEXTO (el payload QR) → hex 64. null si crypto.subtle no
  *  está (contexto raro — el caller salta el remoto, conservador). El hash

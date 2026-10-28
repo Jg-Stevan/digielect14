@@ -46,7 +46,7 @@ import { flagsMasivaEfectivos } from "../gama";
  * NEXT_PUBLIC_BASE_PATH (Vercel/OpenNext sirve bajo base path). */
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-export const WORKER_URLS = [
+const WORKER_URLS = [
   `${PUBLIC_BASE}/scanner/detection-worker.js?v=8`,
   `${PUBLIC_BASE}/scanner/detection-worker.js`,
 ] as const;

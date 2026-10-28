@@ -112,7 +112,7 @@ function cuadranteDesdePunto(fx: number, fy: number): CuadranteQr {
 }
 
 /** Rotación desde el cuadrante (pura — testeable). */
-export function rotDesdeCuadranteQr(cuad: CuadranteQr): RotacionQr {
+function rotDesdeCuadranteQr(cuad: CuadranteQr): RotacionQr {
   return ROT_POR_CUADRANTE[cuad];
 }
 

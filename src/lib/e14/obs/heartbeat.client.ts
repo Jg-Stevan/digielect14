@@ -66,7 +66,7 @@ import {
 
 /** Cadencia del beat del main (§C.4 — el worker tiene su propio tick de
  *  500 ms: si el main cuelga, SU interval muere; el del worker no). */
-export const BEAT_MS = 500;
+const BEAT_MS = 500;
 
 /** Contrato mínimo del worker que este cliente maneja (tests lo
  *  falsifican — patrón sondeo-qr.client.ts §A.5). */
