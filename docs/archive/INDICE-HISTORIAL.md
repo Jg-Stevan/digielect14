@@ -3,7 +3,7 @@
 > Índice resumen del contenido de `historial-reportes-instrucciones.tar.gz`.
 > 1 fila por documento (fecha de último cambio + tema) para localizar todo sin abrir el tar.
 
-Total: 65 documentos archivados.
+Total: 65 documentos archivados (tar.gz) + 19 documentos sueltos (carpeta `reportes/` y raíz — ver §ARCHIVO-SUELTO al final).
 
 | Documento | Fecha | Tema |
 |---|---|---|
@@ -72,3 +72,45 @@ Total: 65 documentos archivados.
 | `REPORTE-quad-repro-v1.md` |  |  |
 | `REPORTE-score-lectura-v1.md` |  |  |
 | `REPORTE-visor-accion-score-v1.md` |  |  |
+
+---
+
+## §ARCHIVO-SUELTO — limpieza masiva v1 (2026-11-28)
+
+> Documentos que vivían sueltos en `docs/` y en la raíz del repo; se movieron aquí
+> sin comprimir (legibles y grepeables). El contenido no fue modificado.
+
+### En `docs/archive/reportes/` (reportes de kits y auditorías puntuales)
+
+| Documento | Tema |
+|---|---|
+| `REPORTE-aa-quickwins-bfcache-v1.md` | Kit aa-quickwins (bfcache) |
+| `REPORTE-banco-qr-identidad-v1-captura.png` | Captura del banco QR identidad |
+| `REPORTE-decode-once-v1.md` | Decode once |
+| `REPORTE-dedup-rechequeo-reserva-v1.md` | Dedup rechequeo reserva |
+| `REPORTE-flujo-dueno-k2-v1.md` | Flujo del dueño K2 (warp ingesta) |
+| `REPORTE-informe-percentiles-hang-v1.md` | Informe percentiles + hang |
+| `REPORTE-kit-e14-orientacion-qr-v1.md` | Kit orientación QR |
+| `REPORTE-kit-e73-sondeo-qr-precoz-v1.md` | Kit e73 sondeo QR precoz |
+| `REPORTE-obs-flags-qa-v1.md` | Observabilidad flags QA |
+| `REPORTE-obs-modo-dev-v1.md` | Observabilidad modo dev |
+| `REPORTE-obs-nucleo-v1.md` | Núcleo de observabilidad |
+| `REPORTE-perf-probe-dedup-precoz-v1.md` | Probe dedup precoz |
+| `REPORTE-poolworkers-wiring-v1.md` | Pool de workers wiring |
+| `REPORTE-runner-logger-v1.md` | Runner logger |
+| `REPORTE-ui-hooks-v1.md` | Refactor UI hooks |
+| `REPORTE-ya-enviada-veto-postocr-v1.md` | Veto ya-enviada post-OCR |
+| `AUDITORIA-REGRESION-4f9c871.md` | Auditoría de regresión (commit 4f9c871) |
+
+### En `docs/archive/` (raíz)
+
+| Documento | Tema |
+|---|---|
+| `MORNING-REPORT.md` | Reporte de la noche agéntica 2026-10-22→23 |
+| `PLAN-overnight.md` | Plan de la noche agéntica 2026-10-22 |
+
+### En `docs/` (reubicado de la raíz del repo)
+
+| Documento | Tema |
+|---|---|
+| `AUDIT.md` | Auditoría de calidad fase 1 (diagnóstico + tandas aplicadas) |
