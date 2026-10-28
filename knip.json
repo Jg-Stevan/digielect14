@@ -4,6 +4,9 @@
     "src/app/**/*.{ts,tsx}",
     "scripts/qa-*.ts",
     "scripts/gen-divipol.mjs",
+    "scripts/build-*.mjs",
+    "scripts/smoke-*.mjs",
+    "src/lib/e14/obs/heartbeat.worker.ts",
     "tools/**/*.{js,ts}",
     "src/**/*.test.ts",
     "open-next.config.ts"
