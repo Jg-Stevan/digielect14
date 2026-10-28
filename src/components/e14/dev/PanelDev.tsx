@@ -13,7 +13,7 @@
  *  2 · Salud del dispositivo (snapshot + refrescar + muestreo cada 5 min)
  *  3 · Reportes de errores (contador + top-10 por digest; detalle → C5)
  *  4 · Ajustes de datos (4 toggles de PoliticaDatos — activar confirma, D4)
- *  5 · Exportar (ZIP migrado de ResumenView en C3 + JSON; vaciar buffer)
+ *  5 · Exportar (JSON del reporte; vaciar buffer)
  *  6 · Kill switch (overrides MANUALES de flags — D6: la app nunca sola)
  *  7 · Flags activas (valor efectivo + refrescar)
  *
@@ -35,7 +35,6 @@ import {
   idSesion,
   iniciarMuestreoSalud,
   leerFlags,
-  purgarBuffer,
   refrescarFlags,
   useModoDev,
   useOverridesFlags,
@@ -229,63 +228,15 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
   };
 
   // ── Sección 5 · exportar ───────────────────────────────────────────────
-  const [exportando, setExportando] = useState<null | "zip" | "json">(null);
-  const [listo, setListo] = useState<null | "zip" | "json">(null);
+  const [exportando, setExportando] = useState<null | "json">(null);
+  const [listo, setListo] = useState<null | "json">(null);
   const [motivo, setMotivo] = useState<string | null>(null);
   const [vaciarTrasExportar, setVaciarTrasExportar] = useState(true);
   const bufferVacio = eventosBuffer === 0;
-  // WAVE3 §A.4 — válvula de pruebas del dueño (ledger remoto D1): doble
-  // confirmación en UI (patrón «reiniciar jornada» — armado 4 s). NUNCA
-  // automática: ni vaciar local ni el reset del modo de pruebas borran el
-  // remoto (literal evitado a propósito — ancla byte-idéntica del kit §1).
-  const [armadoLedger, setArmadoLedger] = useState(false);
-  const [resultadoLedger, setResultadoLedger] = useState<string | null>(null);
-
-  const vaciarLedger = async () => {
-    setResultadoLedger(null);
-    try {
-      const { vaciarLedgerRemoto } = await import("@/lib/e14/masiva/ledger-remoto");
-      const r = await vaciarLedgerRemoto();
-      setResultadoLedger(r.ok ? "LEDGER REMOTO VACIADO ✓" : `NO SE PUDO: ${r.error ?? "?"}`);
-    } catch {
-      setResultadoLedger("NO SE PUDO VACIAR EL LEDGER REMOTO");
-    }
-  };
 
   const motivoDeError = (err: unknown): string => {
     const crudo = err instanceof Error ? err.message : String(err);
     return (crudo.replace(/\s+/g, " ").trim().slice(0, 48) || "NO SE PUDO GENERAR").toUpperCase();
-  };
-
-  /** Flujo ZIP MIGRADO de ResumenView (C3 → C4): lazy import
-   *  generarInformeZip + downloadBlob, chequeo de cola vacía y mensajes. */
-  const exportarZip = async () => {
-    if (exportando || bufferVacio) return;
-    setExportando("zip");
-    setListo(null);
-    setMotivo(null);
-    try {
-      const [{ generarInformeZip }, { downloadBlob }, { contarRegistros }] = await Promise.all([
-        import("@/lib/e14/informe"),
-        import("@jg-stevan/scanner-core/pdf-export"),
-        import("@/lib/e14/masiva/cola"),
-      ]);
-      // Chequeo de cola vacía del flujo original (kit C3: NO se pierde).
-      if ((await contarRegistros()) === 0) {
-        setMotivo("COLA MASIVA VACÍA — NADA QUE EMPAQUETAR");
-        return;
-      }
-      const { blob, nombre } = await generarInformeZip();
-      downloadBlob(blob, nombre);
-      if (vaciarTrasExportar) await purgarBuffer();
-      setListo("zip");
-      window.setTimeout(() => setListo(null), 1500);
-      void refrescarErrores();
-    } catch (err) {
-      setMotivo(motivoDeError(err));
-    } finally {
-      setExportando(null);
-    }
   };
 
   /** JSON = ReporteSesion del contrato (delegado a obs/export.ts — real). */
@@ -307,15 +258,10 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
   };
 
   // ── Sección 6 · kill switch (overrides MANUALES — D6) ──────────────────
-  const toggleOverride = (
-    clave: "poolWorkers" | "thumbsOn" | "ocrThreadsTope",
-    activar: boolean,
-  ) => {
+  const toggleOverride = (clave: "ocrThreadsTope", activar: boolean) => {
     const siguiente = { ...overrides };
     if (activar) {
-      if (clave === "poolWorkers") siguiente.poolWorkers = 1;
-      if (clave === "thumbsOn") siguiente.thumbsOn = false;
-      if (clave === "ocrThreadsTope") siguiente.ocrThreadsTope = 2;
+      siguiente.ocrThreadsTope = 2;
     } else {
       delete siguiente[clave];
     }
@@ -717,15 +663,6 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => void exportarZip()}
-                disabled={bufferVacio || exportando !== null}
-                aria-label="Exportar informe ZIP"
-                className="min-h-[44px] px-3 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] font-mono text-[11px] font-black uppercase tracking-wider shadow-lg shadow-[#10b981]/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                {exportando === "zip" ? "GENERANDO…" : listo === "zip" ? "↓ LISTO ✓" : "↓ ZIP"}
-              </button>
-              <button
-                type="button"
                 onClick={() => void exportarJson()}
                 disabled={bufferVacio || exportando !== null}
                 aria-label="Exportar reporte JSON"
@@ -758,55 +695,12 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
                 />
               </span>
             </button>
-            {/* WAVE3 §A.4 — válvula de pruebas del dueño (ledger remoto D1):
-                doble confirmación en UI (primer toque arma 4 s, segundo
-                ejecuta). NUNCA automática — kit §A.4 literal. */}
-            <button
-              type="button"
-              aria-label="Vaciar ledger remoto (pruebas) — requiere doble confirmación"
-              onClick={() => {
-                if (!armadoLedger) {
-                  setArmadoLedger(true);
-                  window.setTimeout(() => setArmadoLedger(false), ARMADO_MS);
-                  return;
-                }
-                setArmadoLedger(false);
-                void vaciarLedger();
-              }}
-              className={`w-full min-h-11 rounded-xl px-3 border font-mono text-[11px] font-black uppercase tracking-wider transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ef4444]/60 ${
-                armadoLedger
-                  ? "border-[#ef4444] bg-[#ef4444]/20 text-[#ef4444]"
-                  : "border-[#ef4444]/50 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444]"
-              }`}
-            >
-              {armadoLedger
-                ? "¿SEGURO? TOCA DE NUEVO — BORRA EL LEDGER REMOTO (D1)"
-                : "VACIAR LEDGER REMOTO (PRUEBAS)"}
-            </button>
-            {resultadoLedger && (
-              <p
-                role="status"
-                aria-live="polite"
-                className="rounded-xl border border-slate-800 bg-[#0b1117] px-3.5 py-2 font-mono text-[10.5px] font-bold uppercase tracking-wider text-slate-300"
-              >
-                {resultadoLedger}
-              </p>
-            )}
             {bufferVacio && (
               <p
                 role="note"
                 className="rounded-xl border border-slate-800 bg-[#0b1117] px-3.5 py-2 font-mono text-[10.5px] font-bold uppercase tracking-wider text-slate-400"
               >
                 BUFFER VACÍO ({eventosBuffer} EVENTOS) — NADA QUE EXPORTAR
-              </p>
-            )}
-            {exportando === "zip" && (
-              <p
-                role="status"
-                aria-live="polite"
-                className="inline-block self-center rounded-full border border-slate-800 bg-[#0b1117] px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-slate-300"
-              >
-                EMPAQUETANDO ARCHIVOS DE AUDITORÍA…
               </p>
             )}
             {motivo && (
@@ -826,20 +720,6 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
               Estos cambios de proceso los decides tú; la app nunca los hace sola.
             </p>
             <div className="rounded-2xl border border-slate-800 bg-[#0b1117] py-1">
-              <SwitchFila
-                etiqueta="UN SOLO WORKER"
-                nota="poolWorkers 2 → 1: la cola masiva procesa de a una — menos RAM, menos velocidad."
-                ariaLabel="Override: un solo worker"
-                activo={overrides.poolWorkers === 1}
-                onAlternar={() => toggleOverride("poolWorkers", overrides.poolWorkers !== 1)}
-              />
-              <SwitchFila
-                etiqueta="MINIATURAS APAGADAS"
-                nota="thumbsOn on → off: la bandeja deja de generar miniaturas — menos memoria."
-                ariaLabel="Override: miniaturas apagadas"
-                activo={overrides.thumbsOn === false}
-                onAlternar={() => toggleOverride("thumbsOn", overrides.thumbsOn !== false)}
-              />
               <SwitchFila
                 etiqueta="OCR A 2 HILOS"
                 nota="ocrThreadsTope 4 → 2: el OCR usa a lo sumo 2 hilos — equipos modestos respiren."
@@ -868,8 +748,6 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
             <div className="rounded-2xl border border-slate-800 bg-[#0b1117] px-3.5 py-1.5">
               {(
                 [
-                  ["poolWorkers", `${flags.poolWorkers}`, overrides.poolWorkers !== undefined],
-                  ["thumbsOn", flags.thumbsOn ? "on" : "off", overrides.thumbsOn !== undefined],
                   [
                     "ocrThreadsTope",
                     `${flags.ocrThreadsTope}`,

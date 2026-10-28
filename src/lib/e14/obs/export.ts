@@ -34,7 +34,6 @@ import { appVersion, idDispositivo, idSesion } from "./identidad";
 // queda legible desde el artefacto.
 import { leerFlags } from "../flags";
 import { useE14Store } from "../store";
-import { listarMapeados } from "../masiva/cola";
 import type { DiagnosticoActa } from "../types";
 import type { EnvioDetalle, EventoObs, ReporteSesion, SaludSnapshot, UsoContador } from "./tipos";
 
@@ -76,10 +75,10 @@ export function selloDe(d: Date): string {
 export interface FragDiag {
   tiempos: DiagnosticoActa["tiempos"];
   gate: { completa: boolean };
-  /** §G.3: canal del diagnóstico al export — "individual" = actaActual (una
-   *  acta abierta desde la bandeja a REVISIÓN cuenta individual), "masiva" =
-   *  cola. */
-  modo?: "individual" | "masiva";
+  /** §G.3: canal del diagnóstico al export — "individual" = actaActual
+   *  (una acta abierta a REVISIÓN cuenta individual). "masiva" (cola) se
+   *  retiró con el módulo. */
+  modo?: "individual";
   status?: DiagnosticoActa["status"];
   envioRedTipo?: string | null;
   envioDownlinkMbps?: number | null;
@@ -87,12 +86,10 @@ export interface FragDiag {
 }
 
 /** Diagnósticos de la jornada — SOLO LECTURA (kit A1-C6):
- *  · useE14Store.actaActual (la fuente que nombra el kit), y
- *  · la COLA MASIVA vía listarMapeados (lección L7: el mapper corre DENTRO
- *    del cursor y extrae SOLO los números del diagnóstico — los Blobs y
- *    dataURLs jamás se retienen; filas livianas NO traen acta en RAM).
- *  Sin esto, el reporte solo vería 1 acta y el dueño perdería las
- *  estadísticas de la jornada real. */
+ *  · useE14Store.actaActual (la fuente que nombra el kit).
+ *  NOTA (eliminación del módulo masiva): la cola IDB dejó de ser fuente
+ *  (listarMapeados retirado con ella — lección L7 aplicaba al mapper de la
+ *  cola). El reporte ve el acta de la jornada en curso. */
 async function diagnosticosDeLaJornada(): Promise<FragDiag[]> {
   const salida: FragDiag[] = [];
   try {
@@ -105,20 +102,6 @@ async function diagnosticosDeLaJornada(): Promise<FragDiag[]> {
       });
   } catch {
     /* silencioso */
-  }
-  try {
-    await listarMapeados((r) => {
-      const d = r.acta?.diagnostico;
-      if (d)
-        salida.push({
-          ...d,
-          modo: "masiva",
-          actaIdHash: hashDeActaIdDe(d),
-        });
-      return null; // NADA se retiene del registro completo (L7)
-    });
-  } catch {
-    /* silencioso — la cola es opcional para el reporte */
   }
   return salida;
 }
@@ -165,7 +148,7 @@ export function enviosDetalleDe(diags: FragDiag[]): EnvioDetalle[] | undefined {
     .filter((d) => typeof d.tiempos.envioMs === "number")
     .map((d) => ({
       actaIdHash: d.actaIdHash ?? "",
-      modo: d.modo ?? ("masiva" as const),
+      modo: d.modo ?? "individual",
       status: d.status ?? "—",
       ocrMs: typeof d.tiempos.ocrMs === "number" ? d.tiempos.ocrMs : null,
       totalMs: typeof d.tiempos.totalMs === "number" ? d.tiempos.totalMs : null,
@@ -275,9 +258,10 @@ async function miniaturaJpg(fuente: string | Blob, max = 200): Promise<Uint8Arra
   }
 }
 
-/** Fuentes de muestra: dataURL en RAM (actaActual RECHAZADA) o Blob de la
- *  cola (registros RECHAZADOS con fotoProcesadaBlob — e68). Solo RECHAZADAS
- *  (la captura falló; ADVERTENCIA/enviadas no son muestras de fallo). */
+/** Fuentes de muestra: dataURL en RAM (actaActual RECHAZADA). Solo
+ *  RECHAZADAS (la captura falló; ADVERTENCIA/enviadas no son muestras de
+ *  fallo). NOTA: las muestras de la cola IDB se retiraron con el módulo
+ *  masiva (e68). */
 async function miniaturasDeFallidas(): Promise<Array<{ nombre: string; bytes: Uint8Array }>> {
   const salida: Array<{ nombre: string; bytes: Uint8Array }> = [];
   const fuentes: Array<string | Blob> = [];
@@ -286,16 +270,6 @@ async function miniaturasDeFallidas(): Promise<Array<{ nombre: string; bytes: Ui
     if (e14.actaActual?.status === "RECHAZADA" && e14.actaActual.fotoProcesada) {
       fuentes.push(e14.actaActual.fotoProcesada);
     }
-  } catch {
-    /* silencioso */
-  }
-  try {
-    await listarMapeados((r) => {
-      if (r.acta?.status !== "RECHAZADA") return null;
-      const f = r.acta.fotoProcesada ?? r.fotoProcesadaBlob;
-      if (f) fuentes.push(f);
-      return null; // L7: el Blob retenido es SOLO el de la muestra (pocas)
-    });
   } catch {
     /* silencioso */
   }

@@ -600,9 +600,6 @@ describe("uso · contadores (C4)", () => {
     vi.doMock("../store", () => ({
       useE14Store: { subscribe: () => () => {} },
     }));
-    vi.doMock("../masiva/store", () => ({
-      useMasivaStore: { subscribe: () => () => {} },
-    }));
     vi.doMock("./buffer", async (importOriginal) => ({
       ...(await importOriginal<Record<string, unknown>>()),
       appendEvento: async (e: { tipo: string; datos: unknown }) => {
@@ -614,7 +611,6 @@ describe("uso · contadores (C4)", () => {
 
   function limpiarMocks(): void {
     vi.doUnmock("../store");
-    vi.doUnmock("../masiva/store");
     vi.doUnmock("./buffer");
     vi.resetModules();
   }
@@ -634,11 +630,11 @@ describe("uso · contadores (C4)", () => {
     try {
       uso.mezclarContador("2026-10-23", "resumen", "abrir-vista");
       uso.mezclarContador("2026-10-23", "resumen", "abrir-vista");
-      uso.mezclarContador("2026-10-23", "masiva", "fila→LISTA");
+      uso.mezclarContador("2026-10-23", "actas", "abrir-vista");
       const volcado = uso.volcarContadores();
       expect(volcado).toHaveLength(2);
       expect(volcado).toContainEqual({ dia: "2026-10-23", vista: "resumen", accion: "abrir-vista", n: 2 });
-      expect(volcado).toContainEqual({ dia: "2026-10-23", vista: "masiva", accion: "fila→LISTA", n: 1 });
+      expect(volcado).toContainEqual({ dia: "2026-10-23", vista: "actas", accion: "abrir-vista", n: 1 });
       expect(uso.volcarContadores()).toHaveLength(0); // ya se limpió
     } finally {
       limpiarMocks();
@@ -845,13 +841,13 @@ describe("politica · defaults / corrupto / overrides (C5-C6)", () => {
     try {
       const p = await import("./politica");
       expect(p.leerOverridesFlags()).toEqual({});
-      p.guardarOverridesFlags({ ocrThreadsTope: 99, thumbsOn: false, poolWorkers: 1 });
-      expect(p.leerOverridesFlags()).toEqual({ ocrThreadsTope: 8, thumbsOn: false, poolWorkers: 1 });
+      p.guardarOverridesFlags({ ocrThreadsTope: 99, hangEnCurso: false, qrBrujulaOrientacion: false });
+      expect(p.leerOverridesFlags()).toEqual({ ocrThreadsTope: 8, hangEnCurso: false, qrBrujulaOrientacion: false });
       // merge sobre lo existente (guardarOverrides conserva claves previas)
       p.guardarOverridesFlags({ telemetriaSalud: false });
       const o = p.leerOverridesFlags();
       expect(o.telemetriaSalud).toBe(false);
-      expect(o.thumbsOn).toBe(false);
+      expect(o.hangEnCurso).toBe(false);
       // JSON corrupto → {} silencioso
       window.localStorage.setItem("e14-flags-overrides", "###");
       expect(p.leerOverridesFlags()).toEqual({});
@@ -870,15 +866,11 @@ async function importarExport(): Promise<typeof import("./export")> {
   vi.doMock("../store", () => ({
     useE14Store: { getState: () => ({ actaActual: null }), subscribe: () => () => {} },
   }));
-  vi.doMock("../masiva/cola", () => ({
-    listarMapeados: async () => {},
-  }));
   return import("./export");
 }
 
 function limpiarExport(): void {
   vi.doUnmock("../store");
-  vi.doUnmock("../masiva/cola");
   vi.resetModules();
 }
 
@@ -919,15 +911,15 @@ describe("export · helpers puros (C6)", () => {
         datos: datos as EventoObs["datos"],
       });
       const salida = agregarUso([
-        ev({ dia: "2026-10-23", vista: "masiva", accion: "fila→LISTA", n: 2 }),
-        ev({ dia: "2026-10-23", vista: "masiva", accion: "fila→LISTA", n: 3 }),
-        ev({ dia: "2026-10-24", vista: "masiva", accion: "fila→LISTA", n: 1 }),
+        ev({ dia: "2026-10-23", vista: "actas", accion: "abrir-vista", n: 2 }),
+        ev({ dia: "2026-10-23", vista: "actas", accion: "abrir-vista", n: 3 }),
+        ev({ dia: "2026-10-24", vista: "actas", accion: "abrir-vista", n: 1 }),
         ev({ foo: "no-es-contador" }),
         ev({ vista: 42, accion: null }),
       ]);
       expect(salida).toHaveLength(2);
-      expect(salida).toContainEqual({ dia: "2026-10-23", vista: "masiva", accion: "fila→LISTA", n: 5 });
-      expect(salida).toContainEqual({ dia: "2026-10-24", vista: "masiva", accion: "fila→LISTA", n: 1 });
+      expect(salida).toContainEqual({ dia: "2026-10-23", vista: "actas", accion: "abrir-vista", n: 5 });
+      expect(salida).toContainEqual({ dia: "2026-10-24", vista: "actas", accion: "abrir-vista", n: 1 });
     } finally {
       limpiarExport();
     }
@@ -990,16 +982,6 @@ describe("export · construirReporte (C6)", () => {
         subscribe: () => () => {},
       },
     }));
-    vi.doMock("../masiva/cola", () => ({
-      listarMapeados: async (mapper: (r: unknown) => unknown) => {
-        void mapper; // el mapper corre; extrae los diag que quiera
-        const registros = [
-          { id: "f1", acta: { id: "a-2", status: "LISTA", diagnostico: { tiempos: { ocrMs: 750, procesoMs: 1, calidadMs: 1, totalMs: 752 }, gate: { completa: true } } } },
-          { id: "f2", acta: null },
-        ];
-        for (const r of registros) mapper(r);
-      },
-    }));
     vi.doMock("./buffer", async () => ({
       eventosPorDigest: async () => [{ digest: "dd000001", severidad: "error", veces: 1, breadcrumbsRecientes: [] }],
       leerEventos: async (f?: (e: EventoObs) => boolean) => {
@@ -1032,16 +1014,6 @@ describe("export · construirReporte (C6)", () => {
         subscribe: () => () => {},
       },
     }));
-    vi.doMock("../masiva/cola", () => ({
-      listarMapeados: async (mapper: (r: unknown) => unknown) => {
-        void mapper; // el mapper corre; extrae los diag que quiera
-        const registros = [
-          { id: "f1", acta: { id: "a-2", status: "LISTA", diagnostico: { tiempos: { ocrMs: 750, procesoMs: 1, calidadMs: 1, totalMs: 752 }, gate: { completa: true } } } },
-          { id: "f2", acta: null },
-        ];
-        for (const r of registros) mapper(r);
-      },
-    }));
     vi.stubGlobal("window", {
       localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
       setInterval: () => 0,
@@ -1055,9 +1027,9 @@ describe("export · construirReporte (C6)", () => {
       expect(reporte.meta.generado).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(reporte.dispositivo.os).toBe("Android");
       expect(reporte.erroresAgrupados).toEqual([{ digest: "dd000001", severidad: "error", veces: 1, breadcrumbsRecientes: [] }]);
-      expect(reporte.perfResumen.actas).toBe(2); // actaActual + fila f1
-      expect(reporte.perfResumen.p50OcrMs).toBe(250); // [250, 750]
-      expect(reporte.perfResumen.p95OcrMs).toBe(750);
+      expect(reporte.perfResumen.actas).toBe(1); // solo actaActual (fuente única de la jornada)
+      expect(reporte.perfResumen.p50OcrMs).toBe(250); // [250]
+      expect(reporte.perfResumen.p95OcrMs).toBe(250);
       expect(reporte.perfResumen.fallosGate).toBe(1);
       expect(reporte.perfResumen.memoriaPicoMB).toBe(20); // máx de las 2 muestras
       expect(reporte.saludMuestras).toHaveLength(2);
@@ -1066,7 +1038,6 @@ describe("export · construirReporte (C6)", () => {
       vi.doUnmock("./buffer");
       vi.doUnmock("./dispositivo");
       vi.doUnmock("../store");
-      vi.doUnmock("../masiva/cola");
       vi.unstubAllGlobals();
       vi.resetModules();
     }

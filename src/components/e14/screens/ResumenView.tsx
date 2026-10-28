@@ -195,7 +195,7 @@ export function ResumenView() {
             }}
             aria-label={
               reiniciarArmado
-                ? "Confirmar reiniciar la jornada completa (incluye la cola masiva)"
+                ? "Confirmar reiniciar la jornada completa"
                 : "Reiniciar la jornada completa"
             }
             className={`w-full lg:max-w-sm min-h-[44px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${

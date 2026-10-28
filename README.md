@@ -10,7 +10,7 @@ y exportación.
   módulo `src/lib/e14/ocr/rapidocr.ts`, modelos vendidos en
   `public/models/rapidocr/`, runtime en `public/vendor/onnxruntime/`.
 - **Códigos QR/1D**: `zxing-wasm` + capa 0 de identidad con jsQR
-  vendorizado (`src/lib/e14/masiva/identidad-qr.ts`).
+  vendorizado (`src/lib/e14/qr/identidad-qr.ts`).
 - **Nota**: `tesseract.js` NO es dependencia del proyecto. Era el motor
   anterior del core (spa+eng OEM1, downscale 1600) y sobrevive solo
   como instrumento de laboratorio en los docs históricos (`docs/`).

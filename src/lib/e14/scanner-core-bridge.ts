@@ -89,16 +89,12 @@ import { verificarCompletitud, type ResultadoCompletitud } from "./completitud";
 // KIT e14-gate-v2 (FASE G2): marcador OBLIGATORIO de votos — helper ÚNICO
 // compartido con el guard de completitud (motorTinta, cero duplicación).
 import { medirZonaVotos } from "./marcadores";
-// D63-C — KIT e63c-quad-gate-escaneo-v1: detector del MARCO IMPRESO del E-14
-// para el gate de escaneos (T2) — fotos y SIM jamás lo invocan (guards).
-import { evaluarMarcoImpreso, type MarcoEscaneo, type MarcoImpreso } from "./marco-escaneo";
 // KIT e14-score-lectura-v1: señal de LECTURA del score v2 (módulo puro — §4-A).
 import {
   PISO_LECTURA_FUERTE,
   TECHO_LECTURA_DEBIL,
   lazoPerdonadoPorLectura,
   senalDeLectura,
-  type NivelLectura,
 } from "./senal-lectura";
 // §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
 // import estático: Next resuelve el basePath /web-scanner del deploy estático.
@@ -140,7 +136,7 @@ import type { ProbeOrientacion } from "./orientacion";
 import { DET_CAP_PROD, DET_CAP_RAPIDO } from "./ocr/rapidocr";
 import { anclasDe, elegirMejor, necesitaSegunda } from "./ocr-escalonado";
 // KIT e14-ocr-cascada-v1 (K3 fase 2): núcleo PURO de la cascada (gate entre
-// motores + rescate ROI) — flag masivaOcrTesseract (default OFF ⇒ escalonado
+// motores + rescate ROI) — flag ocrCascada (default OFF ⇒ escalonado
 // de siempre byte a byte). Decision/eleccion de siempre: NEEDS ocr-escalonado.
 import {
   cascadaActiva,
@@ -154,14 +150,12 @@ import { construirDiagnostico } from "./diagnostico";
 import { canvasCon } from "./image-utils"; // SPRINT-A A3 — factory de canvas
 import { logger } from "../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
-/** KIT e14-masiva-tiempos-v1 (PR-2, prefetch): memo de decode POR INSTANCIA
- *  de File (WeakMap — GC-friendly, no retiene blobs). El mismo File JAMÁS
- *  se decodifica dos veces: el prefetch del runner MASIVA
- *  (precargarDecodeArchivo) oculta el decode de N+1 tras el OCR de N y el
- *  pipeline de N+1 golpea la memo (~0 ms — AC-P1). TRANSPARENTE para todos
- *  los flujos existentes: misma promesa, mismo resultado; si el decode
- *  falla, la entrada sale de la memo y el siguiente intento re-decodifica
- *  (comportamiento de hoy — kit AC-P2 «jamás bloquea»). */
+/** Memo de decode POR INSTANCIA de File (WeakMap — GC-friendly, no retiene
+ *  blobs; Kit e14-masiva-tiempos-v1 PR-2). El mismo File JAMÁS se decodifica
+ *  dos veces: un re-intento del pipeline sobre el MISMO archivo golpea la
+ *  memo (~0 ms). TRANSPARENTE para todos los flujos: misma promesa, mismo
+ *  resultado; si el decode falla, la entrada sale de la memo y el siguiente
+ *  intento re-decodifica (jamás bloquea). */
 const decodeMemo = new WeakMap<File, Promise<string>>();
 
 function decodeArchivoMemo(file: File): Promise<string> {
@@ -188,9 +182,9 @@ function decodeArchivoMemo(file: File): Promise<string> {
  *  un ARCHIVO real terminó VÁLIDO a los ~53.5 s y el watchdog de 15 s ya lo
  *  había rechazado (resultado descartado en silencio). 120 s da colchón
  *  frente al peor caso observado (53.5 s + 36 líneas OCR) sin esperar de
- *  más a un colgaje real. MASIVA no cambia: pasa su propio presupuesto
- *  (OpcionesEscaneoConTimeout.timeoutMs — WATCHDOG_MS del runner). El
- *  RECORTE manual conserva su RECORTE_TIMEOUT_MS propio (ruta distinta). */
+ *  más a un colgaje real. El presupuesto por llamada es OPCIONAL
+ *  (OpcionesEscaneoConTimeout.timeoutMs). El RECORTE manual conserva su
+ *  RECORTE_TIMEOUT_MS propio (ruta distinta). */
 const TIMEOUT_MS = 120_000;
 /** KIT e14-recorte-manual-v1 (T1): presupuesto del RECORTE manual — el warp
  *  del editor mide 14–17.4 s en el equipo del dueño (OCR solo: 9.8–14.3 s),
@@ -219,11 +213,9 @@ const DETALLE_GENERICO = "SCORE INSUFICIENTE PARA TRANSMISIÓN";
 // §F-5 (SPEC-camara-funcional): detalle del rechazo por acta INCOMPLETA —
 // la captura corta el papel aunque la cabecera sea legible.
 const DETALLE_INCOMPLETA = "EL ACTA ESTÁ CORTADA EN EL ENCUADRE — ALÉJATE UN POCO Y CAPTURA EL ACTA COMPLETA";
-// KIT e63d-escaneo-ya-recortado-v1 (F3.4): copy del rechazo INCOMPLETA para
-// ARCHIVO/escaneo — «aléjate un poco» no tiene sentido para un archivo
-// subido (no hay cámara que alejar). Mismo tipo de rechazo, copy del medio.
-const DETALLE_INCOMPLETA_ESCANEO =
-  "EL ESCANEO PARECE CORTADO — REPITE EL ESCANEO INCLUYENDO EL ACTA COMPLETA";
+// KIT e63d-escaneo-ya-recortado-v1 (F3.4): copy de la rama escaneo RETIRADO
+// junto con el módulo masiva (el origen del archivo era señal exclusiva del
+// runner MASIVA — sin cola no hay flujos «escaneo»).
 // KIT e14-gate-v2 (FASE G2): detalle del rechazo por el MARCADOR
 // OBLIGATORIO de votos fallido — copy CORTO y descriptivo (decisión del
 // dueño: SIN guía de cámara). El rechazo directo regresa el flujo a
@@ -888,7 +880,7 @@ async function recortarRoiDataUrl(
 
 /**
  * KIT e14-ocr-cascada-v1 (K3 fase 2) — la CASCADA en el pipeline, SOLO con
- * `leerFlags().masivaOcrTesseract` ON (default OFF ⇒ esta función nunca se
+ * `leerFlags().ocrCascada` ON (default OFF ⇒ esta función nunca se
  * invoca y el camino es `reconocerRapidOcrEscalonado` byte a byte):
  *
  *   intento 1 (RapidOCR 1280 HOY · Tesseract futuro si GO-B) → GATE
@@ -1015,14 +1007,9 @@ async function esperarWorkerCaliente(topeMs: number): Promise<boolean> {
   }
 }
 
-/** KIT e14-masiva-ux-v1 (T4): opciones con presupuesto de timeout OPCIONAL.
- *  Intersección LOCAL — el kit §1 prohíbe tocar `bridge.ts` (casa de
- *  OpcionesEscaneo): el default 15_000 sigue mandando (escaneo individual
- *  INTACTO) y MASIVA pasa 120_000. La bivariance de métodos TS admite el
- *  método con el parámetro más ancho (class implements E14Bridge sigue
- *  compilando; los callers pasan la variable tipada — sin excess-check).
- *  e67 (M-e67-0): el default real era 15_000 — ahora TIMEOUT_MS = 120_000
- *  (cambio A del kit; el comentario T4 conservaba el valor histórico). */
+/** KIT e14-masiva-ux-v1 (T4) — RETIRADA DEL MÓDULO MASIVA: el runner que
+ *  pasaba 120_000 ya no existe; el presupuesto opcional y el rescate
+ *  post-timeout (e67) siguen disponibles para el flujo individual. */
 export type OpcionesEscaneoConTimeout = OpcionesEscaneo & {
   /** Presupuesto total del pipeline para ESTA llamada (ms). Ausente =
    *  TIMEOUT_MS (120_000 desde e67 — 15_000 antes). */
@@ -1034,121 +1021,10 @@ export type OpcionesEscaneoConTimeout = OpcionesEscaneo & {
    *  por ESTE callback (SOLO se dispara tras un vencimiento — idempotente:
    *  si el pipeline gana la carrera jamás se llama). El receptor decide:
    *  el store individual rescata actas válidas (OPTIMA/ADVERTENCIA) y
-   *  revierte el rechazo; MASIVA no lo pasa (undefined → no-op byte a
-   *  byte — el watchdog D65 del runner manda igual). Firmas intactas.
+   *  revierte el rechazo. Firmas intactas.
    *  `tiempoRealMs` = ms reales del pipeline completo (dato, jamás inventado). */
   onRescateTardio?: (acta: Acta, tiempoRealMs: number) => void;
-  /** PARCHES P1/P2 del plan masiva (brief Agente A — kit de parches sobre
-   *  `5d08dd6`): true SOLO cuando el caller es el runner MASIVA
-   *  (`opcionesMasiva` del runner). La brújula QR (e14-orientacion-qr-v1)
-   *  queda OMITIDA en masiva: su payload ya NO se consume allí (guard qrCam
-   *  de arriba — `if (!esMasiva && !parcial.qrCam)`) y su rescate ZXing
-   *  cuesta 1.3–5.1 s en CADA foto donde jsQR falla (bench v8.3 del kit).
-   *  La rotación en masiva queda cubierta por: deskew D63-B (pre-proceso
-   *  escaneos) + probe de orientación e66/e70 (origenSenales — corre en el
-   *  else-if de abajo cuando la brújula no decidió) + rescate WAVE3 §B.
-   *  El flujo individual y SIM quedan byte-idénticos (campo ausente =
-   *  falsy). Intersección LOCAL — `bridge.ts` INTOCABLE (kit §1), mismo
-   *  patrón de `timeoutMs`/`OpcionesEscaneoConTimeout`. */
-  desdeMasiva?: boolean;
 };
-
-/** KIT e14-quad-streaming-v1 (P4): intersección LOCAL con el quad
- *  PRECOMPUTADO del pre-scan de la masiva (patrón OpcionesEscaneoConTimeout
- *  de arriba — kit §1 prohíbe tocar bridge.ts, casa de OpcionesEscaneo).
- *  Fracciones 0-1 (TL,TR,BR,BL) — la MISMA convención de Quad: el pre-scan
- *  detectó sobre el bitmap de la clase 400 (downscale PROPORCIONAL del
- *  full) y las fracciones viajan sin re-escalar. Opcional → retro-
- *  compatible: flujos individual/SIM JAMÁS lo traen (campo nuevo AL FINAL
- *  de la intersección — contrato D57). El pipeline lo consume SOLO con el
- *  flag masivaQuad ON y SOLO si pasa la validación de plausibilidad (guard
- *  conservador — cualquier duda → detección propia de siempre). */
-export type OpcionesEscaneoConQuad = OpcionesEscaneoConTimeout & {
-  quadPrecomputado?: Quad;
-};
-
-/** KIT flujo-dueno-v1 (K2 — brief Agente B, sub-commit 3): rotación
- *  PRECOMPUTADA por el warp de INGESTA (cuadrante del QR —
- *  orientacion-qr.rotacionDesdeCentroide, bench v8.3 4/4). Intersección
- *  LOCAL (packages/ INTOCABLE — patrón OpcionesEscaneoConQuad); campo AL
- *  FINAL (contrato D57) — SIN colisión con quadPrecomputado de P4: se
- *  aplica POST-warp del core y PRE-OCR (el warp ya terminó cuando rota).
- *  El pipeline la consume SOLO con el flag masivaRotacionQr ON y SOLO si
- *  pasa la validación local (guard conservador — cualquier duda → sondeo
- *  de orientación de siempre). SOLO el runner MASIVA la construye (SIM y
- *  el flujo individual jamás la traen). */
-export type OpcionesEscaneoConRotacion = OpcionesEscaneoConQuad & {
-  rotacionPrecomputada?: 0 | 90 | 180 | 270;
-};
-
-/** KIT e14-quad-streaming-v1 (P4) — DECISIÓN DOCUMENTADA (plan §3-P4 punto
- *  5): el quad precomputado viaja como SEMILLA (QUAD_PRECOMPUTADO_MANUAL =
- *  false): el warp del core REFINA el quad sobre el FULL (refineQuad /
- *  RANSAC del worker — ganancia real vs la detección a 400px del pre-scan).
- *  El camino `manual: true` (respeta el quad al píxel, SIN refine —
- *  :2127) queda como TODO del dueño: decidir con los benches
- *  tools/bench-det960/ y tools/bench-det1280/ antes de voltear esta
- *  constante. */
-const QUAD_PRECOMPUTADO_MANUAL = false;
-
-/** Piso de área (fracción del marco) bajo el cual un quad precomputado se
- *  considera degenerado (un acta que ocupe <5% de la foto es sospechosa —
- *  conservador: detección propia). */
-const QUAD_PRECOMPUTADO_AREA_MIN = 0.05;
-
-/** KIT e14-quad-streaming-v1 (P4) — validación de plausibilidad del quad
- *  precomputado (guard conservador del plan §3-P4): 4 puntos finitos dentro
- *  del marco, polígono convexo no degenerado (área por shoelace + signo
- *  constante de los productos cruzados). Cualquier duda → false → el bridge
- *  corre SU detección de siempre (el parche JAMÁS tumba el pipeline —
- *  doctrina §5; el detección-worker del pre-scan es el mismo OpenCV, pero
- *  aquí NO se confía: se re-valida). */
-function quadPrecomputadoPlausible(q: Quad): boolean {
-  try {
-    if (!Array.isArray(q) || q.length !== 4) return false;
-    for (const p of q) {
-      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
-      if (p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) return false;
-    }
-    // Área por shoelace (orden del contrato Quad: TL,TR,BR,BL).
-    const area2 =
-      Math.abs(
-        q[0]!.x * q[1]!.y -
-          q[1]!.x * q[0]!.y +
-          q[1]!.x * q[2]!.y -
-          q[2]!.x * q[1]!.y +
-          q[2]!.x * q[3]!.y -
-          q[3]!.x * q[2]!.y +
-          q[3]!.x * q[0]!.y -
-          q[0]!.x * q[3]!.y,
-      ) / 2;
-    if (area2 < QUAD_PRECOMPUTADO_AREA_MIN) return false;
-    // Convexidad: productos cruzados de aristas consecutivas con el MISMO
-    // signo (un quad torcido/auto-intersectado produce warps basura —
-    // colineal estricto → false también).
-    let signo = 0;
-    for (let i = 0; i < 4; i += 1) {
-      const a = q[i]!;
-      const b = q[(i + 1) % 4]!;
-      const c = q[(i + 2) % 4]!;
-      const cruz = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
-      if (!Number.isFinite(cruz) || Math.abs(cruz) < 1e-9) return false;
-      if (signo === 0) signo = Math.sign(cruz);
-      else if (Math.sign(cruz) !== signo) return false;
-    }
-    return true;
-  } catch {
-    return false; // jamás tumba — detección propia de siempre
-  }
-}
-
-/** KIT flujo-dueno-v1 (K2 — sub-commit 3) — validación LOCAL de la rotación
- *  precomputada (guard conservador — patrón quadPrecomputadoPlausible): el
- *  valor debe ser entero del set {0, 90, 180, 270}. Cualquier duda → false
- *  → sondeo de orientación de siempre (el parche JAMÁS tumba el pipeline). */
-function rotacionPrecomputadaPlausible(r: number): boolean {
-  return r === 0 || r === 90 || r === 180 || r === 270;
-}
 
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
 interface ResultadoGate {
@@ -1214,29 +1090,6 @@ function conRampa<T>(
       throw error;
     },
   );
-}
-
-/** KIT e63d-escaneo-ya-recortado-v1 (F0.2) · hotfix e63d-rev2 (kit e63e ANEXO A
- *  caso 4): la LECTURA perdona al marco «cortado» de un ESCANEO — mismo patrón
- *  que lazoPerdonadoPorLectura (tabla §3-A del kit). El perdón exige el trío
- *  COMPLETO: veredicto cortado + lectura FUERTE + secciones presentes
- *  (faltaSeccionInferior false). Cualquier otro caso → false: la mutilación
- *  real (falta una sección) y la lectura débil/media jamás se perdonan —
- *  «la lectura perdona al marco, NO al contenido faltante». completo/ceñido/
- *  no-encontrado nunca bloquean por construcción (el perdón no aplica).
- *
- *  REV.2 — el gate F0.2 rev.1 (d671c29) tenía la polaridad INVERTIDA: el
- *  ternario del bridge negaba el trío (`!(FUERTE && !faltaSeccion)`), con lo
- *  cual el caso P2 (cortado+FUERTE+secciones) quedaba RECHAZADA INCOMPLETA y
- *  los MEDIA/DEBIL/SIN pasaban el gate del marco — exacto al revés de la
- *  doctrina (comentario del sitio, REPORTE-e63d §F0.2 y tabla §3-A).
- *  Exportado (patrón D-5) para el QA headless del kit e63e §4.2. */
-export function marcoPerdonadoPorLectura(
-  veredicto: MarcoImpreso,
-  nivelLectura: NivelLectura,
-  faltaSeccion: boolean,
-): boolean {
-  return veredicto === "cortado" && nivelLectura === "FUERTE" && !faltaSeccion;
 }
 
 /** e64-qr T-2.1 — acumulador del pipeline: lo conocido al vencer el timeout
@@ -1311,8 +1164,7 @@ export class RealCoreBridge implements E14Bridge {
             rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_TIMEOUT },
           }),
         );
-        // KIT e14-masiva-ux-v1 (T4): presupuesto OPCIONAL por llamada —
-        // MASIVA pasa su presupuesto del watchdog (WATCHDOG_MS del runner);
+        // Presupuesto OPCIONAL por llamada (OpcionesEscaneoConTimeout);
         // el default manda en el flujo individual (120_000 desde e67).
       }, opciones.timeoutMs ?? TIMEOUT_MS);
 
@@ -1324,7 +1176,7 @@ export class RealCoreBridge implements E14Bridge {
             // (gate/score del pipeline, no del watchdog). Ya no se
             // descarta en silencio: viaja por onRescateTardio para que el
             // receptor valide y revierta el rechazo si es válido. Sin
-            // callback (MASIVA) → no-op, comportamiento de siempre.
+            // callback → no-op, comportamiento de siempre.
             opciones.onRescateTardio?.(
               acta,
               Math.round(performance.now() - tInicioEscaneo),
@@ -1366,8 +1218,7 @@ export class RealCoreBridge implements E14Bridge {
     const fotoOriginal =
       "archivo" in entrada
         ? await conRampa(
-            // KIT e14-masiva-tiempos-v1 (PR-2): decode con memo POR FILE —
-            // el prefetch del runner MASIVA comparte esta instancia → HIT.
+            // Decode con memo POR FILE (re-escaneos del MISMO archivo → HIT).
             decodeArchivoMemo(entrada.archivo),
             700,
             (f) => ({ etapa: "DETECTANDO", progreso: f * 0.5 }),
@@ -1378,29 +1229,23 @@ export class RealCoreBridge implements E14Bridge {
     parcial.fotoOriginal = fotoOriginal;
 
     // e64-qr T-2.1 — CAPA 0 QR también en cámara (kit FASE 2 / hermano C-1):
-    // el MISMO decodificador de masiva (import DINÁMICO — el bundle crítico
+    // el MISMO decodificador de la capa QR (src/lib/e14/qr — reubicada tras
+    // la eliminación del módulo masiva; import DINÁMICO — el bundle crítico
     // del escaneo no engorda), señal ADITIVA — jamás afecta score/gate/OCR
     // ni consume intento. Se lanza EN PARALELO al pipeline (el tier base
     // resuelve en ~0.3-0.5 s — mucho antes del OCR) y se ESPETA donde el
     // acta se construye. tiers "base" — ADAPTACIÓN DECLARADA: la cadena
-    // completa (~15-17 s sin-QR, bloques sync) rompería el timeout 15 s del
-    // flujo individual; el rescate pesado queda en masiva (timeout 120 s).
-    // GUARD (D63-C): `origenActa` viaja SOLO en entradas de MASIVA — allí la
-    // capa 0 del runner (cadena COMPLETA a nivel registro, no acta) manda y
-    // la señal base-only del bridge sería redundante y doble-costo: OMITIDA.
-    // El catch es el fallback silencioso del kit: sin la señal, el flujo de
-    // cámara sigue intacto.
-    const esMasiva = opciones.origenActa != null;
-    const qrCamPromesa: Promise<ParcialPipeline["qrCam"]> = esMasiva
-      ? Promise.resolve(undefined) // la capa 0 del runner manda en masiva
-      : (async () => {
-          try {
-            const { decodificarQrDeCapture } = await import("./masiva/identidad-qr");
-            return await decodificarQrDeCapture(fotoOriginal, { tiers: "base" });
-          } catch {
-            return null; // sin-payload — el flujo de cámara sigue intacto
-          }
-        })();
+    // completa (~15-17 s sin-QR, bloques sync) rompería el timeout del
+    // flujo individual. El catch es el fallback silencioso del kit: sin la
+    // señal, el flujo de cámara sigue intacto.
+    const qrCamPromesa: Promise<ParcialPipeline["qrCam"]> = (async () => {
+      try {
+        const { decodificarQrDeCapture } = await import("./qr/identidad-qr");
+        return await decodificarQrDeCapture(fotoOriginal, { tiers: "base" });
+      } catch {
+        return null; // sin-payload — el flujo de cámara sigue intacto
+      }
+    })();
     const aterrizarQrCam = async (): Promise<void> => {
       // idempotente y acotada (el tier base tiene techo propio ~0.5 s)
       parcial.qrCam = await qrCamPromesa;
@@ -1412,33 +1257,6 @@ export class RealCoreBridge implements E14Bridge {
     //    en el log como hoy, traza de auditoría). SOLO alcanzable desde la
     //    rama SIMULACIÓN (ARCHIVO/CÁMARA corren detect byte a byte, AC15).
     const sinRecorte = "archivo" in entrada && entrada.sinRecorte === true;
-    // D63-C — KIT e63c-quad-gate-escaneo-v1: origen del archivo (detector
-    // D63-A) viaja en opciones SOLO para MASIVA — SIM y el flujo individual
-    // JAMÁS lo traen (guard doble del kit T3: nada de escaneos les aplica).
-    const origenActa = opciones.origenActa ?? null;
-    // KIT e63d-escaneo-ya-recortado-v1 (F2.1): un ESCANEO es rectangular por
-    // construcción — la detección de quad es una herramienta de FOTOS (papel
-    // sobre fondo). En un escaneo ceñido el único rectángulo fuerte es el
-    // MARCO IMPRESO del formulario: dejar que el worker «lo encuentre» =
-    // re-recortar el escaneo (fallo A del plan: P1 → cabecera fuera →
-    // recortada=1 → techo 7.9). Identidad DESDE EL INICIO (sin worker, sin
-    // Sobel, sin espera fría) — el deskew D63-B ya endereza la rotación y el
-    // marco D63-C gobierna el gate. La detección sigue byte a byte para
-    // fotos (identidad ya es la convención de sinRecorte que consume el
-    // editor — plan F2.4).
-    const escaneoIdentidad = origenActa === "escaneo" && !sinRecorte;
-    // KIT e14-quad-streaming-v1 (P4): quad precomputado del pre-scan de la
-    // masiva (intersección LOCAL — se lee como timeoutMs en :1516). SOLO se
-    // usa con el flag masivaQuad ON, SOLO para NO-escaneos (la identidad
-    // F2.1 de arriba manda: página completa) y SOLO si pasa la plausibilidad
-    // de abajo — cualquier duda → rama de detección de siempre.
-    const quadPrecomputado = (opciones as OpcionesEscaneoConQuad).quadPrecomputado ?? null;
-    const usaQuadPrecomputado =
-      !sinRecorte &&
-      !escaneoIdentidad &&
-      quadPrecomputado != null &&
-      leerFlags().masivaQuad === true &&
-      quadPrecomputadoPlausible(quadPrecomputado);
     let quad: Quad;
     // KIT e14-quad-sobel-v1 (P1 §4-B): quién fabricó el quad de verdad —
     // "worker" (la cascada ganó) o "sobel" (el fallback, incluido el catch del
@@ -1452,37 +1270,6 @@ export class RealCoreBridge implements E14Bridge {
     const tDetect = performance.now();
     if (sinRecorte) {
       quad = QUAD_IDENTITY;
-    } else if (escaneoIdentidad) {
-      // KIT e63d (F2.1): página completa SIN correr detección — el paso
-      // entero se omite (detect medio ≈ 0 ms en escaneos; el informe
-      // DETECCION contará quadOrigen "pagina-completa" por la vía normal).
-      // La clase entera de quads falsos queda eliminada POR CONSTRUCCIÓN,
-      // no por parche.
-      quad = QUAD_IDENTITY;
-    } else if (usaQuadPrecomputado && quadPrecomputado) {
-      // KIT e14-quad-streaming-v1 (P4): el pre-scan YA detectó el quad
-      // (el MISMO detection-worker.js OpenCV, sobre la clase 400 — la misma
-      // clase de detección que corre el core) y el dueño autorizó reusarlo
-      // (masivaQuad ON). La detección de aquí abajo se OMITE — resuelve la
-      // desviación D66 (precalor.ts:26-31: «el bridge no acepta un quad
-      // precomputado... sería trabajo muerto» — desde hoy SÍ lo acepta).
-      // quadOrigen = "worker": el quad SÍ lo fabricó el worker OpenCV (vía
-      // pre-scan) — vocabulario EXISTENTE del diagnóstico (D57 intacto: no
-      // se extiende la unión de src/lib/e14/types.ts). SEMILLA por defecto
-      // (QUAD_PRECOMPUTADO_MANUAL=false): los processImage de abajo refinan
-      // el quad sobre el FULL — TODO(dueño) en la constante.
-      quad = quadPrecomputado;
-      quadOrigen = "worker";
-      logger.info(
-        `[e14] quad-precomputado=1 fuente=pre-scan masivaQuad=1 area=${(
-          Math.abs(
-            quad[0]!.x * quad[1]!.y - quad[1]!.x * quad[0]!.y +
-              quad[1]!.x * quad[2]!.y - quad[2]!.x * quad[1]!.y +
-              quad[2]!.x * quad[3]!.y - quad[3]!.x * quad[2]!.y +
-              quad[3]!.x * quad[0]!.y - quad[0]!.x * quad[3]!.y,
-          ) / 2
-        ).toFixed(3)} manual=${QUAD_PRECOMPUTADO_MANUAL ? 1 : 0} — detección propia omitida`,
-      );
     } else {
       try {
         // T1.1: worker frío → esperar su warm-up con tope de 5 s (mecanismo
@@ -1513,22 +1300,6 @@ export class RealCoreBridge implements E14Bridge {
         }
         quad = detalle.quad;
         quadOrigen = detalle.origen;
-        // D63-C (T1): en ESCANEOS sin quad real — el worker falló y sobel
-        // fabricó (un escaneo plano sin bordes no tiene quad que encontrar;
-        // evidencia: 3/8 del informe cayeron a sobel) — la PÁGINA COMPLETA
-        // es el acta: sin warp de perspectiva (la rotación recta ya la trajo
-        // D63-B). Las FOTOS no cambian (T1.3: quad sobel de siempre).
-        // KIT e63d (F0.1): generalizado a TODO escaneo — un quad del worker
-        // sobre un escaneo es un re-recorte en potencia (el marco impreso es
-        // el único rectángulo fuerte y warp-earlo corta el escaneo). Hoy es
-        // camino MUERTO para escaneos (F2.1 ya no corre detección para
-        // ellos) — queda como defensa en profundidad: si la detección
-        // volviera a correr para un escaneo, el desenlace sigue siendo
-        // página completa.
-        if (origenActa === "escaneo") {
-          quad = QUAD_IDENTITY;
-          quadOrigen = "pagina-completa";
-        }
       } catch {
         // El core SIEMPRE devuelve Quad; una EXCEPCIÓN aquí = imagen no
         // detectable → RECHAZADA ILEGIBLE inmediata (§5 paso 1, spec §7.5).
@@ -1593,25 +1364,15 @@ export class RealCoreBridge implements E14Bridge {
       // si processImage("original") rechaza, Promise.all NO rechaza — decide
       // con el resultado null → bw-fallback (§5). El pipeline NUNCA muere por
       // la variante nueva.
-      // KIT e14-quad-streaming-v1 (P4): opts del warp — SOLO difiere de hoy
-      // cuando el quad vino del pre-scan Y la decisión del dueño es
-      // manual:true (hoy SEMILLA → opts OMITIDOS, llamadas byte-idénticas
-      // con el camino de detección propia; el worker refina el quad igual).
-      const optsWarpP4: { manual: true } | undefined =
-        usaQuadPrecomputado && QUAD_PRECOMPUTADO_MANUAL ? { manual: true } : undefined;
       const [resultado, resultadoOcr] = await conRampa(
         Promise.all([
           // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L602-604
           // (captura arranca en B/N adaptativo) + types.ts L50 (default del
           // producto) — D36: e14 no tiene ajustes → el default fijo es "bw".
-          optsWarpP4
-            ? processImage(fotoOriginal, quad, "bw", undefined, optsWarpP4)
-            : processImage(fotoOriginal, quad, "bw"),
+          processImage(fotoOriginal, quad, "bw"),
           // PROD-1: la misma geometría (mismo warp, MISMA convención
           // POST-warp — pitfall §9.5), solo cambia el filtro final.
-          optsWarpP4
-            ? processImage(fotoOriginal, quad, "original", undefined, optsWarpP4).catch(() => null)
-            : processImage(fotoOriginal, quad, "original").catch(() => null),
+          processImage(fotoOriginal, quad, "original").catch(() => null),
         ]),
         // msEstimados 1400→2200 (§4.1): el segundo warp (~0.6-1.3 s, §1.4)
         // se cubre con la MISMA rampa (el core serializa en su worker).
@@ -1638,48 +1399,6 @@ export class RealCoreBridge implements E14Bridge {
         ocrIn = "bw-fallback";
       }
     }
-    // KIT flujo-dueno-v1 (K2 — brief Agente B, sub-commit 3): ROTACIÓN DE
-    // INGESTA (paso 5 del flujo del dueño). La fila trae rotacionSugerida
-    // (cuadrante del QR en el warp de INGESTA — bench v8.3 4/4); con el
-    // flag masivaRotacionQr ON y la plausibilidad local OK, se giran fotoOcr
-    // Y fotoProcesada (mismo trato que cuando la brújula decide — rotar-
-    // DataUrl JAMÁS lanza, catch interno §5) y se OMITE el sondeo de
-    // orientación de abajo (el probe) — la decisión ya está tomada (rot=0
-    // incluido: el cuadrante dice "ya derecha" — el ahorro del probe OCR).
-    // POST-warp, PRE-OCR ⇒ SIN colisión con quadPrecomputado de P4. Fallo
-    // al rotar (rotarDataUrl devuelve la ENTRADA tal cual — identidad con
-    // rot≠0) ⇒ camino de hoy: el probe decide (patrón P4 — el bridge
-    // RE-VALIDA por su lado; el parche JAMÁS tumba el pipeline).
-    let rotacionIngestaAplicada = false;
-    const rotPre = (opciones as OpcionesEscaneoConRotacion).rotacionPrecomputada ?? null;
-    if (
-      !opciones.simular &&
-      !sinRecorte &&
-      rotPre != null &&
-      leerFlags().masivaRotacionQr === true &&
-      rotacionPrecomputadaPlausible(rotPre)
-    ) {
-      const tRot = performance.now();
-      let roto = true;
-      if (rotPre !== 0) {
-        const ocrRot = await rotarDataUrl(fotoOcr, rotPre);
-        const procRot = await rotarDataUrl(fotoProcesada, rotPre);
-        // Identidad con rot≠0 ⇒ fallo interno del giro (catch de rotar-
-        // DataUrl) ⇒ no omitir el probe (conservador).
-        if (ocrRot === fotoOcr || procRot === fotoProcesada) {
-          roto = false;
-        } else {
-          fotoOcr = ocrRot;
-          fotoProcesada = procRot;
-        }
-      }
-      if (roto) {
-        rotacionIngestaAplicada = true;
-        logger.info(
-          `[e14] rotacion-ingesta rot=${rotPre} via=cuadrante-ingesta ms=${(performance.now() - tRot).toFixed(0)} — sondeo de orientación omitido`,
-        );
-      }
-    }
     // KIT e14-orientacion-auto-v1 (T-A2): probe de orientación DESPUÉS de fijar
     // fotoOcr (tras el warp, §2.1) y ANTES del OCR completo y de TODA medición
     // downstream (esquinas/completitud/visor ven el acta YA derecha). SIM:
@@ -1696,21 +1415,11 @@ export class RealCoreBridge implements E14Bridge {
     // (datos para calibración wave 3 — jamás cambia la decisión de HOY).
     let probeMiniOrientacion: ProbeOrientacion["orientacionProbeMini"] | null =
       null;
-    // e66 (P4) → e70 (P4.1) — REVERSA PARCIAL del skip ciego por EXIF: el
-    // EXIF de cámara dice cómo estaba el TELÉFONO, no cómo quedó el acta
-    // (evidencia del dueño: 3 fotos landscape CON EXIF rechazadas score 4.9,
-    // anclas 0 y cabeceraE14 false — el core horneó la orientación del
-    // sensor, el acta física estaba de lado). La omisión del sondeo ahora
-    // exige CONFIRMACIÓN de la detección previa (modo confirmar del probe):
-    // quad del WORKER (el fallback sobel fabricó la geometría — «el quad se
-    // detectó mal» del criterio) + lectura a 0° con anclas >= 3 Y conf >=
-    // 0.7 (la pasada 0° del probe ES la primera pasada rápida del criterio:
-    // det cap rápido + rec — las sanas pagan det+rec0 y se saltan las
-    // challengers 90/180/270; las dudosas sondean 0/90/180/270 completas y
-    // el MARGEN decide la rotación antes del OCR principal). SIM jamás
-    // sondea (mismo guard §2.2 de siempre — SIM nunca trae origenSenales).
-    // Flujos individual/video sin la señal → rama de abajo (probe de
-    // siempre); recorte manual (pipelineRecorte) INTACTO (sin señal ahí).
+    // NOTA (eliminación del módulo masiva): la rama e66/e70 (skip por EXIF de
+    // cámara con confirmación del probe) viajaba con `origenSenales`, señal
+    // que SOLO llenaba el runner MASIVA — retirada con la cola. El probe
+    // plano de abajo es el único camino de sondeo ahora (como en el flujo
+    // individual de siempre sin la señal).
     // KIT e14-orientacion-qr-v1 (T-A) — QR-BRÚJULA PRIMERO: el cuadrante del
     // QR (hogar del E-14: TL del acta derecha) manda la rotación SIN OCR
     // (bench v8.3 del dueño: 4/4 con fotos arrugadas/blotchy donde jsQR
@@ -1721,19 +1430,7 @@ export class RealCoreBridge implements E14Bridge {
     // Guards: SIM jamás (§2.2 — chips 8.2/7.0/4.3 intactos) · sinRecorte no
     // tiene warp/quad real (SIM-only en esta base → cubierto igualmente).
     let brujula: BrujulaQr | null = null;
-    // PARCHES P1/P2 (brief Agente A): `desdeMasiva` OMITE la brújula QR en
-    // el runner MASIVA (su payload no se consume allí — guard qrCam de
-    // arriba; la rotación queda en manos de deskew D63-B + probe e66/e70).
-    // Guards SIM/sinRecorte/flag intactos — flujo individual byte-idéntico
-    // (el kill-switch global `qrBrujulaOrientacion` NO cambia de sentido).
-    if (
-      // El campo viaja en la intersección LOCAL (mismo patrón del cast de
-      // `timeoutMs` en la etapa OCR de abajo — pipeline recibe la base).
-      !(opciones as OpcionesEscaneoConTimeout).desdeMasiva &&
-      !opciones.simular &&
-      !sinRecorte &&
-      leerFlags().qrBrujulaOrientacion
-    ) {
+    if (!opciones.simular && !sinRecorte && leerFlags().qrBrujulaOrientacion) {
       brujula = await brujulaQrOrientacion(fotoOcr, fotoOriginal, quad);
       if (brujula) {
         if (brujula.rot !== 0) {
@@ -1743,32 +1440,15 @@ export class RealCoreBridge implements E14Bridge {
           fotoOcr = await rotarDataUrl(fotoOcr, brujula.rot);
           fotoProcesada = await rotarDataUrl(fotoProcesada, brujula.rot);
         }
-        // e64-qr T-2.1 — señal de identidad ADITIVA SOLO para flujos
-        // NO-masiva (cámara/individual): si la capa base no leyó y la
-        // brújula sí, el payload OPACA viaja como qrCam (mismo contrato de
-        // construirActa — SOLO presencia, red line 10). MASIVA intacto (la
-        // capa 0 del runner manda — guard del bloque qrCam de arriba).
-        if (!esMasiva && !parcial.qrCam) {
+        // e64-qr T-2.1 — señal de identidad ADITIVA: si la capa base no leyó
+        // y la brújula sí, el payload OPACA viaja como qrCam (mismo contrato
+        // de construirActa — SOLO presencia, red line 10).
+        if (!parcial.qrCam) {
           parcial.qrCam = { payload: brujula.payload };
         }
       }
     }
-    if (
-      brujula === null &&
-      !rotacionIngestaAplicada && // K2 — la rotación de ingesta YA decidió
-      !opciones.simular &&
-      opciones.origenSenales === "exif-camara"
-    ) {
-      const probe = await probeOrientacion(fotoOcr, {
-        confirmar: { quadWorker: quadOrigen === "worker" },
-      });
-      if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
-      probeMiniOrientacion = probe?.orientacionProbeMini ?? null; // WAVE2 A1 — la mini que el fallo seguro descartó
-      if (probe?.aplicado) {
-        fotoOcr = await rotarDataUrl(fotoOcr, probe.rot);
-        fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
-      }
-    } else if (brujula === null && !rotacionIngestaAplicada && !opciones.simular) {
+    if (brujula === null && !opciones.simular) {
       const probe = await probeOrientacion(fotoOcr);
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
       probeMiniOrientacion = probe?.orientacionProbeMini ?? null; // WAVE2 A1 — la mini que el fallo seguro descartó
@@ -1798,19 +1478,9 @@ export class RealCoreBridge implements E14Bridge {
     // la rama SIMULACIÓN (AC15 score-ocr) → también cubierto por el skip.
     // FASE 2 (§3): recibe las esquinas — 4 fiduciales presentes → la
     // sospecha geométrica NO condena (papel entero demostrado).
-    // KIT e63d (F2.3): verificarCompletitud NO corre para ESCANEOS — hoy
-    // corría y su `completa` se descartaba (el marco lo pisa SIEMPRE para
-    // escaneos: evaluarMarcoImpreso jamás devuelve null). El guard de fotos
-    // mide tinta al filo del warp — un escaneo no tiene warp (identidad) y
-    // su gate es el MARCO (D63-C). Menos trabajo muerto, misma decisión.
-    // EFECTO DECLARADO (plan §4): el escudo anti-fondo (fondo → techo 7.9,
-    // L1461) tampoco aplica a escaneos — es un guard del WARP (fondo/sombra
-    // incluida por el encuadre), sin premisa en identidad. El veredicto del
-    // escaneo lo gobiernan marco + lectura + marcadores (honestos).
-    const verificacion: Promise<ResultadoCompletitud> | null =
-      opciones.simular || origenActa === "escaneo"
-        ? null
-        : verificarCompletitud(quad, fotoProcesada, esquinas);
+    const verificacion: Promise<ResultadoCompletitud> | null = opciones.simular
+      ? null
+      : verificarCompletitud(quad, fotoProcesada, esquinas);
     // §D4 (SPEC-e14-score-ocr): visor nunca vacío — tinta de la PROCESADA
     // (muestreo 64×64): un warp sin tinta (quad degenerado sobre superficie
     // lisa → blanco puro del B/N adaptativo) marca el acta para que REVISIÓN
@@ -1841,19 +1511,20 @@ export class RealCoreBridge implements E14Bridge {
     const onProgresoOcr = (p: number): void => {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     };
-    // §3 presupuesto: el timeout EXISTENTE del pipeline manda (masiva pasa
-    // 120_000 por OpcionesEscaneoConTimeout; default 15 s).
+    // §3 presupuesto: el timeout EXISTENTE del pipeline manda (opcional por
+    // OpcionesEscaneoConTimeout; default TIMEOUT_MS).
     const cfgOcr = {
       simular: opciones.simular === true,
       presupuestoMs: (opciones as OpcionesEscaneoConTimeout).timeoutMs ?? TIMEOUT_MS,
       inicioMs: inicio,
     };
-    // KIT e14-ocr-cascada-v1 (K3 fase 2): SOLO con `masivaOcrTesseract` ON y
-    // fuera de SIM corre la cascada (gate entre motores + rescate ROI —
-    // ancla del brief: «tras SU warp full-res», fotoOcr ya existe); default
-    // OFF ⇒ el OCR ESCALONADO de siempre byte a byte (mismos args, misma
-    // closure de progreso — smoke flag-OFF).
-    const ocrEsc = cascadaActiva(leerFlags().masivaOcrTesseract, opciones.simular === true)
+    // KIT e14-ocr-cascada-v1 (K3 fase 2): SOLO con `ocrCascada` ON (antes
+    // `masivaOcrTesseract` — renombrado al retirar la cola MASIVA) y fuera
+    // de SIM corre la cascada (gate entre motores + rescate ROI — ancla del
+    // brief: «tras SU warp full-res», fotoOcr ya existe); default OFF ⇒ el
+    // OCR ESCALONADO de siempre byte a byte (mismos args, misma closure de
+    // progreso — smoke flag-OFF).
+    const ocrEsc = cascadaActiva(leerFlags().ocrCascada, opciones.simular === true)
       ? await reconocerRapidOcrCascada(fotoOcr, onProgresoOcr, cfgOcr)
       : await reconocerRapidOcrEscalonado(fotoOcr, onProgresoOcr, cfgOcr);
     let texto = ocrEsc.texto;
@@ -1962,37 +1633,11 @@ export class RealCoreBridge implements E14Bridge {
     // (recorte/calidad/OCR) para que REVISIÓN muestre la imagen y el
     // operador entienda el problema.
     const verificacionResuelta = verificacion ? await verificacion : null;
-    // D63-C (T2): gate de ESCANEOS por MARCO IMPRESO del formulario — el
-    // guard de fotos («contenido al filo = cortada») queda NI UNA LÍNEA
-    // distinto para fotos/SIM (el marco solo consulta `origenActa ===
-    // "escaneo"`, que SIM/fotos jamás traen — kit T2.4/T3). Veredicto:
-    // completo → no bloquea · cortado → INCOMPLETA como hoy (el scanner SÍ
-    // cortó la hoja — honesto) · no-encontrado → no bloquea (lectura/score
-    // deciden como siempre). El RECT del marco alimenta la región de la
-    // zona de votos (el marco ES el borde del acta — mismo sistema de
-    // referencia que las fracciones ZONA_* de marcadores.ts).
-    const marcoEscaneo: MarcoEscaneo | null =
-      origenActa === "escaneo" && !opciones.simular ? await evaluarMarcoImpreso(fotoProcesada) : null;
-    // KIT e63d-escaneo-ya-recortado-v1 (F0.2): la LECTURA perdona al marco
-    // (mismo patrón que lazoPerdonadoPorLectura del kit lectura-perdona-lazo).
-    // Un marco «cortado» en un escaneo CEÑIDO demuestra un corte GEOMÉTRICO
-    // de la hoja, no pérdida de CONTENIDO (el marco vive insertado ~2%:
-    // cortar EN el marco no pierde ni un dato). La lectura FUERTE + secciones
-    // presentes = contenido probado → el veredicto del marco no condena.
-    // El gate sigue HONESTO: falta una sección inferior o lectura débil/media
-    // → «cortado» sigue condenando (la lectura perdona al marco, NO al
-    // contenido faltante — plan §3/§4). "ceñido" (F3) nunca bloquea por
-    // construcción (≠ "cortado"). senal (L1368) y faltaSeccion (L1357) ya
-    // están calculadas aquí — costo cero.
+    // NOTA (eliminación del módulo masiva): el gate de ESCANEOS por MARCO
+    // IMPRESO (D63-C T2) y el perdón de marco (e63d F0.2) corrían SOLO para
+    // entradas del runner MASIVA (`origenActa === "escaneo"`) — retirados
+    // con la cola. El guard de fotos (verificarCompletitud) manda igual.
     let completa = opciones.simular ? true : (verificacionResuelta?.completa ?? true);
-    if (marcoEscaneo) {
-      // e63d F0.2 · rev.2: el perdón (tabla §3-A) decide si el marco cortado
-      // condena — rev.1 negaba el trío (bug ANEXO A caso 4, ver helper).
-      completa =
-        marcoEscaneo.veredicto === "cortado"
-          ? marcoPerdonadoPorLectura(marcoEscaneo.veredicto, senal.nivel, faltaSeccion)
-          : true;
-    }
     // e71 (P10) — VETO 4/4 FIDUCIALES (kit e71-consolidación): la medición
     // de integridad encontró LAS 4 esquinas ausentes (traza
     // `esquinas=FALTA_tl+tr+bl+br`) → el papel NO está demostrado entero y
@@ -2013,10 +1658,7 @@ export class RealCoreBridge implements E14Bridge {
     // demo no se rompe · docs/REPORTE-gate-marcadores-v2.md). INCOMPLETA
     // manda primero: el veto de votos SOLO condena actas completas sin
     // tinta en la zona de votos.
-    // D63-C: con RECT del marco impreso (escaneos «completo») la zona se
-    // mide RELATIVA AL FORMULARIO — las fracciones fijas ZONA_* asumen el
-    // recorte = acta (falso SIN_VOTOS en página-completa con márgenes).
-    const marcadores = await medirZonaVotos(fotoProcesada, marcoEscaneo?.rect ?? undefined);
+    const marcadores = await medirZonaVotos(fotoProcesada, undefined);
     // KIT actas-vivas-paginas-v1 (FASE C): gate de votos SOLO P1 — la pág 2
     // (constancias) NO tiene zona de votos (hoy pasaba por la tinta de las
     // líneas impresas: de la suerte). Página desconocida → se mide
@@ -2046,14 +1688,9 @@ export class RealCoreBridge implements E14Bridge {
             opciones.intento >= opciones.maxIntentos
               ? ("EN_REVISION_HUMANA" as ActaStatus)
               : ("RECHAZADA" as ActaStatus),
-          // KIT e63d (F3.4): el copy del rechazo depende del ORIGEN — para
-          // escaneos el mensaje de cámara («aléjate») es absurdo: se pide
-          // repetir el ESCANEO. Fotos/cámara conservan el copy de siempre
-          // byte a byte. (pipelineRecorte —rama manual— sin cambios: F2.4.)
           rechazo: {
             tipo: "INCOMPLETA",
-            detalle:
-              origenActa === "escaneo" ? DETALLE_INCOMPLETA_ESCANEO : DETALLE_INCOMPLETA,
+            detalle: DETALLE_INCOMPLETA,
           },
           clasificacion: null,
         }
@@ -2163,8 +1800,6 @@ export class RealCoreBridge implements E14Bridge {
           ocrValido: ocrTextIsValid(texto),
           gate: {
             completa,
-            // D63-C (T2.3): veredicto del marco impreso (null en fotos/SIM).
-            gateMarco: marcoEscaneo?.veredicto ?? null,
             fondo: verificacionResuelta?.fondo ?? false,
             recortada,
             ladoEsquina: ladoEsquina ?? null,

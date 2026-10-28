@@ -6,7 +6,6 @@
 import type { PageFilter, Quad } from "@jg-stevan/scanner-core/types";
 import type { ClasificacionE14 } from "./clasificador";
 import type { NivelLectura } from "./senal-lectura";
-import type { OrigenActa } from "./masiva/origen"; // D63-A — tipo del origen (kit: tipos viven en origen.ts)
 
 // ---------- Captura y análisis (SPEC fase lógica §3.1) ----------
 export type FuenteCaptura = "SIMULACION" | "CAMARA" | "ARCHIVO";
@@ -95,15 +94,6 @@ export interface DiagnosticoActa {
   ocrValido: boolean;
   gate: {
     completa: boolean;
-    /** D63-C — KIT e63c-quad-gate-escaneo-v1 (T2.3): veredicto del MARCO
-     *  IMPRESO del formulario en escaneos ("completo" | "cortado" |
-     *  "no-encontrado"). null = no se evaluó (fotos, SIM, registros
-     *  previos a D63-C — jamás inventar). Aditivo al final del contrato.
-     *  KIT e63d (F3.2): nuevo valor "ceñido" — marco EN el filo (escáner
-     *  atravesó el marco: corte geométrico, sin pérdida de contenido) —
-     *  NUNCA bloquea. Valor ADITIVO: los instrumentos previos siguen
-     *  parseando los tres valores viejos (contrato D51). */
-    gateMarco?: "completo" | "ceñido" | "cortado" | "no-encontrado" | null;
     fondo: boolean;
     recortada: boolean;
     ladoEsquina: string | null;
@@ -129,12 +119,6 @@ export interface DiagnosticoActa {
     calidadMs: number;
     ocrMs: number;
     totalMs: number;
-    /** D57 — KIT e14-instrumentos-espera-v1 (T1): espera en cola MASIVA, desde
-     *  `agregadaEn` hasta iniciar el pipeline (tInicio − agregadaEn). SOLO
-     *  masiva/runner.ts lo llena (el flujo individual no tiene espera de
-     *  cola). Opcional: los registros previos y el flujo individual van sin
-     *  él — jamás inventar (kit §2). */
-    esperaMs?: number;
     /** D61 — KIT e14-tiempos-ocultos-v1 (T1): coste de DECODE del archivo
      *  (heic2any/imagen→canvas). Ya se medía en el bridge (traza) — ahora
      *  persiste. null/ausente en canvas-path y SIM. */
@@ -142,17 +126,18 @@ export interface DiagnosticoActa {
     /** D61 — KIT e14-tiempos-ocultos-v1 (T1): coste de la DETECCIÓN de página
      *  del core (worker). ídem. */
     detectMs?: number | null;
-    /** D61 — KIT e14-tiempos-ocultos-v1 (T1): MASIVA — persistencia del
-     *  desenlace en IDB (guardarRegistro). */
-    persistMs?: number;
-    /** D61 — KIT e14-tiempos-ocultos-v1 (T1): MASIVA — envío (SHA-256 + POST
-     *  / reintentos offline). */
+    /** D61 — KIT e14-tiempos-ocultos-v1 (T1): envío (SHA-256 + registro).
+     *  §G.1 — envioMs SOLO flujo INDIVIDUAL (lo escribe registrarEnvio del
+     *  store; envioMs != null ⇔ había red al enviar — null honesto). */
     envioMs?: number;
     /** WAVE3 G.5 — ORDEN-WAVE3-add-envio-individual-v1: latencia del CHECK
      *  remoto (ledger D1 — §A.3 hook del runner). null/ausente = sin check
      *  (offline, forzarDedupOff, hash ausente o ledger indisponible) —
      *  jamás inventar. La maquinaria §G.3 lo agrega a percentiles gratis
-     *  después (mismo patrón D61). */
+     *  después (mismo patrón D61).
+     *  NOTA (eliminación del módulo masiva): el ledger remoto vivía SOLO
+     *  para la cola MASIVA — con su retirada este campo queda sin escritor
+     *  (se conserva la forma del contrato para informes antiguos). */
     remotoMs?: number | null;
   };
   /** D57 — KIT e14-instrumentos-espera-v1 (T2): coste del probe de
@@ -183,31 +168,6 @@ export interface DiagnosticoActa {
     /** anclas de la ganadora (null si sin dato para esa rot). */
     anclas: number | null;
   };
-  /** D63-A — KIT e63a-origen-escaneo-v1 (T2): origen del archivo MASIVA
-   *  según el detector heurístico (masiva/origen.ts). null = duda honesta —
-   *  jamás inventar. Ausente en SIM y en registros previos a D63-A. SOLO
-   *  visibilidad: no toca score/gate/veredictos (kit §0). */
-  origen?: OrigenActa;
-  /** D63-A — T2: señales auditables de la decisión del detector (p. ej.
-   *  "sin-exif+borde-blanco+ratio-hoja"). null = no evaluado. */
-  origenSenales?: string | null;
-  /** D63-B — KIT e63b-deskew-escaneo-v1 (T2): ángulo de skew detectado en la
-   *  banda del encabezado (con signo, pasos de 0.1°; null = banda sin tinta
-   *  suficiente o ángulo fuera de ±10° — captura torcida, no skew). */
-  skewGrados?: number | null;
-  /** D63-B — T2: ms del deskew (detección + rotación del master). null si
-   *  no se rotó (|θ| < 0.3° o fuera de rango o no es escaneo). */
-  deskewMs?: number | null;
-  /** D63-B — T3: limpieza de blanco aplicada al master ("blanco" cuando el
-   *  histograma no llegaba a blanco puro). "no" = sin limpieza; null = no
-   *  evaluado (no escaneo / registro previo a D63-B). */
-  limpieza?: "blanco" | "no" | null;
-  /** D63-A2 — KIT e14-d63a2-deskew-pipeline-v1 (T0): provenance del master
-   *  que el bridge CONSUMIÓ — "corregido" (deskew del pre-proceso aplicado)
-   *  | "original". Aditivo al final del contrato; null = sin pre-proceso
-   *  (no debería en MASIVA post-D63-A2 — jamás inventar). El informe lo
-   *  consume como `preprocesoAplicado` (bool, presente si origen escaneo). */
-  maestroFuente?: "corregido" | "original" | null;
   /** §G.2 — ORDEN-WAVE3-add-envio-individual-v1 (obs-envio-individual-v1):
    *  la red del MOMENTO del envío (aditivos AL FINAL del interface — patrón
    *  «diag-campos-aditivos»). tipo = effectiveType ("4g"/"3g"… —

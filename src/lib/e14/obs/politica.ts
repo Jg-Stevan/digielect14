@@ -113,12 +113,6 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     const o = JSON.parse(raw) as Partial<FlagsApp>;
     if (typeof o !== "object" || o === null) return {};
     const limpio: Partial<FlagsApp> = {};
-    if (o.poolWorkers === 1 || o.poolWorkers === 2) limpio.poolWorkers = o.poolWorkers;
-    if (typeof o.thumbsOn === "boolean") limpio.thumbsOn = o.thumbsOn;
-    // cola-persistente-v1 (ANEXO Agente B): el override del dueño pasa por
-    // ESTE whitelist — sin esta línea el MODO PRUEBAS (colaPersistente:false)
-    // sería inalcanzable vía e14-flags-overrides.
-    if (typeof o.colaPersistente === "boolean") limpio.colaPersistente = o.colaPersistente;
     if (typeof o.ocrThreadsTope === "number" && Number.isFinite(o.ocrThreadsTope)) {
       limpio.ocrThreadsTope = Math.max(1, Math.min(8, Math.round(o.ocrThreadsTope)));
     }
@@ -128,58 +122,17 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     }
     // KIT e14-obs-hang-atribucion-v1 (§D) — el kill-switch `hangEnCurso` del
     // dueño pasa por ESTE whitelist: sin esta línea el override localStorage
-    // (§G.3.d del smoke) sería inalcanzable — mismo criterio de
-    // colaPersistente arriba (el override MANUAL es la máxima prioridad, D6).
+    // (§G.3.d del smoke) sería inalcanzable (el override MANUAL es la
+    // máxima prioridad, D6; el whitelist de leerOverridesFlags es
+    // INDEPENDIENTE del de sanearFlags en flags.ts — cada puerta su línea).
     if (typeof o.hangEnCurso === "boolean") limpio.hangEnCurso = o.hangEnCurso;
-    // KIT e14-dhash-resize-v1 (§D — parche P3) — mismo criterio: sin esta
-    // línea el override localStorage de `dhashResize` sería inalcanzable
-    // (el whitelist de leerOverridesFlags es INDEPENDIENTE del de
-    // sanearFlags en flags.ts — cada puerta necesita su línea).
-    if (typeof o.dhashResize === "boolean") limpio.dhashResize = o.dhashResize;
-    // W1 (KIT k1-obs-prioridad — brief Agente A) — mismo criterio: sin esta
-    // línea el override localStorage de `masivaPrioridad` sería inalcanzable
-    // (DOBLE whitelist — cada puerta necesita su línea, lección dhashResize).
-    if (typeof o.masivaPrioridad === "boolean") limpio.masivaPrioridad = o.masivaPrioridad;
-    // KIT flujo-dueno-v1 (K2 — brief Agente B) — mismo criterio: sin estas
-    // líneas los overrides localStorage de los kill-switches K2 serían
-    // inalcanzables (el whitelist de leerOverridesFlags es INDEPENDIENTE del
-    // de sanearFlags en flags.ts — cada puerta necesita su línea).
-    if (typeof o.masivaWarpIngesta === "boolean") limpio.masivaWarpIngesta = o.masivaWarpIngesta;
-    if (typeof o.masivaRotacionQr === "boolean") limpio.masivaRotacionQr = o.masivaRotacionQr;
-    if (typeof o.masivaSondeoCrudo === "boolean") limpio.masivaSondeoCrudo = o.masivaSondeoCrudo;
-    // KIT e14-ocr-cascada-v1 (K3 fase 2) — mismo criterio: sin esta línea
-    // el override localStorage de `masivaOcrTesseract` sería inalcanzable.
-    if (typeof o.masivaOcrTesseract === "boolean") limpio.masivaOcrTesseract = o.masivaOcrTesseract;
-    // KIT e14-solo-warp-qr-v1 (prueba de consola del dueño) — mismo criterio:
-    // sin esta línea el override localStorage de `sondeoQrPrecoz` (kill-switch
-    // e73) sería inalcanzable — ya estaba en el whitelist de sanearFlags
-    // (flags.ts) pero FALTABA ESTA puerta (DOBLE whitelist — cada puerta su
-    // línea, lección dhashResize). Con el override en false el dueño apaga el
-    // sondeo de ingesta para aislar la hambruna de CPU en pruebas dry run.
-    if (typeof o.sondeoQrPrecoz === "boolean") limpio.sondeoQrPrecoz = o.sondeoQrPrecoz;
-    // KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — mismo criterio: sin esta
-    // línea el override localStorage de `masivaSoloWarpQr` (toggle SOLO QR de
-    // MASIVA) sería inalcanzable (DOBLE whitelist — cada puerta su línea).
-    if (typeof o.masivaSoloWarpQr === "boolean") limpio.masivaSoloWarpQr = o.masivaSoloWarpQr;
-    // KIT e14-prescan-warp-lado-v1 — mismo criterio: sin estas líneas los
-    // overrides localStorage de las válvulas del pre-scan serían
-    // inalcanzables (DOBLE whitelist — cada puerta su línea).
-    if (typeof o.prescanQrPresupuestoMs === "number" && Number.isFinite(o.prescanQrPresupuestoMs)) {
-      limpio.prescanQrPresupuestoMs = Math.max(1000, Math.min(30_000, Math.round(o.prescanQrPresupuestoMs)));
-    }
-    if (typeof o.prescanWarpLado === "number" && Number.isFinite(o.prescanWarpLado)) {
-      limpio.prescanWarpLado = Math.max(256, Math.min(4032, Math.round(o.prescanWarpLado)));
-    }
-    // KIT e14-prescan-rescate-qr-v1 — mismo criterio: sin esta línea el
-    // override localStorage de `prescanQrRescate` (rescate del QR difícil
-    // del pre-scan) sería inalcanzable (DOBLE whitelist — cada puerta su
-    // línea, lección dhashResize/sondeoQrPrecoz).
-    if (typeof o.prescanQrRescate === "boolean") limpio.prescanQrRescate = o.prescanQrRescate;
-    // KIT e14-gama-adaptativa-v1 — mismo criterio: sin esta línea el
-    // override localStorage del kill-switch `masivaAdaptativoGama` (OFF =
-    // byte-idéntico a hoy en TODOS los dispositivos — D74) sería
-    // inalcanzable (DOBLE whitelist — cada puerta su línea).
-    if (typeof o.masivaAdaptativoGama === "boolean") limpio.masivaAdaptativoGama = o.masivaAdaptativoGama;
+    // KIT e14-orientacion-qr-v1 (§D) — mismo criterio (DOBLE whitelist).
+    if (typeof o.qrBrujulaOrientacion === "boolean") limpio.qrBrujulaOrientacion = o.qrBrujulaOrientacion;
+    // KIT e14-ocr-cascada-v1 (K3 fase 2) — mismo criterio (DOBLE whitelist).
+    // Renombrado de `masivaOcrTesseract` al retirar el módulo masiva.
+    if (typeof o.ocrCascada === "boolean") limpio.ocrCascada = o.ocrCascada;
+    // NOTA (eliminación del módulo masiva): las puertas de los 17 flags
+    // exclusivos de la cola se retiraron junto con el módulo.
     return limpio;
   } catch {
     return {};

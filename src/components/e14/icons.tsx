@@ -352,23 +352,6 @@ export const StitchGrid2Icon = ({ className = "w-5 h-5" }: IconProps) => (
   </svg>
 );
 
-/** KIT e14-carga-masiva-v1 (T4): ítem MASIVA de la nav — capas apiladas
- *  desfasadas (pila de fotos), outline 1.8 como el resto de la nav. */
-export const StitchStackIcon = ({ className = "w-5 h-5" }: IconProps) => (
-  <svg
-    className={`${className} stroke-current fill-none`}
-    strokeWidth="1.8"
-    viewBox="0 0 24 24"
-    aria-hidden
-  >
-    <path
-      d="M9 3h10a2 2 0 012 2v10M7 7h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V9a2 2 0 012-2z"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 /** Lupa-ojo del CTA REVISIÓN HUMANA (mock rechazada_2, strokeWidth 2). */
 export const StitchEyeIcon = ({ className = "w-4 h-4" }: IconProps) => (
   <svg

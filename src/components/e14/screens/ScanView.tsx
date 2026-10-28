@@ -241,8 +241,8 @@ export function ScanView() {
   useEffect(() => {
     warmUpScannerWorker();
     // KIT e14-prowarm-ocr-v1 (T2b): pre-warm del OCR diferido 2 s (app recién
-    // abierta — no competir con la carga). Idempotente: si MASIVA ya calentó,
-    // rapidOcrPrecalentar() resuelve al instante (flag de módulo).
+    // abierta — no competir con la carga). Idempotente: si el precalentamiento
+    // ya corrió, rapidOcrPrecalentar() resuelve al instante (flag de módulo).
     const t = window.setTimeout(() => void rapidOcrPrecalentar(), 2000);
     return () => window.clearTimeout(t);
   }, []);

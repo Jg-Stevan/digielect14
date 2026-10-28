@@ -485,9 +485,9 @@ export function ReviewView() {
 
         {/* e64-qr T-2.2 — chip estático de la CAPA 0 QR de cámara (kit FASE 2):
             solo PRESENCIA, JAMÁS contenido del payload (llave opaca — red
-            line 10; misma convención del chip QR ✓/✗ de MASIVA). Solo nace
-            con el flujo de cámara/SIM (T-2.1) — en actas de MASIVA viaja
-            ausente (la señal de esa capa vive en la bandeja/informe). */}
+            line 10; misma convención de los chips QR ✓/✗). Solo nace con el
+            flujo de cámara/SIM (T-2.1) — en actas que no pasaron por cámara
+            viaja ausente (la señal de esa capa vive en el informe). */}
         {acta.qrPayload && (
           <div
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#10161f] border border-slate-800 text-[10px] font-mono font-semibold tracking-wide w-full"
@@ -530,7 +530,7 @@ export function ReviewView() {
         {/* LÍNEA DE ID («KIT --- · --- · -/-» + «MESA · POR KIT») — ELIMINADA
             a pedido del dueño. La identidad del acta sigue VIVA en el resto de
             la app: chips de estado de arriba (tipo/MESA/PÁG), clasificación
-            (dedup, infoTitulo de MASIVA) e informe ZIP. Cero cambios de
+            (dedup, infoTitulo) e informe ZIP. Cero cambios de
             lógica: solo se retiró el bloque visual del KIT consenso-frankfurt
             (Task 122, FASE 5 §6.2). */}
 

@@ -1,6 +1,13 @@
 /**
  * KIT e63m-capa0-qr-identidad-v1 — CAPA 0: IDENTIDAD QR PRE-OCR (F1/F2).
  *
+ * UBICACIÓN (eliminación del módulo masiva): este módulo era
+ * `src/lib/e14/masiva/identidad-qr.ts`; con la retirada de la cola MASIVA
+ * se reubica a `src/lib/e14/qr/` porque el flujo INDIVIDUAL de cámara lo
+ * consume (capa 0 QR del bridge + brújula de orientación-qr). Código
+ * INTACTO salvo la unión local `EstadoOriginalQr` (los estados de fila
+ * vivían en masiva/tipos.ts).
+ *
  * El QR del E-14 es DATO LEÍDO, no imagen: dos fotos del MISMO papel
  * producen el MISMO payload byte-a-byte aunque el dhash no pueda separarlas
  * (banco #72 — GO medido del dueño: 88.2% decode, 0 colisiones, re-encodes
@@ -60,7 +67,6 @@
 // (jsQR vivía aquí — desde el FIX DICTAMEN-e73 §3.1 TODO el decode jsQR puro
 // vive en qr-pixeles.ts; este módulo ya no lo importa directamente.)
 import type { Binarizer, ReaderOptions } from "zxing-wasm/reader";
-import type { EstadoEntrada } from "./tipos";
 import { canvasCon, decodeImagenLru } from "../image-utils"; // SPRINT-A A1/A3 — decode-once LRU + factory de canvas
 import { logger } from "../../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 // ─── KIT e73-sondeo-qr-precoz-v1 (§A.2) — refactor puro ADITIVO ───────────
@@ -143,9 +149,11 @@ const ZXING_FORMATO = "QRCode" as const; // SPRINT-A A5: de-export (vivo solo aq
 // (QR_RECORTE_LADO vive en qr-pixeles.ts desde el FIX DICTAMEN-e73 §3.1 —
 // re-exportado arriba; decodificarQrDeRecorte lo consume vía ese import.)
 
-/** Estado del original para la espera acotada — EstadoEntrada + AUSENTE
- *  (la fila fue quitada/vaciada mientras se esperaba). */
-type EstadoOriginalQr = EstadoEntrada | "AUSENTE";
+/** Estado del original para la espera acotada — estados de fila + AUSENTE
+ *  (la fila fue quitada/vaciada mientras se esperaba). Unión LOCAL: los
+ *  estados viven en la cola masiva (ELIMINADA) — la firma se conserva
+ *  porque es parte del contrato público del módulo. */
+type EstadoOriginalQr = "PENDIENTE" | "PROCESANDO" | "LISTA" | "ERROR" | "DUPLICADA" | "AUSENTE";
 
 // ─── Núcleo puro del decode: vive en qr-pixeles.ts (KIT e73 §A.2) ───────
 // intentoSobrePixeles (banda → jsQR attemptBoth, puro) y rotar90/rotarPixeles

@@ -255,7 +255,7 @@ describe("ocr-cascada · correrCascadaOcr (cascada con mocks)", () => {
 describe("ocr-cascada · source-scan (contrato del kit en src/)", () => {
   it("bridge: call-site condicional con cascadaActiva + escalonado intacto", () => {
     const bridge = lee("src/lib/e14/scanner-core-bridge.ts");
-    expect(bridge).toContain("cascadaActiva(leerFlags().masivaOcrTesseract");
+    expect(bridge).toContain("cascadaActiva(leerFlags().ocrCascada");
     expect(bridge).toContain("reconocerRapidOcrCascada(fotoOcr, onProgresoOcr, cfgOcr)");
     expect(bridge).toContain("reconocerRapidOcrEscalonado(fotoOcr, onProgresoOcr, cfgOcr)");
     expect(bridge).toContain("OCR_CASCADA_TESSERACT_GO = false");
@@ -263,17 +263,17 @@ describe("ocr-cascada · source-scan (contrato del kit en src/)", () => {
   });
   it("flags: default OFF + DOBLE whitelist (sanearFlags + leerOverridesFlags)", () => {
     const flags = lee("src/lib/e14/flags.ts");
-    expect(flags).toContain("masivaOcrTesseract: false,");
-    expect(flags).toContain('limpio.masivaOcrTesseract = p.masivaOcrTesseract;');
+    expect(flags).toContain("ocrCascada: false,");
+    expect(flags).toContain('limpio.ocrCascada = p.ocrCascada;');
     const politica = lee("src/lib/e14/obs/politica.ts");
-    expect(politica).toContain('limpio.masivaOcrTesseract = o.masivaOcrTesseract;');
+    expect(politica).toContain('limpio.ocrCascada = o.ocrCascada;');
   });
-  it("obs/tipos.ts: FlagsApp + masivaOcrTesseract (D57 — al final, tras dhashResize)", () => {
+  it("obs/tipos.ts: FlagsApp + ocrCascada (D57 — al final, tras qrBrujulaOrientacion)", () => {
     const tipos = lee("src/lib/e14/obs/tipos.ts");
-    const dhash = tipos.indexOf("dhashResize: boolean;");
-    const cascada = tipos.indexOf("masivaOcrTesseract: boolean;");
-    expect(dhash).toBeGreaterThan(-1);
-    expect(cascada).toBeGreaterThan(dhash); // ADITIVO AL FINAL (contrato D57)
+    const brujula = tipos.indexOf("qrBrujulaOrientacion: boolean;");
+    const cascada = tipos.indexOf("ocrCascada: boolean;");
+    expect(brujula).toBeGreaterThan(-1);
+    expect(cascada).toBeGreaterThan(brujula); // ADITIVO AL FINAL (contrato D57)
     expect(tipos.slice(cascada)).toContain("}"); // es el último campo de FlagsApp
   });
 });

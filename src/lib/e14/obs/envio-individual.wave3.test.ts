@@ -4,16 +4,13 @@
  *  · G.1 — registrarEnvio (punto único): individual online → envioMs
  *    estampado en actaActual.diagnostico.tiempos (contrato: envioMs != null
  *    ⇔ había red al enviar — offline → SIN campo, null honesto).
- *  · G.1 — vía registrarEnvioMasiva (actaEnvio ≠ actaActual) → actaActual
- *    INTACTO (sin doble stamp — la masiva la mide el runner con SU envioMs
- *    externo D61).
  *  · G.2 — redActual(): null honesto sin navigator.connection; valores con
  *    mock; la red viaja en el MISMO parche del envío individual.
  *  · G.3 — perfDeDiags agrega envioMs (envios/p50/p95) y enviosDetalleDe
  *    produce filas con actaIdHash (fnv1a8 — JAMÁS el id plano), modo por
  *    canal y SIN título/mesa/puesto/payload (qa-obs-privacidad manda).
  * Patrón: hang.test.ts (node + vi.stubGlobal) y runner-veto-postocr.test.ts
- * (vi.mock de la infra — ./cola en memoria para el envío MASIVA).
+ * (vi.mock de la infra).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -115,27 +112,6 @@ describe("WAVE3 §G.1 — registrarEnvio individual mide su envío", () => {
     expect("envioMs" in (acta.diagnostico?.tiempos ?? {})).toBe(false);
     expect(acta.diagnostico?.envioRedTipo).toBeUndefined();
     expect(acta.hashSha256).toBe("EN COLA"); // cola offline de siempre
-  });
-});
-
-describe("WAVE3 §G.1 — vía registrarEnvioMasiva (actaEnvio) → actaActual INTACTO", () => {
-  it("el envío MASIVA no estampa envioMs en actaActual (sin doble medición — la mide el runner D61)", () => {
-    vi.stubGlobal("navigator", { connection: { effectiveType: "4g", downlink: 1.5 } });
-    useE14Store.setState({ online: true, actaActual: actaIndividual() } as never);
-    const antes = useE14Store.getState().actaActual!.diagnostico!.tiempos;
-
-    // La masiva envía SU acta (actaEnvio ≠ actaActual — T3.3). El método
-    // vive en el E14 store (registrarEnvioMasiva → registrarEnvio interno
-    // con actaEnvio):
-    const actaAjena = { ...actaIndividual(), id: "acta-masiva-9" } as unknown as Acta;
-    useE14Store.getState().registrarEnvioMasiva(actaAjena);
-
-    const acta = useE14Store.getState().actaActual!;
-    expect(acta.id).toBe("acta-ind-1");
-    expect("envioMs" in (acta.diagnostico?.tiempos ?? {})).toBe(false);
-    expect(acta.diagnostico?.tiempos).toBe(antes); // MISMO objeto — intocable
-    // el historial SÍ creció (el envío masiva registró su fila):
-    expect(useE14Store.getState().historial.length).toBe(1);
   });
 });
 

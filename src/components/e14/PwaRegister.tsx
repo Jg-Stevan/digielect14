@@ -7,7 +7,7 @@
  * web-scanner) — copia adaptada (regla de oro #0). ADAPTACIÓN declarada:
  * el warm-up idle del OCR del lab NO aplica aquí — e14 ya tiene su propio
  * pre-warm real de RapidOCR (kit e14-prowarm-ocr-v1: disparo al montar
- * MASIVA + diferido 2 s en ScanView), no hay nada que duplicar.
+ * el shell + diferido 2 s en ScanView), no hay nada que duplicar.
  *
  * DEV-SIN-SW (fix de soporte): en DESARROLLO el service worker NO se
  * registra y cualquier SW/caché de una sesión anterior se DESREGISTRA al

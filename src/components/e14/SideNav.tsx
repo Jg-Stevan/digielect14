@@ -4,7 +4,9 @@
  * SideNav — Task 2-a (shell responsive): navegación lateral de escritorio
  * (lg+). En móvil/ tablet la navegación la sigue dando BottomNav (oculto
  * en lg desde page.tsx). Reglas de activo idénticas a BottomNav: la vista
- * `revision` cuenta como ESCANEAR activo (salvo masivaOrigen → MASIVA).
+ * `revision` cuenta como ESCANEAR activo. NOTA (eliminación del módulo
+ * masiva): el ítem MASIVA y la regla de origen (`masivaOrigen`) se
+ * retiraron junto con el módulo.
  * Estado vivo del store (solo lectura): online + cola, actas de sesión.
  * «CÓMO FUNCIONA» abre el AyudaOverlay (módulo propio, cero lógica de
  * negocio).
@@ -14,14 +16,12 @@ import {
   StitchCameraIcon,
   StitchDocIcon,
   StitchGrid2Icon,
-  StitchStackIcon,
 } from "./icons";
 import { abrirAyuda } from "./AyudaOverlay";
 
 const ITEMS: { vista: Vista; label: string; hint: string; Icon: typeof StitchCameraIcon }[] = [
   { vista: "escanear", label: "ESCANEAR", hint: "Cámara · sim · subir", Icon: StitchCameraIcon },
   { vista: "actas", label: "ACTAS", hint: "Control de mesas", Icon: StitchDocIcon },
-  { vista: "masiva", label: "MASIVA", hint: "Carga en lote", Icon: StitchStackIcon },
   { vista: "resumen", label: "RESUMEN", hint: "Jornada y análisis", Icon: StitchGrid2Icon },
 ];
 
@@ -57,7 +57,6 @@ export function SideNav() {
   const actasSesion = useE14Store((s) => s.actasSesion);
   const online = useE14Store((s) => s.online);
   const colaOffline = useE14Store((s) => s.colaOffline);
-  const masivaOrigen = useE14Store((s) => s.masivaOrigen);
 
   return (
     <aside
@@ -83,8 +82,7 @@ export function SideNav() {
         {ITEMS.map(({ vista: v, label, hint, Icon }) => {
           const activo =
             vista === v ||
-            (vista === "revision" && v === "escanear" && !masivaOrigen) ||
-            (vista === "revision" && v === "masiva" && masivaOrigen);
+            (vista === "revision" && v === "escanear");
           return (
             <button
               key={v}

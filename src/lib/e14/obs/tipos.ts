@@ -121,45 +121,20 @@ export interface ErroresAgrupados {
 }
 
 export interface FlagsApp {
-  poolWorkers: 1 | 2; // default 2
-  thumbsOn: boolean; // default true
   ocrThreadsTope: number; // default 4
   telemetriaSalud: boolean; // default true
   endpointReportes: string | null; // default null — sin backend, D1
-  colaPersistente: boolean; // default true (cola-persistente-v1) — la masiva SOLO muere con vaciar() del dueño; false = MODO PRUEBAS e64p
-  // ─── KIT e73-sondeo-qr-precoz-v1 (§D) — campos ADITIVOS AL FINAL (D57) ───
-  sondeoQrPrecoz: boolean; // default true — sondeo QR en INGESTA (worker e73); false = kill-switch (byte-idéntico a 043b2ba)
-  sondeoQrPresupuestoMs: number; // default 2500 — presupuesto del reló del ladder del worker (jamás extender — kit §I)
   // ─── KIT e14-obs-hang-atribucion-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
   hangEnCurso: boolean; // default true — sensor hang-en-curso (worker heartbeat + WAL); false = byte-idéntico a b688fbc
-  // ─── KIT e107-prescan-qr-cola-v1 (§D.4) — campo ADITIVO AL FINAL (D57) ───
-  prescanQrCola: boolean; // default true — pre-scan QR en «PROCESAR COLA» (quad+warp → BarcodeDetector/jsQR); false = byte-idéntico a 3f1cc17
   // ─── KIT e14-orientacion-qr-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
   qrBrujulaOrientacion: boolean; // default true — QR-brújula de orientación (cuadrante del QR manda + rescate hi-res ZXing; bench v8.3 4/4); false = sondeo OCR de siempre byte a byte
-  // ─── P1 (plan masiva — brief Agente A) — campo ADITIVO AL FINAL (D57) ───
-  masivaQrHandoff: boolean; // default false — hand-off del payload QR del sondeo de ingesta (prescan salta su lectura; CAPA 0 salta su decode); false = byte-idéntico a 5d08dd6
-  // ─── KIT e14-quad-streaming-v1 (§D) — campos ADITIVOS AL FINAL (D57) ───
-  masivaQuad: boolean; // default false — P4: quad del pre-scan viaja al bridge (salta la re-detección, desviación D66 resuelta); false = byte-idéntico a 5d08dd6
-  masivaStreaming: boolean; // default false — P5: el runner arranca con el 1.er pre-scan-OK (consumo por turno de clasificación); false = prescan serial de siempre byte a byte
-  // ─── KIT e14-dhash-resize-v1 (§D) — campo ADITIVO AL FINAL (D57) ───
-  dhashResize: boolean; // default false — decode chico del dhash (resize 64×64 a nivel de decode, anti-hambruna P3); false = decode FULL byte-idéntico a 5d08dd6 (GO/NO-GO: bench-dedup-tolerancia/bench-resize.html)
-  // ─── W1 — KIT k1-obs-prioridad (brief Agente A) — campo ADITIVO AL FINAL (D57) ───
-  masivaPrioridad: boolean; // default false — prioridad de fila (paso 4 del dueño): sort de siguientePendiente por prioridad efectiva (1=QR+quad OK · 2=resto · 3=DUPLICADA derivada del estado); false = FIFO de siempre byte a byte
-  // ─── KIT flujo-dueno-v1 (K2 — brief Agente B) — campos ADITIVOS AL FINAL (D57) ───
-  masivaWarpIngesta: boolean; // default false — K2/paso 2: detección+warp+sondeo-QR del pre-scan suben a la INGESTA (cola serial con cortesía de CPU); false = byte-idéntico a acf181f (el trabajo sigue en «PROCESAR COLA»)
-  masivaRotacionQr: boolean; // default false — K2/paso 5: la ROTACIÓN final la guía el cuadrante del QR en el warp de ingesta (rotacionSugerida viaja al bridge como rotacionPrecomputada y el sondeo de orientación se omite); false = byte-idéntico a acf181f (probe de siempre)
-  masivaSondeoCrudo: boolean; // default TRUE = camino de hoy — el sondeo QR crudo de la cadenaDedup (e73) alimenta hand-off P1 y dedup temprano; false = SOLO para la corrida de control del dueño (el guard fuerza sondeo=null, la fila sigue a dhash COMO HOY)
   // ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — campo ADITIVO AL FINAL (D57) ───
-  masivaOcrTesseract: boolean; // default false — cascada OCR: intento 1 → gate → core RapidOCR como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte (GO/NO-GO: bench-ocr-cascada/)
-  // ─── KIT e14-solo-warp-qr-v1 (DRY RUN del dueño) — campo ADITIVO AL FINAL (D57) ───
-  masivaSoloWarpQr: boolean; // default false — PRUEBA EN SECO: «PROCESAR COLA» hace SOLO el pre-scan (decode→quad→warp→QR) con stamp qrLeido por fila y JAMÁS llama iniciar() (cero OCR, cero envío — la cola queda PENDIENTE, viva); el dedup del pre-scan (DUPLICADA/YA-ENVIADA por payload) SÍ corre (pedido del dueño); false = byte-idéntico al flujo de hoy
-  // ─── KIT e14-prescan-warp-lado-v1 — campos ADITIVOS AL FINAL (D57) ───
-  prescanQrPresupuestoMs: number; // default 4000 — presupuesto del hard-kill del pre-scan (PRESUPUESTO_FILA_MS); válvula del dueño para equipos lentos (clamp 1000..30000)
-  prescanWarpLado: number; // default 4032 — maxWarpLongSide de la SALIDA del warp del pre-scan (el worker ya aceptaba msg.maxWarpLongSide sin consumidor); 1920 recorta ~4.5x el coste del warpPerspective y la QR se lee igual (el core lee QR a 1280/1920); clamp 256..4032
-  // ─── KIT e14-prescan-rescate-qr-v1 (ENMIENDA §F.3 — orden del dueño) ───
-  prescanQrRescate: boolean; // default false — RESCATE del QR difícil en el pre-scan: SOLO tras null de BarcodeDetector/jsQR en leerQrDeWarped corre la escalera difícil de la capa 0 (decodificarQrDeRecorte esquina-600 → barridoQrZxingDePixeles, presupuesto interno 4000 ms) sobre el MISMO raster del warp — en MAIN THREAD vía import DINÁMICO cacheado de identidad-qr (el worker JAMÁS ve zxing — dictamen e73 intacto); false = byte-idéntico (el módulo de rescate ni se intenta)
-  // ─── KIT e14-gama-adaptativa-v1 — campo ADITIVO AL FINAL (D57) ───
-  masivaAdaptativoGama: boolean; // default true — capa adaptativa de GAMA para masiva+OCR: el tier detectado (obs/dispositivo §4.4) aplica SOLO presupuestos de recursos (pool/threads/warp/watchdog/master/QR/dhash — tabla en gama.ts) en BAJO/MEDIO; el override MANUAL del dueño manda clave a clave (D6) y false = byte-idéntico a hoy en TODOS los dispositivos (D74)
+  // Renombrado de `masivaOcrTesseract` al retirar el módulo masiva (la
+  // cascada es del pipeline general; el nombre era herencia del kit).
+  ocrCascada: boolean; // default false — cascada OCR: intento 1 → gate → core RapidOCR como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte (GO/NO-GO: bench-ocr-cascada/)
+  // NOTA (eliminación del módulo masiva): los 17 flags exclusivos de la cola
+  // (poolWorkers · thumbsOn · colaPersistente · sondeoQr* · prescan* ·
+  // masiva* · dhashResize) se retiraron con el módulo.
 }
 
 export interface ReporteSesion {
@@ -231,11 +206,11 @@ export interface HangPorOp {
 /** §G.3 — fila de enviosDetalle (una por diagnóstico con envioMs != null).
  *  PRIVACIDAD: actaIdHash (fnv1a8 — JAMÁS el id plano), sin título/mesa/
  *  puesto/payload (qa-obs-privacidad manda). modo = canal del diagnóstico
- *  al export ("individual" = actaActual — una acta abierta desde la bandeja
- *  a REVISIÓN cuenta individual; "masiva" = cola). */
+ *  al export ("individual" = actaActual — una acta abierta desde REVISIÓN
+ *  cuenta individual). "masiva" (cola) se retiró con el módulo. */
 export interface EnvioDetalle {
   actaIdHash: string; // fnv1a8(actaId) — 8 hex (JAMÁS el id plano)
-  modo: "individual" | "masiva";
+  modo: "individual";
   status: string; // ActaStatus del desenlace (string — informe JSON estable)
   ocrMs: number | null;
   totalMs: number | null;

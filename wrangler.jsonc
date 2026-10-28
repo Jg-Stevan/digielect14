@@ -25,16 +25,5 @@
                 // Enable image optimization
                 // see https://opennext.js.org/cloudflare/howtos/image
                 "binding": "IMAGES"
-        },
-        // WAVE3 §A.1 — ORDEN-WAVE3-remoto-rescate-obs-v1 (ledger-remoto-envios-v1):
-        // ledger REMOTO de envíos (idempotencia REAL cross-origen) — SOLO
-        // SHA-256 del payload QR (jamás el payload — privacidad dura), serie
-        // y metadatos mínimos. Formato 2 espacios (kit §A.1 literal).
-        "d1_databases": [
-          {
-            "binding": "DB_ENVIOS_E14",
-            "database_name": "e14-envios-remoto",
-            "database_id": "c5a7be23-bdd3-403b-a550-bcc0316d4a77"
-          }
-        ]
+        }
 }

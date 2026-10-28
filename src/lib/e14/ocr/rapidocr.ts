@@ -22,11 +22,9 @@
 // KIT e14-observabilidad-v1 (A1-C7): tope de threads OCR = flag del dueño
 // (kill switch MANUAL — ocrThreadsTope, default 4 = el literal que vivía
 // aquí). La app NUNCA cambia reglas de negocio sola (D6).
-// KIT e14-gama-adaptativa-v1 (D74): la LECTURA es EFECTIVA — flagsMasiva-
-// Efectivos() baja el tope a 2 en gama BAJO adaptativa (deja un núcleo al
-// hilo UI); el override manual del dueño manda y el flag adaptativo OFF
-// devuelve el flag puro de siempre.
-import { flagsMasivaEfectivos } from "../gama";
+// NOTA (eliminación del módulo masiva): la lectura EFECTIVA vía gama.ts
+// (capa adaptativa del kit e14-gama-adaptativa-v1) se retiró con el módulo
+// — el tope vuelve a leer el flag puro de siempre.
 
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
@@ -173,8 +171,7 @@ async function initReal(): Promise<RapidRuntime> {
     typeof SharedArrayBuffer !== "undefined" && self.crossOriginIsolated
       ? // A1-C7: el `4` era el literal histórico — ahora flag del dueño
         // (default 4 → comportamiento idéntico sin overrides).
-        // D74: lectura EFECTIVA — gama BAJO adaptativa ⇒ 2 hilos.
-        Math.min(flagsMasivaEfectivos().ocrThreadsTope, navigator.hardwareConcurrency || 1)
+        Math.min(leerFlags().ocrThreadsTope, navigator.hardwareConcurrency || 1)
       : 1;
   ort.env.wasm.simd = true;
   // KIT e14-optimizacion-v1 (T2, hallazgo #2 de AUDITORIA-e14-v1): proxy=true
@@ -216,6 +213,7 @@ async function initReal(): Promise<RapidRuntime> {
 // (máx 2 entradas en la ruta del OCR); el re-OCR de la banda corre DESPUÉS
 // de la elección, sin dependencia con la entrada viva.
 import { canvasCon, loadImageMemo } from "../image-utils";
+import { leerFlags } from "../flags";
 import { logger } from "../../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 function canvasDe(img: HTMLImageElement | HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {

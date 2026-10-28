@@ -3,8 +3,7 @@
  * congelado. Greps estáticos sobre src/ que fijan lo acordado en
  * README-KITS.md §4 (tipos, claves de persistencia, defaults de política,
  * firmas públicas) para que ninguna ola futura lo rompa. Sin red, sin DOM,
- * determinista (mismo harness de los 7 QA existentes — patrón
- * scripts/qa-watchdog-relectura.ts).
+ * determinista (mismo harness estilo QA headless del repo).
  *
  *   bun scripts/qa-obs-contract.ts
  *
