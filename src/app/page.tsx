@@ -14,9 +14,9 @@
  *    contenido; BottomNav se oculta y las CTAs de REVISIÓN (ReviewCtas)
  *    viven al fondo de la columna en desktop.
  *  · <lg: comportamiento móvil original (BottomNav + CTAs encima).
- *  · Atajos de teclado (desktop): 1/2/3/4 cambian de vista · «?»/«h» abre
- *    la guía. Se desactivan mientras haya un dialog abierto (editores,
- *    visor de foto, ayuda) o el foco esté en un input.
+ *  · Atajos de teclado (desktop): 1/2/3 cambian de vista (escanear/actas/
+ *    resumen) · «?»/«h» abre la guía. Se desactivan mientras haya un dialog
+ *    abierto (editores, visor de foto, ayuda) o el foco esté en un input.
  */
 import { useEffect } from "react";
 import { useE14Store } from "@/lib/e14/store";
@@ -28,8 +28,6 @@ import { AnalyzingView } from "@/components/e14/screens/AnalyzingView";
 import { ReviewView, ReviewCtas } from "@/components/e14/screens/ReviewView";
 import { ActasView } from "@/components/e14/screens/ActasView";
 import { ResumenView } from "@/components/e14/screens/ResumenView";
-// KIT e14-carga-masiva-v1 (T4): vista MASIVA (módulo separado, desktop-first).
-import { MasivaView } from "@/components/e14/screens/MasivaView";
 // F-PWA (kit H6): registro del Service Worker + listeners de instalación +
 // banner E-04 «Nueva versión lista» — montaje único, no renderiza nada.
 import { PwaRegister } from "@/components/e14/PwaRegister";
@@ -110,8 +108,7 @@ export default function Page() {
       if (document.querySelector('[role="dialog"]')) return;
       if (e.key === "1") navegar("escanear");
       else if (e.key === "2") navegar("actas");
-      else if (e.key === "3") navegar("masiva");
-      else if (e.key === "4") navegar("resumen");
+      else if (e.key === "3") navegar("resumen");
       else if (e.key === "?" || e.key === "h" || e.key === "H") abrirAyuda();
     };
     window.addEventListener("keydown", onKey);
@@ -147,9 +144,6 @@ export default function Page() {
               {vista === "revision" && <ReviewView />}
               {vista === "actas" && <ActasView />}
               {vista === "resumen" && <ResumenView />}
-              {/* KIT e14-carga-masiva-v1 (T4): MASIVA en la grilla de vistas —
-              TopBar queda como está (solo REVISIÓN), scroll propio. */}
-              {vista === "masiva" && <MasivaView />}
             </div>
           </main>
 

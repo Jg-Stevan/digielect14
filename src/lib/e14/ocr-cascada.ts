@@ -1,8 +1,9 @@
 /**
  * KIT e14-ocr-cascada-v1 (K3 fase 2 — plan flujo-dueño paso 6) — núcleo PURO
  * de la CASCADA OCR: intento 1 → GATE (clasificador puro) → core RapidOCR
- * como hoy → rescate por ROIs top/bottom. El flag `masivaOcrTesseract`
- * (default OFF — kill-switch del dueño) decide si el pipeline la corre; con
+ * como hoy → rescate por ROIs top/bottom. El flag `ocrCascada` (antes
+ * `masivaOcrTesseract` — renombrado al retirar el módulo masiva; default
+ * OFF — kill-switch del dueño) decide si el pipeline la corre; con
  * flag OFF el camino es el OCR ESCALONADO de siempre byte a byte (KIT
  * e14-ocr-escalonado-v1 intacto — este módulo SOLO CONSUME `necesitaSegunda`
  * y `elegirMejor`, jamás los re-define).
@@ -65,11 +66,8 @@ export const ROI_FRACCIONES = {
 /** ¿La cascada corre en ESTA pasada? Guard del call-site del bridge:
  *  flag del dueño ON y NUNCA en SIM (chips 8.2/7.0/4.3 intactos — §3 del
  *  kit escalonado). Con false el bridge llama al escalonado de siempre. */
-export function cascadaActiva(
-  masivaOcrTesseract: boolean,
-  simular: boolean | undefined,
-): boolean {
-  return masivaOcrTesseract === true && simular !== true;
+export function cascadaActiva(ocrCascada: boolean, simular: boolean | undefined): boolean {
+  return ocrCascada === true && simular !== true;
 }
 
 /**

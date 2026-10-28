@@ -66,15 +66,16 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   // módulos REALES de prod (rapidocr+clasificador+core — kit
   // e14-bench-ocr-cascada-v1 §1) — ARTEFACTO de build del banco, se regenera
   // con generar-vendor.sh: mismo criterio vendor (no código fuente).
-  // "src/lib/e14/masiva/vendor/jsQR.js": EL MISMO archivo vendido a producción
-  // por e63m (kit e63m-capa0-qr-identidad-v1 §1.1 — copia BYTE-IDÉNTICA de la
-  // de #72; d.ts aparte con los tipos): mismo criterio vendor.
+  // "src/lib/e14/qr/vendor/jsQR.js": jsQR@1.4.0 VENDIDO byte-exacto (kit
+  // e63m — antes src/lib/e14/masiva/vendor/, reubicado con la eliminación del
+  // módulo masiva): mismo criterio vendor (el UMD asigna `module` y trae
+  // expresiones sueltas del bundle: fallaría lint sin este ignore).
   // ".open-next/**" + ".wrangler/**": ARTEFACTOS del deploy Workers (Opción A
   // — opennextjs-cloudflare build / wrangler state): bundles minificados del
   // worker, no código fuente. SIN este ignore `eslint .` los parsea y muere
   // por RAM (SIGABRT — hallazgo wave3: el gate de ayer corrió ANTES del
   // primer deploy; hoy .open-next existe y el lint OOM-ea).
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", ".open-next/**", ".wrangler/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "lab/**/*.bundle.js", "tools/bench-qr-identidad/jsQR.js", "tools/bench-ocr-cascada/vendor/**", "src/lib/e14/masiva/vendor/jsQR.js"]
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", ".open-next/**", ".wrangler/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "lab/**/*.bundle.js", "tools/bench-qr-identidad/jsQR.js", "tools/bench-ocr-cascada/vendor/**", "src/lib/e14/qr/vendor/jsQR.js"]
 }];
 
 export default eslintConfig;

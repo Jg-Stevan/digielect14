@@ -40,9 +40,6 @@ vi.mock("./captura", () => ({
 vi.mock("../store", () => ({
   useE14Store: { getState: () => ({ actaActual: null }) },
 }));
-vi.mock("../masiva/cola", () => ({
-  listarMapeados: vi.fn(async () => []),
-}));
 
 import { construirReporte } from "./export";
 

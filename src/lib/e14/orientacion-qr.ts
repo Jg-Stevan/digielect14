@@ -26,8 +26,8 @@
  * nuevas):
  *   · zxing-wasm 3.1.6 YA está en el repo (e63n/e64) con wasm LOCAL en
  *     public/wasm/ — este módulo usa el MISMO loader perezoso
- *     (moduloZxingDe de identidad-qr.ts, exportado ADITIVO).
- *   · jsQR 1.4.0 VENDIDO (masiva/vendor — red line 9) para el intento sobre
+ *     (moduloZxingDe de qr/identidad-qr.ts — antes masiva/identidad-qr).
+ *   · jsQR 1.4.0 VENDIDO (qr/vendor — red line 9) para el intento sobre
  *     el warp (barato) y como intento extra del rescate.
  *   · loadImageMemo/canvasCon (SPRINT-A) — el re-decode de fotoOriginal pega
  *     al LRU compartido del pipeline (HIT, sin decode doble).
@@ -66,9 +66,11 @@ import type { Quad } from "@jg-stevan/scanner-core/types";
 import type { Binarizer } from "zxing-wasm/reader";
 import { canvasCon, loadImageMemo } from "./image-utils";
 import { logger } from "../logger";
-import { moduloZxingDe, qrCorto } from "./masiva/identidad-qr";
+// Capa QR reubicada (antes src/lib/e14/masiva/identidad-qr — eliminado el
+// módulo masiva, la capa QR vive en src/lib/e14/qr/).
+import { moduloZxingDe, qrCorto } from "./qr/identidad-qr";
 import { anilloGanadorRegistrar, ganadorPersistente } from "./orientacion";
-import jsQR from "./masiva/vendor/jsQR.js";
+import jsQR from "./qr/vendor/jsQR.js";
 
 /** Rotación a aplicar (misma unión que el Rotacion local de orientacion.ts —
  *  estructuralmente compatible con rotarDataUrl). */

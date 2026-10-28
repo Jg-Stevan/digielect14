@@ -17,11 +17,7 @@
  *      ilegible + aviso LUGAR-DESVIADO · sin kit → cap como hoy (byte-idéntico).
  *   3. F0 balde fino — prioridad puesto-lugar > tipo > mesa-registro > ruta
  *      + AUTO → null.
- *   4. F2 re-lectura interna — predicate + desenlace puros (masiva/relectura):
- *      SUGERIDA/MANUAL + score 8.5 + FUERTE + completa → procede; controles
- *      score 7.x / ADVERTENCIA / RECHAZADA / incompleta / MEDIA → no; applier
- *      AUTO → OPTIMA y SUGERIDA → acta IDÉNTICA (jamás empeora).
- *   5. Invariancias — umbrales 0.82/0.6/0.55 y OPTIMA=8/ADVERTENCIA=6.5 byte-
+ *   4. Invariancias — umbrales 0.82/0.6/0.55 y OPTIMA=8/ADVERTENCIA=6.5 byte-
  *      idénticos (source-scan) + claves viejas del store intactas + registro
  *      KIT intacto.
  */
@@ -31,14 +27,8 @@ import {
   normalizarNombre,
   normalizarNombreLugar,
   similitud,
-  type ClasificacionE14,
 } from "../src/lib/e14/clasificador";
 import type { DivipolBase } from "../src/lib/e14/divipol";
-import {
-  desenlaceTrasRelectura,
-  procedeRelecturaInterna,
-} from "../src/lib/e14/masiva/relectura";
-import type { Acta } from "../src/lib/e14/types";
 
 let pasadas = 0;
 let fallos = 0;
@@ -206,114 +196,14 @@ ok(
   "AUTO → clasifDebil null (el score NO es un motivo de clasificación)",
 );
 
-// ---------- Bloque 4 · F2 — re-lectura interna (pura, masiva/relectura.ts) ----------
+// ---------- Bloque 4 · Invariancias (source-scan — RED LINES del kit) ----------
 
-console.log("— Bloque 4 · F2 re-lectura interna (predicate + desenlace) —");
-
-/** Acta sintética mínima (cast — el QA solo consume status/score/clasif/diag). */
-const actaTest = (p: Partial<Acta>): Acta =>
-  ({
-    id: "qa-e63f",
-    titulo: null,
-    ubicacion: null,
-    tipo: null,
-    pagina: null,
-    candidatos: [],
-    firmas: [],
-    codigoBarras: null,
-    score: 8.5,
-    status: "EN_REVISION_HUMANA",
-    rechazo: null,
-    intento: 1,
-    maxIntentos: 4,
-    fuente: "ARCHIVO",
-    diagnostico: {
-      lectura: { nivel: "FUERTE", anclas: 7, chars: 502 },
-      gate: { completa: true },
-    },
-    ...p,
-  }) as Acta;
-
-const clasif = (nivel: ClasificacionE14["nivel"]): ClasificacionE14 => ({
-  departamento: null,
-  municipio: null,
-  zona: null,
-  puesto: null,
-  mesa: null,
-  tipo: "TRANSMISION",
-  pagina: null,
-  kit: null,
-  nivel,
-  confianzas: { departamento: 0, municipio: 0, puesto: 0, tipo: 1 },
-});
-
-const casoReal171446 = actaTest({
-  clasificacion: clasif("SUGERIDA"),
-}); // el caso real del kit §4: 171446.jpg — score 8.5 FUERTE, cayó por clasificación
-
-ok(procedeRelecturaInterna(casoReal171446) === true, "SUGERIDA + score 8.5 + FUERTE + completa → PROCEDE re-lectura");
-ok(
-  procedeRelecturaInterna(actaTest({ clasificacion: clasif("MANUAL") })) === true,
-  "MANUAL + captura perfecta → PROCEDE (mismo trato que SUGERIDA)",
-);
-ok(
-  procedeRelecturaInterna(actaTest({ score: 7.9, clasificacion: clasif("SUGERIDA") })) === false,
-  "RED LINE: score 7.9 (< 8) → NO procede — re-escaneo humano como hoy (intocable)",
-);
-ok(
-  procedeRelecturaInterna(
-    actaTest({ score: 7.5, status: "ADVERTENCIA", clasificacion: clasif("SUGERIDA") }),
-  ) === false,
-  "RED LINE: ADVERTENCIA (6.5-8) → NO procede jamás",
-);
-ok(
-  procedeRelecturaInterna(actaTest({ score: 6.0, status: "RECHAZADA" })) === false,
-  "RED LINE: RECHAZADA por calidad → NO procede (ahí re-escanear SÍ ayuda)",
-);
-ok(
-  procedeRelecturaInterna(
-    actaTest({
-      diagnostico: { lectura: { nivel: "FUERTE", anclas: 7, chars: 502 }, gate: { completa: false } } as Acta["diagnostico"],
-    }),
-  ) === false,
-  "RED LINE: gate.completa false → NO procede",
-);
-ok(
-  procedeRelecturaInterna(
-    actaTest({
-      diagnostico: { lectura: { nivel: "MEDIA", anclas: 4, chars: 300 }, gate: { completa: true } } as Acta["diagnostico"],
-    }),
-  ) === false,
-  "RED LINE: lectura MEDIA → NO procede",
-);
-
-const auto = desenlaceTrasRelectura(casoReal171446, "TEXTO RE-LEIDO", clasif("AUTO"));
-ok(
-  auto.desenlace === "auto" && auto.acta.status === "OPTIMA" && auto.acta.clasificacion?.nivel === "AUTO",
-  "re-lectura AUTO → OPTIMA (autoenvío normal — sin intervención)",
-);
-ok(auto.acta.ocrTexto === "TEXTO RE-LEIDO" && auto.acta.score === 8.5, "viaja el texto re-leído; el score NO se retoca");
-
-const sinCambio = desenlaceTrasRelectura(casoReal171446, "otro texto", clasif("SUGERIDA"));
-ok(
-  sinCambio.desenlace === "sin-cambio" && sinCambio.acta === casoReal171446,
-  "re-lectura no-AUTO → acta IDÉNTICA (mismo objeto — jamás empeora el veredicto)",
-);
-ok(
-  desenlaceTrasRelectura(casoReal171446, "x", clasif("AUTO")).desenlace === "auto" &&
-    actaTest({ score: 7.9, clasificacion: clasif("SUGERIDA") }).status === "EN_REVISION_HUMANA",
-  "control: sin re-lectura el desenlace de siempre queda EN_REVISION_HUMANA",
-);
-
-// ---------- Bloque 5 · Invariancias (source-scan — RED LINES del kit) ----------
-
-console.log("— Bloque 5 · invariancias (source-scan) —");
+console.log("— Bloque 4 · invariancias (source-scan) —");
 
 const srcClasificador = await readFile(new URL("../src/lib/e14/clasificador.ts", import.meta.url), "utf8");
 const srcTypes = await readFile(new URL("../src/lib/e14/types.ts", import.meta.url), "utf8");
 const srcStore = await readFile(new URL("../src/lib/e14/store.ts", import.meta.url), "utf8");
 const srcKits = await readFile(new URL("../src/lib/e14/kits.ts", import.meta.url), "utf8");
-const srcInforme = await readFile(new URL("../src/lib/e14/informe.ts", import.meta.url), "utf8");
 
 ok(
   srcClasificador.includes("const UMBRAL_AUTO = 0.82;") &&
@@ -334,11 +224,6 @@ ok(
 ok(
   srcKits.includes('mun: "335"') && srcKits.includes("kit: 399,"),
   "RED LINE 6: REGISTRO_KITS intacto (el registro sigue sin resolver nada solo)",
-);
-ok(
-  srcInforme.includes("`ESCANEOS: ENVIADAS ${escPorStatus[\"ENVIADA\"]}") &&
-    srcInforme.includes("`CLASIF-DEBIL: puesto-lugar"),
-  "informe: línea ESCANEOS intacta + CLASIF-DEBIL ADITIVA (D51 — solo si n > 0)",
 );
 
 // ---------- resultado ----------

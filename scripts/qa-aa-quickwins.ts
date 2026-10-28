@@ -11,23 +11,17 @@
  *   1. Grises AA (C1): en src/components/** hay 0 líneas con co-ocurrencia
  *      text-(slate|gray)-(500|600) + token de tamaño ≤ 12 px en la MISMA
  *      línea de clases.
- *   2. Chip QR (C1): MasivaView ya NO contiene text-white/30 (2.70:1 — el
- *      peor fallo AA) y SÍ conserva las condiciones lógicas del chip
- *      (f.qrEstado === "leido" · sin-payload+LISTA — T-0.2 de
- *      qa-qr-identidad sigue anclando LÓGICA, no clases) + el chip ✗ ahora
- *      text-slate-400.
- *   3. Rojo crit (M4): primitives.tsx con 0 ef4444 y ≥ 4 E52222; y
+ *   2. Rojo crit (M4): primitives.tsx con 0 ef4444 y ≥ 4 E52222; y
  *      PanelDev/VistaErrores/ActasView/ResumenView AÚN contienen ef4444
  *      (migración incompleta prohibida en AMBAS direcciones — sobre
  *      superficie oscura el #E52222 EMPEORARÍA el contraste).
- *   4. Táctiles (M1): MasivaView sin min-h-[32px]/[34px]/[42px] y con
- *      min-h-[44px]; ResumenView sin min-h-[40px].
- *   5. Residuales INTACTOS (pactados fuera de alcance): ReviewView conserva
+ *   3. Táctiles (M1): ResumenView sin min-h-[40px] y con min-h-[44px].
+ *   4. Residuales INTACTOS (pactados fuera de alcance): ReviewView conserva
  *      su text-[13px] … gray-500 y PanelClasificacion su gray-500 disabled
  *      — el QA afirma que SIGUEN (si el agente los tocó, rojo: tocó lo
  *      prohibido).
- *   6. Exclusiones intactas: los iconos (w-11 h-11 de MasivaView · h-6 w-6
- *      de ReviewView) conservan su gris (fuera de AA 1.4.3).
+ *   5. Exclusiones intactas: el icono de ReviewView (h-6 w-6) conserva su
+ *      gris (fuera de AA 1.4.3).
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -78,22 +72,7 @@ async function main(): Promise<void> {
     `0 líneas con gris 500/600 + texto ≤ 12 px en src/components/** (${componentes.length} .tsx escaneados — C1 del kit §B)`,
   );
 
-  // ── 2 · Chip QR ✗: el peor fallo AA del repo corregido, lógica intacta ───
-  const masiva = (await leer("src/components/e14/screens/MasivaView.tsx")) ?? "";
-  ok(!masiva.includes("text-white/30"), "MasivaView SIN text-white/30 (2.70:1 — diagnóstico C1, kit §B)");
-  ok(
-    masiva.includes('f.qrEstado === "leido"') &&
-      masiva.includes('f.qrEstado === "sin-payload"') &&
-      masiva.includes('f.estado === "LISTA"'),
-    "lógica del chip QR intacta (leido / sin-payload+LISTA — T-0.2 qa-qr-identidad sigue anclando LÓGICA)",
-  );
-  ok(
-    /qrEstado === "sin-payload"[^\n]*\n[^\n]*text-slate-400/.test(masiva) ||
-      /text-\[9px\] font-semibold tracking-wide text-slate-400/.test(masiva),
-    "chip QR ✗ ahora text-slate-400 (≈7:1 — mantiene la jerarquía atenuada)",
-  );
-
-  // ── 3 · Rojo crit: #E52222 SOLO en primitives; los oscuros intactos ──────
+  // ── 2 · Rojo crit: #E52222 SOLO en primitives; los oscuros intactos ──────
   const primitives = (await leer("src/components/e14/primitives.tsx")) ?? "";
   ok(!primitives.includes("ef4444"), "primitives.tsx con 0 ef4444 (M4 — migración completa)");
   ok(
@@ -114,21 +93,14 @@ async function main(): Promise<void> {
     );
   }
 
-  // ── 4 · Targets táctiles: 44 px en operador, SOLO min-h (§D) ─────────────
-  ok(
-    !masiva.includes("min-h-[32px]") &&
-      !masiva.includes("min-h-[34px]") &&
-      !masiva.includes("min-h-[42px]"),
-    "MasivaView sin min-h-[32px]/[34px]/[42px] (FILTROS · ENVIAR ADVERTENCIAS · PAUSAR · PROCESAR · VACIAR — M1)",
-  );
-  ok(masiva.includes("min-h-[44px]"), "MasivaView con min-h-[44px] (targets táctiles ≥ 44 px)");
+  // ── 3 · Targets táctiles: 44 px, SOLO min-h (§D) ─────────────────────
   const resumen = (await leer("src/components/e14/screens/ResumenView.tsx")) ?? "";
   ok(
     !resumen.includes("min-h-[40px]") && resumen.includes("min-h-[44px]"),
     "ResumenView sin min-h-[40px] y con min-h-[44px] (REINICIAR JORNADA — M1)",
   );
 
-  // ── 5 · Residuales pactados INTACTOS (tocarlos ES desviación) ────────────
+  // ── 4 · Residuales pactados INTACTOS (tocarlos ES desviación) ──────
   const review = (await leer("src/components/e14/screens/ReviewView.tsx")) ?? "";
   ok(
     /text-\[13px\][^\n]*text-gray-500/.test(review),
@@ -140,11 +112,7 @@ async function main(): Promise<void> {
     "PanelClasificacion conserva su gray-500 DISABLED (exento por WCAG 1.4.3 — kit §B)",
   );
 
-  // ── 6 · Exclusiones intactas: iconos con su gris (fuera de AA 1.4.3) ─────
-  ok(
-    /w-11 h-11[^\n]*text-slate-500/.test(masiva),
-    "icono MasivaView (w-11 h-11) conserva su gris (exclusión verificada del auditor — kit §B)",
-  );
+  // ── 5 · Exclusiones intactas: icono con su gris (fuera de AA 1.4.3) ─────
   ok(
     /h-6 w-6[^\n]*text-gray-500/.test(review),
     "icono ReviewView (h-6 w-6) conserva su gris (exclusión verificada del auditor — kit §B)",

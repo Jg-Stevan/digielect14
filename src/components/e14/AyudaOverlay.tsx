@@ -100,10 +100,6 @@ const GLOSARIO: [string, string][] = [
     "Calidad de la digitalización: nitidez, contraste y legibilidad del OCR. Define el desenlace del acta.",
   ],
   [
-    "MASIVA",
-    "Carga en lote: arrastra muchas fotos o PDFs a la vez y la app las procesa en cola, una por una.",
-  ],
-  [
     "Dedup",
     "Detección de duplicados: si subes la misma acta dos veces, la copia se marca y no contamina el registro.",
   ],

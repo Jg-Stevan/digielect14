@@ -14,10 +14,9 @@
  *  · La vista `revision` sigue contando como ESCANEAR activo (el flujo de
  *    revisión ES el flujo del escáner) — solo presentación, `navegar`
  *    intacto. El slot `children` (CTAs de ReviewCtas) se conserva.
- *  · KIT e14-carga-masiva-v1 (T4): ítem MASIVA + regla de origen — cuando
- *    `masivaOrigen === true` y `vista === "revision"` (acta abierta desde
- *    la bandeja MASIVA), MASIVA se pinta activo Y ESCANEAR no. Una línea
- *    condicional; en cualquier otra REVISIÓN manda ESCANEAR como siempre.
+ *  · NOTA (eliminación del módulo masiva): el ítem MASIVA y la regla de
+ *    origen (`masivaOrigen` → MASIVA activo en REVISIÓN) se retiraron con
+ *    el módulo — REVISIÓN vuelve a activar ESCANEAR, como siempre.
  */
 import type { ReactNode } from "react";
 import { useE14Store, type Vista } from "@/lib/e14/store";
@@ -25,13 +24,11 @@ import {
   StitchCameraIcon,
   StitchDocIcon,
   StitchGrid2Icon,
-  StitchStackIcon,
 } from "./icons";
 
 const ITEMS: { vista: Vista; label: string; Icon: typeof StitchCameraIcon }[] = [
   { vista: "escanear", label: "ESCANEAR", Icon: StitchCameraIcon },
   { vista: "actas", label: "ACTAS", Icon: StitchDocIcon },
-  { vista: "masiva", label: "MASIVA", Icon: StitchStackIcon },
   { vista: "resumen", label: "RESUMEN", Icon: StitchGrid2Icon },
 ];
 
@@ -39,8 +36,6 @@ export function BottomNav({ mode = "dark", children }: { mode?: "dark" | "app"; 
   const vista = useE14Store((s) => s.vista);
   const navegar = useE14Store((s) => s.navegar);
   const actasSesion = useE14Store((s) => s.actasSesion);
-  // KIT e14-carga-masiva-v1 (T4): origen de la REVISIÓN (bandeja MASIVA).
-  const masivaOrigen = useE14Store((s) => s.masivaOrigen);
 
   return (
     <footer className="relative z-30 shrink-0 pb-safe">
@@ -55,8 +50,7 @@ export function BottomNav({ mode = "dark", children }: { mode?: "dark" | "app"; 
           {ITEMS.map(({ vista: v, label, Icon }) => {
             const activo =
               vista === v ||
-              (vista === "revision" && v === "escanear" && !masivaOrigen) ||
-              (vista === "revision" && v === "masiva" && masivaOrigen);
+              (vista === "revision" && v === "escanear");
             return (
               <button
                 key={v}

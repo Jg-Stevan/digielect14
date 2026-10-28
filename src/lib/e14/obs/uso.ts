@@ -6,11 +6,10 @@
  *   (clave dia|vista|accion → n); flush al buffer (eventos tipo `uso` con
  *   datos UsoContador) cada 30 s o al visibilitychange → hidden (deltas:
  *   se appendea lo acumulado y el mapa se limpia).
- * · iniciarUso() — idempotente: suscripción SELECTIVA a useE14Store y
- *   useMasivaStore para las transiciones clave:
+ * · iniciarUso() — idempotente: suscripción SELECTIVA a useE14Store para
+ *   las transiciones clave:
  *     · cambio de vista (→ breadcrumb tipo vista + contador «abrir-vista»)
- *     · fila MASIVA → PROCESANDO/LISTA/ERROR/DUPLICADA/YA-ENVIADA
- *       (los nombres REALES del contrato EstadoEntrada — jamás inventar).
+ *   (la suscripción a filas de la bandeja MASIVA se retiró con el módulo).
  *
  * La vista actual: el shell alterna vistas con `vista` del useE14Store
  * (page.tsx la renderiza) — se engancha por SUSCRIPCIÓN, sin editar un
@@ -18,7 +17,6 @@
  * vista/acción/estado, nunca ids de fila ni contenido (§2.5).
  */
 import { useE14Store } from "../store";
-import { useMasivaStore } from "../masiva/store";
 import { appendEvento } from "./buffer";
 import { registrarVista } from "./breadcrumbs";
 import { idDispositivo, idSesion, appVersion } from "./identidad";
@@ -103,33 +101,6 @@ export function iniciarUso(): void {
         if (estado.vista === previo.vista) return;
         registrarVista(estado.vista); // breadcrumb tipo vista
         void registrarUso(estado.vista, "abrir-vista");
-      } catch {
-        /* silencioso */
-      }
-    });
-
-    // Filas MASIVA — transiciones de estado (diff de mapa id→desenlace).
-    const desenlaceDe = (f: { estado: string; acta?: { status?: string } | null }): string =>
-      f.acta?.status ? `${f.estado}/${f.acta.status}` : f.estado;
-    const mapaDesenlaces = new Map<string, string>();
-    const syncMapa = (filas: { id: string; estado: string; acta?: { status?: string } | null }[]) => {
-      const nuevo = new Map<string, string>();
-      for (const f of filas) nuevo.set(f.id, desenlaceDe(f));
-      // transiciones: compara contra el mapa previo (las filas nuevas entran
-      // sin contador — solo cuentan los CAMBIOS, no la carga inicial)
-      for (const [id, desenlace] of nuevo) {
-        const previo = mapaDesenlaces.get(id);
-        if (previo !== undefined && previo !== desenlace) {
-          void registrarUso("masiva", `fila→${desenlace}`);
-        }
-      }
-      mapaDesenlaces.clear();
-      for (const [id, d] of nuevo) mapaDesenlaces.set(id, d);
-    };
-
-    useMasivaStore.subscribe((estado) => {
-      try {
-        syncMapa(estado.filas);
       } catch {
         /* silencioso */
       }

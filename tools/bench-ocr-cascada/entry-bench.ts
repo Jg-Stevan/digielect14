@@ -36,11 +36,5 @@ export {
 export { anclasDe, elegirMejor, necesitaSegunda } from "../../src/lib/e14/ocr-escalonado";
 export { senalDeLectura } from "../../src/lib/e14/senal-lectura";
 
-// Cliente del detection-worker REAL (OpenCV detect→quad · warp SIN rotar):
-// el MISMO asset público que usa el pre-scan de prod
-// (public/scanner/detection-worker.js?v=8) con los MISMOS budgets
-// (presupuesto 4000+1500 ms, hard-kill anti-zombi).
-export { crearClientePrescan } from "../../src/lib/e14/masiva/prescan-qr.client";
-
 // Decode HEIC del banco (el core hace import("heic2any") — bundled aquí).
 export { default as heic2any } from "heic2any";
