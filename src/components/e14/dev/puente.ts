@@ -63,6 +63,16 @@ import {
   leerFlags as nucleoLeerFlags,
   refrescarFlags as nucleoRefrescarFlags,
 } from "@/lib/e14/flags";
+// KIT e14-adaptacion-dispositivo-v1 — núcleo nuevo (perfil/plan/informe IA).
+import {
+  obtenerPerfilDispositivo as nucleoObtenerPerfilDispositivo,
+  type PerfilDispositivo as PerfilDispositivoAdaptacion,
+} from "@/lib/e14/adaptacion/perfil";
+import {
+  planAdaptativo as nucleoPlanAdaptativo,
+  type PlanAdaptativo as PlanAdaptativoAdaptacion,
+} from "@/lib/e14/adaptacion/plan";
+import { descargarInformeIA as nucleoDescargarInformeIA } from "@/lib/e14/adaptacion/informe-ia";
 import type {
   ErroresAgrupados,
   FlagsApp,
@@ -265,4 +275,30 @@ export function useOverridesFlags(): Partial<FlagsApp> {
     return suscribirObs([CLAVE_OVERRIDES], sync);
   }, []);
   return o;
+}
+
+// ── KIT e14-adaptacion-dispositivo-v1 (perfil + plan + informe IA) ─────────
+// La UI (PanelDev) codifica contra el puente — misma costumbre que el resto
+// del núcleo obs. Los módulos adaptacion/* ya son null-honestos y jamás
+// lanzan; los try/catch del puente solo cubren SSR.
+
+export type { PerfilDispositivo } from "@/lib/e14/adaptacion/perfil";
+export type { PlanAdaptativo } from "@/lib/e14/adaptacion/plan";
+
+export async function obtenerPerfilDispositivo(
+  forzar = false,
+): Promise<PerfilDispositivoAdaptacion | null> {
+  try {
+    return await nucleoObtenerPerfilDispositivo(forzar);
+  } catch {
+    return null;
+  }
+}
+
+export function planAdaptativo(): PlanAdaptativoAdaptacion {
+  return nucleoPlanAdaptativo();
+}
+
+export async function descargarInformeIA(): Promise<{ nombre: string; bytes: number }> {
+  return nucleoDescargarInformeIA();
 }
