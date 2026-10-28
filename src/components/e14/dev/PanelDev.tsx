@@ -8,7 +8,7 @@
  * clic-fuera cierra, Esc cierra, role="dialog" aria-modal) + focus trap
  * básico. SOLO accesible desde la tuerca (sin ruta ni query param).
  *
- * Secciones (orden del kit C4):
+ * Secciones (orden del kit C4 + kit e14-adaptacion-dispositivo-v1):
  *  1 · Estado (versión, modo, identidad truncada, política en texto)
  *  2 · Salud del dispositivo (snapshot + refrescar + muestreo cada 5 min)
  *  3 · Reportes de errores (contador + top-10 por digest; detalle → C5)
@@ -16,6 +16,8 @@
  *  5 · Exportar (JSON del reporte; vaciar buffer)
  *  6 · Kill switch (overrides MANUALES de flags — D6: la app nunca sola)
  *  7 · Flags activas (valor efectivo + refrescar)
+ *  8 · Perfil del dispositivo (adaptación: capacidades + puntuación + plan
+ *      por gama + DESCARGAR INFORME IA — kit e14-adaptacion-dispositivo-v1)
  *
  * FASE 1: datos REALES vía dev/puente.ts → obs/* (buffer IDB, salud,
  * identidad, export) + lib/e14/flags.ts — el núcleo ya existe y el puente
@@ -25,6 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   appVersion,
   contarEventos,
+  descargarInformeIA,
   descargarReporte,
   detenerMuestreoSalud,
   eventosPorDigest,
@@ -35,11 +38,14 @@ import {
   idSesion,
   iniciarMuestreoSalud,
   leerFlags,
+  obtenerPerfilDispositivo,
+  planAdaptativo,
   refrescarFlags,
   useModoDev,
   useOverridesFlags,
   usePolitica,
 } from "./puente";
+import type { PerfilDispositivo } from "./puente";
 import type { ErroresAgrupados, PoliticaDatos } from "@/lib/e14/obs/tipos";
 // KIT e14-observabilidad-v1 (agente 2 · C5): detalle de errores + breadcrumbs.
 import { VistaErrores } from "./VistaErrores";
@@ -177,6 +183,59 @@ function truncarId(id: string): string {
   return id.length <= 14 ? id : `${id.slice(0, 8)}…${id.slice(-4)}`;
 }
 
+// ─── KIT e14-adaptacion-dispositivo-v1 (sección 8) ─────────────────────────
+
+/** Chip de capacidad web: verde disponible, gris ausente (honesto). */
+function ChipCap({ ok, label, title }: { ok: boolean; label: string; title: string }) {
+  return (
+    <span
+      title={title}
+      className={`font-mono text-[9px] font-black uppercase tracking-wider rounded px-1.5 py-0.5 border ${
+        ok
+          ? "border-[#10b981]/50 bg-[#10b981]/10 text-[#10b981]"
+          : "border-slate-700 bg-slate-800/60 text-slate-500"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** Barra 0-100 de un sub-score (verde ≥70 · ámbar ≥40 · rojo <40 · — null). */
+function BarraSubscore({ etiqueta, valor }: { etiqueta: string; valor: number | null }) {
+  const color =
+    valor === null
+      ? "bg-slate-600"
+      : valor >= 70
+        ? "bg-[#10b981]"
+        : valor >= 40
+          ? "bg-amber-400"
+          : "bg-[#ef4444]";
+  return (
+    <div className="flex items-center gap-2 min-h-[16px]">
+      <span className="w-16 font-mono text-[9px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
+        {etiqueta}
+      </span>
+      <div
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={valor ?? undefined}
+        aria-label={`Puntuación ${etiqueta}`}
+        className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden"
+      >
+        <div
+          className={`h-full rounded-full transition-all ${color}`}
+          style={{ width: valor === null ? "0%" : `${Math.max(2, valor)}%` }}
+        />
+      </div>
+      <span className="w-8 text-right font-mono text-[10px] font-bold text-slate-300 tabular-nums">
+        {valor === null ? "—" : valor}
+      </span>
+    </div>
+  );
+}
+
 export function PanelDev({ onClose }: { onClose: () => void }) {
   const modoDev = useModoDev();
   const politica = usePolitica();
@@ -278,6 +337,45 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
   const refrescarFlagsAhora = useCallback(async () => {
     setResultadoFlags(await refrescarFlags());
   }, []);
+
+  // ── Sección 8 · perfil del dispositivo (adaptación) ──────────────────
+  // KIT e14-adaptacion-dispositivo-v1: perfil con benchmarks (una vez por
+  // carga; REPETIR re-mide) + plan efectivo (reacciona al kill switch vía
+  // overrides) + descarga del informe IA.
+  const [perfil, setPerfil] = useState<PerfilDispositivo | null>(null);
+  const [perfileando, setPerfileando] = useState(false);
+  const pedirPerfil = useCallback(async (forzar: boolean) => {
+    setPerfileando(true);
+    try {
+      setPerfil(await obtenerPerfilDispositivo(forzar));
+    } catch {
+      setPerfil(null); // null honesto — jamás romper el panel
+    } finally {
+      setPerfileando(false);
+    }
+  }, []);
+  useEffect(() => {
+    void pedirPerfil(false);
+  }, [pedirPerfil]);
+  const plan = useMemo(() => planAdaptativo(), [overrides]);
+  const [exportandoIA, setExportandoIA] = useState(false);
+  const [listoIA, setListoIA] = useState(false);
+  const [motivoIA, setMotivoIA] = useState<string | null>(null);
+  const exportarInformeIA = async () => {
+    if (exportandoIA) return;
+    setExportandoIA(true);
+    setListoIA(false);
+    setMotivoIA(null);
+    try {
+      await descargarInformeIA();
+      setListoIA(true);
+      window.setTimeout(() => setListoIA(false), 1500);
+    } catch (err) {
+      setMotivoIA(motivoDeError(err));
+    } finally {
+      setExportandoIA(false);
+    }
+  };
 
   // ── Overlay: Esc cierra + focus trap básico (convención AyudaOverlay) ──
   // Mientras el modal hijo (VistaErrores) está abierto, ESTE manejador se
@@ -722,10 +820,24 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
             <div className="rounded-2xl border border-slate-800 bg-[#0b1117] py-1">
               <SwitchFila
                 etiqueta="OCR A 2 HILOS"
-                nota="ocrThreadsTope 4 → 2: el OCR usa a lo sumo 2 hilos — equipos modestos respiren."
+                nota="ocrThreadsTope 4 → 2: el OCR usa a lo sumo 2 hilos — equipos modestos respiren. (Override MANUAL — manda sobre el plan adaptativo.)"
                 ariaLabel="Override: OCR a dos hilos"
                 activo={overrides.ocrThreadsTope === 2}
                 onAlternar={() => toggleOverride("ocrThreadsTope", overrides.ocrThreadsTope !== 2)}
+              />
+              {/* KIT e14-adaptacion-dispositivo-v1 — kill switch del plan:
+                  el override MANUAL manda (D6); false = byte-idéntico a hoy. */}
+              <SwitchFila
+                etiqueta="ADAPTACIÓN AUTOMÁTICA"
+                nota="El plan por gama ajusta knobs de RECURSOS (hilos OCR: BAJO 2 · MEDIO 3 · ALTO 6). Nunca reglas de negocio; tu override manual manda. OFF = comportamiento histórico."
+                ariaLabel="Adaptación automática al dispositivo"
+                activo={flags.adaptacionDispositivo}
+                onAlternar={() =>
+                  guardarOverridesFlags({
+                    ...overrides,
+                    adaptacionDispositivo: !flags.adaptacionDispositivo,
+                  })
+                }
               />
             </div>
           </section>
@@ -800,6 +912,141 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
                   : resultadoFlags === "sin-endpoint"
                     ? "SIN ENDPOINT DE FLAGS (default null — D1)"
                     : "ERROR AL REFRESCAR FLAGS"}
+              </p>
+            )}
+          </section>
+
+          {/* ── 8 · PERFIL DEL DISPOSITIVO (ADAPTACIÓN) ────────────────── */}
+          <section aria-label="Perfil del dispositivo y adaptación" className="flex flex-col gap-2">
+            <TituloSeccion
+              n={8}
+              titulo="Perfil · adaptación"
+              hijo={
+                <button
+                  type="button"
+                  onClick={() => void pedirPerfil(true)}
+                  disabled={perfileando}
+                  className="min-h-[32px] px-2.5 rounded-lg border border-slate-700 bg-slate-800/60 hover:border-[#10b981]/60 hover:text-[#10b981] text-slate-300 font-mono text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/60 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {perfileando ? "MIDIENDO…" : "REPETIR BENCH"}
+                </button>
+              }
+            />
+            {/* Tier + puntuación global */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span
+                className={`font-mono text-[10px] font-black uppercase tracking-wider rounded-md px-2 py-1 border ${
+                  perfil?.tier === "ALTO"
+                    ? "bg-[#10b981]/15 border-[#10b981]/50 text-[#10b981]"
+                    : perfil?.tier === "MEDIO"
+                      ? "bg-amber-400/15 border-amber-400/50 text-amber-400"
+                      : perfil?.tier === "BAJO"
+                        ? "bg-[#ef4444]/15 border-[#ef4444]/50 text-[#ef4444]"
+                        : "border-slate-700 bg-slate-800/60 text-slate-400"
+                }`}
+              >
+                {perfil ? `TIER ${perfil.tier}` : "TIER N/D"}
+              </span>
+              {perfil && (
+                <span className="font-mono text-[10px] text-slate-300 tabular-nums">
+                  puntuación{" "}
+                  <b className="text-slate-100">{perfil.puntuacion.global ?? "—"}</b>/100
+                </span>
+              )}
+              {perfil?.tierInferido && (
+                <span className="text-[10.5px] text-slate-400 font-mono">
+                  tier inferido (sin deviceMemory — iOS)
+                </span>
+              )}
+            </div>
+            {/* Capacidades web (SIMD/multihilo = aceleradores del OCR) */}
+            <div className="flex items-center gap-1.5 flex-wrap" role="list" aria-label="Capacidades web">
+              <ChipCap
+                ok={perfil?.capacidades.wasmSimd ?? false}
+                label="SIMD"
+                title="WASM SIMD — acelera el OCR ~2×. Ausente: actualizar el navegador."
+              />
+              <ChipCap
+                ok={perfil?.capacidades.hilosWasm ?? false}
+                label="HILOS"
+                title="SharedArrayBuffer + COOP/COEP — habilita el OCR multihilo (sin esto corre a 1 hilo)."
+              />
+              <ChipCap
+                ok={perfil?.capacidades.webgpu ?? false}
+                label="WEBGPU"
+                title="WebGPU — futuro acelerador de inferencia (hoy el motor usa WASM)."
+              />
+              <ChipCap
+                ok={perfil?.capacidades.offscreenCanvas ?? false}
+                label="OFFSCREEN"
+                title="OffscreenCanvas — candidato futuro para pre-procesado fuera del main thread."
+              />
+              <ChipCap
+                ok={perfil?.capacidades.serviceWorker ?? false}
+                label="PWA"
+                title="Service Worker — modo offline y cache de modelos OCR."
+              />
+            </div>
+            {/* Sub-scores 0-100 (null = el navegador no da el dato) */}
+            <div className="rounded-2xl border border-slate-800 bg-[#0b1117] px-3.5 py-3 flex flex-col gap-1.5">
+              <BarraSubscore etiqueta="CPU" valor={perfil?.puntuacion.desglose.cpu ?? null} />
+              <BarraSubscore etiqueta="RAM" valor={perfil?.puntuacion.desglose.ram ?? null} />
+              <BarraSubscore etiqueta="GPU" valor={perfil?.puntuacion.desglose.gpu ?? null} />
+              <BarraSubscore etiqueta="Red" valor={perfil?.puntuacion.desglose.red ?? null} />
+              <BarraSubscore etiqueta="Storage" valor={perfil?.puntuacion.desglose.storage ?? null} />
+              {perfil && (
+                <p className="text-[10px] leading-snug text-slate-500 font-mono pt-0.5">
+                  {perfil.puntuacion.nota}
+                </p>
+              )}
+            </div>
+            {/* Plan aplicado (knobs de recursos — auditoría honesta) */}
+            <div className="rounded-2xl border border-slate-800 bg-[#0b1117] px-3.5 py-2">
+              <FilaDato
+                etiqueta="Hilos OCR"
+                valor={`${plan.ocrHilos} (${plan.ocrHilosFuente}${plan.hilosWasmDisponibles ? "" : " · sin SAB ⇒ 1 hilo"})`}
+              />
+              <div className="border-t border-slate-800/70" />
+              <FilaDato
+                etiqueta="Adaptación"
+                valor={plan.adaptado ? "ON (plan por gama)" : "OFF (histórico)"}
+              />
+              <div className="border-t border-slate-800/70" />
+              <FilaDato
+                etiqueta="GPU"
+                valor={perfil?.gpu.renderer ?? "—"}
+              />
+              <div className="border-t border-slate-800/70" />
+              <FilaDato
+                etiqueta="Cámaras"
+                valor={perfil?.camaras != null ? `${perfil.camaras}` : "—"}
+              />
+            </div>
+            {/* Descarga del INFORME IA (petición del dueño — JSON auto-descrito) */}
+            <button
+              type="button"
+              onClick={() => void exportarInformeIA()}
+              disabled={exportandoIA}
+              aria-label="Descargar informe del dispositivo para IA"
+              className="min-h-[44px] px-3 rounded-xl border border-[#10b981]/60 bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] font-mono text-[11px] font-black uppercase tracking-wider transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              {exportandoIA
+                ? "GENERANDO…"
+                : listoIA
+                  ? "INFORME LISTO ✓"
+                  : "⬇ INFORME PARA IA (JSON)"}
+            </button>
+            <p className="text-[10.5px] leading-snug text-slate-500">
+              JSON auto-descriptivo con hardware, GPU, capacidades, benchmarks, plan aplicado y
+              recomendaciones — una IA lo interpreta sin contexto del repo. Solo metadatos: sin
+              actas ni contenido OCR.
+            </p>
+            {motivoIA && (
+              <p
+                role="alert"
+                className="rounded-xl border border-amber-400/60 bg-amber-400/10 px-3.5 py-2 font-mono text-[11px] font-bold uppercase tracking-wider text-amber-400"
+              >
+                {motivoIA}
               </p>
             )}
           </section>

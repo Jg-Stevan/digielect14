@@ -167,12 +167,14 @@ export async function rapidOcrReiniciar(): Promise<void> {
 async function initReal(): Promise<RapidRuntime> {
   const ort = (await import("onnxruntime-web/wasm")) as unknown as OrtModule;
   ort.env.wasm.wasmPaths = `${PUBLIC_BASE}/vendor/onnxruntime/`;
-  ort.env.wasm.numThreads =
-    typeof SharedArrayBuffer !== "undefined" && self.crossOriginIsolated
-      ? // A1-C7: el `4` era el literal histórico — ahora flag del dueño
-        // (default 4 → comportamiento idéntico sin overrides).
-        Math.min(leerFlags().ocrThreadsTope, navigator.hardwareConcurrency || 1)
-      : 1;
+  // KIT e14-adaptacion-dispositivo-v1 — hilos RESUELTOS por el plan adaptativo
+  // (adaptacion/plan.ts · numThreadsOcrEfectivos): SAB+COOP/COEP exigidos
+  // (sin ellos 1 hilo — igual que siempre); dentro, prioridad D6:
+  //   override MANUAL del dueño (ocrThreadsTope) > plan por tier (BAJO 2 ·
+  //   MEDIO 3 · ALTO 6 — exprimar en gama alta, proteger en baja) > default 4.
+  // Cap SIEMPRE por hardwareConcurrency. `adaptacionDispositivo: false`
+  // ⇒ byte-idéntico al comportamiento histórico (default 4).
+  ort.env.wasm.numThreads = numThreadsOcrEfectivos();
   ort.env.wasm.simd = true;
   // KIT e14-optimizacion-v1 (T2, hallazgo #2 de AUDITORIA-e14-v1): proxy=true
   // migra det/cls/rec al worker interno de ORT — la inferencia (9.8-14.3 s)
@@ -213,7 +215,7 @@ async function initReal(): Promise<RapidRuntime> {
 // (máx 2 entradas en la ruta del OCR); el re-OCR de la banda corre DESPUÉS
 // de la elección, sin dependencia con la entrada viva.
 import { canvasCon, loadImageMemo } from "../image-utils";
-import { leerFlags } from "../flags";
+import { numThreadsOcrEfectivos } from "../adaptacion/plan";
 import { logger } from "../../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 function canvasDe(img: HTMLImageElement | HTMLCanvasElement, w: number, h: number): HTMLCanvasElement {

@@ -50,6 +50,10 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // TRANSMISIÓN blanco-sobre-negro + MESA IMPOSIBLE 001→004 de Tesseract,
   // dos fallos documentados).
   ocrCascada: false,
+  // KIT e14-adaptacion-dispositivo-v1 — adaptación automática al dispositivo
+  // (petición del dueño): el tier consume knobs de RECURSOS (hilos OCR —
+  // adaptacion/plan.ts). Override manual manda (D6); false = byte-idéntico.
+  adaptacionDispositivo: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -74,6 +78,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.qrBrujulaOrientacion === "boolean") limpio.qrBrujulaOrientacion = p.qrBrujulaOrientacion;
   // KIT e14-ocr-cascada-v1 (K3 fase 2) — whitelist aditiva (booleano).
   if (typeof p.ocrCascada === "boolean") limpio.ocrCascada = p.ocrCascada;
+  // KIT e14-adaptacion-dispositivo-v1 — whitelist aditiva (booleano).
+  if (typeof p.adaptacionDispositivo === "boolean") limpio.adaptacionDispositivo = p.adaptacionDispositivo;
   return limpio;
 }
 

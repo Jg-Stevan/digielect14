@@ -431,3 +431,14 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] T-4 — UI: chip ámbar «GAMA {tier} · ADAPTADO» en el header de MASIVA (`hidden sm:inline-flex` — MISMO patrón del contador {terminadas}/{filas}: en <640 px la fila de acciones ya ocupa el ancho; verificado en 390 px sin solapes) con title completo (ajustes + cómo desactivar) + `refrescarPlanGama()` al montar + traza `[e14] gama plan tier=… adaptativo=ON (…)` siempre en consola.
 - [x] T-5 — Verificación: suite Vitest **434/434** · 13 scripts QA OK (ancla Opt-3 del pool de qa-dedup-enviadas actualizada al literal efectivo — INTENT intacto: concurrencia por flags + reserva de fila) · tsc 0 · lint 0 · navegador end-to-end (headless, tier BAJO real del entorno): ingesta de 3 actas (2 gemelas) → dedup SHA-256 instantáneo de la gemela + `dhash OMITIDO (gama adaptativa)` ×3 + prescan `warpLado=1920 presupuesto=6000` + capa-0 `tier=base ms=169` + OCR pasada1=1280 FUERTE score 8.5 + gemela `reutiliza status=DUPLICADA ms=17` + ENVIADAS 2/DUPLICADA 1 · layouts 390/900/1280 px sin solapes · 0 errores de consola y del server.
 - [ ] Dueño: validación de campo con gama baja REAL — el master a 3072 mueve scores ±margen (kit propio registrado en D74; revocable con `masivaAdaptativoGama=false` o override manual por clave) · decidir si el chip sube a móviles (<640 px) con un layout de 2 filas.
+
+## ADAPTACIÓN DE DISPOSITIVO — perfil + plan + informe IA — e14-adaptacion-dispositivo-v1 (2026-11)
+
+- [x] T-1 — `adaptacion/perfil.ts` NUEVO: perfil profundo (GPU real, capacidades web, pantalla, cámaras, 2 micro-benchmarks) + puntuación 0-100 por dimensión + `tierRapido()` sync (contrato obs intacto) — nulls honestos, jamás lanza.
+- [x] T-2 — `adaptacion/plan.ts` NUEVO: plan de knobs por tier con prioridad D6 (override manual > plan > default) — hilos OCR: BAJO 2 · MEDIO 3 · ALTO 6, capados por cores y SAB+COOP/COEP.
+- [x] T-3 — `adaptacion/informe-ia.ts` NUEVO: informe JSON auto-descriptivo para IA (_como_interpretar + leyenda + recomendaciones + plan aplicado) con descarga manual (D1) — solo metadatos.
+- [x] T-4 — Flag `adaptacionDispositivo` default TRUE + DOBLE whitelist (flags.ts + politica.ts) + defaults test al día (protocolo #3).
+- [x] T-5 — Consumo real: rapidocr numThreads vía `numThreadsOcrEfectivos()`. Negocio intacto (DET_CAP, cámara, scores, gates).
+- [x] T-6 — UI PanelDev §8 (chips + barras + plan + INFORME PARA IA) + kill switch §6 + puente delegante.
+- [x] T-7 — Docs: REPORTE-adaptacion-dispositivo-v1.md + worklog + DECISIONS D75 + AGENTS.md · Gates tsc/lint/vitest verdes.
+- [ ] Dueño: validación de campo con gama baja real; decidir knobs futuros (cap det / resolución por tier — requieren kit propio).
