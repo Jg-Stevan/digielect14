@@ -257,7 +257,7 @@ export const DET_CAP_RAPIDO = 1280;
 // hasta 864 sobrevivieron sin pérdida. Aplicado en AMBOS rec (producción y
 // probe §2.1) para mantener el pre/post idéntico. Kill switch: REC_WMAX =
 // Infinity = comportamiento anterior byte a byte.
-export const REC_WMAX = 480;
+const REC_WMAX = 480;
 
 // ─── Pre-det (main.py fidelidad: reduce_max → increase_min → letterbox →
 //     det-preprocess round32) + registro de ops para mapear de vuelta ───────

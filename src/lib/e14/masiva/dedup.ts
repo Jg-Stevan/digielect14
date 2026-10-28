@@ -139,17 +139,6 @@ function dhashDeBitmap(fuente: FuenteBitmap): string | null {
 }
 
 /**
- * dhash de una dataURL (PNG/JPG — EXIF ya horneado o ausente): decode vía
- * bitmapNormalizado → dhash. Mantenida por compatibilidad con quien la
- * consumía; D65 el dhash de la COLA vive en dhashDeArchivo.
- */
-export async function dhash64DeDataUrl(dataUrl: string): Promise<string | null> {
-  try {
-    const blob = await (await fetch(dataUrl)).blob();
-    return dhashDeBitmap(await bitmapNormalizado(blob));
-  } catch {
-    return null;
-  }
 }
 
 /** Distancia de Hamming entre dos hashes hex 64-bit (longitudes distintas → 64). */
