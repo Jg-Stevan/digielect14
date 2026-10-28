@@ -126,7 +126,7 @@ __registrarDepsWarpIngesta({
 
 /** Veredicto del pre-scan para UNA fila (§D.2 — ESPEJO de cadenaDedup:
  *  primer ganador gana, FIFO por agregadaEn). */
-export type VeredictoPrescan =
+type VeredictoPrescan =
   | { accion: "duplicada"; originalId: string }
   | { accion: "ya-enviada"; enviadaId: string }
   | { accion: "registrar" } // payload NUEVO → registrarQrPayload + sigue PENDIENTE
@@ -185,7 +185,7 @@ export function objetivoPrescan(filas: FilaMasiva[]): FilaMasiva[] {
 
 // ─── Escritura del veredicto (extraída para vitest — patrón deps e73) ───────
 
-export interface DepsEscrituraPrescan {
+interface DepsEscrituraPrescan {
   leerRegistro: typeof leerRegistro;
   guardarRegistro: typeof guardarRegistro;
   actualizarFila: (id: string, patch: Partial<FilaMasiva>) => void;
@@ -302,9 +302,9 @@ export async function leerQrDeWarped(warped: ImageBitmap): Promise<string | null
 
 // ─── Estado del pre-scan (banner D.3 — «SONDEANDO QR… k/N») ─────────────────
 
-export type FasePrescan = "idle" | "boot" | "sondeo" | "fin";
+type FasePrescan = "idle" | "boot" | "sondeo" | "fin";
 
-export interface EstadoPrescan {
+interface EstadoPrescan {
   corriendo: boolean;
   total: number;
   listo: number;

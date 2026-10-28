@@ -82,7 +82,7 @@ export function debeDesmarcar(e: {
 /** Resultado del drenaje (§C.4): la LÁPIDA GANA sobre la marca (un
  *  pagehide procesado = desenlace limpio — borrar y callar); sin lápida,
  *  la marca sobreviviente se emite; sin nada, null. */
-export type DrenajeWal = { limpio: true } | { marca: MarcaHangEnCurso } | null;
+type DrenajeWal = { limpio: true } | { marca: MarcaHangEnCurso } | null;
 
 export function decidirDrenaje(registros: RegistroWal[]): DrenajeWal {
   if (registros.some((r) => r.id === CLAVE_LIMPIO)) return { limpio: true };

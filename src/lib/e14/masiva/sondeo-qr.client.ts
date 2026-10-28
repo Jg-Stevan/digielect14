@@ -31,7 +31,7 @@ import type { RespuestaSondeo } from "./sondeo-qr.worker";
  *  QR — honesto, alimenta «N leídos» del informe §E); `null` de la promesa
  *  significa «NO corrió» (flag OFF / sin soporte / hard-kill / error).
  *  Payload EXACTO (llave opaca) + tier que lo leyó — M-e73-2 del REPORTE. */
-export type SondeoQr = { payload: string | null; tier: string | null; ms: number };
+type SondeoQr = { payload: string | null; tier: string | null; ms: number };
 
 /** Contrato mínimo del worker que este cliente maneja (tests lo falsifican). */
 export interface WorkerSondeo {
@@ -46,7 +46,7 @@ type PeticionSondeoAnonima = { blob: Blob; presupuestoMs: number };
 
 /** Fábrica del worker — inyectable SOLO para tests (kit §A.5). En
  *  producción es la ÚNICA referencia `new Worker` de src/ (smoke §A.1). */
-export type FabricaWorkerSondeo = () => WorkerSondeo | null;
+type FabricaWorkerSondeo = () => WorkerSondeo | null;
 
 /** Base pública de assets — MISMO patrón del repo (flags.ts/rapidocr.ts/
  *  scanner-core WORKER_URL): assets servidos desde public/ con prefijo

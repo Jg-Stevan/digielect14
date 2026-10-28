@@ -80,7 +80,7 @@ function quadsClose(a: Quad, b: Quad) {
 
 // ── Componente ──────────────────────────────────────────────────────────────
 
-export interface QuadEditorProps {
+interface QuadEditorProps {
   /** data URL cruda del acta (la fuente de verdad del recorte). */
   fotoOriginal: string;
   /** Esquinas de la detección automática (o defaultQuad() si no hubo). */

@@ -118,7 +118,7 @@ export function osDeUA(ua: string): string {
 // ─── tier (D6 — SOLO detectar, §4.4) ───────────────────────────────────────
 
 /** Entrada explícita (PURA — testeada con tabla de casos). */
-export interface EntradaTier {
+interface EntradaTier {
   memoriaGB: number | null;
   nucleos: number;
   saveData: boolean;

@@ -84,7 +84,7 @@ type MensajeHeartbeat =
 /** Fábrica del worker — inyectable SOLO para tests (patrón exacto de
  *  sondeo-qr.client.ts:218). En producción es la única referencia
  *  `new Worker` de este módulo. */
-export type FabricaWorkerHeartbeat = () => WorkerHeartbeat | null;
+type FabricaWorkerHeartbeat = () => WorkerHeartbeat | null;
 
 /** Base pública de assets — MISMO patrón del repo (flags.ts /
  *  sondeo-qr.client.ts): el worker precompilado se sirve desde public/.
