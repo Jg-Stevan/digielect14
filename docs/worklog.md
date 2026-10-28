@@ -2247,3 +2247,16 @@ smoke REAL en el gate (3bis: frescura byte a byte · marcadores · prohibidos ·
 - **Commits:** 321b6be (feat(e14) — 21 archivos, +674/−50)
 - **Cómo probar:** MASIVA con el dispositivo objetivo: el chip «GAMA BAJO · ADAPTADO» (≥640 px) o la traza `[e14] gama plan tier=… adaptativo=ON (…)` en consola → soltar actas (gemelas incluidas) → «PROCESAR COLA»: traza `prescan-qr corrida warpLado=1920 presupuesto=6000` (BAJO), `dhash OMITIDO (gama adaptativa)` en ingesta, dedup de gemelas por SHA-256 instantáneo y por payload QR en capa-0. Kill-switch: `guardarOverridesFlags({ masivaAdaptativoGama: false })` en consola ⇒ byte-idéntico a hoy.
 - **Pendiente/Bloqueado:** validación de campo del dueño con gama baja REAL (el master 3072 mueve scores ±margen — revocable con el flag) · decidir chip en móviles <640 px (layout 2 filas) · verificación `bun run build` estática NO ejecutada en esta sesión (tsc/lint/vitest/QA/navegador en verde).
+
+### [2026-11-28 15:35 (Bogotá)] — limpieza-masiva-v1 — Z.ai Code (sesión interactiva)
+- **Hecho:** limpieza masiva del repo a petición del dueño («ya masiva lo terminé y paso a otro proyecto») — cero cambios de lógica de negocio:
+  - ARCHIVO: 15 `REPORTE-*.md` + captura PNG + `AUDITORIA-REGRESION-4f9c871.md` → `docs/archive/reportes/`; `MORNING-REPORT.md`/`PLAN-overnight.md` (raíz) → `docs/archive/`; `AUDIT.md` → `docs/AUDIT.md`; INDICE-HISTORIAL §ARCHIVO-SUELTO (65 tar + 19 sueltos).
+  - ELIMINADO (decisión del dueño): `metadata.json` (scaffold AI Studio), `docs/design/` (mockups 1.2 MB), `docs/evidence/` (188 KB), `dev/contrato.ts` (FASE 0 consumada).
+  - knip.json: `build-*.mjs`/`smoke-*.mjs`/`heartbeat.worker.ts` como entry (pipeline real de workers del gate) — 6 falsos «unused files» → 0.
+  - DE-EXPORT: 36 tipos + 7 valores (TORCH_HINT, LEDGER_TIMEOUT_MS, WORKER_URLS, BEAT_MS, CLAVE_MODO_DEV, REC_WMAX, rotDesdeCuadranteQr). ELIMINADAS 3 funciones muertas (`__resetGamaParaTest`, `analizarPixeles`, `dhash64DeDataUrl`). knip: 66 → 14 ítems, todos falsos positivos documentados (imports dinámicos en obs.test/prescan-qr-rescate + anclas QA ViaYaEnviada/TipoEvento).
+  - QA obs-ui §e HONESTO: la fila «perf de actas» (/perf/i) pasaba por el comentario «performance.memory» del scaffold contrato.ts (verde falso desde el nacimiento — PanelDev nunca renderizó esa sección); eliminada con NOTA. check-quality.sh: NOMBRES 12 → 13 (faltaba prescan-qr-cola — solo display).
+  - Ramas remotas: 25 mergeadas eliminadas + 2 descartadas por el dueño (`feat/aa-quickwins-bfcache-v1`, `feat/ux-masiva-fixes-v1` — patches preservados en docs/archive/ramas-descartadas.tar.gz).
+- **Archivos:** docs/** · knip.json · scripts/{qa-obs-ui.ts, check-quality.sh} · src/components/e14/{QuadEditor.tsx, hooks/useLinterna.ts} · src/lib/e14/** (21 archivos de-export) · src/lib/e14/{gama.ts, image-utils.ts, masiva/dedup.ts} (funciones muertas) · src/lib/e14/masiva/identidad-qr.ts (re-export)
+- **Commits:** serie `chore/limpieza-masiva-v1` (7 commits atómicos) → merge a main
+- **Gates:** tsc 0 · lint 0/0 · build exit 0 · smokes workers OK · vitest 434/434 · QA 13/13 (445 checks) · knip 14 falsos positivos documentados.
+- **Pendiente/Bloqueado:** reescritura de historia git (~41 MB, ~10 MB de blobs muertos: lab/fixtures etc.) — descartada por riesgo force-push; si el repo se archiva en frío, opcional con git-filter-repo.
