@@ -86,7 +86,7 @@ interface EntornoInforme {
  *  · overridesCrudos — el JSON de localStorage[CLAVE_OVERRIDES] SIN sanear
  *    (try/catch → {} si falta o está corrupto): el contexto del kill switch
  *    manual, incluidas claves que el saneo habría descartado. */
-export interface FlagsInforme {
+interface FlagsInforme {
   efectivos: FlagsApp;
   overridesCrudos: Record<string, unknown>;
 }
@@ -681,7 +681,7 @@ function mediosTiempos(filas: FilaInforme[]): ResumenInforme["tiemposMediosMs"] 
  *  master precalentado (decodeMs top-level es 0 ahí — el decode vivió en el
  *  precalor), decodeMs si no. Semántica idéntica a la línea
  *  CONVERSION/PERSISTENCIA del txt (misma fuente de valores). */
-export type EtapaInforme = "decode" | "espera" | "probe" | "ocr" | "total";
+type EtapaInforme = "decode" | "espera" | "probe" | "ocr" | "total";
 
 /** Valor REALES (ms) de una etapa para UNA fila — null si la fila no trae el
  *  dato (jamás inventar). PURA. */

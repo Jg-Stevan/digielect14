@@ -69,7 +69,7 @@ const MAESTRO_JPEG_CALIDAD = 0.9;
 /** D66 (T2/T4) — quién fabricó el master: el decodificador NATIVO del
  *  navegador (createImageBitmap sobre el blob original) o la ruta wasm
  *  (heic2any — el mismo motor que el F-HEIC del core, import diferido D47). */
-export type OrigenDecode = "nativo" | "wasm";
+type OrigenDecode = "nativo" | "wasm";
 
 /** D66 (T1.5/T3.1) — el MASTER: un solo decodificado a escala de trabajo del
  *  que thumb/quad/OCR se derivan (vía el pipeline normal — el bridge recibe
@@ -237,13 +237,13 @@ export function parecePdfMasiva(archivo: File): boolean {
 /** Guard del kit T2.2 que NO invalida el lote (viajan junto a las imágenes
  *  extraídas — el store los convierte en filas ERROR con motivo corto).
  *  D60 añade LIMITE_PAGINAS_PDF (una fila por PDF que exceda el tope). */
-export type MotivoExtraccion =
+type MotivoExtraccion =
   | "PROTEGIDO_O_CORRUPTO"
   | "ARCHIVO_ANIDADO"
   | "LIMITE_500_POR_COMPRIMIDO"
   | "LIMITE_PAGINAS_PDF";
 
-export interface ErrorExtraccion {
+interface ErrorExtraccion {
   nombre: string;
   motivo: MotivoExtraccion;
 }
@@ -253,7 +253,7 @@ export interface ErrorExtraccion {
  *  límite 500 con encolado parcial) exigen devolver también las filas de
  *  error — File[] solo no puede materializarlos. Los errores de contraseña/
  *  corrupción SÍ lanzan (motivo como message — el store crea la fila). */
-export interface ResultadoExtraccion {
+interface ResultadoExtraccion {
   archivos: File[];
   errores: ErrorExtraccion[];
 }

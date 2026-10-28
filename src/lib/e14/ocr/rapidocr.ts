@@ -57,13 +57,13 @@ interface OrtModule {
   };
 }
 
-export interface RapidOcrLinea {
+interface RapidOcrLinea {
   texto: string;
   conf: number;
   box: { x: number; y: number }[];
 }
 
-export interface RapidOcrResultado {
+interface RapidOcrResultado {
   lineas: RapidOcrLinea[];
   texto: string;
   confMedia: number;

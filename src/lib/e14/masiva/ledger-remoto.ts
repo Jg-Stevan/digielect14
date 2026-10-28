@@ -16,17 +16,17 @@
  */
 
 /** fetch inyectable (tests — cero red real en vitest). */
-export type TraerLedger = (entrada: string, init?: RequestInit) => Promise<Response>;
+type TraerLedger = (entrada: string, init?: RequestInit) => Promise<Response>;
 
 /** Respuesta del check remoto (route.e14api.ts — contrato §A.2). */
-export interface RespuestaCheck {
+interface RespuestaCheck {
   duplicado: boolean;
   tsOriginal?: number | null;
   filaOriginal?: string | null;
 }
 
 /** Datos del registro remoto (SOLO post-envío local exitoso — kit §A.3). */
-export interface DatosRegistroRemoto {
+interface DatosRegistroRemoto {
   payloadHash: string;
   serie?: string | null;
   filaId?: string | null;

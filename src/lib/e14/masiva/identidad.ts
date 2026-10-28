@@ -21,7 +21,7 @@
 import { codigoUnicoE14 } from "../clasificador";
 import type { Acta } from "../types";
 
-export interface IdentidadActa {
+interface IdentidadActa {
   /** Crudo 15 dígitos (consenso validado). */
   serie: string;
   /** crudo.slice(0, 11) — 7100+KIT+TIPO+VER (el papel físico). */

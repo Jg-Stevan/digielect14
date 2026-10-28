@@ -84,7 +84,7 @@ export interface WorkerDeteccion {
 }
 
 /** Fábrica del worker — inyectable SOLO para tests (patrón e73). */
-export type FabricaWorkerDeteccion = (url: string) => WorkerDeteccion | null;
+type FabricaWorkerDeteccion = (url: string) => WorkerDeteccion | null;
 
 let fabrica: FabricaWorkerDeteccion = fabricaProduccion;
 

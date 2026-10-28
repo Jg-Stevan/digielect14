@@ -60,7 +60,7 @@ import {
 export const SONDEO_S3_MINIMO_RESTANTE_MS = 1500;
 
 /** Mensaje que el cliente (sondeo-qr.client.ts) postea al worker. */
-export type PeticionSondeo = { blob: Blob; presupuestoMs: number };
+type PeticionSondeo = { blob: Blob; presupuestoMs: number };
 
 /** Respuesta del worker — payload null = sin QR (o fallo honesto). */
 export type RespuestaSondeo = {
@@ -75,14 +75,14 @@ export type BarridoQrFn = (pix: PixelesQr) => string | null;
 
 /** Deps inyectables del ladder (el worker las resuelve con el import
  *  dinámico; los tests las inyectan sin worker real — kit §A.5.1). */
-export type DepsLadderSondeo = {
+type DepsLadderSondeo = {
   barrido: BarridoQrFn;
   ladoRecorte: number;
   /** Reló inyectable (default Date.now — los tests lo congelan). */
   ahora?: () => number;
 };
 
-export type DesenlaceSondeo = { payload: string | null; tier: string | null };
+type DesenlaceSondeo = { payload: string | null; tier: string | null };
 
 /** Recorte puro de la esquina sup-izq, CLAMPADO (jamás inventa píxeles —
  *  misma semántica de la geometría del recorte del repo): copia fila a fila
