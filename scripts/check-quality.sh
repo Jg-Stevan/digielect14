@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-quality.sh — GATE ÚNICO de calidad (overnight 2026-10-22, Prioridad 5
-# del PLAN-overnight.md). Corre TODO lo que un commit debe pasar:
+# del docs/archive/PLAN-overnight.md). Corre TODO lo que un commit debe pasar:
 #
 #   1. bunx tsc --noEmit        → 0 errores
 #   2. bun run lint             → 0 errores / 0 warnings (desde PR #93 NO
