@@ -114,3 +114,4 @@ Total: 65 documentos archivados (tar.gz) + 19 documentos sueltos (carpeta `repor
 | Documento | Tema |
 |---|---|
 | `AUDIT.md` | Auditoría de calidad fase 1 (diagnóstico + tandas aplicadas) |
+| `ramas-descartadas.tar.gz` | Parches de feat/aa-quickwins-bfcache-v1 y feat/ux-masiva-fixes-v1 (ramas eliminadas sin merge por decisión del dueño) |
