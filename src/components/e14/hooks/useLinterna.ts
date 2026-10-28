@@ -27,7 +27,7 @@ import type { CamEstado } from "./useSesionCamara";
 /** F-FLASH v3 — diagnóstico del flash: cubre navegador sin soporte (iPhone:
  *  Safari 17.4+, Chrome/Firefox de iOS no exponen torch; WebViews in-app
  *  tampoco), cámara sin LED (gran angular/macro) y permisos WebView. */
-export const TORCH_HINT =
+const TORCH_HINT =
   "No se pudo controlar la linterna aquí. Causas típicas: navegador sin " +
   "soporte (en iPhone usa Safari 17.4 o posterior; Chrome/Firefox de iOS " +
   "no lo permiten), cámara abierta sin LED (gran angular o macro) o la " +

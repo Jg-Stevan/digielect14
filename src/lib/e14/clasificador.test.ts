@@ -1,6 +1,6 @@
 /**
  * Tests unitarios — clasificador.ts (partes PURAS de normalización/fuzzy).
- * Overnight 2026-10-22, Prioridad 2 del PLAN-overnight.md.
+ * Overnight 2026-10-22, Prioridad 2 del docs/archive/PLAN-overnight.md.
  *
  * Alcance (funciones bajo test, SIN tocar su lógica):
  *  · normalizarNombre — NFKD, diacríticos, MAYÚSCULAS, espacios.

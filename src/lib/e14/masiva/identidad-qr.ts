@@ -102,7 +102,7 @@ export {
   QR_RECORTE_LADO,
   rotarPixeles,
 } from "./qr-pixeles";
-export type { EspecieBanda, PixelesQr } from "./qr-pixeles";
+export type { PixelesQr } from "./qr-pixeles";
 
 // ─── Constantes NUEVAS del kit e63m §1.1 (separadas de las existentes) ──────
 /** Lado largo MÁXIMO del canvas de trabajo (kit §1.1 — igual que el banco:
@@ -145,7 +145,7 @@ const ZXING_FORMATO = "QRCode" as const; // SPRINT-A A5: de-export (vivo solo aq
 
 /** Estado del original para la espera acotada — EstadoEntrada + AUSENTE
  *  (la fila fue quitada/vaciada mientras se esperaba). */
-export type EstadoOriginalQr = EstadoEntrada | "AUSENTE";
+type EstadoOriginalQr = EstadoEntrada | "AUSENTE";
 
 // ─── Núcleo puro del decode: vive en qr-pixeles.ts (KIT e73 §A.2) ───────
 // intentoSobrePixeles (banda → jsQR attemptBoth, puro) y rotar90/rotarPixeles

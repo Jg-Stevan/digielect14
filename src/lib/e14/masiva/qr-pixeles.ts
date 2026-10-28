@@ -31,7 +31,7 @@ export interface PixelesQr {
 }
 
 /** Bandas del ladder — fracciones EXACTAS del banco (#72 bench.html). */
-export interface EspecieBanda {
+interface EspecieBanda {
   id: string;
   x0: number;
   y0: number;
@@ -165,7 +165,7 @@ export const QR_RECORTE_LADO = 600;
 // ─── e63n (T-PRE) — BARRIDO CEÑIDO (grilla de ventanas por cuadrante) ──────
 /** Cuadrantes del barrido EN ORDEN (doc hermano §1: TL→TR→BL→BR). La
  *  frontera cae en floor(lado/2) — las ventanas NUNCA cruzan cuadrantes. */
-export interface Cuadrante {
+interface Cuadrante {
   id: string;
   x0: number; // fracción del ancho donde empieza
   y0: number; // fracción del alto donde empieza

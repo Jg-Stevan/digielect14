@@ -30,7 +30,7 @@ import type { Acta } from "../types";
 export const MAX_RESCATES_CORRIDA = 3;
 
 /** Contexto del rescate (inyectado por el runner — PURO y testable). */
-export interface ContextoRescate {
+interface ContextoRescate {
   /** intento ACTUAL del bucle del pipeline (solo la 1ª pasada rescata). */
   intento: number;
   /** rescates ya lanzados en ESTA corrida (contador del runner). */

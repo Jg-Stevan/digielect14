@@ -13,11 +13,17 @@
  *      (grep negativo de acceso directo a la clave en components — la
  *      persistencia es del contrato §4.1, dueño agente 1).
  *   d. badge DEV en TopBar.tsx (el modo dev es visible siempre que está ON).
- *   e. PanelDev contiene las 7 secciones del contrato (modo dev, salud,
- *      errores agrupados, perf de actas, uso, política de datos, kill
- *      switch/overrides) — greps conceptuales: si el agente 2 usó textos
- *      distintos NO cambiar el QA a ciegas: coordinar con el dueño y
- *      documentar en el REPORTE (kit A3-C4 ⚠).
+ *   e. PanelDev contiene las 6 secciones del contrato (modo dev, salud,
+ *      errores agrupados, uso, política de datos, kill switch/overrides) —
+ *      greps conceptuales: si el agente 2 usó textos distintos NO cambiar
+ *      el QA a ciegas: coordinar con el dueño y documentar en el REPORTE
+ *      (kit A3-C4 ⚠). NOTA limpieza-masiva-v1: la fila «perf de actas»
+ *      (/perf/i) se elimina — PanelDev NUNCA renderizó esa sección y el
+ *      grep pasaba solo por el comentario «performance.memory» del
+ *      scaffold dev/contrato.ts (eliminado: contrato migrado a obs/tipos
+ *      en FASE 1). Verde falso desde el nacimiento del ancla; si el dueño
+ *      añade una sección de perf al modo dev, restaurar la fila
+ *      DELIBERADAMENTE junto con la UI.
  *   f. El kill switch escribe por guardarOverridesFlags (grep positivo) y
  *      JAMÁS escribe `e14-flags-overrides` directo (grep negativo).
  *
@@ -155,16 +161,17 @@ ok(
   "TopBar.tsx muestra el badge DEV (kit A3-C4 d)",
 );
 
-// ---------- Bloque e · PanelDev con las 7 secciones del contrato ----------
+// ---------- Bloque e · PanelDev con las 6 secciones del contrato ----------
+// (7 en el kit original; «perf de actas» eliminada en limpieza-masiva-v1 —
+//  ver NOTA en el header §e: verde falso por comentario del scaffold).
 
-console.log("— Bloque e · PanelDev: 7 secciones —");
+console.log("— Bloque e · PanelDev: 6 secciones —");
 
 {
   const SECCIONES = [
     ["modo dev", /modo dev/i],
     ["salud", /salud/i],
     ["errores agrupados", /error/i],
-    ["perf de actas", /perf/i],
     ["uso", /\buso\b/i],
     ["política de datos", /pol[ií]tica/i],
     ["kill switch / overrides", /override|kill/i],
@@ -172,7 +179,7 @@ console.log("— Bloque e · PanelDev: 7 secciones —");
   const faltantes = SECCIONES.filter(([, re]) => !re.test(srcDev)).map(([n]) => n);
   ok(
     faltantes.length === 0,
-    `PanelDev cubre las 7 secciones del contrato${
+    `PanelDev cubre las 6 secciones del contrato${
       faltantes.length ? ` — FALTA: ${faltantes.join(", ")}` : ""
     } (kit A3-C4 e — textos distintos → coordinar con el dueño, NO editar a ciegas)`,
   );

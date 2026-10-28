@@ -16,7 +16,7 @@ import { obtenerBreadcrumbs } from "./breadcrumbs";
 import type { FlagsApp, PoliticaDatos } from "./tipos";
 
 const CLAVE_POLITICA = "e14-obs-politica";
-export const CLAVE_MODO_DEV = "e14-dev-mode";
+const CLAVE_MODO_DEV = "e14-dev-mode";
 export const CLAVE_OVERRIDES = "e14-flags-overrides";
 
 /** Defaults del contrato §4.2 (D4). */

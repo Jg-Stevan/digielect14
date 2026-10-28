@@ -137,7 +137,7 @@ export interface ProbeOrientacion {
  *  → sin atajo («el quad se detectó mal» — fallback sobel fabricó la
  *  geometría → sondeo completo). Ausente → comportamiento de hoy byte a
  *  byte (recorte manual, flujos sin EXIF). */
-export interface OpcionesProbeOrientacion {
+interface OpcionesProbeOrientacion {
   confirmar?: { quadWorker: boolean };
 }
 

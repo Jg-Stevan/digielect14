@@ -75,7 +75,7 @@ import jsQR from "./masiva/vendor/jsQR.js";
 export type RotacionQr = 0 | 90 | 180 | 270;
 
 /** Cuadrante de la imagen SIN rotar donde cayó el QR. */
-export type CuadranteQr = "TL" | "TR" | "BR" | "BL";
+type CuadranteQr = "TL" | "TR" | "BR" | "BL";
 
 /** Desenlace de la brújula. null del orquestador = no decidió (cae al sondeo). */
 export interface BrujulaQr {
@@ -112,7 +112,7 @@ function cuadranteDesdePunto(fx: number, fy: number): CuadranteQr {
 }
 
 /** Rotación desde el cuadrante (pura — testeable). */
-export function rotDesdeCuadranteQr(cuad: CuadranteQr): RotacionQr {
+function rotDesdeCuadranteQr(cuad: CuadranteQr): RotacionQr {
   return ROT_POR_CUADRANTE[cuad];
 }
 

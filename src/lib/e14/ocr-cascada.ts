@@ -42,7 +42,7 @@
 import { elegirMejor, necesitaSegunda, type PasadaOcr } from "./ocr-escalonado";
 
 /** Nivel del GATE — el que produce `clasificarCabecera(...).nivel`. */
-export type NivelGate = "AUTO" | "SUGERIDA" | "MANUAL";
+type NivelGate = "AUTO" | "SUGERIDA" | "MANUAL";
 
 /** Una pasada de la cascada — `PasadaOcr` (texto+conf, comparable entre
  *  pasadas del MISMO motor) + etiqueta para la traza y métricas del motor
@@ -127,7 +127,7 @@ export interface DepsOcrCascada {
 
 /** Salida de la cascada — el caller (bridge) consume texto/conf y arma su
  *  OcrEscalonadoSalida (detMs/recMs de la ELEGIDA, 0 si n/d). */
-export interface SalidaCascada {
+interface SalidaCascada {
   texto: string;
   conf: number;
   /** Cap de la pasada elegida: 1280 | 1920 | "roi" | cap del intento 1. */
