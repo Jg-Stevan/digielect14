@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-quality.sh — GATE ÚNICO de calidad (overnight 2026-10-22, Prioridad 5
-# del PLAN-overnight.md). Corre TODO lo que un commit debe pasar:
+# del docs/archive/PLAN-overnight.md). Corre TODO lo que un commit debe pasar:
 #
 #   1. bunx tsc --noEmit        → 0 errores
 #   2. bun run lint             → 0 errores / 0 warnings (desde PR #93 NO
@@ -76,7 +76,7 @@ paso "5/6 · Los 12 harnesses de regresión + contrato obs + AA quickwins (QA)"
 # Orden ALFABÉTICO EXACTO del glob scripts/qa-*.ts (los 4 obs-* entran
 # entre identidad-acta y qr-identidad) — NOMBRES[i-1] debe corresponder 1:1
 # con el i-ésimo archivo del glob (kit A3-C5).
-declare -a NOMBRES=(aa-quickwins autoenvío dedup-enviadas escaneo-ya-recortado historico-enviadas identidad-acta obs-contract obs-privacidad obs-transporte obs-ui qr-identidad watchdog-relectura)
+declare -a NOMBRES=(aa-quickwins autoenvío dedup-enviadas escaneo-ya-recortado historico-enviadas identidad-acta obs-contract obs-privacidad obs-transporte obs-ui prescan-qr-cola qr-identidad watchdog-relectura)
 i=0
 for f in scripts/qa-*.ts; do
   i=$((i+1))

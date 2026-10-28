@@ -355,8 +355,3 @@ export function flagsMasivaEfectivos(): FlagsApp {
   }
 }
 
-/** Prueba interna (tests): reset de las cachés de tier. */
-export function __resetGamaParaTest(): void {
-  cacheSync = null;
-  cacheCompleta = null;
-}

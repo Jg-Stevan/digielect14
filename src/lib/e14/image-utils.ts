@@ -196,28 +196,6 @@ export function canvasCon(ancho: number, alto: number): HTMLCanvasElement {
   return cv;
 }
 
-/** Decode (LRU compartido A1) → escala a `maxDim` → getImageData, en un solo
- *  paso — la receta repetida del QR capa 0 y de los detectores de análisis
- *  (antes: cada módulo hacía su propio decode → drawImage → getImageData). */
-export async function analizarPixeles(
-  fuente: string,
-  maxDim: number,
-): Promise<{ data: Uint8ClampedArray; ancho: number; alto: number }> {
-  const src = await decodeImagenLru(fuente, { maxDim });
-  let cv: HTMLCanvasElement;
-  if (src instanceof HTMLCanvasElement) {
-    cv = src; // canvas pre-escalado del LRU (maxDim aplicado)
-  } else {
-    const img = src as HTMLImageElement;
-    cv = canvasCon(img.naturalWidth, img.naturalHeight);
-    const c0 = cv.getContext("2d");
-    if (c0) c0.drawImage(img, 0, 0);
-  }
-  const ctx = cv.getContext("2d", { willReadFrequently: true });
-  if (!ctx) throw new Error("sin contexto 2d");
-  const imgData = ctx.getImageData(0, 0, cv.width, cv.height);
-  return { data: imgData.data, ancho: cv.width, alto: cv.height };
-}
 
 /**
  * §D4 (SPEC-e14-score-ocr) — cobertura de TINTA de la foto PROCESADA.

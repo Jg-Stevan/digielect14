@@ -22,7 +22,7 @@
 
 export type NivelLectura = "FUERTE" | "MEDIA" | "DEBIL";
 
-export interface SenalLectura {
+interface SenalLectura {
   nivel: NivelLectura;
   chars: number;
   anclas: number;

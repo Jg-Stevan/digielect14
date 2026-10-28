@@ -94,7 +94,7 @@ export function instalarCaptura(): void {
 
 /** Datos de perf del contrato PerfActa (el sitio del bridge ya los tiene —
  *  NO re-evalúa nada, §9.10). */
-export interface DatosPerfActa {
+interface DatosPerfActa {
   actaId: string;
   status: string;
   intento: number;

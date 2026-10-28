@@ -16,17 +16,17 @@
  */
 
 /** fetch inyectable (tests — cero red real en vitest). */
-export type TraerLedger = (entrada: string, init?: RequestInit) => Promise<Response>;
+type TraerLedger = (entrada: string, init?: RequestInit) => Promise<Response>;
 
 /** Respuesta del check remoto (route.e14api.ts — contrato §A.2). */
-export interface RespuestaCheck {
+interface RespuestaCheck {
   duplicado: boolean;
   tsOriginal?: number | null;
   filaOriginal?: string | null;
 }
 
 /** Datos del registro remoto (SOLO post-envío local exitoso — kit §A.3). */
-export interface DatosRegistroRemoto {
+interface DatosRegistroRemoto {
   payloadHash: string;
   serie?: string | null;
   filaId?: string | null;
@@ -35,7 +35,7 @@ export interface DatosRegistroRemoto {
 
 export const LEDGER_RUTA = "/api/e14/envios";
 /** Timeout del check (kit §A.3: 3 s — fallo → seguir como hoy). */
-export const LEDGER_TIMEOUT_MS = 3_000;
+const LEDGER_TIMEOUT_MS = 3_000;
 
 /** SHA-256 de un TEXTO (el payload QR) → hex 64. null si crypto.subtle no
  *  está (contexto raro — el caller salta el remoto, conservador). El hash
