@@ -1,6 +1,6 @@
 /**
  * Tests unitarios — completitud.ts (GUARD-BORDE Rev. 2, tabla de decisión §2).
- * Overnight 2026-10-22, Prioridad 2 del PLAN-overnight.md.
+ * Overnight 2026-10-22, Prioridad 2 del docs/archive/PLAN-overnight.md.
  *
  * Dependencia DOM mockeada: loadImageMemo (image-utils) rechaza siempre →
  * motorTinta → noUtilizable → se ejercita la rama §7 (warp degenerado /

@@ -65,7 +65,7 @@ import type { Acta, EtapaAnalisis } from "../types";
 // SPLIT C1 (refactor/runner-logger-v1 — movimiento puro): la infra del
 // orquestador vive en runner-*.ts (imports UNIDIRECCIONALES — los
 // runner-*.ts no se importan entre sí; detalle en
-// docs/REPORTE-runner-logger-v1.md). Las líneas ANCLADAS por QA
+// docs/archive/reportes/REPORTE-runner-logger-v1.md). Las líneas ANCLADAS por QA
 // (WATCHDOG_*_MS, RELECTURA_TOPE_MS, mutexDedup/conExclusionMutua,
 // reutilizarResultado*, bloque capa-0, relectura conTope, bucle del pool,
 // iniciar/pausar/rearrancar) permanecen AQUÍ — los harnesses

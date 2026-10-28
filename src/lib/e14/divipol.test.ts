@@ -1,6 +1,6 @@
 /**
  * Tests unitarios — divipol.ts (lookups PUROS sobre una base mock).
- * Overnight 2026-10-22, Prioridad 2 del PLAN-overnight.md.
+ * Overnight 2026-10-22, Prioridad 2 del docs/archive/PLAN-overnight.md.
  *
  * La base REAL (public/e14/divipol.json, 0,63 MB, 34 departamentos) no se
  * carga aquí: cada test usa una base mock MÍNIMA con la MISMA forma

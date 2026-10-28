@@ -1,6 +1,6 @@
 /**
  * Helper de logging con política ÚNICA del proyecto (overnight 2026-10-22,
- * Prioridad 3 del PLAN-overnight.md — AUDIT.md fila «Observabilidad»).
+ * Prioridad 3 del docs/archive/PLAN-overnight.md — docs/AUDIT.md fila «Observabilidad»).
  *
  * Política:
  *  · debug/info — SOLO en desarrollo (`process.env.NODE_ENV !== "production"`).
