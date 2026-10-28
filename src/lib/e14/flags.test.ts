@@ -62,6 +62,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       qrBrujulaOrientacion: true,
       // KIT e14-ocr-cascada-v1 (K3 fase 2) — aditivo AL FINAL (contrato D57):
       ocrCascada: false,
+      // KIT e14-adaptacion-dispositivo-v1 — aditivo AL FINAL (contrato D57):
+      adaptacionDispositivo: true,
     });
   });
 
