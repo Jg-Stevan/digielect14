@@ -131,6 +131,10 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // KIT e14-ocr-cascada-v1 (K3 fase 2) — mismo criterio (DOBLE whitelist).
     // Renombrado de `masivaOcrTesseract` al retirar el módulo masiva.
     if (typeof o.ocrCascada === "boolean") limpio.ocrCascada = o.ocrCascada;
+    // KIT e14-adaptacion-dispositivo-v1 — mismo criterio (DOBLE whitelist):
+    // el kill-switch {"adaptacionDispositivo": false} del dueño pasa por
+    // ESTE whitelist (prioridad máxima, D6 — plan.ts ya lo respeta).
+    if (typeof o.adaptacionDispositivo === "boolean") limpio.adaptacionDispositivo = o.adaptacionDispositivo;
     // NOTA (eliminación del módulo masiva): las puertas de los 17 flags
     // exclusivos de la cola se retiraron junto con el módulo.
     return limpio;

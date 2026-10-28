@@ -135,6 +135,11 @@ export interface FlagsApp {
   // NOTA (eliminación del módulo masiva): los 17 flags exclusivos de la cola
   // (poolWorkers · thumbsOn · colaPersistente · sondeoQr* · prescan* ·
   // masiva* · dhashResize) se retiraron con el módulo.
+  // ─── KIT e14-adaptacion-dispositivo-v1 — campo ADITIVO AL FINAL (D57) ───
+  // Adaptación automática al dispositivo (petición del dueño): el tier
+  // detectado consume knobs de RECURSOS (hilos OCR — plan.ts). El override
+  // MANUAL del dueño manda clave a clave (D6); false = byte-idéntico a hoy.
+  adaptacionDispositivo: boolean; // default true
 }
 
 export interface ReporteSesion {
