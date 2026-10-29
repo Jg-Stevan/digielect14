@@ -144,6 +144,14 @@ import {
   type DepsOcrCascada,
   type PasadaCascada,
 } from "./ocr-cascada";
+// KIT e14-ocr-tessbest-v1 (GO-B del dueño): TESSERACT BEST como intento 1
+// de la cascada (vendido + worker propio + budget) y el presupuesto del
+// escaneo por tier (BAJO 480 s · MEDIO 240 s · ALTO 120 s — P0 del informe
+// sim-gama-baja: el timeout fijo de 120 s rechazaba actas perfectas en
+// mono-hilo). Import dinámico dentro del módulo: el bundle principal no
+// descarga tesseract hasta la 1.ª cascada real.
+import { tessReconocer } from "./ocr/tesseract";
+import { esperaWorkerEfectiva, presupuestoEscaneoEfectivo } from "./adaptacion/plan";
 // KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado justo
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
@@ -182,10 +190,14 @@ function decodeArchivoMemo(file: File): Promise<string> {
  *  un ARCHIVO real terminó VÁLIDO a los ~53.5 s y el watchdog de 15 s ya lo
  *  había rechazado (resultado descartado en silencio). 120 s da colchón
  *  frente al peor caso observado (53.5 s + 36 líneas OCR) sin esperar de
- *  más a un colgaje real. El presupuesto por llamada es OPCIONAL
- *  (OpcionesEscaneoConTimeout.timeoutMs). El RECORTE manual conserva su
- *  RECORTE_TIMEOUT_MS propio (ruta distinta). */
-const TIMEOUT_MS = 120_000;
+ *  más a un colgaje real. KIT e14-ocr-tessbest-v1: el default FIJO dejó de
+ *  existir — hoy el default lo resuelve `presupuestoEscaneoEfectivo()`
+ *  (adaptacion/plan.ts): ALTO 120 s (byte-idéntico a e67) · MEDIO 240 s ·
+ *  BAJO 480 s (evidencia sim-gama-baja v2/v3: mono-hilo 6× necesita ~125 s
+ *  y el fijo de 120 s rechazaba el acta con score 0.0 ANTES de terminar).
+ *  El presupuesto por llamada es OPCIONAL
+ *  (OpcionesEscaneoConTimeout.timeoutMs — manda sobre el plan). El RECORTE
+ *  manual conserva su RECORTE_TIMEOUT_MS propio (ruta distinta). */
 /** KIT e14-recorte-manual-v1 (T1): presupuesto del RECORTE manual — el warp
  *  del editor mide 14–17.4 s en el equipo del dueño (OCR solo: 9.8–14.3 s),
  *  al borde del límite de 15 s del escaneo. El timeout SIGUE RECHAZANDO
@@ -201,11 +213,15 @@ type ParcialRecorte = {
   quadDetectado?: Quad;
   rotation?: number;
 };
-/** KIT e14-masiva-ux-v1 (T1): tope de cada espera del warm-up del worker
- *  OpenCV en la detección (1ª espera antes del intento + 1ª antes del
- *  reintento — §3-T1). Vencido el tope se continúa como hoy (fallback
- *  Sobel): la espera JAMÁS bloquea el pipeline más de 5 s por paso. */
-const TOPE_ESPERA_WORKER_MS = 5_000;
+/** KIT e14-masiva-ux-v1 (T1) + KIT e14-ocr-tessbest-v1: tope de cada espera
+ *  del warm-up del worker OpenCV en la detección (1ª espera antes del
+ *  intento + 1ª antes del reintento — §3-T1). YA NO es una constante fija:
+ *  `esperaWorkerEfectiva()` (adaptacion/plan.ts) la resuelve POR TIER —
+ *  ALTO 5 s (byte-idéntico histórico) · MEDIO 10 s · BAJO 20 s (a CPU 6× el
+ *  compile+wasm mono-hilo no cabe en 5 s y la detección caía a fallback
+ *  Sobel → quad peor → score 4.9 en un acta 10.0 — sim-lowend-v4).
+ *  Vencido el tope se continúa como hoy (fallback Sobel): la espera JAMÁS
+ *  bloquea el pipeline más de lo que tarda el warm-up real. */
 /** Techos/labels del mapeo §4 y el gate §4.2. */
 const DETALLE_ILEGIBLE = "CÓDIGO DE BARRAS Y CABECERA NO DETECTADOS";
 const DETALLE_TIMEOUT = "TIEMPO DE PROCESADO EXCEDIDO";
@@ -879,27 +895,31 @@ async function recortarRoiDataUrl(
 }
 
 /**
- * KIT e14-ocr-cascada-v1 (K3 fase 2) — la CASCADA en el pipeline, SOLO con
- * `leerFlags().ocrCascada` ON (default OFF ⇒ esta función nunca se
- * invoca y el camino es `reconocerRapidOcrEscalonado` byte a byte):
+ * KIT e14-ocr-cascada-v1 (K3 fase 2) + GO-B — la CASCADA en el pipeline,
+ * SOLO con `leerFlags().ocrCascada` ON (default ON — decisión del dueño
+ * 2026-11; kill-switch override {"ocrCascada": false} ⇒ esta función nunca
+ * se invoca y el camino es `reconocerRapidOcrEscalonado` byte a byte):
  *
- *   intento 1 (RapidOCR 1280 HOY · Tesseract futuro si GO-B) → GATE
- *   (clasificador puro, nivel AUTO) ⇒ listo; si no ⇒ core RapidOCR COMO
- *   HOY (1280 → necesitaSegunda → 1920 → elegirMejor); si débil y sin AUTO
- *   ⇒ rescate por ROIs top 0-25% / bottom 75-100% (cap 1920) → elegirMejor
- *   SOLO entre pasadas RapidOCR (entre motores decidió el GATE).
+ *   intento 1 (TESSERACT BEST — ocr/tesseract.ts, vendido, worker propio,
+ *   budget 60 s capado al restante del pipeline) → GATE (clasificador
+ *   puro, nivel AUTO) ⇒ listo; Tess fallo/vencido ⇒ RapidOCR 1280 de
+ *   siempre como intento 1 (reusable); si no AUTO ⇒ core RapidOCR COMO
+ *   HOY (1280 → necesitaSegunda → 1920 → elegirMejor); si débil y sin
+ *   AUTO ⇒ rescate por ROIs top 0-25% / bottom 75-100% (cap 1920) →
+ *   elegirMejor SOLO entre pasadas RapidOCR (entre motores decidió el
+ *   GATE).
  *
  * El GATE usa el clasificador REAL de producción (clasificarCabecera +
  * cargarDivipol — el MISMO juez que decide el acta más abajo en el
- * pipeline, FASE 6). TODO(GO-B): con el GO del bench
- * `tools/bench-ocr-cascada/`, crear `masiva/ocr-tesseract.ts` (tesseract.js
- * vendido, worker propio — JAMÁS main thread) y apuntar `intento1` a él con
- * `mismoMotorIntento1: false` (su texto SOLO vale por el GATE — jamás
- * elegirMejor) + budget/timeout propio (dato del bench; el core usa el
- * TIMEOUT_MS de referencia). SIN GO ⇒ NO-GO documentado y este scaffold
- * queda dormido (patrón P3-dhash).
+ * pipeline, FASE 6). GO-B OTORGADO (dueño 2026-11: «dejemos como primer
+ * motor de ocr tess best y escalonado a pp ocr»): `ocr/tesseract.ts`
+ * (tesseract.js 5 vendido, worker propio — JAMÁS main thread) hace el
+ * intento 1 con texto SOLO-vía-GATE (jamás elegirMejor) + budget propio
+ * (dato del bench tools/bench-ocr-cascada: 60 000 ms); cae honesto a
+ * RapidOCR 1280 (pasada motor:"rapidocr" — la cascada la REUSA y el
+ * escalonado a PP-OCR sigue byte a byte).
  */
-const OCR_CASCADA_TESSERACT_GO = false; // decisión del dueño tras el bench K3
+const OCR_CASCADA_TESSERACT_GO = true; // GO-B del dueño (2026-11) — kill-switch: flag `ocrCascada` OFF
 async function reconocerRapidOcrCascada(
   fotoOcr: string,
   onProgress: (p: number) => void,
@@ -916,9 +936,38 @@ async function reconocerRapidOcrCascada(
   ): PasadaCascada => ({ texto: r.texto, conf: r.confMedia, cap, msDet: r.msDet, msRec: r.msRec });
   const deps: DepsOcrCascada = {
     intento1: async (foto) => {
-      // HOY: RapidOCR 1280 (la MISMA 1.ª pasada del escalonado — se reusa).
-      // TODO(GO-B): Tesseract completo (masiva/ocr-tesseract.ts, budget propio).
-      return aPasada(await rapidOcrReconocer(rt, foto, onProgress, { detCap: DET_CAP_RAPIDO }), DET_CAP_RAPIDO);
+      // GO-B (dueño 2026-11): TESSERACT BEST primero (worker propio de la
+      // lib, budget capado al restante del pipeline) → su texto vale SOLO
+      // por el GATE. Cualquier fallo/vencido/sin-presupuesto-suficiente ⇒
+      // RapidOCR 1280 de SIEMPRE («escalonado a pp ocr») — pasada marcada
+      // motor:"rapidocr" para que la cascada la REUSE como 1.ª pasada
+      // (jamás se paga dos veces la misma pasada del mismo motor).
+      if (OCR_CASCADA_TESSERACT_GO) {
+        const restante = cfg.presupuestoMs - (performance.now() - cfg.inicioMs);
+        try {
+          // tessReconocer decide sola: vence si el restante no alcanza el
+          // mínimo honesto (< 20 s — falla segura → RapidOCR), la CREACIÓN
+          // lleva presupuesto propio de 180 s (descarga vendida de la 1.ª
+          // vez) capado por este restante, y la recognize 60 s (bench).
+          const r = await tessReconocer(foto, restante);
+          logger.info(
+            `[e14] tess-best intento1 ok conf=${r.conf.toFixed(2)} chars=${r.texto.length}`,
+          );
+          return { texto: r.texto, conf: r.conf, cap: "tess", motor: "tesseract" };
+        } catch (e) {
+          logger.warn(
+            "[e14] tess-best no disponible → RapidOCR 1280 (escalonado a pp ocr)",
+            { motivo: e instanceof Error ? e.message : String(e) },
+          );
+        }
+      }
+      return {
+        ...aPasada(
+          await rapidOcrReconocer(rt, foto, onProgress, { detCap: DET_CAP_RAPIDO }),
+          DET_CAP_RAPIDO,
+        ),
+        motor: "rapidocr",
+      };
     },
     mismoMotorIntento1: !OCR_CASCADA_TESSERACT_GO,
     ocr1280: async (foto) =>
@@ -938,7 +987,7 @@ async function reconocerRapidOcrCascada(
   // Traza PROPIA (D51 — línea nueva, SOLO con flag ON; parseable).
   const ms1 = s.ms1280 != null ? s.ms1280 + s.msIntento1 : s.msIntento1;
   logger.info(
-    `[e14] ocr-cascada intento1=${OCR_CASCADA_TESSERACT_GO ? "tesseract" : DET_CAP_RAPIDO} ` +
+    `[e14] ocr-cascada intento1=${s.motorIntento1 === "tesseract" ? "tess-best" : DET_CAP_RAPIDO} ` +
       `gate1=${s.paso === "intento1" ? "AUTO" : "NO"} elegido=${s.elegidoCap} ` +
       `rescate=${s.rescate ? 1 : 0} ms1=${ms1}` +
       (s.ms1920 != null ? ` ms2=${s.ms1920}` : " ms2=-") +
@@ -1012,7 +1061,8 @@ async function esperarWorkerCaliente(topeMs: number): Promise<boolean> {
  *  post-timeout (e67) siguen disponibles para el flujo individual. */
 export type OpcionesEscaneoConTimeout = OpcionesEscaneo & {
   /** Presupuesto total del pipeline para ESTA llamada (ms). Ausente =
-   *  TIMEOUT_MS (120_000 desde e67 — 15_000 antes). */
+   *  presupuestoEscaneoEfectivo() (plan por tier — KIT e14-ocr-tessbest-v1:
+   *  ALTO 120_000 desde e67 — 15_000 antes — · MEDIO 240_000 · BAJO 480_000). */
   timeoutMs?: number;
   /** e67-watchdog-rescate-v1 (cambio B — RESCATE post-timeout): el pipeline
    *  NO se cancela al vencer el presupuesto — sigue vivo y su desenlace
@@ -1166,7 +1216,7 @@ export class RealCoreBridge implements E14Bridge {
         );
         // Presupuesto OPCIONAL por llamada (OpcionesEscaneoConTimeout);
         // el default manda en el flujo individual (120_000 desde e67).
-      }, opciones.timeoutMs ?? TIMEOUT_MS);
+      }, opciones.timeoutMs ?? presupuestoEscaneoEfectivo());
 
       this.pipeline(opciones, entrada, parcial, emitir).then(
         (acta) => {
@@ -1275,7 +1325,7 @@ export class RealCoreBridge implements E14Bridge {
         // T1.1: worker frío → esperar su warm-up con tope de 5 s (mecanismo
         // del core — el mismo que ScanView invoca al montar). Si a los 5 s
         // no está listo, continuar como hoy (no bloquear más).
-        await esperarWorkerCaliente(TOPE_ESPERA_WORKER_MS);
+        await esperarWorkerCaliente(esperaWorkerEfectiva());
         let detalle = await conRampa(
           detectDocumentEdgesDetail(fotoOriginal),
           900,
@@ -1287,7 +1337,7 @@ export class RealCoreBridge implements E14Bridge {
         // reintento viene del worker, manda ese quad; si no, conservar el
         // quad original (comportamiento actual — kit §3-T1.2).
         if (detalle.origen === "sobel") {
-          const caliente = await esperarWorkerCaliente(TOPE_ESPERA_WORKER_MS);
+          const caliente = await esperarWorkerCaliente(esperaWorkerEfectiva());
           if (caliente) {
             detectReintento = true;
             try {
@@ -1512,10 +1562,11 @@ export class RealCoreBridge implements E14Bridge {
       emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
     };
     // §3 presupuesto: el timeout EXISTENTE del pipeline manda (opcional por
-    // OpcionesEscaneoConTimeout; default TIMEOUT_MS).
+    // OpcionesEscaneoConTimeout; default presupuestoEscaneoEfectivo() — plan
+    // por tier del KIT e14-ocr-tessbest-v1).
     const cfgOcr = {
       simular: opciones.simular === true,
-      presupuestoMs: (opciones as OpcionesEscaneoConTimeout).timeoutMs ?? TIMEOUT_MS,
+      presupuestoMs: (opciones as OpcionesEscaneoConTimeout).timeoutMs ?? presupuestoEscaneoEfectivo(),
       inicioMs: inicio,
     };
     // KIT e14-ocr-cascada-v1 (K3 fase 2): SOLO con `ocrCascada` ON (antes

@@ -100,13 +100,19 @@ function isImmutableAsset(url) {
   );
 }
 
-/** Motores del pipeline (modelos OCR + runtime ONNX): includes() y NO
- *  startsWith — el deploy de Pages vive bajo basePath (/digielect14), el
- *  pathname real es /digielect14/models/** (lab L108-113). */
+/** Motores del pipeline (modelos OCR + runtime ONNX + TESSERACT BEST del
+ *  KIT e14-ocr-tessbest-v1): includes() y NO startsWith — el deploy de
+ *  Pages vive bajo basePath (/digielect14), el pathname real es
+ *  /digielect14/models/** (lab L108-113). Tess best entra al MISMO cache
+ *  al primer uso: /models/tess/spa.traineddata.gz (~12 MB) +
+ *  /vendor/tesseract/{worker,core simd-lstm} (~6.9 MB) — offline desde la
+ *  1.ª cascada con éxito, igual que RapidOCR. */
 function isMotorAsset(url) {
   return (
     url.pathname.includes("/models/rapidocr/") ||
-    url.pathname.includes("/vendor/onnxruntime/")
+    url.pathname.includes("/vendor/onnxruntime/") ||
+    url.pathname.includes("/models/tess/") ||
+    url.pathname.includes("/vendor/tesseract/")
   );
 }
 
