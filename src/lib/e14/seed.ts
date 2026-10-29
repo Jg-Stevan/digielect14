@@ -1,10 +1,22 @@
 /**
- * Seed EXACTO de los diseños (SPEC §6.4) — el primer render de ACTAS y
- * RESUMEN debe calcar los mocks del zip v2.
+ * KIT e14-sin-relleno-v1 — seed EXCLUSIVO del MODO SIMULACIÓN.
+ *
+ * Antes este módulo alimentaba el ARRANQUE de la app (mesas demo MESA
+ * 01/02/03, progreso falso 12/9, cola offline 3, rescaneo 1 y filas de
+ * historial inventadas). Eso era relleno de prueba visible en producción y
+ * se retiró: el arranque/jornada real nace VACÍO (store.ts).
+ *
+ * Lo que queda SOLO se consume con el toggle «SIM» de ACTAS encendido
+ * (overlay de vista — D6: jamás escribe archivadas/puestoActual/historial)
+ * y en `construirActa` del bridge (datos de pantalla del editor, fase
+ * lógica L1). El usuario final jamás ve estos datos sin activar la
+ * simulación de forma explícita.
  */
-import type { HistorialRow, Mesa, MesaPagina, ProgresoPuesto } from "./types";
+import type { Mesa, MesaPagina } from "./types";
 
-/** MESA 01 COMPLETADA · MESA 02 EN PROCESO · MESA 03 PENDIENTE (§6.4). */
+/** Guion demo del SIM sin puesto real: MESA 01 COMPLETADA · MESA 02 EN
+ *  PROCESO · MESA 03 PENDIENTE (§6.4) — es el avance que el tick de 5 s
+ *  «sube a la vista». FUERA del SIM no existe. */
 export function mesasIniciales(): Mesa[] {
   return [
     {
@@ -79,39 +91,9 @@ export const PUESTO_SIMULADO = {
   puesto: "02",
 } as const;
 
-/** 12 asignadas / 9 completadas → "PROGRESO DEL PUESTO: 75%" (§6.4). */
-export function progresoInicial(): ProgresoPuesto {
-  return { asignadasHoy: 12, completadas: 9 };
-}
-
-export const COLA_OFFLINE_INICIAL = 3; // "03 PENDIENTES EN COLA (OFFLINE)"
-export const SOLICITUDES_RESCANEO_INICIAL = 1; // "01 SOLICITUD DE RESCANEO"
-
-/** Historial del mock (§6.4) — "ÚLT. ACT.: 14:32". */
-export function historialInicial(): HistorialRow[] {
-  return [
-    {
-      id: "h-1",
-      titulo: "MESA 01 — TRANSMISIÓN P2",
-      estado: "RESCANEO_REQUERIDO",
-      hora: "14:32",
-    },
-    {
-      id: "h-2",
-      titulo: "MESA 02 — DELEGADOS P2",
-      estado: "ENVIADO",
-      hora: "14:28",
-    },
-    {
-      id: "h-3",
-      titulo: "MESA 01 — DELEGADOS P1",
-      estado: "ENVIADO",
-      hora: "14:21",
-    },
-  ];
-}
-
-/** Datos fijos del acta mock (los diseños siempre muestran el mismo acta). */
+/** Datos fijos del acta del editor (los diseños siempre muestran la misma
+ *  pantalla de acta — fase lógica L1). Consumido por `construirActa` del
+ *  bridge; NUNCA se muestra al usuario final sin pasar por el pipeline. */
 export const ACTA_MOCK = {
   titulo: "ROMA - CONSULADO",
   departamento: "CONSULADOS",

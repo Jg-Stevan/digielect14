@@ -78,6 +78,10 @@ import { SHUTTER_SCORE } from "@jg-stevan/scanner-core/quality";
 import type { SensorProfile } from "@jg-stevan/scanner-core/sensor-profiler";
 import { useE14Store, type BandaSim } from "@/lib/e14/store";
 import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
+// KIT e14-sin-relleno-v1: la barra de SIMULACIÓN (chips TEST SCORES) solo se
+// muestra con el toggle «SIM» de ACTAS encendido o en modo desarrollador —
+// el usuario público ve el escáner limpio, sin botones de prueba.
+import { useModoDev } from "../dev/puente";
 import {
   CameraNavIcon,
   FolderImportIcon,
@@ -161,6 +165,10 @@ export function ScanView() {
   // §D2/§D3 (SPEC-e14-simulacion-scores): los chips disparan la simulación
   // determinista (store.simularScore — mismo camino de dispararEscaneo).
   const simularScore = useE14Store((s) => s.simularScore);
+  // KIT e14-sin-relleno-v1: gate de VISIBILIDAD de la barra de simulación.
+  const modoSimulacion = useE14Store((s) => s.modoSimulacion);
+  const modoDev = useModoDev();
+  const simVisible = modoSimulacion || modoDev;
   const setArchivoPendiente = useE14Store((s) => s.setArchivoPendiente);
   const setFramePendiente = useE14Store((s) => s.setFramePendiente);
   // G3 (upgrade silencioso): re-proceso full-res del acta en revisión.
@@ -692,18 +700,20 @@ export function ScanView() {
                   <CameraNavIcon className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">CÁMARA</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setFuente("SIMULACION")}
-                  className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
-                    fuente === "SIMULACION"
-                      ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  <SparklesIcon className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">SIM</span>
-                </button>
+                {simVisible && (
+                  <button
+                    type="button"
+                    onClick={() => setFuente("SIMULACION")}
+                    className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
+                      fuente === "SIMULACION"
+                        ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <SparklesIcon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">SIM</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => inputRef.current?.click()}
@@ -762,7 +772,11 @@ export function ScanView() {
                         candado o de cámara junto a la barra de direcciones) y
                         permite el acceso.
                       </li>
-                      <li>O activa la simulación para probar el flujo completo sin cámara.</li>
+                      {/* KIT e14-sin-relleno-v1: la mención a la simulación
+                          solo aplica cuando el SIM está habilitado. */}
+                      {simVisible && (
+                        <li>O activa la simulación para probar el flujo completo sin cámara.</li>
+                      )}
                       <li>O sube una foto del acta desde tu galería o tu disco.</li>
                     </ol>
                   ) : (
@@ -772,17 +786,22 @@ export function ScanView() {
                     </p>
                   )}
                   <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAvisoCamara(null);
-                        setFuente("SIMULACION");
-                      }}
-                      className="h-10 rounded-xl px-4 text-xs font-bold text-[#090d12] bg-[#10b981] hover:bg-[#059669] transition shadow-md shadow-[#10b981]/20 flex items-center justify-center gap-1.5"
-                    >
-                      <SparklesIcon className="w-4 h-4" />
-                      PROBAR CON SIMULACIÓN
-                    </button>
+                    {/* KIT e14-sin-relleno-v1: la vía de SIMULACIÓN solo se
+                        ofrece con «SIM» (ACTAS) o modo desarrollador — el
+                        flujo público degrada a cámara/subir. */}
+                    {simVisible && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAvisoCamara(null);
+                          setFuente("SIMULACION");
+                        }}
+                        className="h-10 rounded-xl px-4 text-xs font-bold text-[#090d12] bg-[#10b981] hover:bg-[#059669] transition shadow-md shadow-[#10b981]/20 flex items-center justify-center gap-1.5"
+                      >
+                        <SparklesIcon className="w-4 h-4" />
+                        PROBAR CON SIMULACIÓN
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -1032,11 +1051,14 @@ export function ScanView() {
             <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" aria-hidden />
             {labelModo}
           </span>
-          <span className="text-[9px] text-slate-400">TEST SCORES</span>
+          {simVisible && <span className="text-[9px] text-slate-400">TEST SCORES</span>}
         </div>
 
         {/* Barra de SIMULACIÓN — Task 2-b: lg:max-w-md + chips con más aire en
-            lg. Mismos ids/aria/handlers (los tests E2E dependen de ellos). */}
+            lg. Mismos ids/aria/handlers (los tests E2E dependen de ellos).
+            KIT e14-sin-relleno-v1: SOLO visible con «SIM» (ACTAS) o modo
+            desarrollador activo — el flujo público va limpio. */}
+        {simVisible && (
         <div
           className="w-full max-w-sm lg:max-w-md mx-auto mb-3 px-1 flex items-center justify-between gap-2 bg-[#10161f]/90 border border-slate-800 rounded-xl p-1.5 lg:p-2 backdrop-blur-md shadow-md z-30"
           data-purpose="score-simulation-bar"
@@ -1059,6 +1081,7 @@ export function ScanView() {
             </button>
           ))}
         </div>
+        )}
 
         {/* §6/Rev.4 Fila de disparo: [Importar | obturador | Flash] —
             EXACTAMENTE la fila de Rev. 4 (Auto fuera; la linterna real, el

@@ -2731,16 +2731,20 @@ export class RealCoreBridge implements E14Bridge {
       campos.status === "ADVERTENCIA" ? "TENUE" : campos.status === "RECHAZADA" ? "NO_DETECTADO" : "OK";
 
     // §1.2 (SPEC-titulo-ubicacion): clasificación AUTO → el acta nace con
-    // título/ubicación REALES; sin ella se conserva el seed (no se inventa).
+    // título/ubicación REALES. KIT e14-sin-relleno-v1: SIN clasificación el
+    // fallback es HONESTO («ACTA SIN IDENTIFICAR») — antes heredaba el
+    // «ROMA - CONSULADO» del mock y una acta real sin leer mostraba un
+    // puesto de mentira. Los datos de PANTALLA del editor (candidatos,
+    // firmas, código de barras — fase lógica L1) se conservan tal cual.
     const titUbi = tituloYUbicacionDe(campos.clasificacion ?? null);
     return {
       id: `acta-${Date.now()}-${this.contador}`,
-      titulo: titUbi?.titulo ?? ACTA_MOCK.titulo,
+      titulo: titUbi?.titulo ?? "ACTA SIN IDENTIFICAR",
       ubicacion: titUbi?.ubicacion ?? {
-        departamento: ACTA_MOCK.departamento,
-        municipio: ACTA_MOCK.municipio,
-        zona: ACTA_MOCK.zona,
-        puesto: ACTA_MOCK.puesto,
+        departamento: "—",
+        municipio: "—",
+        zona: "—",
+        puesto: "—",
         mesa: numeroMesa,
       },
       tipo: ACTA_MOCK.tipo,

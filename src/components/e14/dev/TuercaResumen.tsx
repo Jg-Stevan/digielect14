@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * TuercaResumen — puerta de entrada al modo de diagnóstico (KIT
+ * TuercaResumen — puerta de entrada al MODO DESARROLLADOR (antes «modo de
+ * diagnóstico», renombrado por el dueño — KIT
  * e14-observabilidad-v1, agente 2 · C1). SIEMPRE visible arriba-izquierda
  * del header de ResumenView; GRIS con modo dev OFF, ACENTO con ON.
  *
  * Activación ARMADA — MISMO patrón UX de «reiniciar jornada» de
  * ResumenView (armado + timeout 4 s): 1.er toque → confirmación
- * «¿Activar modo de diagnóstico? [SÍ] [NO]»; toque en SÍ →
+ * «¿Activar modo desarrollador? [SÍ] [NO]»; toque en SÍ →
  * `guardarModoDev(true)`. Desactivar se hace desde el PanelDev (flujo
  * inverso, C4). Con modo dev ON el toque abre el panel (`onAbrirPanel`).
  *
@@ -85,9 +86,9 @@ export function TuercaResumen({ onAbrirPanel }: { onAbrirPanel?: () => void }) {
       <button
         type="button"
         onClick={tocar}
-        aria-label={modoDev ? "Abrir modo de diagnóstico" : "Activar modo de diagnóstico"}
+        aria-label={modoDev ? "Abrir modo desarrollador" : "Activar modo desarrollador"}
         aria-expanded={armado}
-        title={modoDev ? "Abrir panel de diagnóstico" : "Activar modo de diagnóstico"}
+        title={modoDev ? "Abrir panel de modo desarrollador" : "Activar modo desarrollador"}
         className={`min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl flex items-center justify-center transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/70 ${
           modoDev
             ? "bg-[#10b981]/15 border border-[#10b981]/50 text-[#10b981]"
@@ -104,11 +105,11 @@ export function TuercaResumen({ onAbrirPanel }: { onAbrirPanel?: () => void }) {
           <div
             role="dialog"
             aria-modal="false"
-            aria-label="¿Activar el modo de diagnóstico?"
+            aria-label="¿Activar el modo desarrollador?"
             className="absolute left-0 top-[calc(100%+8px)] z-50 w-[min(88vw,20rem)] rounded-2xl border border-slate-700/80 bg-[#10161f] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
           >
             <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              ¿ACTIVAR EL MODO DE DIAGNÓSTICO?
+              ¿ACTIVAR EL MODO DESARROLLADOR?
             </p>
             <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-300">{COPIA_ACTIVACION}</p>
             <div className="mt-3 flex gap-2">

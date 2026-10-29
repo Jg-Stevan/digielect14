@@ -77,3 +77,7 @@ tools/bench-rec-int8/*.onnx
 .wrangler
 .dev.vars*
 !.dev.vars.example
+
+# Infraestructura del sandbox de desarrollo (NO es parte del producto)
+/.zscripts/
+/Caddyfile

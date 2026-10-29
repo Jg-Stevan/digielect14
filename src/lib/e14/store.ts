@@ -41,14 +41,10 @@ import {
   mesasRealesDe,
   TOPE_HISTORIAL,
 } from "./jornada";
-import {
-  COLA_OFFLINE_INICIAL,
-  SOLICITUDES_RESCANEO_INICIAL,
-  guionDePuesto,
-  historialInicial,
-  mesasIniciales,
-  progresoInicial,
-} from "./seed";
+// KIT e14-sin-relleno-v1: el seed DEMO solo vive dentro del MODO SIMULACIÓN
+// (toggle «SIM» de ACTAS). El arranque/jornada real nace SIEMPRE vacío —
+// cero mesas falsas, cero progreso 12/9, cero historial de mentira.
+import { guionDePuesto, mesasIniciales } from "./seed";
 
 // NOTA (eliminación del módulo masiva): la vista "masiva" salió de la unión
 // junto con la cola/bandeja (src/lib/e14/masiva/ y MasivaView retirados).
@@ -480,6 +476,9 @@ export const useE14Store = create<E14Store>((set, get) => {
       colaOffline += 1;
       hash = "EN COLA";
     }
+    // KIT e14-sin-relleno-v1: conteo HONESTO de envíos reales (antes el cap
+    // «Math.min(+1, asignadasHoy)» era herencia del seed demo 12/9 — con
+    // asignadasHoy 0 congelaba el contador a cero para siempre).
     const mesasActualizadas =
       paginaObjetivo
         ? mesas.map((m) =>
@@ -513,7 +512,7 @@ export const useE14Store = create<E14Store>((set, get) => {
     }
     set({
       historial: [fila, ...historial],
-      completadas: Math.min(completadas + 1, get().asignadasHoy),
+      completadas: completadas + 1,
       colaOffline,
       mesas: mesasActualizadas,
       archivadas: archivadasNuevas,
@@ -586,17 +585,21 @@ export const useE14Store = create<E14Store>((set, get) => {
     errorRecorte: null,
     revelando: false,
     actasSesion: 0,
-    mesas: mesasIniciales(),
+    // KIT e14-sin-relleno-v1: arranque REAL vacío — sin mesas demo (MESA
+    // 01/02/03 del mock §6.4), sin progreso falso 12/9, sin cola/rescaneos
+    // ni filas de historial inventadas. El demo SOLO existe con el toggle
+    // «SIM» de ACTAS encendido (overlay de vista, D6 intocable).
+    mesas: [],
     archivadas: {},
     puestoActual: null,
     modoSimulacion: false,
     simCompleta: false,
     simUltima: null,
-    completadas: progresoInicial().completadas,
-    asignadasHoy: progresoInicial().asignadasHoy,
-    colaOffline: COLA_OFFLINE_INICIAL,
-    solicitudesRescaneo: SOLICITUDES_RESCANEO_INICIAL,
-    historial: historialInicial(),
+    completadas: 0,
+    asignadasHoy: 0,
+    colaOffline: 0,
+    solicitudesRescaneo: 0,
+    historial: [],
     // KIT e14-optimizacion-v1 (T5): contador de sesión arranca vacío.
     motivosNoEnvio: {},
 
@@ -635,8 +638,9 @@ export const useE14Store = create<E14Store>((set, get) => {
               /* sin base → mesas queda como esté (degradación honesta) */
             });
         } else {
-          // Sin puesto real → guion demo FRESCO (mismo estado de arranque).
-          set({ mesas: mesasIniciales() });
+          // KIT e14-sin-relleno-v1: sin puesto real la vista vuelve al estado
+          // REAL (vacío — «AÚN NO HAY ACTAS ESCANEADAS»), no al guion demo.
+          set({ mesas: [] });
         }
         return;
       }
@@ -1339,18 +1343,19 @@ export const useE14Store = create<E14Store>((set, get) => {
         recortando: false,
         errorRecorte: null,
         revelando: false,
-        // Jornada REAL a cero (nuevo día de votación).
+        // Jornada REAL a cero (nuevo día de votación) — KIT e14-sin-relleno-v1:
+        // a cero HONESTO (sin seed demo; el demo solo con «SIM» encendido).
         archivadas: {},
         puestoActual: null,
-        historial: historialInicial(),
-        completadas: progresoInicial().completadas,
-        asignadasHoy: progresoInicial().asignadasHoy,
+        historial: [],
+        completadas: 0,
+        asignadasHoy: 0,
         actasSesion: 0,
-        colaOffline: COLA_OFFLINE_INICIAL,
-        solicitudesRescaneo: SOLICITUDES_RESCANEO_INICIAL,
+        colaOffline: 0,
+        solicitudesRescaneo: 0,
         motivosNoEnvio: {},
         // Overlays y guiones también nacen frescos.
-        mesas: mesasIniciales(),
+        mesas: [],
         modoSimulacion: false,
         simCompleta: false,
         simUltima: null,
