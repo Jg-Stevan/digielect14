@@ -139,6 +139,10 @@ export interface ProbeOrientacion {
  *  byte (recorte manual, flujos sin EXIF). */
 interface OpcionesProbeOrientacion {
   confirmar?: { quadWorker: boolean };
+  /** KIT e14-gama-baja-20s-v1 — presupuesto PARED del probe COMPLETO (ms).
+   *  Cubre mini + posible re-corrida (t0 compartido). Sin pasar = default
+   *  PROBE_BUDGET_MS (12000) — comportamiento de hoy byte a byte. */
+  presupuestoMs?: number;
 }
 
 /** §2.2 — tope duro del probe: a mitad, abortar y seguir con 0° (hoy).
@@ -406,9 +410,11 @@ async function sondeoDe(
   let corte: "sana" | "presupuesto" | "completo" | "confirmada" = "completo";
   for (const rot of orden) {
     // §2.2 presupuesto: a mitad de probe, abortar y seguir con 0° (hoy).
-    // El t0 es COMPARTIDO con el camino miniatura: el techo de 12 s es el
-    // del probe COMPLETO (mini + posible re-corrida), no por pasada.
-    if (rot !== 0 && performance.now() - t0 > PROBE_BUDGET_MS) {
+    // El t0 es COMPARTIDO con el camino miniatura: el techo es el del probe
+    // COMPLETO (mini + posible re-corrida), no por pasada. KIT
+    // e14-gama-baja-20s-v1: el caller puede pasar un presupuesto por tier
+    // (BAJO 6000 fail-fast) — sin la opción, 12000 (byte-idéntico a hoy).
+    if (rot !== 0 && performance.now() - t0 > (opciones?.presupuestoMs ?? PROBE_BUDGET_MS)) {
       corte = "presupuesto";
       break;
     }
