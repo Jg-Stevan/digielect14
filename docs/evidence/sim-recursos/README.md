@@ -35,3 +35,26 @@ antes de `Performance.getMetrics`, y rutas/presupuestos por entorno (sin `/home/
 Correcciones de higiene vs v2: `sim-normal.js` declaraba `cpuThrottle: "6x"` en su
 resultado aunque corrió a `rate: 1` (cadena hardcodeada) — v3 registra el rate REAL
 usado. Nota: los `.local.json`/PNG de re-corridas NO se suben (artefactos locales).
+
+---
+
+## v7 + A/B — kit `e14-ocr-tessbest-v1` (rama `feat/e14-ocr-tessbest-cascada`, PR)
+
+Mismo perfil (CPU 6× · 2 GB · 4 núcleos · 3G · mono-hilo), build del kit:
+
+- `sim-lowend-v7-resultados.json` — **Tess best funciona e2e**: traza
+  `tess-best intento1 ok conf=0.81 chars=338` · cascada completa
+  (`intento1=tess-best gate1=NO elegido=1920 rescate=1`) · pipeline TERMINA
+  (221.9 s < presupuesto 240 s MEDIO) con **score REAL 4.9** (antes: timeout
+  120 s → 0.0). El rechazo restante (cabeceraE14=false · recortada=1 lado=sup)
+  quedó ENMASCARADO en main por el timeout — ver A/B.
+- `sim-ab-killswitch-resultados.json` + `sim-ab-killswitch.js` — **A/B con los
+  kill-switches del dueño** (`{"ocrCascada":false,"adaptacionDispositivo":false}` =
+  comportamiento byte-idéntico a main) bajo las MISMAS condiciones 6×+3G:
+  **mismo corte** (`cabeceraE14=false recortada=1 lado=sup`, probe de orientación
+  cortado `probe={0:4.14}` `cortes=presupuesto`). El 10.0 histórico se obtuvo SIN
+  throttling de red — la primera descarga de modelos a 3G es la condición que
+  trunca el sondeo/quad, PRE-EXISTENTE y enmascarada por el timeout de 120 s.
+  Kit propio pendiente (visibilidad del origen det + presupuesto de primera
+  descarga). Con el kit, el sondeo evalúa 3 rotaciones (antes 1) y el pipeline
+  COMPLETA con score real.
