@@ -145,7 +145,7 @@ export function TopBar() {
           )}
           {modoDev && (
             <span
-              title="Modo de diagnóstico activo"
+              title="Modo desarrollador activo"
               className="absolute -top-2 -right-2 pointer-events-none font-mono text-[8px] font-black tracking-widest px-1.5 py-px rounded-md border border-[#10b981]/60 bg-[#090d12] text-[#10b981] shadow-sm"
             >
               DEV

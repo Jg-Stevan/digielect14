@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * PanelDev — panel del modo de diagnóstico (KIT e14-observabilidad-v1,
+ * PanelDev — panel del MODO DESARROLLADOR (antes «modo de diagnóstico»,
+ * renombrado por el dueño — KIT e14-observabilidad-v1,
  * agente 2 · C4). La puerta de entrada visual a TODA la observabilidad.
  *
  * Convención de overlay COPIADA de AyudaOverlay.tsx (fixed inset-0 z-[70],
@@ -51,6 +52,10 @@ import type { ErroresAgrupados, PoliticaDatos } from "@/lib/e14/obs/tipos";
 import { VistaErrores } from "./VistaErrores";
 // KIT e14-observabilidad-v1 (agente 2 · C6): salud en vivo (30 s, solo panel abierto).
 import { useSaludVivo } from "./useSaludVivo";
+// KIT e14-rastreo-tiempos-v1: test/rastréo de tiempos de digitalización
+// (sección 9) — activado desde el modo desarrollador, mide el flujo como
+// lo usaría un usuario normal.
+import { SeccionRastreo } from "./SeccionRastreo";
 
 /** Timeout del armado — el MISMO patrón de «reiniciar jornada» (4 s). */
 const ARMADO_MS = 4000;
@@ -433,7 +438,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
-      aria-label="Panel de modo de diagnóstico"
+      aria-label="Panel de modo desarrollador"
       onClick={onClose}
     >
       <div
@@ -445,7 +450,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
         <div className="sticky top-0 z-10 bg-[#10161f]/95 backdrop-blur px-5 pt-5 pb-3.5 border-b border-slate-800/80 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-[#10b981]">
-              Modo de diagnóstico
+              Modo desarrollador
             </p>
             <h2 className="text-lg font-extrabold text-white mt-0.5">PANEL DEV</h2>
           </div>
@@ -453,7 +458,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={onClose}
             autoFocus
-            aria-label="Cerrar panel de diagnóstico"
+            aria-label="Cerrar panel de modo desarrollador"
             className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl border border-slate-700/70 bg-slate-800/60 hover:border-slate-500 text-slate-300 font-mono text-base flex items-center justify-center transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]"
           >
             ✕
@@ -469,7 +474,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
               <div className="border-t border-slate-800/70" />
               <div className="flex items-center justify-between gap-3 py-1.5">
                 <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
-                  Modo diagnóstico
+                  Modo desarrollador
                 </span>
                 {modoDev ? (
                   armadoDesactivar ? (
@@ -485,7 +490,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
               </div>
               {armadoDesactivar && (
                 <ConfirmInline
-                  pregunta="¿Desactivar el modo de diagnóstico? Se apaga la recolección y se cierra el panel (el buffer se conserva)."
+                  pregunta="¿Desactivar el modo desarrollador? Se apaga la recolección y se cierra el panel (el buffer se conserva)."
                   onSi={() => {
                     desarmarDesactivar();
                     guardarModoDev(false);
@@ -591,7 +596,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
             <div className="rounded-2xl border border-slate-800 bg-[#0b1117] py-1">
               <SwitchFila
                 etiqueta="MUESTREO CADA 5 MIN"
-                nota="Escribe muestras de salud en el buffer. Solo corre con el modo diagnóstico activo."
+                nota="Escribe muestras de salud en el buffer. Solo corre con el modo desarrollador activo."
                 ariaLabel="Muestreo de salud cada 5 minutos"
                 activo={politica.saludEnVivo}
                 onAlternar={() => {
@@ -736,14 +741,14 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
               )}
               <SwitchFila
                 etiqueta="SALUD EN VIVO"
-                nota="Muestras periódicas de salud del dispositivo. Solo corre con el modo diagnóstico activo."
+                nota="Muestras periódicas de salud del dispositivo. Solo corre con el modo desarrollador activo."
                 ariaLabel="Salud en vivo"
                 activo={politica.saludEnVivo}
                 onAlternar={() => alternarPolitica("saludEnVivo")}
               />
               {claveConfirmando === "saludEnVivo" && (
                 <ConfirmInline
-                  pregunta="¿Activar la salud en vivo? Solo corre mientras el modo diagnóstico esté activo."
+                  pregunta="¿Activar la salud en vivo? Solo corre mientras el modo desarrollador esté activo."
                   onSi={() => {
                     guardarPolitica({ ...politica, saludEnVivo: true });
                     iniciarMuestreoSalud();
@@ -1050,6 +1055,9 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
               </p>
             )}
           </section>
+
+          {/* ── 9 · RASTREO DE TIEMPOS (KIT e14-rastreo-tiempos-v1) ───── */}
+          <SeccionRastreo />
 
           <p className="text-center font-mono text-[9.5px] text-slate-400 pb-1">
             Nada sale del dispositivo sin que lo exportes manualmente (D1)

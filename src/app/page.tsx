@@ -45,6 +45,10 @@ import { iniciarDetectorHang } from "@/lib/e14/obs/hang"; // ANEXO Agente C (Pie
 import { iniciarSensorHangEnCurso } from "@/lib/e14/obs/heartbeat.client"; // KIT e14-obs-hang-atribucion-v1 (§C.7) — heartbeat + WAL (idempotente, silencioso, kill-switch hangEnCurso)
 import { iniciarTransporte } from "@/lib/e14/obs/transporte";
 import { refrescarFlags } from "@/lib/e14/flags";
+// KIT e14-rastreo-tiempos-v1: bootstrap del rastreo de tiempos (idempotente,
+// silencioso) — retoma la sesión activa si quedó de una recarga. La sesión
+// se activa/detiene desde el modo desarrollador (PanelDev §9).
+import { iniciarRastreo } from "@/lib/e14/rastreo/motor";
 
 export default function Page() {
   const vista = useE14Store((s) => s.vista);
@@ -72,6 +76,7 @@ export default function Page() {
       iniciarSensorHangEnCurso(); // KIT e14-obs-hang-atribucion-v1 (§C.7) — drena el WAL + heartbeat del hang-en-curso (idempotente, silencioso, kill-switch hangEnCurso)
       iniciarTransporte();
       void refrescarFlags();
+      iniciarRastreo(); // KIT e14-rastreo-tiempos-v1 — idempotente y silencioso
     } catch {
       /* el rastreo jamás rompe la app (§2.4) */
     }
