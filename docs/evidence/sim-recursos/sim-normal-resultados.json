@@ -1,0 +1,70 @@
+{
+  "app": "http://localhost:3100",
+  "etapas": {
+    "cargaInicial": {
+      "domContentLoaded_ms": 426,
+      "uiVisible_ms": 456
+    },
+    "perfilNavegador": {
+      "deviceMemory": 2,
+      "hardwareConcurrency": 4,
+      "heapLimitMB": 2222,
+      "crossOriginIsolated": false
+    },
+    "camara": {
+      "__cameraChoice": {
+        "elegida": "fake_device_0",
+        "torch": false,
+        "focusModes": [
+          "manual",
+          "continuous"
+        ],
+        "width": 960,
+        "height": 540,
+        "sondas": [
+          {
+            "label": "fake_device_0",
+            "torch": false,
+            "af": [
+              "manual",
+              "continuous"
+            ],
+            "max": "3840x2160"
+          }
+        ]
+      },
+      "bootMsHastaTelemetria": 2504,
+      "overlayError": false,
+      "iniciando": false
+    },
+    "fileInputs": [
+      {
+        "accept": "image/*,.heic,.heif",
+        "capture": null,
+        "id": "",
+        "className": "hidden"
+      },
+      {
+        "accept": "image/*,.heic,.heif",
+        "capture": null,
+        "id": "",
+        "className": "hidden"
+      }
+    ],
+    "pipeline": {
+      "resuelto": true,
+      "msHastaRevision": 14136,
+      "analizandoVisto": true,
+      "tAnalizando": 1889,
+      "cpuThrottle": "6x",
+      "red": "3G",
+      "hilosOcr": "mono-hilo (dev sin COOP/COEP ≈ GH Pages / sin SAB)"
+    },
+    "vistaFinal_texto": "10.0/10\nÓPTIMA\nSABADO LISBOA - CONSULADO\nQR ✓\nCAPA 0 QR\nTRANSMISIÓN\nMESA 003\nPÁG 1 DE 2\n✓ 10.0/10 ÓPTIMA\n✓\nENVIADO AUTOMÁTICAMENTE\n04:54:16\nSEGUIR ESCANEANDO\nESCANEAR\n1\nACTAS\nRESUMEN",
+    "memoriaPostPipeline": {
+      "jsHeapUsedMB": 28,
+      "heapLimitMB": 2222
+    }
+  },
+  "errores": []
+}

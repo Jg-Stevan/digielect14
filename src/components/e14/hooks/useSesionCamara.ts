@@ -8,9 +8,12 @@
  * Contiene (extraído tal cual de ScanView.tsx):
  *  · Constantes de plataforma/preview/escalera (IS_ANDROID, CAN_TAKEPHOTO,
  *    IDEAL_PREVIEW_*, FOTO_LADDER, esCalidadPrimero, TAKEPHOTO_TIMEOUT_MS).
- *  · F-LENS v4 — sondas secuenciales y elección de la cámara principal
+ *  · F-LENS v4/v5 — sondas secuenciales y elección de la cámara principal
  *    (BACK/FRONT_CAMERA_RE, CameraProbeResult, probeCamera, chooseMainProbe,
- *    caché e14-main-camera-v1, PROBE_TIMEOUT_MS) + esIOS.
+ *    caché e14-main-camera-v1, PROBE_TIMEOUT_MS) + esIOS. v5 (fix-camara-
+ *    principal): clasificación por facingMode REAL de cada sonda + guard de
+ *    apertura (facing "user" → cascada) + saneo de caché venenada — el bug
+ *    de campo «abrió la frontal» no puede repetirse ni persistir.
  *  · tomarFoto (DUAL PIPELINE — escalera FOTO_LADDER + carrera 8 s + lista
  *    negra + upgrade LOTE 5.4).
  *  · Efectos, EN EL MISMO ORDEN RELATIVO del original: ARRANQUE (lab
@@ -131,12 +134,35 @@ declare global {
   }
 }
 
-/* ── F-LENS v4 — selección de la cámara PRINCIPAL (puerto EXACTO del lab) ────
+/* ── F-LENS v4/v5 — selección de la cámara PRINCIPAL (puerto EXACTO del lab) ──
  *  Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L76-L92
  *  (comentario E4/F-LENS v4) + L116-L223 (código). Remedición H1 del
  *  SPEC-auditoria-copias.md: la fase lógica dejó solo la cascada
  *  facingMode (la red de seguridad del lab) y el bug visible en producción
- *  fue la GRAN ANGULAR en vez de la principal 50MP. */
+ *  fue la GRAN ANGULAR en vez de la principal 50MP.
+ *
+ *  F-LENS v5 (kit fix-camara-principal, bug de campo del dueño: «en un
+ *  dispositivo abrió la cámara FRONTAL y no se pudo hacer las pruebas»):
+ *  tres vectores confirmados en el código y sus contramedidas —
+ *     A) Sondas ciegas al facing: probeCamera leía caps de AF/torch/resolución
+ *        pero DESHECHABA track.getSettings().facingMode — la señal MÁS
+ *        confiable del oriente físico. Sin labels útiles (genéricos o en
+ *        otro idioma) el pool de respaldo era TODAS las cámaras y la
+ *        frontal podía ganar por AF/resolución. → v5 captura facingMode en
+ *        cada sonda y la elección clasifica por facing primero, label
+ *        después (esSondaFrontal/esSondaTrasera); frontal solo si el
+ *        dispositivo no tiene otra.
+ *     B) Caché venenada sin cura: e14-main-camera-v1 solo se invalidaba por
+ *        FALLO de apertura — y abrir la frontal NUNCA falla → el dispositivo
+ *        quedó pegado a la frontal para siempre (por eso «no se pudo hacer
+ *        las pruebas» ni recargando). → v5 sanea la caché al leerla (entrada
+ *        frontal por facing/label se borra y fuerza re-sondeo) y JAMÁS escribe
+ *        una frontal.
+ *     C) Apertura sin verificación: el stream ganador se aceptaba sin mirar
+ *        el facing real del track. → v5 guarda de apertura: stream con
+ *        facing "user" se cierra y cae a la cascada (facingMode exact
+ *        "environment"); la cascada ya tenía la red de seguridad para
+ *        dispositivos solo-frontales. */
 
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L76-L92 (E4/F-LENS v4):
 // E4: facingMode NO es confiable en iPhone (puede ganar la frontal o
@@ -162,7 +188,9 @@ const BACK_CAMERA_RE = /back|rear|environment|trasera|posterior|arri[eè]re/i;
 const FRONT_CAMERA_RE = /front|delantera|anterior|face|facial|selfie/i;
 
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L129-L137
-/** Resultado de sondear UNA cámara (puerto de CameraProbe de codigo-test). */
+/** Resultado de sondear UNA cámara (puerto de CameraProbe de codigo-test).
+ *  F-LENS v5: `facingMode` — lo que el track REAL reporta ("user"/"environment"
+ *  /undefined); manda sobre el label a la hora de clasificar. */
 interface CameraProbeResult {
   deviceId: string;
   label: string;
@@ -170,6 +198,7 @@ interface CameraProbeResult {
   torch: boolean;
   maxWidth: number;
   maxHeight: number;
+  facingMode?: string;
 }
 
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L139-L144
@@ -183,6 +212,35 @@ function hasRealAF(modes: string[]): boolean {
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L146-L148
 function readCapsNum(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+// F-LENS v5 — el facing REAL del track ya abierto (la verdad en apertura;
+// puede existir aunque la sonda no lo hubiera capturado). undefined = sin
+// reporte (Safari escritorio, webcams USB).
+function leerFacingDeStream(stream: MediaStream): string | undefined {
+  try {
+    const track = stream.getVideoTracks()[0];
+    if (!track || typeof track.getSettings !== "function") return undefined;
+    const st = track.getSettings() as { facingMode?: string } | undefined;
+    return st?.facingMode;
+  } catch {
+    return undefined;
+  }
+}
+
+// F-LENS v5 — clasificación de ORIENTACIÓN de una sonda: el facing reportado
+// por el track MANDA sobre el label (los labels son localizados/mutables;
+// facingMode es el dato del driver). Sin facing, solo el regex E4 decide.
+function esSondaFrontal(p: CameraProbeResult): boolean {
+  if (p.facingMode === "user") return true;
+  if (p.facingMode === "environment") return false;
+  return FRONT_CAMERA_RE.test(p.label) && !BACK_CAMERA_RE.test(p.label);
+}
+
+function esSondaTrasera(p: CameraProbeResult): boolean {
+  if (p.facingMode === "environment") return true;
+  if (p.facingMode === "user") return false;
+  return BACK_CAMERA_RE.test(p.label) && !FRONT_CAMERA_RE.test(p.label);
 }
 
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L150-L188
@@ -240,7 +298,14 @@ async function probeCamera(
       torch?: boolean;
       width?: { max?: number };
       height?: { max?: number };
+      facingMode?: string | string[];
     };
+    // F-LENS v5: el facing REAL del track (getSettings manda; caps de
+    // respaldo — algunos drivers solo lo anuncian en capabilities).
+    const stFacing = (track.getSettings?.() ?? {}) as { facingMode?: string };
+    const capsFacing = Array.isArray(caps.facingMode)
+      ? caps.facingMode[0]
+      : caps.facingMode;
     return {
       deviceId,
       label: label || track.label,
@@ -248,6 +313,7 @@ async function probeCamera(
       torch: caps.torch === true,
       maxWidth: readCapsNum(caps.width?.max),
       maxHeight: readCapsNum(caps.height?.max),
+      facingMode: stFacing?.facingMode ?? capsFacing,
     };
   } catch {
     return null; // cámara ocupada/no accesible → descartada
@@ -262,13 +328,17 @@ async function probeCamera(
  *    sensor (maxWidth×maxHeight) — la principal es siempre el sensor
  *    grande; el torch desempata resoluciones idénticas.
  *  · Sin AF en ninguna (típico iOS, regla D6): grupo de label más SIMPLE
- *    (sin palabras de lente), luego menos palabras, luego más resolución. */
+ *    (sin palabras de lente), luego menos palabras, luego más resolución.
+ *  F-LENS v5 (bug de campo: abrió la FRONTAL): el pool de respaldo ya no es
+ *  «todas las sondas» — primero traseras por FACING/label; sin traseras,
+ *  desconocidas EXCLUYENDO frontales; la frontal entra solo si el
+ *  dispositivo no tiene nada más (tablet/escritorio de una cámara). */
 function chooseMainProbe(probes: CameraProbeResult[]): CameraProbeResult | null {
   if (probes.length === 0) return null;
-  const backs = probes.filter(
-    (p) => BACK_CAMERA_RE.test(p.label) && !FRONT_CAMERA_RE.test(p.label)
-  );
-  const pool = backs.length > 0 ? backs : probes;
+  const backs = probes.filter(esSondaTrasera);
+  const noFrontales = probes.filter((p) => !esSondaFrontal(p));
+  const pool =
+    backs.length > 0 ? backs : noFrontales.length > 0 ? noFrontales : probes;
   const byRes = (a: CameraProbeResult, b: CameraProbeResult): number =>
     b.maxWidth * b.maxHeight - a.maxWidth * a.maxHeight;
   const withAf = pool.filter((p) => hasRealAF(p.focusModes));
@@ -312,6 +382,8 @@ interface MainCameraCache {
   focusModes: string[];
   maxWidth: number;
   maxHeight: number;
+  /** F-LENS v5 — facing registrado al elegir ("user"/"environment"). */
+  facingMode?: string;
 }
 
 function readMainCameraCache(): MainCameraCache | null {
@@ -320,6 +392,17 @@ function readMainCameraCache(): MainCameraCache | null {
     if (!raw) return null;
     const c = JSON.parse(raw) as MainCameraCache;
     if (!c || typeof c.deviceId !== "string" || c.deviceId === "") return null;
+    // F-LENS v5 — SANEO de cachés venenadas (el dispositivo del dueño quedó
+    // pegado a la FRONTAL: la caché solo se invalidaba por FALLO de apertura
+    // y abrir la frontal nunca falla). Entrada frontal por facing o label →
+    // se borra AHORA y se fuerza re-sondeo completo.
+    if (
+      c.facingMode === "user" ||
+      (FRONT_CAMERA_RE.test(c.label) && !BACK_CAMERA_RE.test(c.label))
+    ) {
+      clearMainCameraCache();
+      return null;
+    }
     return c;
   } catch {
     return null; // almacenamiento corrupto/bloqueado — sondeo completo
@@ -327,6 +410,11 @@ function readMainCameraCache(): MainCameraCache | null {
 }
 
 function writeMainCameraCache(p: CameraProbeResult): void {
+  // F-LENS v5 — defensa en profundidad: JAMÁS persistir una frontal (el
+  // guard de apertura ya impide llegar aquí con una; si el facing es
+  // desconocido decide el label).
+  if (p.facingMode === "user") return;
+  if (FRONT_CAMERA_RE.test(p.label) && !BACK_CAMERA_RE.test(p.label)) return;
   try {
     const entry: MainCameraCache = {
       deviceId: p.deviceId,
@@ -338,7 +426,10 @@ function writeMainCameraCache(p: CameraProbeResult): void {
       maxWidth: p.maxWidth,
       maxHeight: p.maxHeight,
     };
-    localStorage.setItem(MAIN_CAMERA_CACHE_KEY, JSON.stringify(entry));
+    localStorage.setItem(
+      MAIN_CAMERA_CACHE_KEY,
+      JSON.stringify({ ...entry, facingMode: p.facingMode }),
+    );
   } catch {
     /* cuota llena / modo privado — solo es una caché */
   }
@@ -634,6 +725,10 @@ export function useSesionCamara({
     //    D27, decisión documentada de e14; la captura hi-res va por
     //    takePhoto al sensor).
     // Devuelve el stream de la principal o null (→ cascade/SIM).
+    // F-LENS v5: la eleccion clasifica por FACING (getSettings de cada sonda)
+    // primero y label después; toda apertura se VERIFICA (guard: stream con
+    // facing "user" se cierra y cae a la cascada) y la caché se sanea al
+    // leerla — ver bloque v5 arriba del archivo.
     // (Nota e14: el lab marca permisoDenegado aquí para su aviso B2 con CTA
     //  «Activar cámara»; e14 no tiene ese overlay — el fallback unificado a
     //  SIMULACIÓN con toast cubre el caso, ver fila 16 de la auditoría.)
@@ -646,7 +741,7 @@ export function useSesionCamara({
       const cache = readMainCameraCache();
       if (cache) {
         try {
-          return await media.getUserMedia({
+          const stream = await media.getUserMedia({
             video: {
               deviceId: { exact: cache.deviceId },
               width: { ideal: IDEAL_PREVIEW_WIDTH },
@@ -655,6 +750,16 @@ export function useSesionCamara({
             },
             audio: false,
           });
+          // F-LENS v5 — guard de apertura en la VÍA RÁPIDA: si lo abierto
+          // reporta facing "user", la caché estaba venenada MÁS ALLÁ del
+          // label (frente a un driver que mintió al escribir) → cerrar,
+          // borrar y caer al sondeo completo. JAMÁS devolver la frontal.
+          if (leerFacingDeStream(stream) === "user") {
+            stream.getTracks().forEach((t) => t.stop());
+            clearMainCameraCache();
+          } else {
+            return stream;
+          }
         } catch (err) {
           clearMainCameraCache();
           if (esErrorPermiso(err)) return null; // permiso: la cascada no ayuda
@@ -715,6 +820,18 @@ export function useSesionCamara({
         if (cancelado) return null;
         try {
           const stream = await media.getUserMedia(attempts[ai]!);
+          // F-LENS v5 — guard de apertura (última línea de defensa): si el
+          // stream abierto reporta facing "user", NO es la principal que
+          // pedimos (clasificación errada o default del SO) → cerrarlo y
+          // seguir; agotados los intentos → null → cascada, cuyo primer
+          // intento es facingMode EXACT "environment" (la señal fuerte).
+          // Dispositivo SOLO-frontal: la cascada lo cubre (environment ideal
+          // es best-effort y su {video:true} final acepta la única cámara).
+          if (leerFacingDeStream(stream) === "user") {
+            stream.getTracks().forEach((t) => t.stop());
+            if (main && ai < 2) clearMainCameraCache();
+            continue;
+          }
           // FIX v5 (5.3) del lab: persistir la elección SOLO si el stream
           // abrió con la deviceId de la ganadora (los 2 primeros intentos la
           // fijan; el fallback {video:true} NO escribe caché).
@@ -745,20 +862,25 @@ export function useSesionCamara({
           }
           // Telemetría de QA (window.__cameraChoice): qué lente quedó abierta
           // y qué se midió en las sondas — útil para depurar remotamente.
+          // F-LENS v5: incluye el FACING real abierto (depuración remota del
+          // bug «abrió la frontal» sin acceso al dispositivo).
           try {
             const track = stream.getVideoTracks()[0];
             const st = track?.getSettings?.() as {
               width?: number;
               height?: number;
+              facingMode?: string;
             } | undefined;
             (window as unknown as { __cameraChoice?: unknown }).__cameraChoice = {
               elegida: main?.label ?? track?.label ?? "",
+              facing: st?.facingMode ?? main?.facingMode ?? null,
               torch: main?.torch ?? false,
               focusModes: main?.focusModes ?? [],
               width: st?.width ?? 0,
               height: st?.height ?? 0,
               sondas: probes.map((p) => ({
                 label: p.label,
+                facing: p.facingMode ?? null,
                 torch: p.torch,
                 af: p.focusModes,
                 max: `${p.maxWidth}x${p.maxHeight}`,

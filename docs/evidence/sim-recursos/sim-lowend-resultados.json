@@ -1,0 +1,70 @@
+{
+  "app": "http://localhost:3100",
+  "etapas": {
+    "cargaInicial": {
+      "domContentLoaded_ms": 805,
+      "uiVisible_ms": 1008
+    },
+    "perfilNavegador": {
+      "deviceMemory": 2,
+      "hardwareConcurrency": 4,
+      "heapLimitMB": 2222,
+      "crossOriginIsolated": false
+    },
+    "camara": {
+      "__cameraChoice": {
+        "elegida": "fake_device_0",
+        "torch": false,
+        "focusModes": [
+          "manual",
+          "continuous"
+        ],
+        "width": 960,
+        "height": 540,
+        "sondas": [
+          {
+            "label": "fake_device_0",
+            "torch": false,
+            "af": [
+              "manual",
+              "continuous"
+            ],
+            "max": "3840x2160"
+          }
+        ]
+      },
+      "bootMsHastaTelemetria": 7920,
+      "overlayError": false,
+      "iniciando": false
+    },
+    "fileInputs": [
+      {
+        "accept": "image/*,.heic,.heif",
+        "capture": null,
+        "id": "",
+        "className": "hidden"
+      },
+      {
+        "accept": "image/*,.heic,.heif",
+        "capture": null,
+        "id": "",
+        "className": "hidden"
+      }
+    ],
+    "pipeline": {
+      "resuelto": true,
+      "msHastaRevision": 125809,
+      "analizandoVisto": true,
+      "tAnalizando": 8110,
+      "cpuThrottle": "6x",
+      "red": "3G",
+      "hilosOcr": "mono-hilo (dev sin COOP/COEP ≈ GH Pages / sin SAB)"
+    },
+    "vistaFinal_texto": "0.0/10\nRECHAZADA\nNO IDENTIFICADO\n---\nMESA ---\nPÁG - DE -\nACTA RECHAZADA\n\nSE MUESTRA LA FOTO ORIGINAL\n\nRecortar\nRotar 90°\nImagen\nOBLIGATORIO REPETIR FOTO (INTENTO 1 DE 4)\nESCANEAR\n1\nACTAS\nRESUMEN\n\nGUÍA RÁPIDA\n\n¿Cómo funciona el Digitalizador?\n\nConvierte las fotos de las actas E-14 en registros digitales verificados: escanea, la app lee el acta con OCR y transmite el resultado.\n\n1 · ESCANEA\n\nApunta la cámara al acta E-14 llenando el encuadre. También puedes subir una foto o un PDF.\n\n2 · ANALIZA\n\nLa app detecta los bordes del acta, la endereza y lee la cabecera y el contenido con OCR.\n\n3 · REVISA\n\nComprueba el resultado: calidad del escaneo, clasificación (puesto · tipo · mesa · página) y texto leído.\n\n4 · TRANSMITE\n\nLas actas óptimas se envían solas; las demás te pedimos confirmación o un rescaneo. Sin conexión, se acumulan en cola.\n\nNIVELES DE CALIDAD (SCORE)\n\nÓPTIMA\nscore ≥ 8.0\nSe envía ",
+    "memoriaPostPipeline": {
+      "jsHeapUsedMB": 10,
+      "heapLimitMB": 2222
+    }
+  },
+  "errores": []
+}

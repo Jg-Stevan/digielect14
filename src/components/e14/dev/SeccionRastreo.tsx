@@ -20,7 +20,7 @@
  * contaminan los agregados de tiempos reales. PRIVACIDAD: solo tiempos/
  * estados — sin actas, sin OCR, sin puesto/mesa en claro; ids con hash.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import {
   activarRastreo,
@@ -188,7 +188,10 @@ export function SeccionRastreo() {
   const resumen: ResumenSesion | null = sesion ? resumenDeSesion(sesion) : null;
   const hayDatos = !!sesion && sesion.actas.length > 0;
 
-  const exportar = useCallback(async (formato: FormatoRastreo) => {
+  // FIX lint (react-hooks/preserve-manual-memoization): `exportar` NO vive en
+  // ningún array de deps (solo onClick) → función plana; el guard de
+  // re-entrada y el feedback UI (`exportando`/`listo`) quedan idénticos.
+  const exportar = async (formato: FormatoRastreo) => {
     if (exportando) return;
     setExportando(formato);
     setListo(null);
@@ -203,7 +206,7 @@ export function SeccionRastreo() {
     } finally {
       setExportando(null);
     }
-  }, [exportando]);
+  };
 
   return (
     <section aria-label="Rastreo de tiempos de digitalización" className="flex flex-col gap-2">
