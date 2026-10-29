@@ -1,0 +1,85 @@
+{
+  "app": "http://localhost:3100",
+  "acta": "/home/z/repos/digielect14/src/assets/acta-e14-real.jpg",
+  "perfil": "CPU 6x · RAM 2GB · 4 núcleos · 3G · mono-hilo (sin COOP/COEP)",
+  "etapas": {
+    "cargaInicial": {
+      "uiVisible_ms": 1024
+    },
+    "perfilNavegador": {
+      "deviceMemory": 2,
+      "hardwareConcurrency": 4,
+      "heapLimitMB": 2222,
+      "crossOriginIsolated": false
+    },
+    "camara": {
+      "__cameraChoice": {
+        "elegida": "fake_device_0",
+        "facing": null,
+        "torch": false,
+        "focusModes": [
+          "manual",
+          "continuous"
+        ],
+        "width": 960,
+        "height": 540,
+        "sondas": [
+          {
+            "label": "fake_device_0",
+            "facing": null,
+            "torch": false,
+            "af": [
+              "manual",
+              "continuous"
+            ],
+            "max": "3840x2160"
+          }
+        ]
+      },
+      "bootMsHastaTelemetria": 7833
+    },
+    "pipelineArranque": {
+      "analizandoVisto": true,
+      "tAnalizando": 2238
+    },
+    "pipeline": {
+      "resuelto": true,
+      "msHastaRevision": 124535,
+      "vista": {
+        "score": "0.0",
+        "rechazada": true,
+        "optima": true,
+        "enviadaAuto": false,
+        "repetirFoto": true,
+        "tiempoExcedido": false,
+        "noIdentificado": true,
+        "clasificacion": "DELEGADOS",
+        "qr": false
+      },
+      "cpuThrottle": "6x (CDP Emulation.setCPUThrottlingRate)",
+      "red": "3G",
+      "hilosOcr": "mono-hilo (dev sin COOP/COEP, sin SAB)"
+    },
+    "vigilanciaRescate": {
+      "ventana_ms": 120000,
+      "cambios": [],
+      "estadoFinal": {
+        "score": "0.0",
+        "rechazada": true,
+        "optima": true,
+        "enviadaAuto": false,
+        "repetirFoto": true,
+        "tiempoExcedido": false,
+        "noIdentificado": true,
+        "clasificacion": "DELEGADOS",
+        "qr": false
+      }
+    },
+    "memoriaPostPipeline": {
+      "jsHeapUsedMB": 10,
+      "heapLimitMB": 2222
+    },
+    "metricasCDP": {}
+  },
+  "errores": []
+}

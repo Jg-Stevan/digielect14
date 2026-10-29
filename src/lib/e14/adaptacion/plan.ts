@@ -37,6 +37,61 @@ const HILOS_POR_TIER: Record<Tier, number> = {
   ALTO: 6,
 };
 
+/** KIT e14-ocr-tessbest-v1 — Presupuesto del ESCANEO individual (timeout
+ *  del pipeline) por tier. Evidencia (docs/REPORTE-sim-gama-baja-v2.md +
+ *  sim-lowend-v3-resultados.json): en mono-hilo 6× el pipeline real
+ *  necesita ~125 s y el timeout fijo de 120 s (e67) lo RECHAZABA con score
+ *  0.0 justo antes de terminar (P0). ALTO = 120 s byte-idéntico al
+ *  histórico; MEDIO/BAJO escalan (lección D48 del masiva: el presupuesto
+ *  manda sobre el reloj de la máquina del dueño, no al revés). La UI nunca
+ *  se congela: el pipeline corre en worker y el ANALIZANDO es event-driven
+ *  (D18). Coherente con la cascada: vencido ⇒ no se abre ninguna etapa
+ *  nueva (§3 del kit escalonado). */
+const PRESUPUESTO_ESCANEO_POR_TIER: Record<Tier, number> = {
+  BAJO: 480_000,
+  MEDIO: 240_000,
+  ALTO: 120_000,
+};
+
+/** Referencia histórica (e67) — default/ALTO y fallback seguro. */
+export const PRESUPUESTO_ESCANEO_DEFAULT_MS = 120_000;
+
+/** KIT e14-ocr-tessbest-v1 — presupuesto del PROBE de orientación por tier
+ *  (histórico fijo 12 000 — D56 §3 T3, calibrado con det del probe a
+ *  DET_CAP_RAPIDO en equipos del dueño: det ~1.2 s + rec0 ~3 s + rec90 ~3 s
+ *  + rec270 ~3 s ≈ 10.2 s). Evidencia sim-lowend v5/v6 (mono-hilo 6× + 3G):
+ *  el t0 COMPARTIDO se consume con cargas de fondo (descarga vendida de
+ *  Tess, modelos en cola) ⇒ el sondeo queda cortado (cortes=presupuesto) sin
+ *  evaluar challengers → rotación débil sin confirmar → el warp corta la
+ *  cabecera (recortada=1 lado=sup) → cabeceraE14=false → RECHAZADA en un
+ *  acta que con sondeo completo es 10.0 ÓPTIMA. BAJO cubre el probe completo
+ *  con margen; ALTO = 12 s byte-idéntico. Kill-switch: adaptación OFF ⇒ 12 s. */
+const PROBE_ORIENTACION_POR_TIER: Record<Tier, number> = {
+  BAJO: 150_000,
+  MEDIO: 60_000,
+  ALTO: 12_000,
+};
+
+/** Referencia histórica (D56 §3 T3) — default/ALTO y fallback seguro. */
+export const PROBE_ORIENTACION_DEFAULT_MS = 12_000;
+
+/** KIT e14-ocr-tessbest-v1 — espera del warm-up del worker OpenCV en la
+ *  DETECCIÓN (tope histórico 5 s — kit masiva-ux T1). Evidencia sim-lowend-v4:
+ *  a CPU 6× el compile+warm wasm mono-hilo NO cabe en 5 s ⇒ la detección cae
+ *  a fallback (quad peor → score 4.9 y cabecera dañada → ILEGIBLE en un acta
+ *  que a 1× fue 10.0 ÓPTIMA). ALTO = 5 s byte-idéntico; BAJO/MEDIO escalan
+ *  (el tope es una ESPERA pasiva — el worker avanza mientras tanto, jamás
+ *  bloquea más de lo que tarda el warm-up real). Kill-switch: adaptación OFF
+ *  ⇒ 5 s histórico exacto. */
+const ESPERA_WORKER_POR_TIER: Record<Tier, number> = {
+  BAJO: 20_000,
+  MEDIO: 10_000,
+  ALTO: 5_000,
+};
+
+/** Referencia histórica (masiva-ux T1) — default/ALTO y fallback seguro. */
+export const ESPERA_WORKER_DEFAULT_MS = 5_000;
+
 export interface PlanAdaptativo {
   /** false ⇒ el flag del dueño está OFF ⇒ knobs byte-idénticos a hoy. */
   adaptado: boolean;
@@ -48,6 +103,17 @@ export interface PlanAdaptativo {
   ocrHilosFuente: "override-manual" | "plan-adaptativo" | "default";
   /** Sin SharedArrayBuffer+COOP/COEP el wasm corre a 1 hilo — registro. */
   hilosWasmDisponibles: boolean;
+  /** KIT e14-ocr-tessbest-v1 — presupuesto del escaneo individual ya
+   *  RESUELTO (override manual > plan por tier > default 120 s). */
+  presupuestoEscaneoMs: number;
+  /** De dónde salió presupuestoEscaneoMs (misma auditoría honesta). */
+  presupuestoEscaneoFuente: "override-manual" | "plan-adaptativo" | "default";
+  /** KIT e14-ocr-tessbest-v1 — espera del warm-up del worker OpenCV en la
+   *  detección ya RESUELTA por tier (BAJO 20 s · MEDIO 10 s · ALTO 5 s). */
+  esperaWorkerMs: number;
+  /** KIT e14-ocr-tessbest-v1 — presupuesto del probe de orientación ya
+   *  RESUELTO por tier (BAJO 150 s · MEDIO 60 s · ALTO 12 s). */
+  probeOrientacionMs: number;
 }
 
 function nucleosDisponibles(): number {
@@ -72,6 +138,41 @@ function hilosWasmDisponibles(): boolean {
   }
 }
 
+/** Resuelve el presupuesto del escaneo con la MISMA prioridad del plan:
+ *  override MANUAL del dueño (flag `presupuestoEscaneoMs`, clamp 30-900 s)
+ *  > plan por tier > default 120 s. Jamás lanza. */
+function resolverPresupuesto(tier: Tier): {
+  ms: number;
+  fuente: PlanAdaptativo["presupuestoEscaneoFuente"];
+} {
+  try {
+    const override = leerOverridesFlags().presupuestoEscaneoMs;
+    if (typeof override === "number" && Number.isFinite(override)) {
+      return {
+        ms: Math.max(30_000, Math.min(900_000, Math.round(override))),
+        fuente: "override-manual",
+      };
+    }
+  } catch {
+    /* sin override legible → plan por tier */
+  }
+  return {
+    ms: PRESUPUESTO_ESCANEO_POR_TIER[tier] ?? PRESUPUESTO_ESCANEO_DEFAULT_MS,
+    fuente: "plan-adaptativo",
+  };
+}
+
+/** Espera del warm-up del worker OpenCV por tier (sin flag propio — el
+ *  kill-switch `adaptacionDispositivo` OFF ⇒ 5 s histórico exacto). */
+function resolverEsperaWorker(tier: Tier): number {
+  return ESPERA_WORKER_POR_TIER[tier] ?? ESPERA_WORKER_DEFAULT_MS;
+}
+
+/** Presupuesto del probe de orientación por tier (mismo criterio). */
+function resolverProbeOrientacion(tier: Tier): number {
+  return PROBE_ORIENTACION_POR_TIER[tier] ?? PROBE_ORIENTACION_DEFAULT_MS;
+}
+
 /** Plan efectivo de recursos — SYNC, barato, jamás lanza. Consumidores:
  *  rapidocr (numThreads), PanelDev (visor) e informe-ia (auditoría). */
 export function planAdaptativo(): PlanAdaptativo {
@@ -91,11 +192,16 @@ export function planAdaptativo(): PlanAdaptativo {
           : 1,
         ocrHilosFuente: "default",
         hilosWasmDisponibles: hilosOk,
+        presupuestoEscaneoMs: PRESUPUESTO_ESCANEO_DEFAULT_MS,
+        presupuestoEscaneoFuente: "default",
+        esperaWorkerMs: ESPERA_WORKER_DEFAULT_MS,
+        probeOrientacionMs: PROBE_ORIENTACION_DEFAULT_MS,
       };
     }
     // 1 · override MANUAL del dueño — manda sobre el plan (D6).
     const overrideHilos = leerOverridesFlags().ocrThreadsTope;
     if (typeof overrideHilos === "number") {
+      const pres = resolverPresupuesto(tierRap.tier);
       return {
         adaptado: true,
         tier: tierRap.tier,
@@ -103,9 +209,14 @@ export function planAdaptativo(): PlanAdaptativo {
         ocrHilos: hilosOk ? Math.min(overrideHilos, nucleos) : 1,
         ocrHilosFuente: "override-manual",
         hilosWasmDisponibles: hilosOk,
+        presupuestoEscaneoMs: pres.ms,
+        presupuestoEscaneoFuente: pres.fuente,
+        esperaWorkerMs: resolverEsperaWorker(tierRap.tier),
+        probeOrientacionMs: resolverProbeOrientacion(tierRap.tier),
       };
     }
     // 2 · plan adaptativo por tier (capado por hardware real).
+    const pres = resolverPresupuesto(tierRap.tier);
     return {
       adaptado: true,
       tier: tierRap.tier,
@@ -113,6 +224,10 @@ export function planAdaptativo(): PlanAdaptativo {
       ocrHilos: hilosOk ? Math.min(HILOS_POR_TIER[tierRap.tier], nucleos) : 1,
       ocrHilosFuente: "plan-adaptativo",
       hilosWasmDisponibles: hilosOk,
+      presupuestoEscaneoMs: pres.ms,
+      presupuestoEscaneoFuente: pres.fuente,
+      esperaWorkerMs: resolverEsperaWorker(tierRap.tier),
+      probeOrientacionMs: resolverProbeOrientacion(tierRap.tier),
     };
   } catch {
     // Fallo inesperado → histórico puro (jamás romper el OCR por el plan).
@@ -123,6 +238,10 @@ export function planAdaptativo(): PlanAdaptativo {
       ocrHilos: hilosOk ? Math.min(FLAGS_DEFAULT.ocrThreadsTope, nucleos) : 1,
       ocrHilosFuente: "default",
       hilosWasmDisponibles: hilosOk,
+      presupuestoEscaneoMs: PRESUPUESTO_ESCANEO_DEFAULT_MS,
+      presupuestoEscaneoFuente: "default",
+      esperaWorkerMs: ESPERA_WORKER_DEFAULT_MS,
+      probeOrientacionMs: PROBE_ORIENTACION_DEFAULT_MS,
     };
   }
 }
@@ -132,4 +251,37 @@ export function planAdaptativo(): PlanAdaptativo {
 export function numThreadsOcrEfectivos(): number {
   const plan = planAdaptativo();
   return plan.hilosWasmDisponibles ? plan.ocrHilos : 1;
+}
+
+/** Helper del consumidor (scanner-core-bridge) — presupuesto del ESCANEO
+ *  individual ya resuelto (SYNC, barato, jamás lanza). Adaptación OFF o
+ *  fallo ⇒ default histórico 120 s (byte-idéntico a e67). */
+export function presupuestoEscaneoEfectivo(): number {
+  try {
+    return planAdaptativo().presupuestoEscaneoMs;
+  } catch {
+    return PRESUPUESTO_ESCANEO_DEFAULT_MS;
+  }
+}
+
+/** Helper del consumidor (scanner-core-bridge) — espera del warm-up del
+ *  worker OpenCV ya resuelta (SYNC, barato, jamás lanza). Adaptación OFF o
+ *  fallo ⇒ 5 s histórico exacto (masiva-ux T1). */
+export function esperaWorkerEfectiva(): number {
+  try {
+    return planAdaptativo().esperaWorkerMs;
+  } catch {
+    return ESPERA_WORKER_DEFAULT_MS;
+  }
+}
+
+/** Helper del consumidor (orientacion.ts) — presupuesto del probe de
+ *  orientación ya resuelto (SYNC, barato, jamás lanza). Adaptación OFF o
+ *  fallo ⇒ 12 s histórico exacto (D56 §3 T3). */
+export function presupuestoProbeOrientacionEfectivo(): number {
+  try {
+    return planAdaptativo().probeOrientacionMs;
+  } catch {
+    return PROBE_ORIENTACION_DEFAULT_MS;
+  }
 }

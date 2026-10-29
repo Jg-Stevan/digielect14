@@ -135,6 +135,12 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // el kill-switch {"adaptacionDispositivo": false} del dueño pasa por
     // ESTE whitelist (prioridad máxima, D6 — plan.ts ya lo respeta).
     if (typeof o.adaptacionDispositivo === "boolean") limpio.adaptacionDispositivo = o.adaptacionDispositivo;
+    // KIT e14-ocr-tessbest-v1 (GO-B) — mismo criterio (DOBLE whitelist):
+    // override MANUAL del presupuesto del escaneo (null o ms clampados).
+    if (o.presupuestoEscaneoMs === null) limpio.presupuestoEscaneoMs = null;
+    if (typeof o.presupuestoEscaneoMs === "number" && Number.isFinite(o.presupuestoEscaneoMs)) {
+      limpio.presupuestoEscaneoMs = Math.max(30_000, Math.min(900_000, Math.round(o.presupuestoEscaneoMs)));
+    }
     // NOTA (eliminación del módulo masiva): las puertas de los 17 flags
     // exclusivos de la cola se retiraron junto con el módulo.
     return limpio;
