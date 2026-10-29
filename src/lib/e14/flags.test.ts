@@ -60,10 +60,12 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       hangEnCurso: true,
       // KIT e14-orientacion-qr-v1 (§D) — aditivo AL FINAL (contrato D57):
       qrBrujulaOrientacion: true,
-      // KIT e14-ocr-cascada-v1 (K3 fase 2) — aditivo AL FINAL (contrato D57):
-      ocrCascada: false,
+      // KIT e14-ocr-cascada-v1 (K3 fase 2) + GO-B del dueño (2026-11) — aditivo AL FINAL (contrato D57):
+      ocrCascada: true,
       // KIT e14-adaptacion-dispositivo-v1 — aditivo AL FINAL (contrato D57):
       adaptacionDispositivo: true,
+      // KIT e14-ocr-tessbest-v1 (GO-B) — aditivo AL FINAL (contrato D57):
+      presupuestoEscaneoMs: null,
     });
   });
 
@@ -161,10 +163,10 @@ describe("flags · hangEnCurso (kill-switch del sensor hang-en-curso, §D)", () 
 });
 
 // ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — flag ocrCascada ──────────────────
-describe("flags · ocrCascada (cascada OCR — kill-switch K3; renombrado del antiguo masivaOcrTesseract)", () => {
-  it("default OFF → byte-idéntico al OCR escalonado de siempre", () => {
+describe("flags · ocrCascada (cascada OCR GO-B; renombrado del antiguo masivaOcrTesseract)", () => {
+  it("default ON (GO-B del dueño 2026-11: tess best primero, escalonado a pp ocr)", () => {
     stubWindow();
-    expect(leerFlags().ocrCascada).toBe(false); // FLAGS_DEFAULT
+    expect(leerFlags().ocrCascada).toBe(true); // FLAGS_DEFAULT
   });
 
   it("saneo acepta booleano (true/false); leerFlags lo aplica sobre defaults", () => {
@@ -176,12 +178,12 @@ describe("flags · ocrCascada (cascada OCR — kill-switch K3; renombrado del an
       clearTimeout: () => {},
       localStorage: {
         getItem: (k: string) =>
-          k === "e14-flags-overrides" ? JSON.stringify({ ocrCascada: true }) : null,
+          k === "e14-flags-overrides" ? JSON.stringify({ ocrCascada: false }) : null,
         setItem: () => {},
         removeItem: () => {},
       },
     });
-    expect(leerFlags().ocrCascada).toBe(true); // override manual del dueño (D6 — pasa por los DOS whitelists: sanearFlags + leerOverridesFlags)
+    expect(leerFlags().ocrCascada).toBe(false); // kill-switch manual del dueño (D6 — pasa por los DOS whitelists: sanearFlags + leerOverridesFlags)
   });
 
   it("tipo inválido (no-booleano) → default (ausente del whitelist)", () => {
@@ -189,6 +191,37 @@ describe("flags · ocrCascada (cascada OCR — kill-switch K3; renombrado del an
     expect(sanearFlags({ ocrCascada: 1 })).toEqual({});
     expect(sanearFlags({ ocrCascada: null })).toEqual({});
     stubWindow();
-    expect(leerFlags().ocrCascada).toBe(false); // cae al default conservador
+    expect(leerFlags().ocrCascada).toBe(true); // cae al default del GO-B
+  });
+});
+
+describe("flags · presupuestoEscaneoMs (presupuesto del escaneo — override MANUAL del dueño, KIT e14-ocr-tessbest-v1)", () => {
+  it("default null ⇒ el plan por tier resuelve (BAJO 480 s · MEDIO 240 s · ALTO 120 s)", () => {
+    stubWindow();
+    expect(leerFlags().presupuestoEscaneoMs).toBe(null); // FLAGS_DEFAULT
+  });
+
+  it("saneo: número clampeado 30_000..900_000; null pasa; inválido → ausente", () => {
+    expect(sanearFlags({ presupuestoEscaneoMs: 240_000 })).toEqual({ presupuestoEscaneoMs: 240_000 });
+    expect(sanearFlags({ presupuestoEscaneoMs: 5_000 })).toEqual({ presupuestoEscaneoMs: 30_000 });
+    expect(sanearFlags({ presupuestoEscaneoMs: 9_999_999 })).toEqual({ presupuestoEscaneoMs: 900_000 });
+    expect(sanearFlags({ presupuestoEscaneoMs: null })).toEqual({ presupuestoEscaneoMs: null });
+    expect(sanearFlags({ presupuestoEscaneoMs: "largo" })).toEqual({});
+    expect(sanearFlags({ presupuestoEscaneoMs: Number.NaN })).toEqual({});
+  });
+
+  it("override manual (localStorage) manda sobre el plan (D6 — DOBLE whitelist)", () => {
+    stubWindow();
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ presupuestoEscaneoMs: 60_000 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().presupuestoEscaneoMs).toBe(60_000);
   });
 });

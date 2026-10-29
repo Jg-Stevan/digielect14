@@ -30,7 +30,11 @@ const raiz = new URL("../../..", import.meta.url).pathname;
 const lee = (ruta: string): string => readFileSync(`${raiz}${ruta}`, "utf8");
 
 /** Pasada de prueba — conf/comparables SOLO entre pasadas del mismo motor. */
-function pasada(texto: string, conf = 0.9, cap: number | "roi" = 1280): PasadaCascada {
+function pasada(
+  texto: string,
+  conf = 0.9,
+  cap: number | "roi" | "tess" = 1280,
+): PasadaCascada {
   return { texto, conf, cap, msDet: 10, msRec: 20 };
 }
 
@@ -183,38 +187,59 @@ describe("ocr-cascada · correrCascadaOcr (cascada con mocks)", () => {
     expect(s.texto).toBe(TEXTO_DEBIL);
   });
 
-  it("futuro GO-B (intento 1 de OTRO motor): su texto JAMÁS entra a elegirMejor", async () => {
-    // Tesseract simulado: cap -1 (no-RapidOCR). El gate NO le da AUTO → el
-    // core abre su PROPIA 1.ª pasada y TODO lo que entra a elegirMejor es
-    // RapidOCR (1280/1920/roi) — jamás el cap -1.
-    let vioCapMenos1 = false;
+  it("GO-B (intento 1 de OTRO motor): su texto JAMÁS entra a elegirMejor", async () => {
+    // Tesseract simulado: cap "tess" + motor "tesseract". El gate NO le da
+    // AUTO → el core abre su PROPIA 1.ª pasada y TODO lo que entra a
+    // elegirMejor es RapidOCR (1280/1920/roi) — jamás la pasada Tess.
+    let vioTess = false;
     const elegirEspia = async (deps: DepsOcrCascada, foto: string) => {
       const s = await correrCascadaOcr(foto, deps);
-      if (s.elegidoCap === -1) vioCapMenos1 = true;
+      if (s.elegidoCap === "tess") vioTess = true;
       return s;
     };
     const d = depsBase({
-      intento1: async () => pasada("TESSERACT DEBIL", 0.95, -1),
+      intento1: async () => ({ ...pasada("TESSERACT DEBIL", 0.95, "tess"), motor: "tesseract" }),
       mismoMotorIntento1: false,
     });
     const s = await elegirEspia(d, "data:x");
-    expect(vioCapMenos1).toBe(false);
+    expect(vioTess).toBe(false);
     expect(d.llamadas.ocr1280).toBe(1); // core abre su 1.ª pasada propia
-    expect(s.elegidoCap).not.toBe(-1);
+    expect(s.elegidoCap).not.toBe("tess");
     expect(s.ms1280).not.toBe(null);
   });
 
-  it("futuro GO-B: Tesseract con gate AUTO ⇒ listo SIN core (el gate decide entre motores)", async () => {
+  it("GO-B: Tesseract con gate AUTO ⇒ listo SIN core (el gate decide entre motores)", async () => {
     const d = depsBase({
-      intento1: async () => pasada(`${TEXTO_AUTO} (tess)`, 0.7, -1),
+      intento1: async () => ({ ...pasada(`${TEXTO_AUTO} (tess)`, 0.7, "tess"), motor: "tesseract" }),
       mismoMotorIntento1: false,
     });
     const s = await correrCascadaOcr("data:x", d);
     expect(s.paso).toBe("intento1");
-    expect(s.elegidoCap).toBe(-1); // el texto del intento 1 viaja POR EL GATE
+    expect(s.elegidoCap).toBe("tess"); // el texto del intento 1 viaja POR EL GATE
+    expect(s.motorIntento1).toBe("tesseract");
     expect(d.llamadas.ocr1280).toBe(0);
     expect(d.llamadas.ocr1920).toBe(0);
     expect(d.llamadas.ocrRoi).toBe(0);
+  });
+
+  it("GO-B CAÍDA HONESTA: Tess vencido ⇒ intento1 RapidOCR (motor declarado) ⇒ SE REUSA (no se paga dos veces)", async () => {
+    const d = depsBase({ mismoMotorIntento1: false });
+    d.intento1 = async () => {
+      d.llamadas.intento1 += 1;
+      return { ...pasada(TEXTO_DEBIL, 0.5, 1280), motor: "rapidocr" }; // fallback del bridge
+    };
+    const s = await correrCascadaOcr("data:x", d);
+    expect(d.llamadas.intento1).toBe(1);
+    expect(d.llamadas.ocr1280).toBe(0); // REUSADA — el core no repite la 1.ª pasada
+    expect(s.motorIntento1).toBe("rapidocr");
+    expect(s.ms1280).toBe(null);
+  });
+
+  it("GO-B: retro-compat — pasada sin motor + mismoMotorIntento1 true ⇒ reuso histórico intacto", async () => {
+    const d = depsBase(); // intento1 sin campo motor (pasadas históricas)
+    const s = await correrCascadaOcr("data:x", d);
+    expect(d.llamadas.ocr1280).toBe(0); // la 1.ª pasada YA pagada se reusa
+    expect(s.motorIntento1).toBe("rapidocr");
   });
 
   it("presupuesto vencido ⇒ ni 1920 ni ROI (el timeout EXISTENTE manda — §3)", async () => {
@@ -253,20 +278,36 @@ describe("ocr-cascada · correrCascadaOcr (cascada con mocks)", () => {
 });
 
 describe("ocr-cascada · source-scan (contrato del kit en src/)", () => {
-  it("bridge: call-site condicional con cascadaActiva + escalonado intacto", () => {
+  it("bridge: call-site condicional con cascadaActiva + escalonado intacto + GO-B activo", () => {
     const bridge = lee("src/lib/e14/scanner-core-bridge.ts");
     expect(bridge).toContain("cascadaActiva(leerFlags().ocrCascada");
     expect(bridge).toContain("reconocerRapidOcrCascada(fotoOcr, onProgresoOcr, cfgOcr)");
     expect(bridge).toContain("reconocerRapidOcrEscalonado(fotoOcr, onProgresoOcr, cfgOcr)");
-    expect(bridge).toContain("OCR_CASCADA_TESSERACT_GO = false");
+    expect(bridge).toContain("OCR_CASCADA_TESSERACT_GO = true");
     expect(bridge).toContain("recortarRoiDataUrl");
+    // KIT e14-ocr-tessbest-v1: el intento 1 ES tessReconocer con caída
+    // honesta a RapidOCR 1280 (motor:"rapidocr" — pasada reutilizable). El
+    // presupuesto viaja COMPLETO (restante del pipeline): la creación de la
+    // 1.ª vez lleva su ventana propia de 180 s DENTRO del módulo.
+    expect(bridge).toContain("await tessReconocer(foto, restante)");
+    expect(bridge).toContain('motor: "rapidocr"');
+    // Espera del warm-up del worker OpenCV POR TIER (BAJO 20 s — evidencia v4).
+    expect(bridge).toContain("esperarWorkerCaliente(esperaWorkerEfectiva())");
   });
-  it("flags: default OFF + DOBLE whitelist (sanearFlags + leerOverridesFlags)", () => {
+  it("flags: default ON (GO-B del dueño) + DOBLE whitelist (sanearFlags + leerOverridesFlags)", () => {
     const flags = lee("src/lib/e14/flags.ts");
-    expect(flags).toContain("ocrCascada: false,");
+    expect(flags).toContain("ocrCascada: true,");
     expect(flags).toContain('limpio.ocrCascada = p.ocrCascada;');
     const politica = lee("src/lib/e14/obs/politica.ts");
     expect(politica).toContain('limpio.ocrCascada = o.ocrCascada;');
+    expect(politica).toContain("limpio.presupuestoEscaneoMs");
+  });
+  it("tess vendido: assets en public/ (worker + core simd-lstm + spa BEST)", () => {
+    const pub = lee("public/vendor/tesseract/tesseract-core-simd-lstm.wasm.js").length;
+    expect(pub).toBeGreaterThan(1_000_000); // glue del core presente
+    expect(lee("public/vendor/tesseract/worker.min.js").length).toBeGreaterThan(50_000);
+    const gz = lee("public/models/tess/spa.traineddata.gz").length;
+    expect(gz).toBeGreaterThan(5_000_000); // spa traineddata best (~12 MB)
   });
   it("obs/tipos.ts: FlagsApp + ocrCascada (D57 — al final, tras qrBrujulaOrientacion)", () => {
     const tipos = lee("src/lib/e14/obs/tipos.ts");
@@ -274,6 +315,6 @@ describe("ocr-cascada · source-scan (contrato del kit en src/)", () => {
     const cascada = tipos.indexOf("ocrCascada: boolean;");
     expect(brujula).toBeGreaterThan(-1);
     expect(cascada).toBeGreaterThan(brujula); // ADITIVO AL FINAL (contrato D57)
-    expect(tipos.slice(cascada)).toContain("}"); // es el último campo de FlagsApp
+    expect(tipos.slice(cascada)).toContain("presupuestoEscaneoMs"); // el kit nuevo va AL FINAL
   });
 });

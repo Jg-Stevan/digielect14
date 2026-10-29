@@ -1,0 +1,116 @@
+{
+  "app": "http://localhost:3100",
+  "acta": "/home/z/repos/digielect14/src/assets/acta-e14-real.jpg",
+  "perfil": "CPU 6x · RAM 2GB · 4 núcleos · 3G · mono-hilo (sin COOP/COEP)",
+  "etapas": {
+    "cargaInicial": {
+      "uiVisible_ms": 1027
+    },
+    "perfilNavegador": {
+      "deviceMemory": 2,
+      "hardwareConcurrency": 4,
+      "heapLimitMB": 2222,
+      "crossOriginIsolated": false
+    },
+    "camara": {
+      "__cameraChoice": {
+        "elegida": "fake_device_0",
+        "facing": null,
+        "torch": false,
+        "focusModes": [
+          "manual",
+          "continuous"
+        ],
+        "width": 960,
+        "height": 540,
+        "sondas": [
+          {
+            "label": "fake_device_0",
+            "facing": null,
+            "torch": false,
+            "af": [
+              "manual",
+              "continuous"
+            ],
+            "max": "3840x2160"
+          }
+        ]
+      },
+      "bootMsHastaTelemetria": 7717
+    },
+    "pipelineArranque": {
+      "analizandoVisto": true,
+      "tAnalizando": 1898
+    },
+    "pipeline": {
+      "resuelto": true,
+      "msHastaRevision": 221899,
+      "vista": {
+        "score": "4.9",
+        "rechazada": true,
+        "optima": true,
+        "enviadaAuto": false,
+        "repetirFoto": true,
+        "tiempoExcedido": false,
+        "noIdentificado": true,
+        "clasificacion": "DELEGADOS",
+        "qr": true
+      },
+      "cpuThrottle": "6x (CDP Emulation.setCPUThrottlingRate)",
+      "red": "3G",
+      "hilosOcr": "mono-hilo (dev sin COOP/COEP, sin SAB)"
+    },
+    "vigilanciaRescate": {
+      "ventana_ms": 20000,
+      "cambios": [],
+      "estadoFinal": {
+        "score": "4.9",
+        "rechazada": true,
+        "optima": true,
+        "enviadaAuto": false,
+        "repetirFoto": true,
+        "tiempoExcedido": false,
+        "noIdentificado": true,
+        "clasificacion": "DELEGADOS",
+        "qr": true
+      }
+    },
+    "memoriaPostPipeline": {
+      "jsHeapUsedMB": 10,
+      "heapLimitMB": 2222
+    },
+    "metricasCDP": {}
+  },
+  "trazasCascada": [
+    "info: %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+    "log: [HMR] connected",
+    "info: [e14] orientacion-qr sin-payload (cae al sondeo OCR de siempre) ms=11813 intentos=39 jsQR@1600✗ · jsQR@1100✗ · jsQR@750+inv✗ · ZX-HR·c2BR@1.5G✗ · ZX-HR·c2BR@2G✗ · ZX-HR·c0TL@1.5G✗ · ZX-HR·c0TL@2G✗ · ZX-HR·c3BL@1.5G✗ · ZX",
+    "info: [e14-rapidocr] det run [1,3,480,640]...",
+    "info: [e14-rapidocr] det run [1,3,320,128]...",
+    "info: [e14-rapidocr] det run OK (779ms)",
+    "info: [e14-rapidocr] det run OK (993ms)",
+    "info: [e14-rapidocr] celda: det=780ms cls=142ms rec=949ms · 3 cajas · 3 líneas · conf 98.4% · 2236ms detMemo=miss",
+    "info: [e14-prowarm] listo det=780ms cls=142ms rec=949ms · 3 cajas · 3 líneas",
+    "info: [e14-rapidocr] det run [1,3,1280,512]...",
+    "info: [e14-rapidocr] det run OK (1342ms)",
+    "info: [e14] orientacion crop=598x1457 rot=0 probe={0:4.14,90:0.00,180:0.04} anclas0=1 conf0=0.77 aplicado=0 ms=60691 cortes=presupuesto orden=0,180,90,270 gan=- exif=0 escala=1457",
+    "info: [e14] tess-best intento1 ok conf=0.81 chars=338",
+    "info: [e14-rapidocr] celda: det=1397ms cls=510ms rec=6654ms · 37 cajas · 32 líneas · conf 91.7% · 7697ms detMemo=hit msAhorrado=1397",
+    "info: [e14-rapidocr] det run [1,3,1472,608]...",
+    "info: [e14-rapidocr] det run OK (1753ms)",
+    "info: [e14-rapidocr] celda: det=1755ms cls=343ms rec=6771ms · 37 cajas · 33 líneas · conf 92.1% · 9114ms detMemo=miss",
+    "info: [e14-rapidocr] det run [1,3,352,608]...",
+    "info: [e14-rapidocr] det run OK (431ms)",
+    "info: [e14-rapidocr] celda: det=439ms cls=187ms rec=2182ms · 16 cajas · 14 líneas · conf 93.3% · 3040ms detMemo=miss",
+    "info: [e14-rapidocr] det run [1,3,352,608]...",
+    "info: [e14-rapidocr] det run OK (472ms)",
+    "info: [e14-rapidocr] celda: det=481ms cls=85ms rec=315ms · 3 cajas · 3 líneas · conf 90.5% · 1094ms detMemo=miss",
+    "info: [e14] ocr-cascada intento1=tess-best gate1=NO elegido=1920 rescate=1 ms1=68727 ms2=9154 msRoi=4177",
+    "info: [e14-rapidocr] det run [1,3,288,800]...",
+    "info: [e14-rapidocr] det run OK (652ms)",
+    "info: [e14-rapidocr] celda: det=656ms cls=35ms rec=1000ms · 5 cajas · 5 líneas · conf 97.8% · 1801ms detMemo=miss",
+    "info: [e14] pipeline ARCHIVO/file total=216070ms (decode=2811 detect=29340 proceso=21674 calidad=684 ocr=88618 motor=canvas ocrValido=true cabeceraE14=false completa=true senal=false vacia=false votos=6.5% recortada=1 lado=sup",
+    "info: [e14] memoria acta {statusActa: RECHAZADA, fuente: ARCHIVO, fotoOriginalBytes: 421910, fotoProcesadaBytes: 60341, originalLiberada: false}"
+  ],
+  "errores": []
+}

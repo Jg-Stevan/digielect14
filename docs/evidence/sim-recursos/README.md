@@ -16,3 +16,45 @@ contexto del kit de cámara: `docs/REPORTE-fix-camara-principal-f-lens-v5.md` §
 
 Los `.js` son los guiones de corrida (agent-browser contra la app servida en local);
 los `.json` son los resultados crudos de esa corrida (artefactos inmutables).
+
+---
+
+## v2/v3 — re-verificación con guion parametrizado (`sim-lowend-v3.js`, rama `docs/sim-gama-baja-v2`)
+
+Mismo perfil (CPU 6× · RAM 2 GB · 4 núcleos · 3G · mono-hilo) con tres añadidos:
+vigilancia del rescate post-timeout e67 (ventana 120 s tras REVISIÓN), `Performance.enable`
+antes de `Performance.getMetrics`, y rutas/presupuestos por entorno (sin `/home/z` fijo;
+`CPU_RATE`/`POST_WATCH_MS`/`OUT_PATH`/`ACTA_PATH` por env).
+
+- `sim-lowend-v3-resultados.json` — REPRODUCCIÓN del hallazgo v2: pipeline
+  **124 535 ms** (> `TIMEOUT_MS` 120 000) → acta real **RECHAZADA 0.0/10 ·
+  NO IDENTIFICADO · REPETIR FOTO**; sin auto-envío y SIN cambios de vista en los
+  120 s de vigilancia (el rescate e67 no materializó). 0 errores JS · heap 10 MB.
+  Detalle completo: `docs/REPORTE-sim-gama-baja-v2.md`.
+
+Correcciones de higiene vs v2: `sim-normal.js` declaraba `cpuThrottle: "6x"` en su
+resultado aunque corrió a `rate: 1` (cadena hardcodeada) — v3 registra el rate REAL
+usado. Nota: los `.local.json`/PNG de re-corridas NO se suben (artefactos locales).
+
+---
+
+## v7 + A/B — kit `e14-ocr-tessbest-v1` (rama `feat/e14-ocr-tessbest-cascada`, PR)
+
+Mismo perfil (CPU 6× · 2 GB · 4 núcleos · 3G · mono-hilo), build del kit:
+
+- `sim-lowend-v7-resultados.json` — **Tess best funciona e2e**: traza
+  `tess-best intento1 ok conf=0.81 chars=338` · cascada completa
+  (`intento1=tess-best gate1=NO elegido=1920 rescate=1`) · pipeline TERMINA
+  (221.9 s < presupuesto 240 s MEDIO) con **score REAL 4.9** (antes: timeout
+  120 s → 0.0). El rechazo restante (cabeceraE14=false · recortada=1 lado=sup)
+  quedó ENMASCARADO en main por el timeout — ver A/B.
+- `sim-ab-killswitch-resultados.json` + `sim-ab-killswitch.js` — **A/B con los
+  kill-switches del dueño** (`{"ocrCascada":false,"adaptacionDispositivo":false}` =
+  comportamiento byte-idéntico a main) bajo las MISMAS condiciones 6×+3G:
+  **mismo corte** (`cabeceraE14=false recortada=1 lado=sup`, probe de orientación
+  cortado `probe={0:4.14}` `cortes=presupuesto`). El 10.0 histórico se obtuvo SIN
+  throttling de red — la primera descarga de modelos a 3G es la condición que
+  trunca el sondeo/quad, PRE-EXISTENTE y enmascarada por el timeout de 120 s.
+  Kit propio pendiente (visibilidad del origen det + presupuesto de primera
+  descarga). Con el kit, el sondeo evalúa 3 rotaciones (antes 1) y el pipeline
+  COMPLETA con score real.

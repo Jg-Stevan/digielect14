@@ -131,7 +131,7 @@ export interface FlagsApp {
   // ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — campo ADITIVO AL FINAL (D57) ───
   // Renombrado de `masivaOcrTesseract` al retirar el módulo masiva (la
   // cascada es del pipeline general; el nombre era herencia del kit).
-  ocrCascada: boolean; // default false — cascada OCR: intento 1 → gate → core RapidOCR como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte (GO/NO-GO: bench-ocr-cascada/)
+  ocrCascada: boolean; // default true (GO-B del dueño) — cascada OCR: intento 1 TESSERACT BEST (ocr/tesseract.ts) → gate → core RapidOCR escalonado como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte
   // NOTA (eliminación del módulo masiva): los 17 flags exclusivos de la cola
   // (poolWorkers · thumbsOn · colaPersistente · sondeoQr* · prescan* ·
   // masiva* · dhashResize) se retiraron con el módulo.
@@ -140,6 +140,11 @@ export interface FlagsApp {
   // detectado consume knobs de RECURSOS (hilos OCR — plan.ts). El override
   // MANUAL del dueño manda clave a clave (D6); false = byte-idéntico a hoy.
   adaptacionDispositivo: boolean; // default true
+  // ─── KIT e14-ocr-tessbest-v1 (GO-B del dueño) — campo ADITIVO AL FINAL
+  // ─── (D57): presupuesto del ESCANEO individual. null = plan por tier
+  // ─── (BAJO 480 s · MEDIO 240 s · ALTO 120 s — lección del masiva D48 y
+  // ─── la evidencia sim-gama-baja); número = override MANUAL del dueño.
+  presupuestoEscaneoMs: number | null; // default null
 }
 
 export interface ReporteSesion {
