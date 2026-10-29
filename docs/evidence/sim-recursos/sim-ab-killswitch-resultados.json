@@ -1,0 +1,107 @@
+{
+  "app": "http://localhost:3100",
+  "acta": "/home/z/repos/digielect14/src/assets/acta-e14-real.jpg",
+  "perfil": "CPU 6x · RAM 2GB · 4 núcleos · 3G · mono-hilo (sin COOP/COEP)",
+  "etapas": {
+    "cargaInicial": {
+      "uiVisible_ms": 1069
+    },
+    "perfilNavegador": {
+      "deviceMemory": 2,
+      "hardwareConcurrency": 4,
+      "heapLimitMB": 2222,
+      "crossOriginIsolated": false
+    },
+    "camara": {
+      "__cameraChoice": {
+        "elegida": "fake_device_0",
+        "facing": null,
+        "torch": false,
+        "focusModes": [
+          "manual",
+          "continuous"
+        ],
+        "width": 960,
+        "height": 540,
+        "sondas": [
+          {
+            "label": "fake_device_0",
+            "facing": null,
+            "torch": false,
+            "af": [
+              "manual",
+              "continuous"
+            ],
+            "max": "3840x2160"
+          }
+        ]
+      },
+      "bootMsHastaTelemetria": 7942
+    },
+    "pipelineArranque": {
+      "analizandoVisto": true,
+      "tAnalizando": 2482
+    },
+    "pipeline": {
+      "resuelto": true,
+      "msHastaRevision": 125274,
+      "vista": {
+        "score": "0.0",
+        "rechazada": true,
+        "optima": true,
+        "enviadaAuto": false,
+        "repetirFoto": true,
+        "tiempoExcedido": false,
+        "noIdentificado": true,
+        "clasificacion": "DELEGADOS",
+        "qr": false
+      },
+      "cpuThrottle": "6x (CDP Emulation.setCPUThrottlingRate)",
+      "red": "3G",
+      "hilosOcr": "mono-hilo (dev sin COOP/COEP, sin SAB)"
+    },
+    "vigilanciaRescate": {
+      "ventana_ms": 20000,
+      "cambios": [],
+      "estadoFinal": {
+        "score": "0.0",
+        "rechazada": true,
+        "optima": true,
+        "enviadaAuto": false,
+        "repetirFoto": true,
+        "tiempoExcedido": false,
+        "noIdentificado": true,
+        "clasificacion": "DELEGADOS",
+        "qr": false
+      }
+    },
+    "memoriaPostPipeline": {
+      "jsHeapUsedMB": 10,
+      "heapLimitMB": 2222
+    },
+    "metricasCDP": {}
+  },
+  "trazasCascada": [
+    "info: %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+    "log: [HMR] connected",
+    "info: [e14] orientacion-qr sin-payload (cae al sondeo OCR de siempre) ms=12168 intentos=39 jsQR@1600✗ · jsQR@1100✗ · jsQR@750+inv✗ · ZX-HR·c2BR@1.5G✗ · ZX-HR·c2BR@2G✗ · ZX-HR·c0TL@1.5G✗ · ZX-HR·c0TL@2G✗ · ZX-HR·c3BL@1.5G✗ · ZX",
+    "info: [e14-rapidocr] det run [1,3,480,640]...",
+    "info: [e14-rapidocr] det run [1,3,320,128]...",
+    "info: [e14-rapidocr] det run OK (770ms)",
+    "info: [e14-rapidocr] det run OK (968ms)",
+    "info: [e14-rapidocr] det run [1,3,1280,512]...",
+    "info: [e14-rapidocr] celda: det=778ms cls=158ms rec=1303ms · 3 cajas · 3 líneas · conf 98.4% · 2601ms detMemo=miss",
+    "info: [e14-prowarm] listo det=778ms cls=158ms rec=1303ms · 3 cajas · 3 líneas",
+    "info: [e14-rapidocr] det run OK (1803ms)",
+    "info: [e14] memoria acta {statusActa: RECHAZADA, fuente: ARCHIVO, fotoOriginalBytes: 421910, fotoProcesadaBytes: 0, originalLiberada: false}",
+    "info: [e14] orientacion crop=598x1457 rot=0 probe={0:4.14} anclas0=1 conf0=0.77 aplicado=0 ms=53393 cortes=presupuesto orden=0,180,90,270 gan=- exif=0 escala=1457",
+    "info: [e14-rapidocr] celda: det=1835ms cls=515ms rec=6174ms · 37 cajas · 32 líneas · conf 91.7% · 6721ms detMemo=hit msAhorrado=1835",
+    "info: [e14] ocr-escalonado pasada1=1280 lectura=MEDIA reocr=0 elegido=1280 anclas1=1 ms1=6724",
+    "info: [e14-rapidocr] det run [1,3,288,800]...",
+    "info: [e14-rapidocr] det run OK (496ms)",
+    "info: [e14-rapidocr] celda: det=498ms cls=61ms rec=1148ms · 5 cajas · 5 líneas · conf 97.8% · 1844ms detMemo=miss",
+    "info: [e14] pipeline ARCHIVO/file total=131429ms (decode=2968 detect=23490 proceso=29852 calidad=365 ocr=8758 motor=canvas ocrValido=true cabeceraE14=false completa=true senal=false vacia=false votos=6.5% recortada=1 lado=sup-",
+    "info: [e14] pipeline terminó inválido tras timeout {actaId: acta-1793288108305-2, status: RECHAZADA, score: 4.9}"
+  ],
+  "errores": []
+}

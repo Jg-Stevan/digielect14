@@ -78,6 +78,12 @@ import { SHUTTER_SCORE } from "@jg-stevan/scanner-core/quality";
 import type { SensorProfile } from "@jg-stevan/scanner-core/sensor-profiler";
 import { useE14Store, type BandaSim } from "@/lib/e14/store";
 import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
+// KIT e14-ocr-tessbest-v1 (GO-B): pre-warm de TESSERACT BEST junto al del
+// motor RapidOCR — la descarga vendida (~19 MB, 1.ª vez) arranca al abrir
+// el visor y el SW la cachea ⇒ la 1.ª captura ya compite con assets
+// calientes. Solo con la cascada ON (kill-switch del dueño).
+import { tessPrecalentar } from "@/lib/e14/ocr/tesseract";
+import { leerFlags } from "@/lib/e14/flags";
 // KIT e14-sin-relleno-v1: la barra de SIMULACIÓN (chips TEST SCORES) solo se
 // muestra con el toggle «SIM» de ACTAS encendido o en modo desarrollador —
 // el usuario público ve el escáner limpio, sin botones de prueba.
@@ -251,7 +257,18 @@ export function ScanView() {
     // KIT e14-prowarm-ocr-v1 (T2b): pre-warm del OCR diferido 2 s (app recién
     // abierta — no competir con la carga). Idempotente: si el precalentamiento
     // ya corrió, rapidOcrPrecalentar() resuelve al instante (flag de módulo).
-    const t = window.setTimeout(() => void rapidOcrPrecalentar(), 2000);
+    const t = window.setTimeout(() => {
+      void rapidOcrPrecalentar().then(() => {
+        // KIT e14-ocr-tessbest-v1 (GO-B): pre-warm de TESSERACT BEST SOLO
+        // cuando el motor CRÍTICO del pipeline ya está caliente — su
+        // descarga vendida (~19 MB) no debe competir por el enlace con los
+        // modelos del 1.er escaneo (evidencia sim-lowend v6: la descarga
+        // concurrente agotaba el t0 compartido del sondeo de orientación ⇒
+        // warp cortaba la cabecera ⇒ RECHAZADA). Idempotente + silencioso;
+        // con la cascada OFF (kill-switch) jamás se menciona Tess.
+        if (leerFlags().ocrCascada) tessPrecalentar();
+      });
+    }, 2000);
     return () => window.clearTimeout(t);
   }, []);
 
