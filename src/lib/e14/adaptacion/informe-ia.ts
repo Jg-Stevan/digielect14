@@ -40,6 +40,10 @@ export interface InformeIA {
       ocr_hilos: number;
       ocr_hilos_fuente: string;
       hilos_wasm_disponibles: boolean;
+      /** KIT e14-gama-baja-20s-v1 — knobs OCR del plan por tier (aditivos). */
+      ocr_reocr_modo: "completo" | "roi-cabecera";
+      ocr_segunda_presupuesto_ms: number | null;
+      probe_budget_ms: number;
       explicacion: string;
     };
   };
@@ -217,10 +221,17 @@ export async function construirInformeIA(): Promise<InformeIA> {
         ocr_hilos: plan.ocrHilos,
         ocr_hilos_fuente: plan.ocrHilosFuente,
         hilos_wasm_disponibles: plan.hilosWasmDisponibles,
+        ocr_reocr_modo: plan.ocrReOcrModo,
+        ocr_segunda_presupuesto_ms: plan.ocrSegundaPresupuestoMs,
+        probe_budget_ms: plan.probeBudgetMs,
         explicacion:
           "ocr_hilos = workers del WASM que ejecutan la inferencia OCR (RapidOCR PP-OCRv4). " +
           "Requieren SharedArrayBuffer (COOP/COEP). Fuente: 'override-manual' (decisión del dueño en localStorage), " +
-          "'plan-adaptativo' (BAJO 2 · MEDIO 3 · ALTO 6, capado por núcleos reales) o 'default' (4, histórico).",
+          "'plan-adaptativo' (BAJO 2 · MEDIO 3 · ALTO 6, capado por núcleos reales) o 'default' (4, histórico). " +
+          "ocr_reocr_modo / ocr_segunda_presupuesto_ms / probe_budget_ms (KIT e14-gama-baja-20s-v1) = " +
+          "cómo se resuelve el 2.º intento OCR cuando la 1.ª pasada sale débil y con qué presupuestos " +
+          "pared (en BAJO: rescate de la franja cabecera 0-25% en vez del re-OCR 1920 completo + " +
+          "tope de 15 s para abrir intentos extra + sondeo de orientación fail-fast de 6 s).",
       },
     },
     dispositivo: {

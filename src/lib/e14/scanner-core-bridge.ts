@@ -134,16 +134,24 @@ import type { ProbeOrientacion } from "./orientacion";
 // KIT e14-ocr-escalonado-v1 (§2): caps del det-preprocess (op4) expuestos por
 // el motor + decisión/elegir del módulo PURO nuevo (testable headless — bun).
 import { DET_CAP_PROD, DET_CAP_RAPIDO } from "./ocr/rapidocr";
-import { anclasDe, elegirMejor, necesitaSegunda } from "./ocr-escalonado";
+import {
+  anclasDe,
+  elegirMejor,
+  necesitaSegunda,
+  rescateAporta,
+} from "./ocr-escalonado";
 // KIT e14-ocr-cascada-v1 (K3 fase 2): núcleo PURO de la cascada (gate entre
 // motores + rescate ROI) — flag ocrCascada (default OFF ⇒ escalonado
 // de siempre byte a byte). Decision/eleccion de siempre: NEEDS ocr-escalonado.
 import {
   cascadaActiva,
   correrCascadaOcr,
+  ROI_FRACCIONES,
   type DepsOcrCascada,
   type PasadaCascada,
 } from "./ocr-cascada";
+// KIT e14-gama-baja-20s-v1: knobs OCR por tier (SYNC/barato — adaptacion/plan.ts).
+import { planAdaptativo } from "./adaptacion/plan";
 // KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado justo
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
 import { construirDiagnostico } from "./diagnostico";
@@ -805,9 +813,20 @@ async function reconocerRapidOcrEscalonado(
   const senal1 = senalDeLectura(r1.texto);
   // §2.3 decisión + §3 presupuesto (el timeout existente manda): vencido →
   // NO hay 2.ª (mismo desenlace que hoy: el timeout del pipeline resuelve).
+  // KIT e14-gama-baja-20s-v1 — knobs del plan adaptativo (SYNC, barato):
+  // en BAJO el intento extra se acota a su PROPIO presupuesto pared
+  // (ocrSegundaPresupuestoMs = 15000) y cambia el MODO del 2.º intento
+  // (rescate ROI cabecera en vez del re-OCR 1920 completo). MEDIO/ALTO y
+  // adaptación OFF ⇒ histórico byte a byte (null = sin tope adicional —
+  // manda el presupuesto EXISTENTE del pipeline, §3 del kit escalonado).
+  const planOcr = planAdaptativo();
+  const presupuestoSegunda =
+    planOcr.adaptado && planOcr.ocrSegundaPresupuestoMs != null
+      ? Math.min(escalonado.presupuestoMs, planOcr.ocrSegundaPresupuestoMs)
+      : escalonado.presupuestoMs;
   const tocaSegunda =
     necesitaSegunda(r1.texto) &&
-    performance.now() - escalonado.inicioMs < escalonado.presupuestoMs;
+    performance.now() - escalonado.inicioMs < presupuestoSegunda;
   let elegido: PasadaEscalonada = {
     texto: r1.texto,
     conf: r1.confMedia,
@@ -818,17 +837,67 @@ async function reconocerRapidOcrEscalonado(
   let ms2: number | null = null;
   let anclas2: number | null = null;
   if (tocaSegunda) {
-    // 2.ª pasada — det cap PROD (1920) → cls → rec (§2.4); MISMO emit de
-    // progreso (§3). Elegir el MEJOR — NUNCA automáticamente la 2.ª.
-    const t2 = performance.now();
-    const r2 = await rapidOcrReconocer(rt, fotoOcr, onProgress, { detCap: DET_CAP_PROD });
-    ms2 = Math.round(performance.now() - t2);
-    anclas2 = anclasDe(r2.texto);
-    const ganadora = elegirMejor(
-      { texto: r1.texto, conf: r1.confMedia, detMs: r1.msDet, recMs: r1.msRec, cap: DET_CAP_RAPIDO },
-      { texto: r2.texto, conf: r2.confMedia, detMs: r2.msDet, recMs: r2.msRec, cap: DET_CAP_PROD },
-    );
-    elegido = ganadora; // MISMA referencia — la ganadora trae sus métricas
+    if (planOcr.adaptado && planOcr.ocrReOcrModo === "roi-cabecera") {
+      // KIT e14-gama-baja-20s-v1 — rescate ROI CABECERA: franja top 0-25%
+      // re-escalada a cap 1920 (MISMO helper y fracciones de la cascada K3 —
+      // recortarRoiDataUrl + ROI_FRACCIONES.top) en vez del re-OCR 1920
+      // COMPLETO. En gama baja el re-OCR completo cuesta ~2.5× la 1.ª pasada
+      // (det ≈ (1920/1280)² + cls + rec de TODO el acta) y es el
+      // multiplicador dominante del pipeline (126 s low-end mono-hilo,
+      // sim-recursos). El candidato compuesto (cabecera del ROI + cuerpo de
+      // la 1.ª pasada) se adopta SOLO si AÑADE anclas (`rescateAporta` —
+      // información puramente aditiva; conf de la pasada BASE). JAMÁS
+      // tumba: cualquier fallo del crop/OCR → r1 queda como está.
+      const tR = performance.now();
+      const roiUrl = await recortarRoiDataUrl(
+        fotoOcr,
+        ROI_FRACCIONES.top[0],
+        ROI_FRACCIONES.top[1],
+      );
+      let msRoi = Math.round(performance.now() - tR);
+      let adoptado = 0;
+      if (roiUrl) {
+        try {
+          const rRoi = await rapidOcrReconocer(rt, roiUrl, onProgress);
+          msRoi = Math.round(performance.now() - tR);
+          const texto2 =
+            rRoi.texto.trim().length > 0
+              ? rRoi.texto.trim() + "\n" + r1.texto.trim()
+              : r1.texto;
+          anclas2 = anclasDe(texto2);
+          if (rescateAporta(r1.texto, texto2)) {
+            elegido = {
+              texto: texto2,
+              conf: r1.confMedia, // conf de la pasada BASE — conservador
+              detMs: r1.msDet,
+              recMs: r1.msRec,
+              cap: DET_CAP_RAPIDO,
+            };
+            adoptado = 1;
+          }
+        } catch {
+          /* fallo del rescate → r1 queda como está (jamás tumba) */
+        }
+      }
+      // Traza PROPIA (línea NUEVA — los parsers de ocr-escalonado intactos;
+      // la línea de abajo sigue imprimiendo reocr=0 elegido=1280 en este modo).
+      logger.info(
+        `[e14] ocr-rescate-cabecera y0=${ROI_FRACCIONES.top[0]} y1=${ROI_FRACCIONES.top[1]} ` +
+          `ms=${msRoi} anclas1=${anclasDe(r1.texto)} anclas2=${anclas2 ?? "-"} adoptado=${adoptado}`,
+      );
+    } else {
+      // 2.ª pasada — det cap PROD (1920) → cls → rec (§2.4); MISMO emit de
+      // progreso (§3). Elegir el MEJOR — NUNCA automáticamente la 2.ª.
+      const t2 = performance.now();
+      const r2 = await rapidOcrReconocer(rt, fotoOcr, onProgress, { detCap: DET_CAP_PROD });
+      ms2 = Math.round(performance.now() - t2);
+      anclas2 = anclasDe(r2.texto);
+      const ganadora = elegirMejor(
+        { texto: r1.texto, conf: r1.confMedia, detMs: r1.msDet, recMs: r1.msRec, cap: DET_CAP_RAPIDO },
+        { texto: r2.texto, conf: r2.confMedia, detMs: r2.msDet, recMs: r2.msRec, cap: DET_CAP_PROD },
+      );
+      elegido = ganadora; // MISMA referencia — la ganadora trae sus métricas
+    }
   }
   // Traza propia (§2.5 — línea PROPIA, append-only; SIN línea en SIM).
   logger.info(
@@ -1449,7 +1518,12 @@ export class RealCoreBridge implements E14Bridge {
       }
     }
     if (brujula === null && !opciones.simular) {
-      const probe = await probeOrientacion(fotoOcr);
+      // KIT e14-gama-baja-20s-v1 — presupuesto del probe por tier (BAJO 6000
+      // fail-fast: si la miniatura no alcanzó confianza, el sondeo completo
+      // rara vez converge en gama baja; resto 12000 = histórico byte a byte).
+      const probe = await probeOrientacion(fotoOcr, {
+        presupuestoMs: planAdaptativo().probeBudgetMs,
+      });
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
       probeMiniOrientacion = probe?.orientacionProbeMini ?? null; // WAVE2 A1 — la mini que el fallo seguro descartó
       if (probe?.aplicado) {
@@ -2149,7 +2223,12 @@ export class RealCoreBridge implements E14Bridge {
     let probeMiniOrientacion: ProbeOrientacion["orientacionProbeMini"] | null =
       null;
     {
-      const probe = await probeOrientacion(fotoOcr);
+      // KIT e14-gama-baja-20s-v1 — presupuesto del probe por tier (BAJO 6000
+      // fail-fast: si la miniatura no alcanzó confianza, el sondeo completo
+      // rara vez converge en gama baja; resto 12000 = histórico byte a byte).
+      const probe = await probeOrientacion(fotoOcr, {
+        presupuestoMs: planAdaptativo().probeBudgetMs,
+      });
       if (probe != null) probeMsOrientacion = probe.ms; // D57 T2
       probeMiniOrientacion = probe?.orientacionProbeMini ?? null; // WAVE2 A1 — la mini que el fallo seguro descartó
       if (probe?.aplicado) {

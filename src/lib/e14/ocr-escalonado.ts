@@ -64,3 +64,21 @@ export function elegirMejor<T extends PasadaOcr>(a: T, b: T): T {
   if (a.conf !== b.conf) return a.conf > b.conf ? a : b;
   return a;
 }
+
+/**
+ * KIT e14-gama-baja-20s-v1 — ¿el RESCATE AÑADE información al texto base?
+ *
+ * El candidato compuesto del rescate ROI cabecera (franja superior 0-25%
+ * re-escalada a cap 1920 + cuerpo de la 1.ª pasada) CONTIENE SIEMPRE al
+ * texto base ⇒ las anclas (re.test → booleano por ancla — los duplicados
+ * NO inflan el conteo) solo pueden aumentar o empatar. El rescate se
+ * adopta SOLO si leyó AL MENOS UNA ancla nueva: información puramente
+ * aditiva — JAMÁS intercambia texto sin ganancia (más conservador que
+ * `elegirMejor` para un candidato que NO es una pasada independiente:
+ * su conf no es comparable — es la base + un añadido).
+ *
+ * PURO (sin DOM, sin OCR) — testeable headless con bun (§6.2).
+ */
+export function rescateAporta(textoBase: string, textoRescate: string): boolean {
+  return anclasDe(textoRescate) > anclasDe(textoBase);
+}
