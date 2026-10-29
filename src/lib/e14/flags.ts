@@ -41,19 +41,23 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // jsQR 0/4). Kill-switch del dueño: OFF = sondeo OCR de siempre byte a
   // byte (el probe D56 queda como red de seguridad).
   qrBrujulaOrientacion: true,
-  // KIT e14-ocr-cascada-v1 (K3 fase 2 — plan flujo-dueño paso 6): CASCADA
-  // OCR — intento 1 → GATE (clasificador puro) → core RapidOCR como hoy →
-  // rescate por ROIs top/bottom. Default OFF ⇒ OCR ESCALONADO de siempre
-  // byte a byte (KIT e14-ocr-escalonado-v1 intacto). GO/NO-GO del intento
-  // Tesseract: bench obligatorio tools/bench-ocr-cascada/ (el GATE decide
-  // ENTRE motores; elegirMejor SOLO entre pasadas RapidOCR — riesgo: sello
-  // TRANSMISIÓN blanco-sobre-negro + MESA IMPOSIBLE 001→004 de Tesseract,
-  // dos fallos documentados).
-  ocrCascada: false,
+  // KIT e14-ocr-cascada-v1 (K3 fase 2) + GO-B del dueño (2026-11): CASCADA
+  // OCR — intento 1 = TESSERACT BEST (ocr/tesseract.ts — spa 4.0.0_best,
+  // vendido, worker propio, budget 60 s) → GATE (clasificador puro) → core
+  // RapidOCR escalonado como siempre (1280→1920→elegirMejor) → rescate por
+  // ROIs top/bottom. Default ON por decisión del dueño («tess best primero,
+  // escalonado a pp ocr»); kill-switch: override {"ocrCascada": false} ⇒
+  // OCR escalonado de siempre byte a byte (sin descarga de Tess).
+  ocrCascada: true,
   // KIT e14-adaptacion-dispositivo-v1 — adaptación automática al dispositivo
   // (petición del dueño): el tier consume knobs de RECURSOS (hilos OCR —
   // adaptacion/plan.ts). Override manual manda (D6); false = byte-idéntico.
   adaptacionDispositivo: true,
+  // KIT e14-ocr-tessbest-v1 (GO-B) — presupuesto del ESCANEO individual.
+  // null = plan por tier (BAJO 480 s · MEDIO 240 s · ALTO 120 s — evidencia
+  // sim-gama-baja: el timeout fijo de 120 s rechazaba actas perfectas en
+  // mono-hilo). Override manual del dueño (D6): número en ms, clamp 30-900 s.
+  presupuestoEscaneoMs: null,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -80,6 +84,11 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.ocrCascada === "boolean") limpio.ocrCascada = p.ocrCascada;
   // KIT e14-adaptacion-dispositivo-v1 — whitelist aditiva (booleano).
   if (typeof p.adaptacionDispositivo === "boolean") limpio.adaptacionDispositivo = p.adaptacionDispositivo;
+  // KIT e14-ocr-tessbest-v1 (GO-B) — whitelist aditiva (null o ms clampados).
+  if (p.presupuestoEscaneoMs === null) limpio.presupuestoEscaneoMs = null;
+  if (typeof p.presupuestoEscaneoMs === "number" && Number.isFinite(p.presupuestoEscaneoMs)) {
+    limpio.presupuestoEscaneoMs = Math.max(30_000, Math.min(900_000, Math.round(p.presupuestoEscaneoMs)));
+  }
   return limpio;
 }
 

@@ -97,6 +97,8 @@ import {
   rapidOcrRecLote,
 } from "./ocr/rapidocr";
 import { logger } from "../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
+// KIT e14-ocr-tessbest-v1 — presupuesto del probe de orientación por tier.
+import { presupuestoProbeOrientacionEfectivo } from "./adaptacion/plan";
 
 type Rotacion = 0 | 90 | 180 | 270;
 
@@ -146,8 +148,15 @@ interface OpcionesProbeOrientacion {
  *  (HP 4 cores: det a 1920 = 3037 ms) ya agotaba 4000 con el baseline a 0°.
  *  Con det del probe a DET_CAP_RAPIDO (T2) el caso roto cabe: det ~1.2 s +
  *  rec0 ~3 s + rec90 ~3 s + rec270 ~3 s ≈ 10.2 s < 12 s. Solo lo pagan actas
- *  con lectura DEBIL a 0° (las sanas salen por el atajo T1 en ~4 s). */
-const PROBE_BUDGET_MS = 12000;
+ *  con lectura DEBIL a 0° (las sanas salen por el atajo T1 en ~4 s).
+ *  KIT e14-ocr-tessbest-v1: el default FIJO se volvió POR TIER
+ *  (`presupuestoProbeOrientacionEfectivo()` — BAJO 150 s · MEDIO 60 s ·
+ *  ALTO 12 s): a 6× mono-hilo el t0 COMPARTIDO se consume con cargas de
+ *  fondo (evidencia sim-lowend v5/v6 — sondeo cortado ⇒ warp corta la
+ *  cabecera ⇒ RECHAZADA). Resuelto POR LLAMADA (jamás a nivel de módulo —
+ *  el tier puede no estar listo al importar; plan.ts es sync y barato).
+ *  Kill-switch: adaptación OFF ⇒ 12 s histórico exacto. */
+const probeBudgetMs = (): number => presupuestoProbeOrientacionEfectivo();
 /** §2.1 paso 3 — margen mínimo sobre score(0) para aplicar la rotación. */
 const MARGEN_ORIENTACION = 1.5;
 /** §2.1 paso 1 — K crops repartidos por el acta. */
@@ -408,7 +417,7 @@ async function sondeoDe(
     // §2.2 presupuesto: a mitad de probe, abortar y seguir con 0° (hoy).
     // El t0 es COMPARTIDO con el camino miniatura: el techo de 12 s es el
     // del probe COMPLETO (mini + posible re-corrida), no por pasada.
-    if (rot !== 0 && performance.now() - t0 > PROBE_BUDGET_MS) {
+    if (rot !== 0 && performance.now() - t0 > probeBudgetMs()) {
       corte = "presupuesto";
       break;
     }
