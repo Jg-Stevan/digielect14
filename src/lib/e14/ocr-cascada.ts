@@ -47,12 +47,19 @@ type NivelGate = "AUTO" | "SUGERIDA" | "MANUAL";
 
 /** Una pasada de la cascada — `PasadaOcr` (texto+conf, comparable entre
  *  pasadas del MISMO motor) + etiqueta para la traza y métricas del motor
- *  (opcional: Tesseract futuro no separa det/rec — n/d honesto). */
+ *  (opcional: Tesseract no separa det/rec — n/d honesto). */
 export interface PasadaCascada extends PasadaOcr {
-  /** 1280 | 1920 | "roi" — etiqueta del cap para la traza `elegido=`. */
-  cap: number | "roi";
+  /** 1280 | 1920 | "roi" | "tess" — etiqueta del cap para la traza `elegido=`. */
+  cap: number | "roi" | "tess";
   msDet?: number;
   msRec?: number;
+  /** KIT e14-ocr-tessbest-v1 (GO-B) — motor REAL que produjo la pasada.
+   *  Ausente = "rapidocr" (retro-compat: todas las pasadas históricas).
+   *  La REUSABILIDAD del intento 1 se decide por ESTE campo (el motor
+   *  declarado de la pasada manda sobre la promesa estática del dep):
+   *  solo una pasada RapidOCR puede reusarse como 1.ª pasada del core
+   *  (mismo espacio de conf); una pasada Tesseract vale SOLO por el gate. */
+  motor?: "rapidocr" | "tesseract";
 }
 
 /** Fracciones Y de los ROIs de rescate sobre el warp (brief K3 fase 1):
@@ -68,6 +75,12 @@ export const ROI_FRACCIONES = {
  *  kit escalonado). Con false el bridge llama al escalonado de siempre. */
 export function cascadaActiva(ocrCascada: boolean, simular: boolean | undefined): boolean {
   return ocrCascada === true && simular !== true;
+}
+
+/** ¿La pasada del intento 1 es RapidOCR? (motor declarado manda —
+ *  ausente = "rapidocr", retro-compat byte-idéntica con lo histórico). */
+export function esRapidOcr(p: PasadaCascada): boolean {
+  return (p.motor ?? "rapidocr") === "rapidocr";
 }
 
 /**
@@ -128,8 +141,10 @@ export interface DepsOcrCascada {
 interface SalidaCascada {
   texto: string;
   conf: number;
-  /** Cap de la pasada elegida: 1280 | 1920 | "roi" | cap del intento 1. */
-  elegidoCap: number | "roi";
+  /** Cap de la pasada elegida: 1280 | 1920 | "roi" | "tess" | cap intento 1. */
+  elegidoCap: number | "roi" | "tess";
+  /** KIT e14-ocr-tessbest-v1 — motor que produjo el INTENTO 1 (traza). */
+  motorIntento1: "rapidocr" | "tesseract";
   /** Etapa donde quedó: "intento1" = gate AUTO directo (ahorro del re-OCR),
    *  "1280" = core sin 2.ª, "1920" = escalonado completo, "roi" = rescate. */
   paso: "intento1" | "1280" | "1920" | "roi";
@@ -171,8 +186,10 @@ async function ocrRoiSeguro(
  * ANTES del clasificador del pipeline — SIN colisión con quadPrecomputado
  * de P4, que vive en el warp, ni con el gate §4 del score, que es POST-OCR):
  *
- *  1. intento 1 ( RapidOCR 1280 hoy · Tesseract futuro ) → GATE AUTO ⇒ listo.
- *  2. sin AUTO ⇒ core RapidOCR COMO HOY: 1280 (reusada si mismo-motor) →
+ *  1. intento 1 ( TESSERACT BEST con GO-B del dueño · RapidOCR 1280 sin GO )
+ *     → GATE AUTO ⇒ listo.
+ *  2. sin AUTO ⇒ core RapidOCR COMO HOY: 1280 (reusada SOLO si la pasada
+ *     del intento 1 es RapidOCR — `esRapidOcr` por motor declarado) →
  *     `necesitaSegunda` → 1920 → `elegirMejor` (mismo motor).
  *  3. sin AUTO y lectura débil ⇒ rescate ROI top/bottom (cap 1920) →
  *     compuesta → `elegirMejor` SOLO entre pasadas RapidOCR.
@@ -185,10 +202,12 @@ export async function correrCascadaOcr(
   foto: string,
   deps: DepsOcrCascada,
 ): Promise<SalidaCascada> {
-  // 1) intento 1 — RapidOCR 1280 (scaffold) o Tesseract (futuro GO-B).
+  // 1) intento 1 — TESSERACT BEST (GO-B del dueño) con caída honesta a
+  //    RapidOCR 1280 (el caller declara el motor REAL en cada pasada).
   const t1 = performance.now();
   const r1 = await deps.intento1(foto);
   const msIntento1 = Math.round(performance.now() - t1);
+  const motorIntento1 = esRapidOcr(r1) ? "rapidocr" : "tesseract";
   if (gateSeguro(deps, r1.texto) === "AUTO") {
     return {
       texto: r1.texto,
@@ -196,6 +215,7 @@ export async function correrCascadaOcr(
       elegidoCap: r1.cap,
       paso: "intento1",
       rescate: false,
+      motorIntento1,
       msIntento1,
       ms1280: null,
       ms1920: null,
@@ -209,10 +229,13 @@ export async function correrCascadaOcr(
   //    de siempre; ninguna regla nueva).
   let acumulado: PasadaCascada;
   let ms1280: number | null = null;
-  if (deps.mismoMotorIntento1) {
-    acumulado = r1; // la 1.ª pasada YA pagada se reusa (hoy)
+  if (deps.mismoMotorIntento1 || esRapidOcr(r1)) {
+    // La 1.ª pasada YA pagada se reusa: promesa estática del dep O pasada
+    // que DECLARA motor rapidocr (caída honesta Tess→RapidOCR del GO-B —
+    // jamás se paga dos veces la misma pasada del mismo motor).
+    acumulado = r1;
   } else {
-    // intento 1 de OTRO motor (futuro Tesseract): su texto JAMÁS entra a
+    // intento 1 de OTRO motor (Tess best): su texto JAMÁS entra a
     // elegirMejor — el core abre su propia 1.ª pasada.
     const t = performance.now();
     acumulado = await deps.ocr1280(foto);
@@ -276,6 +299,7 @@ export async function correrCascadaOcr(
     elegidoCap: acumulado.cap,
     paso,
     rescate,
+    motorIntento1,
     msIntento1,
     ms1280,
     ms1920,
