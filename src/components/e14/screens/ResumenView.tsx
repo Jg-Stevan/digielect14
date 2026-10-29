@@ -20,6 +20,11 @@ import { useEffect, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import type { HistorialRow } from "@/lib/e14/types";
 import { PUESTO_SIMULADO } from "@/lib/e14/seed";
+// KIT e14-puente-supervision-v1 (§7): tarjeta del puente al panel de
+// supervisión — estado del singleton + sincronización manual inline.
+import type { EstadoPuente } from "@/lib/e14/puente/tipos";
+import { estadoPuente, sincronizarAhora } from "@/lib/e14/puente/envio";
+import { contarPendientes } from "@/lib/e14/puente/cola";
 import { SegmentedBar } from "../primitives";
 // KIT e14-observabilidad-v1 (agente 2 · C1): puerta del modo de diagnóstico.
 import { TuercaResumen } from "../dev/TuercaResumen";
@@ -61,6 +66,39 @@ export function ResumenView() {
   // KIT e14-observabilidad-v1 (agente 2 · C4): el panel SOLO se abre desde
   // la tuerca (sin ruta ni query param).
   const [panelAbierto, setPanelAbierto] = useState(false);
+  // KIT e14-puente-supervision-v1 (§7): estado del puente leído del
+  // singleton (snapshot COPIA) + cola pendiente real + feedback inline del
+  // botón (sin modales ni toasts — D2 del redesign).
+  const [puenteEstado, setPuenteEstado] = useState<EstadoPuente | null>(null);
+  const [puentePendientes, setPuentePendientes] = useState(0);
+  const [puenteSincronizando, setPuenteSincronizando] = useState(false);
+  const [puenteFeedback, setPuenteFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      setPuenteEstado(estadoPuente());
+      void contarPendientes().then((n) => setPuentePendientes(n));
+    } catch {
+      /* silencioso — la tarjeta jamás rompe RESUMEN */
+    }
+  }, []);
+
+  const sincronizarPuente = async (): Promise<void> => {
+    if (puenteSincronizando) return; // un ciclo a la vez (debounce del kit)
+    setPuenteSincronizando(true);
+    setPuenteFeedback("Sincronizando…");
+    try {
+      const resumen = await sincronizarAhora();
+      setPuenteFeedback(resumen.detalle);
+      setPuenteEstado(estadoPuente());
+      setPuentePendientes(await contarPendientes());
+    } catch {
+      setPuenteFeedback("Error: no se pudo sincronizar");
+    } finally {
+      setPuenteSincronizando(false);
+    }
+  };
+
   useEffect(() => {
     if (!reiniciarArmado) return;
     const t = window.setTimeout(() => setReiniciarArmado(false), 4000);
@@ -179,6 +217,58 @@ export function ResumenView() {
             </span>
           </div>
         </div>
+
+        {/* KIT e14-puente-supervision-v1 (§7): puente al panel de supervisión
+            — estilo idéntico a las tarjetas de arriba (misma piel del shell).
+            Feedback INLINE del botón (D2: sin modales, sin toasts nuevos). */}
+        <section className="bg-[#10161f] border border-slate-800 p-4 lg:p-5 flex flex-col gap-2.5 rounded-2xl shadow-sm">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">
+              PUENTE A SUPERVISIÓN
+            </span>
+            <span
+              className={`font-mono text-[10px] font-bold uppercase tracking-wider ${
+                puenteEstado && !puenteEstado.activo
+                  ? "text-red-400"
+                  : "text-[#10b981]"
+              }`}
+            >
+              {puenteEstado ? (puenteEstado.activo ? "ACTIVO" : "DETENIDO") : "—"}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 font-mono">
+            Envía las actas ENVIADAS al panel de supervisión en vivo.
+          </p>
+          <div className="text-[11px] font-mono text-slate-400 border-t border-slate-800/80 pt-2 flex flex-col gap-1">
+            <span>
+              {puentePendientes} pendientes · {puenteEstado?.enviadasOk ?? 0} enviadas
+              {puenteEstado?.ultimaSyncTs
+                ? ` · última ${new Date(puenteEstado.ultimaSyncTs).toLocaleTimeString()}`
+                : ""}
+            </span>
+            {puenteEstado?.ultimoError && (
+              <span className="text-amber-400 break-words">
+                Último error: {puenteEstado.ultimoError}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void sincronizarPuente();
+            }}
+            disabled={puenteSincronizando}
+            aria-label="Sincronizar ahora con el panel de supervisión"
+            className="w-full min-h-[44px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer disabled:opacity-60 disabled:cursor-wait border-emerald-500/40 bg-[#10161f] text-[#10b981] hover:border-emerald-400 hover:bg-emerald-500/10"
+          >
+            {puenteSincronizando ? "SINCRONIZANDO…" : "SINCRONIZAR AHORA"}
+          </button>
+          {puenteFeedback && (
+            <span className="text-[11px] font-mono text-slate-300">
+              {puenteFeedback}
+            </span>
+          )}
+        </section>
 
         {/* Fin de jornada — el INFORME ZIP salió de aquí en C3 (migró al
             PanelDev, sección Exportar) */}
