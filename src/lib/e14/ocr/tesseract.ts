@@ -5,6 +5,14 @@
  * LSTM_ONLY — tessdata_best es LSTM-only) como INTENTO 1 de la cascada
  * `ocr-cascada.ts`.
  *
+ * KIT e14-ocr-psm4-port-v1 — PUERTO DE VELOCIDAD desde supervision-e14
+ * @ a249518 («tesseract-spa-best-v1», el commit con los mejores tiempos
+ * medidos por el dueño): (1) PSM 4 SINGLE_COLUMN vía setParameters — la
+ * config EXACTA del benchmark (94,4 % dígitos · 2,2 s/pág · RAM ~67 MB);
+ * (2) corePath DIRECTORIO + core lstm no-SIMD vendido (paridad de assets
+ * con el repo origen). La cascada, presupuestos, GATE y kill-switch
+ * quedan INTACTOS — solo cambia cómo reconoce el intento 1.
+ *
  * Contrato (hereda las reglas del brief K3 + REPORTE-sim-gama-baja-v2):
  *  · VENDIDO a public/ — jamás CDN en producción (PWA offline; mismo
  *    patrón que vendor/onnxruntime y vendor/opencv):
@@ -53,22 +61,40 @@ interface TessSalida {
 interface TessWorkerMin {
   recognize(image: string): Promise<TessSalida>;
   terminate(): Promise<unknown>;
+  setParameters(params: Record<string, string>): Promise<unknown>;
 }
 
 /** Worker singleton (1 recognize a la vez — la cascada es secuencial). */
 let workerProm: Promise<TessWorkerMin> | null = null;
 
 function crearWorker(): Promise<TessWorkerMin> {
-  return import("tesseract.js").then(({ createWorker }) =>
+  return import("tesseract.js").then(({ createWorker, PSM }) =>
     // OEM 1 = LSTM_ONLY (obligatorio: tessdata_best SOLO trae LSTM).
     // Vendidos same-origin (basePath incluido) — sin red externa.
     createWorker("spa", 1, {
       workerPath: `${PUBLIC_BASE}/vendor/tesseract/worker.min.js`,
-      corePath: `${PUBLIC_BASE}/vendor/tesseract/tesseract-core-simd-lstm.wasm.js`,
+      // KIT e14-ocr-psm4-port-v1 — DIRECTORIO (no archivo fijo): la lib
+      // elige simd-lstm o lstm según la sonda SIMD del dispositivo (ambos
+      // vendidos — paridad con supervision-e14 a249518; antes solo simd ⇒
+      // en no-SIMD el intento 1 fallaba SIEMPRE y la cascada caía al
+      // escalonado completo = el camino lento en exactamente gama baja).
+      corePath: `${PUBLIC_BASE}/vendor/tesseract`,
       langPath: `${PUBLIC_BASE}/models/tess`,
       gzip: true,
       logger: () => {}, // silencio — cero ruido de consola en producción
-    } as Parameters<typeof createWorker>[2]),
+    } as Parameters<typeof createWorker>[2])
+      .then(async (w) => {
+        // KIT e14-ocr-psm4-port-v1 — PSM 4 (SINGLE_COLUMN): la config EXACTA
+        // del benchmark con los mejores tiempos (spa-best + psm 4: 94,4 %
+        // dígitos impresos · 2,2 s/pág · RAM pico ~67 MB — results/
+        // metrics.json, supervision-e14 @ a249518 «tesseract-spa-best-v1»).
+        // Sin esto el intento 1 corre PSM 3 (default) — el bench: psm 3/6
+        // cayeron menos dígitos ⇒ menor tasa de gate-AUTO ⇒ más actas pagando
+        // el escalonado completo (1280→1920+ROI). Misma línea de
+        // tesseract-ocr.ts del repo origen: setParameters tras crear worker.
+        await w.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_COLUMN });
+        return w;
+      }),
   ) as Promise<TessWorkerMin>;
 }
 
