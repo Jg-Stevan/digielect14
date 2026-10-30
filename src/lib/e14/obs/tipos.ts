@@ -145,6 +145,11 @@ export interface FlagsApp {
   // ─── (BAJO 480 s · MEDIO 240 s · ALTO 120 s — lección del masiva D48 y
   // ─── la evidencia sim-gama-baja); número = override MANUAL del dueño.
   presupuestoEscaneoMs: number | null; // default null
+  // ─── KIT e14-capa0-qr-worker-v1 — campo ADITIVO AL FINAL (D57): la capa 0
+  // ─── QR de la cámara corre su cadena jsQR en WORKER (presupuesto real +
+  // ─── fases/fin telemetría; port D40+R1.1+R1.4-b de supervision-e14).
+  // ─── false = camino de HOY byte-idéntico (main thread, tiers "base").
+  capa0QrWorker: boolean; // default true
 }
 
 export interface ReporteSesion {
