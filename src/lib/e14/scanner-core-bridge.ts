@@ -1360,12 +1360,23 @@ export class RealCoreBridge implements E14Bridge {
     // completa (~15-17 s sin-QR, bloques sync) rompería el timeout del
     // flujo individual. El catch es el fallback silencioso del kit: sin la
     // señal, el flujo de cámara sigue intacto.
+    // KIT e14-capa0-qr-worker-v1 — la cadena corre en WORKER (port D40+R1.1+
+    // R1.4-b de supervision-e14): presupuesto real por tier (unificada 8 s ·
+    // BAJO 5 s sin rescate 4096 — floor anti-OOM), fases/fin telemetría y
+    // cero bloques sync en el hilo UI. El wrapper del cliente cae al camino
+    // de HOY (tiers "base" en main) si el worker no corrió — kill-switch
+    // `capa0QrWorker: false` ⇒ byte-idéntico a este bloque de siempre.
     const qrCamPromesa: Promise<ParcialPipeline["qrCam"]> = (async () => {
       try {
-        const { decodificarQrDeCapture } = await import("./qr/identidad-qr");
-        return await decodificarQrDeCapture(fotoOriginal, { tiers: "base" });
+        const { decodificarQrCapa0Camara } = await import("./qr/capa0-qr.client");
+        return await decodificarQrCapa0Camara(fotoOriginal);
       } catch {
-        return null; // sin-payload — el flujo de cámara sigue intacto
+        try {
+          const { decodificarQrDeCapture } = await import("./qr/identidad-qr");
+          return await decodificarQrDeCapture(fotoOriginal, { tiers: "base" });
+        } catch {
+          return null; // sin-payload — el flujo de cámara sigue intacto
+        }
       }
     })();
     const aterrizarQrCam = async (): Promise<void> => {

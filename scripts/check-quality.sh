@@ -58,7 +58,8 @@ paso "4/7 · Smoke de bundling del worker de heartbeat (KIT e14-obs-hang-atribuc
 # env / console. / localStorage) · CLIENTE sin .ts en media y apuntando al
 # .worker.js precompilado.
 bun scripts/smoke-heartbeat-worker.mjs || fail "smoke heartbeat-worker (worker NO compilado de verdad)"
-ok "worker de heartbeat precompilado y fresco · cliente limpio"
+bun scripts/smoke-capa0-qr-worker.mjs || fail "smoke capa0-qr-worker (worker NO compilado de verdad — KIT e14-capa0-qr-worker-v1)"
+ok "workers de heartbeat y capa 0 QR precompilados y frescos · cliente limpio"
 
 paso "5/7 · Vitest (suite unitaria)"
 bun run test || fail "vitest"
