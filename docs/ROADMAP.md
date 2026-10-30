@@ -442,3 +442,16 @@ Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de
 - [x] T-6 — UI PanelDev §8 (chips + barras + plan + INFORME PARA IA) + kill switch §6 + puente delegante.
 - [x] T-7 — Docs: REPORTE-adaptacion-dispositivo-v1.md + worklog + DECISIONS D75 + AGENTS.md · Gates tsc/lint/vitest verdes.
 - [ ] Dueño: validación de campo con gama baja real; decidir knobs futuros (cap det / resolución por tier — requieren kit propio).
+
+## CAPA 0 QR EN WORKER (CÁMARA) — e14-capa0-qr-worker-v1 (2026-10-30): port del D40+R1.1+R1.4-b de supervision-e14 — la cadena completa del QR corre fuera del hilo UI con presupuesto por tier y telemetría de fases
+
+- [x] K-1 — `qr/capa0-qr.worker.ts` NUEVO: cadena jsQR-only (base → recorte-600 → barrido → barrido-nitido unsharp 3×3 → barrido-binarizado umbral local integral → rotaciones 90/180/270 → rescate 4096) con presupuesto de pared + guard R1.1 (cuadrante/fracción/rotación/rescate) + `fases`/`fin` (R1.4-b). RED LINE: zxing JAMÁS en el worker.
+- [x] K-2 — `qr/capa0-qr.client.ts` NUEVO: hard-kill anti-zombi (presupuesto+1500 ms → terminate+respawn), feature-detect, wrapper `decodificarQrCapa0Camara` (presupuesto unificada 8 s · BAJO 5 s sin rescate — floor anti-OOM) + fallback camino de HOY byte-idéntico.
+- [x] K-3 — `qr/qr-pixeles.ts` +`activarGuardBarrido` (R1.1) y +`ladderBaseDePixeles`/`nitidezQrDePixeles`/`binarizadaQrDePixeles` movidas byte a byte desde identidad-qr.ts (doctrina D40 — import estático worker-safe; identidad-qr re-exporta, cero diffs en consumidores).
+- [x] K-4 — Build del artefacto (patrón heartbeat): `scripts/build-capa0-worker.mjs` + `prebuild` + `public/scanner/capa0-qr.worker.js` COMMITTEADO (134.9 KB) + `scripts/smoke-capa0-qr-worker.mjs` en el gate (frescura byte a byte + marcadores + prohibidos).
+- [x] K-5 — Flag kill-switch `capa0QrWorker` default TRUE (false = camino de HOY byte a byte) — whitelist aditiva + ancla de defaults actualizada.
+- [x] K-6 — Bridge: bloque e64-qr T-2.1 de cámara consume el wrapper (catch conserva el camino de hoy).
+- [x] K-7 — Gates: tsc 0 · lint 0/0 · vitest 239/239 · smoke TODO OK. REPORTE + DECISIONS D78 + worklog.
+- [ ] K-8 — (pendiente) Kit 2: knobs del plan (`qrCapa0Nivel`/`qrCapa0PresupuestoMs`/`qrCapa0Rescate4096`) con override manual del dueño (D6).
+- [ ] K-9 — (pendiente) Kit 3: `fases`/`fin`/`qrPresupuestoMs` hacia el informe IA (PanelDev §9 — patrón null honesto).
+- [ ] K-10 — (pendiente) Validación de campo del dueño (móvil + desktop · GH Pages mono-hilo + CF Pages multihilo) + bench con fotos reales (tools/bench-qr-identidad).

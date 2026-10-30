@@ -249,10 +249,37 @@ export function ladoDeVentana(pix: PixelesQr, fraccion: number): number {
  * hermano H-5 — la franja de hasta `paso` px que la condición `+ lado <=`
  * dejaba descubierta).
  */
+// ─── KIT e14-capa0-qr-worker-v1 · R1.1 — GUARD de presupuesto del barrido ───
+// Guard de reló VOLUNTARIO: el caller (cadena de capa 0 en el worker) lo
+// activa ANTES de sus barridos y lo desactiva en finally. Sin guard el
+// chequeo interno es siempre false — byte-idéntico a hoy (gama sin
+// presupuesto). jsQR es sync y la cadena es secuencial en SU contexto —
+// sin reentrancy (MISMO diseño del port de supervision-e14, R1.1).
+let guardBarridoVencido: (() => boolean) | null = null;
+
+/** Activa el guard de reló para las llamadas barridoQrDePixeles que corran
+ *  DENTRO del closure del caller (la cadena de capa 0 es secuencial en SU
+ *  contexto — main o worker — y jsQR es sync: sin reentrancy). null = sin
+ *  guard (byte-idéntico a hoy). El caller DEBE desactivar en finally. */
+export function activarGuardBarrido(vencido: (() => boolean) | null): void {
+  guardBarridoVencido = vencido;
+}
+
+/** Lectura interna del guard (null-safe — jamás lanza). */
+function barridoVencido(): boolean {
+  try {
+    return guardBarridoVencido != null && guardBarridoVencido();
+  } catch {
+    return false; // un guard roto jamás tumba el barrido (honesto)
+  }
+}
+
 export function barridoQrDePixeles(pix: PixelesQr): string | null {
   for (const q of CUADRANTES) {
+    if (barridoVencido()) return null; // R1.1 — guard por cuadrante
     const lim = limitesDeCuadrante(pix, q);
     for (const fraccion of BARRIDO_VENTANAS) {
+      if (barridoVencido()) return null; // R1.1 — guard por fracción
       const lado = ladoDeVentana(pix, fraccion);
       const paso = Math.max(1, Math.round(lado * 0.5));
       for (let y = lim.y0; y + lado <= lim.y1; y += paso) {
@@ -267,10 +294,105 @@ export function barridoQrDePixeles(pix: PixelesQr): string | null {
       // deja una franja descubierta de hasta `paso` px en el filo
       // derecho/inferior (doc hermano H-5); este anclaje la cubre (el clamp
       // de ventanaDePixeles ya existe — jamás inventa píxeles).
+      if (barridoVencido()) return null; // R1.1 — guard antes de la celda del filo
       const winFilo = ventanaDePixeles(pix, lim.x1 - lado, lim.y1 - lado, lado);
       const payloadFilo = winFilo ? jsQrDeVentana(winFilo) : null;
       if (payloadFilo != null) return payloadFilo;
     }
   }
   return null;
+}
+
+// ─── KIT e14-capa0-qr-worker-v1 · LADDER BASE + NITIDEZ + BINARIZADA movidos ─
+// MISMA doctrina del FIX DICTAMEN-e73 §3.1 (módulo puro worker-safe re-
+// exportado por identidad-qr — cero diffs en consumidores): el WORKER de
+// capa 0 necesita ladder/nitidez/binarizada como import ESTÁTICO — moverlos
+// aquí mantiene el grafo del bundle jsQR-only (cero identidad-qr → cero
+// scanner-core/logger/zxing/process.env en el worker emitido). Contenido
+// MOVIDO byte a byte de identidad-qr.ts (y idéntico al qr-pixeles.ts de
+// supervision-e14 — R1.1); identidad-qr.ts re-exporta TODO.
+
+/** Ladder BASE sobre píxeles (T-PRE — refactor del bucle del kit §1.1):
+ *  A imagen completa → B banda top-left → C banda ajustada → C1.5
+ *  up-escalado, early-exit al primer payload. Puro — testeable headless. */
+export function ladderBaseDePixeles(pix: PixelesQr): string | null {
+  for (const esp of BANDAS_BASE) {
+    const payload = intentoSobrePixeles(pix, esp);
+    if (payload != null) return payload; // early-exit al primer payload
+  }
+  return null;
+}
+
+/** e64-qr T-1.1 · NITIDEZ (unsharp 3×3) — Máscara de enfoque sobre RGBA:
+ *  salida = clamp(orig + k·(orig − blur3×3)). Motivo (doc hermano R-1): el
+ *  remuestreo a ≤2048 suaviza módulos de ~3-8 px — jsQR binariza mejor con
+ *  filos (evidencia banco #77: motion blur en el filo del decode). Pura,
+ *  sin DOM, sin throw: bordes intactos (y,x ∈ [1,extremo-1] — el marco de
+ *  1 px no aporta al decode, el QR nunca vive pegado al filo ABSOLUTO de la
+ *  foto). Uint8ClampedArray clampea solo. */
+export const NITIDEZ_K = 0.6;
+
+export function nitidezQrDePixeles(pix: PixelesQr): PixelesQr {
+  const { data, width: w, height: h } = pix;
+  const out = new Uint8ClampedArray(data); // orig + delta acumulado
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      for (let c = 0; c < 4; c++) {
+        // blur 3×3 (sin separables — 9 lecturas, ventana local)
+        let suma = 0;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) suma += data[i + (dy * w + dx) * 4 + c]!;
+        const blur = suma / 9;
+        out[i + c] = data[i + c]! + NITIDEZ_K * (data[i + c]! - blur);
+      }
+    }
+  }
+  return { data: out, width: w, height: h };
+}
+
+/** e64-qr T-1.2 · BINARIZADA (umbral local adaptativo) — Blanco-negro puro
+ *  con umbral LOCAL (ventana integral — patrón EXACTO del que ya usa
+ *  marcasEsquina en src/lib/e14/integridad.ts, con luma 8 bits + Float64):
+ *  fotos con sombra o iluminación dura donde el binarizado interno de jsQR
+ *  falla. Salida RGBA 0/255 — jsQR la consume igual (attemptBoth la invierte
+ *  si hace falta). Pura, sin DOM, sin throw. */
+export const BINARIZADA_VENTANA = 0.025; // fracción del lado menor (mín 24 px)
+export const BINARIZADA_DELTA = 12;      // holgura sobre la media local
+
+export function binarizadaQrDePixeles(pix: PixelesQr): PixelesQr {
+  const { data, width: w, height: h } = pix;
+  // luma 8 bits (redondeo una vez)
+  const luma = new Uint8Array(w * h);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++)
+    luma[p] = Math.round(0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!);
+  // imagen integral (W+1)×(H+1) Float64 — luma 8 bits no desborda
+  const iw = w + 1;
+  const integral = new Float64Array(iw * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let fila = 0;
+    for (let x = 0; x < w; x++) {
+      fila += luma[y * w + x]!;
+      integral[(y + 1) * iw + x + 1] = integral[y * iw + x + 1]! + fila;
+    }
+  }
+  const lado = Math.max(24, Math.round(Math.min(w, h) * BINARIZADA_VENTANA));
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - lado);
+    const y1 = Math.min(h - 1, y + lado);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - lado);
+      const x1 = Math.min(w - 1, x + lado);
+      const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+      const suma =
+        integral[(y1 + 1) * iw + x1 + 1]! - integral[y0 * iw + x1 + 1]! -
+        integral[(y1 + 1) * iw + x0]! + integral[y0 * iw + x0]!;
+      const media = suma / area;
+      const v = luma[y * w + x]! < media - BINARIZADA_DELTA ? 0 : 255;
+      const i = (y * w + x) * 4;
+      out[i] = v; out[i + 1] = v; out[i + 2] = v; out[i + 3] = 255;
+    }
+  }
+  return { data: out, width: w, height: h };
 }

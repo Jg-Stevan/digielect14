@@ -66,6 +66,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       adaptacionDispositivo: true,
       // KIT e14-ocr-tessbest-v1 (GO-B) — aditivo AL FINAL (contrato D57):
       presupuestoEscaneoMs: null,
+      // KIT e14-capa0-qr-worker-v1 — aditivo AL FINAL (contrato D57):
+      capa0QrWorker: true,
     });
   });
 

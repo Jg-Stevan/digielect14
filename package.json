@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "prebuild": "bun scripts/build-capa0-worker.mjs",
     "dev": "next dev -p 3000 -H 0.0.0.0",
     "start": "next start -p 3000 -H 0.0.0.0",
     "lint": "eslint .",
