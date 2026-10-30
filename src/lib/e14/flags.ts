@@ -58,6 +58,11 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // sim-gama-baja: el timeout fijo de 120 s rechazaba actas perfectas en
   // mono-hilo). Override manual del dueño (D6): número en ms, clamp 30-900 s.
   presupuestoEscaneoMs: null,
+  // KIT e14-capa0-qr-worker-v1 — la capa 0 QR de la cámara corre su cadena
+  // jsQR en WORKER (presupuesto real por tier + fases/fin — port D40+R1.1+
+  // R1.4-b de supervision-e14). Kill-switch del dueño: false = camino de HOY
+  // byte-idéntico (main thread, tiers "base").
+  capa0QrWorker: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -89,6 +94,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.presupuestoEscaneoMs === "number" && Number.isFinite(p.presupuestoEscaneoMs)) {
     limpio.presupuestoEscaneoMs = Math.max(30_000, Math.min(900_000, Math.round(p.presupuestoEscaneoMs)));
   }
+  // KIT e14-capa0-qr-worker-v1 — whitelist aditiva (booleano).
+  if (typeof p.capa0QrWorker === "boolean") limpio.capa0QrWorker = p.capa0QrWorker;
   return limpio;
 }
 
