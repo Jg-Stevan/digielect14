@@ -38,21 +38,22 @@ import {
   tituloYUbicacionDe,
   tipoPaginaDe,
 } from "./clasificador";
+import type { ClasificacionE14 } from "./clasificador";
 import type { DivipolBase } from "./divipol";
-import { statusDeScore } from "./types";
+import { statusDeScore, type ActaStatus } from "./types";
 
 interface DescriptorGolden {
   id: string;
   nota: string;
   ocr: string;
-  esperado: Record<string, unknown>;
+  esperado: ClasificacionE14;
   derivados: Record<string, unknown>;
 }
 
 interface Golden {
   version: number;
   divipolMd5: string;
-  estados: Array<{ score: number; status: string }>;
+  estados: Array<{ score: number; status: ActaStatus }>;
   descriptores: DescriptorGolden[];
 }
 
