@@ -21,7 +21,7 @@
  *      /models/tess/spa.traineddata.gz            (~12 MB, tessdata_best)
  *  · WORKER PROPIO de la lib (JAMÁS main thread) — el hilo principal solo
  *    espera la promesa (cero riesgo «página no responde»).
- *  · PRESUPUESTO PROPIO (bench tools/bench-ocr-cascada: default 60 000 ms,
+ *  · PRESUPUESTO PROPIO (banco K3 de cascadas: default 60 000 ms,
  *    capado por el caller al presupuesto restante del pipeline): vencido o
  *    roto ⇒ TERMINA el worker y LANZA → el bridge cae a RapidOCR 1280 de
  *    siempre («escalonado a pp ocr», byte a byte — jamás tumba el pipeline).
@@ -38,7 +38,7 @@
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 /** Presupuesto de UNA recognize Tesseract (dato del bench
- *  tools/bench-ocr-cascada §B — «budget Tesseract default 60 000 ms»). */
+ *  banco K3 de cascadas §B — «budget Tesseract default 60 000 ms»; decisión D76). */
 const TESS_RECONOCER_PRESUPUESTO_MS = 60_000;
 
 /** Presupuesto de la CREACIÓN del worker — la 1.ª vez descarga la lib

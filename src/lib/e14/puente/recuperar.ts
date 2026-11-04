@@ -26,7 +26,7 @@ const VERSION_MASIVA = 1;
 const STORE_ARCHIVOS = "archivos";
 
 /** Contador del barrido. */
-export interface RecuentoRecuperacion {
+interface RecuentoRecuperacion {
   recuperadas: number;
   saltadas: number;
 }

@@ -16,6 +16,7 @@
  *    runner-rechequeo.test.ts): call-site condicional + doble whitelist.
  */
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   cascadaActiva,
@@ -26,7 +27,9 @@ import {
   type PasadaCascada,
 } from "./ocr-cascada";
 
-const raiz = new URL("../../..", import.meta.url).pathname;
+// fileURLToPath, no `.pathname`: en Windows .pathname devuelve "/C:/..." y
+// readFileSync falla — los anclas de contrato jamás corrían en ese SO.
+const raiz = fileURLToPath(new URL("../../..", import.meta.url));
 const lee = (ruta: string): string => readFileSync(`${raiz}${ruta}`, "utf8");
 
 /** Pasada de prueba — conf/comparables SOLO entre pasadas del mismo motor. */

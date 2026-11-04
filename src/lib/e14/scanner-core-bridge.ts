@@ -987,7 +987,7 @@ async function recortarRoiDataUrl(
  * motor de ocr tess best y escalonado a pp ocr»): `ocr/tesseract.ts`
  * (tesseract.js 5 vendido, worker propio — JAMÁS main thread) hace el
  * intento 1 con texto SOLO-vía-GATE (jamás elegirMejor) + budget propio
- * (dato del bench tools/bench-ocr-cascada: 60 000 ms); cae honesto a
+ * (dato del banco K3: 60 000 ms — decisión D76); cae honesto a
  * RapidOCR 1280 (pasada motor:"rapidocr" — la cascada la REUSA y el
  * escalonado a PP-OCR sigue byte a byte).
  */
@@ -1794,7 +1794,7 @@ export class RealCoreBridge implements E14Bridge {
     // fotoProcesada (<30 ms p95, motor compartido motorTinta —
     // marcadores.ts). Corre TAMBIÉN en `simular` (default del dueño —
     // calibración: los 3 assets SIM pasan la zona 8.83-57.5% ≫ 0.8%, la
-    // demo no se rompe · docs/REPORTE-gate-marcadores-v2.md). INCOMPLETA
+    // demo no se rompe · decisión D41 del catálogo). INCOMPLETA
     // manda primero: el veto de votos SOLO condena actas completas sin
     // tinta en la zona de votos.
     const marcadores = await medirZonaVotos(fotoProcesada, undefined);

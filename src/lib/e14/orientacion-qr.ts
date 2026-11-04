@@ -74,7 +74,7 @@ import jsQR from "./qr/vendor/jsQR.js";
 
 /** Rotación a aplicar (misma unión que el Rotacion local de orientacion.ts —
  *  estructuralmente compatible con rotarDataUrl). */
-export type RotacionQr = 0 | 90 | 180 | 270;
+type RotacionQr = 0 | 90 | 180 | 270;
 
 /** Cuadrante de la imagen SIN rotar donde cayó el QR. */
 type CuadranteQr = "TL" | "TR" | "BR" | "BL";
@@ -111,33 +111,6 @@ const IDX_POR_CUADRANTE: Record<CuadranteQr, 0 | 1 | 2 | 3> = {
 /** Cuadrante desde un punto normalizado (0-1) — fórmula del bench v8-2/v8.3. */
 function cuadranteDesdePunto(fx: number, fy: number): CuadranteQr {
   return `${fy < 0.5 ? "T" : "B"}${fx < 0.5 ? "L" : "R"}` as CuadranteQr;
-}
-
-/** Rotación desde el cuadrante (pura — testeable). */
-function rotDesdeCuadranteQr(cuad: CuadranteQr): RotacionQr {
-  return ROT_POR_CUADRANTE[cuad];
-}
-
-/** KIT flujo-dueno-v1 (K2 — brief Agente B, sub-commit 2) — rotación DESDE
- *  el centroide normalizado del QR (pura — testeable). Export ADITIVO que
- *  ENCAPSULA el mapeo validado del bench para los callers del warp de
- *  ingesta: centroide (0-1) → cuadrante (cuadranteDesdePunto, fórmula
- *  v8-2/v8.3) → rotación (ROT_POR_CUADRANTE — v8.3 4/4: el hogar del QR del
- *  E-14 es la esquina TL; foto girada α CW ⇒ QR en TL(0)/TR(90)/BR(180)/
- *  BL(270) del warp SIN rotar ⇒ corrección 0/270/180/90).
- *
- *  POR QUÉ AQUÍ NO VIVEN la base-invertido v8.4 ni el anillo D62: ambas
- *  ordenan INTENTOS del RESCATE hi-res (cropParal por esquinas del quad
- *  + ganadorPersistente que reordena qué cuadrante se prueba primero) —
- *  maquinaria para cuando la UBICACIÓN del QR es DESCONOCIDA. En el warp
- *  de ingesta la ubicación ES conocida (jsQR location / cornerPoints de
- *  BarcodeDetector) → el mapeo directo validado 4/4 es el correcto; un
- *  rescue no existe en ese camino (mismo alcance del pre-scan e107). El
- *  anillo TAMPOCO se alimenta desde aquí (decisión documentada: la rotación
- *  de ingesta no es desenlace de sondeo — no reordena ladders ajenos).
- *  REUTILIZA (no re-implementa) cuadranteDesdePunto + ROT_POR_CUADRANTE. */
-export function rotacionDesdeCentroide(fx: number, fy: number): RotacionQr {
-  return rotDesdeCuadranteQr(cuadranteDesdePunto(fx, fy));
 }
 
 // ─── Copia MEJORADA del warp solo para el QR (bench v8.2 — verbatim) ────────

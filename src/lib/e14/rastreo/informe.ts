@@ -108,7 +108,7 @@ export function resumenDeSesion(s: SesionRastreo): ResumenSesion {
 
 // ─── Informe JSON (auto-descriptivo) ────────────────────────────────────────
 
-export interface InformeRastreo {
+interface InformeRastreo {
   $informe: "digielect14/rastreo-tiempos";
   $version: 1;
   _como_interpretar: string[];
@@ -121,14 +121,14 @@ export interface InformeRastreo {
 }
 
 /** Todas las sesiones con datos: la activa (si hay) + las cerradas. */
-export function todasLasSesiones(): SesionRastreo[] {
+function todasLasSesiones(): SesionRastreo[] {
   const activa = sesionActiva();
   const cerradas = sesionesCerradas();
   const todas = activa ? [activa, ...cerradas] : cerradas;
   return todas.filter((s) => s.actas.length > 0 || s.eventos.length > 2);
 }
 
-export async function construirInformeRastreo(): Promise<InformeRastreo> {
+async function construirInformeRastreo(): Promise<InformeRastreo> {
   const sesiones = todasLasSesiones();
   const perfil = await obtenerPerfilDispositivo().catch(() => null);
   const plan = planAdaptativo();
@@ -286,7 +286,7 @@ function msLegible(ms: number | null): string {
   return `${m}m ${Math.round(s - m * 60)}s`;
 }
 
-export async function construirInformeTxt(): Promise<string> {
+async function construirInformeTxt(): Promise<string> {
   const informe = await construirInformeRastreo();
   const r = informe.resumen as Record<string, unknown>;
   const L: string[] = [];
@@ -353,7 +353,7 @@ function csvEscapar(v: unknown): string {
   return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function construirInformeCsv(sesiones: SesionRastreo[]): string {
+function construirInformeCsv(sesiones: SesionRastreo[]): string {
   const cab = [
     "sesion",
     "id_hash",

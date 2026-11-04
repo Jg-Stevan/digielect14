@@ -22,7 +22,7 @@ import { obtenerPerfilDispositivo } from "./perfil";
 import { planAdaptativo } from "./plan";
 import { appVersion, idDispositivo, idSesion } from "../obs/identidad";
 
-export interface InformeIA {
+interface InformeIA {
   "$informe": "digielect14/perfil-dispositivo";
   "$version": 1;
   /** Instrucciones EXPLÍCITAS para la IA que lea este artefacto. */
@@ -64,7 +64,7 @@ function textoGama(tier: string): string {
 }
 
 /** Recomendaciones ACCIONABLES generadas por reglas sobre el perfil. */
-export function recomendacionesDe(p: {
+function recomendacionesDe(p: {
   tier: string;
   capacidades: { wasmSimd: boolean; hilosWasm: boolean; webgpu: boolean; offscreenCanvas: boolean };
   red: { tipo: string | null; saveData: boolean; downlinkMbps: number | null };
@@ -177,7 +177,7 @@ function descargarBlob(blob: Blob, nombre: string): void {
 }
 
 /** Informe COMPLETO auto-descriptivo (puro — no descarga nada). */
-export async function construirInformeIA(): Promise<InformeIA> {
+async function construirInformeIA(): Promise<InformeIA> {
   const perfil = await obtenerPerfilDispositivo();
   const plan = planAdaptativo();
   const idDisp = idDispositivo();

@@ -13,7 +13,7 @@
  * PAÍS, ZONA, PUESTO, MESA, Ver Pag, KIT, código 15d) y el pie trae KIT +
  * SUMA TOTAL ⇒ el rescate por ROIs (top 0-25% y bottom 75-100% del warp,
  * re-escalados a cap 1920) es coherente con DÓNDE viven los campos. Tres
- * cascadas en el banco (`tools/bench-ocr-cascada/`):
+ * cascadas en el banco K3 (medición recogida en docs/DECISIONS.md D76):
  *   A = RapidOCR escalonado de hoy (1280 → débil → 1920 completo).
  *   B = Tesseract completo → gate → RapidOCR-ROI   (requiere GO del bench).
  *   C = RapidOCR 1280 → gate → RapidOCR-ROI        (control, cero deps nuevas).
@@ -79,7 +79,7 @@ export function cascadaActiva(ocrCascada: boolean, simular: boolean | undefined)
 
 /** ¿La pasada del intento 1 es RapidOCR? (motor declarado manda —
  *  ausente = "rapidocr", retro-compat byte-idéntica con lo histórico). */
-export function esRapidOcr(p: PasadaCascada): boolean {
+function esRapidOcr(p: PasadaCascada): boolean {
   return (p.motor ?? "rapidocr") === "rapidocr";
 }
 

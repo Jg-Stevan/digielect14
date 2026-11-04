@@ -104,7 +104,7 @@ const PRESUPUESTO_ESCANEO_POR_TIER: Record<Tier, number> = {
 };
 
 /** Referencia histórica (e67) — default/ALTO y fallback seguro. */
-export const PRESUPUESTO_ESCANEO_DEFAULT_MS = 120_000;
+const PRESUPUESTO_ESCANEO_DEFAULT_MS = 120_000;
 
 /** KIT e14-ocr-tessbest-v1 — presupuesto del PROBE de orientación por tier
  *  (histórico fijo 12 000 — D56 §3 T3, calibrado con det del probe a
@@ -123,7 +123,7 @@ const PROBE_ORIENTACION_POR_TIER: Record<Tier, number> = {
 };
 
 /** Referencia histórica (D56 §3 T3) — default/ALTO y fallback seguro. */
-export const PROBE_ORIENTACION_DEFAULT_MS = 12_000;
+const PROBE_ORIENTACION_DEFAULT_MS = 12_000;
 
 /** KIT e14-ocr-tessbest-v1 — espera del warm-up del worker OpenCV en la
  *  DETECCIÓN (tope histórico 5 s — kit masiva-ux T1). Evidencia sim-lowend-v4:
@@ -140,7 +140,7 @@ const ESPERA_WORKER_POR_TIER: Record<Tier, number> = {
 };
 
 /** Referencia histórica (masiva-ux T1) — default/ALTO y fallback seguro. */
-export const ESPERA_WORKER_DEFAULT_MS = 5_000;
+const ESPERA_WORKER_DEFAULT_MS = 5_000;
 
 export interface PlanAdaptativo {
   /** false ⇒ el flag del dueño está OFF ⇒ knobs byte-idénticos a hoy. */

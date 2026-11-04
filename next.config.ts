@@ -4,7 +4,7 @@ import path from "node:path";
 /**
  * Configuración DUAL para GitHub Pages (repo digielect14):
  *
- *  · Dev / servidor local: `bun run dev` (:3001) → standalone.
+ *  · Dev / servidor local: `bun run dev` (:3000) → standalone.
  *  · GitHub Pages (estático): `BUILD_STATIC=1 bunx next build` → `./out/`.
  *    El sitio vive en jg-stevan.github.io/digielect14/ → basePath condicional
  *    desde NEXT_PUBLIC_BASE_PATH (la fija el workflow de deploy: /digielect14).

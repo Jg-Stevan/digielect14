@@ -7,8 +7,8 @@
     "scripts/build-*.mjs",
     "scripts/smoke-*.mjs",
     "src/lib/e14/obs/heartbeat.worker.ts",
-    "tools/**/*.{js,ts}",
     "src/**/*.test.ts",
+    "scripts/serve-coop-coep.mjs",
     "open-next.config.ts"
   ],
   "ignore": [

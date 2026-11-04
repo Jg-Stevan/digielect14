@@ -28,7 +28,7 @@
  * real f8ec6a9 = e63m; el commit no existe ni en ramas ni en PRs — API
  * verificada). Esta superficie de e63n se reconstruye aquí con la ÚNICA
  * fuente disponible (doc hermano §1) y queda declarada en
- * docs/REPORTE-e64-qr-v1.md §desviaciones:
+ * el reporte del kit e64-qr (histórico) §desviaciones:
  *   2. ladderBaseDePixeles     — A (100%) → B (top-left 45%×25%) →
  *                                C (8-38%×5-20%) → C1.5 (C up-escalado ×1.5)
  *   3. barridoQrDePixeles      — grilla de ventanas cuadradas por cuadrante
@@ -87,7 +87,6 @@ import { logger } from "../../logger"; // SPRINT-A A6 — console→logger (mens
 import {
   barridoQrDePixeles,
   BANDA_A,
-  BANDAS_BASE,
   BARRIDO_VENTANAS,
   CUADRANTES,
   binarizadaQrDePixeles, // KIT e14-capa0-qr-worker-v1 — movida al módulo puro
@@ -105,17 +104,13 @@ import {
 export {
   barridoQrDePixeles,
   BANDA_A,
-  BANDAS_BASE,
   BARRIDO_VENTANAS,
   // KIT e14-capa0-qr-worker-v1 — ladder/nitidez/binarizada se movieron a
   // qr-pixeles.ts (módulo puro worker-safe, doctrina D40 de supervision-e14):
   // re-exportados — cero diffs en consumidores.
   binarizadaQrDePixeles,
-  BINARIZADA_DELTA,
-  BINARIZADA_VENTANA,
   intentoSobrePixeles,
   ladderBaseDePixeles,
-  NITIDEZ_K,
   nitidezQrDePixeles,
   QR_RECORTE_LADO,
   rotarPixeles,
@@ -125,20 +120,12 @@ export type { PixelesQr } from "./qr-pixeles";
 // ─── Constantes NUEVAS del kit e63m §1.1 (separadas de las existentes) ──────
 /** Lado largo MÁXIMO del canvas de trabajo (kit §1.1 — igual que el banco:
  *  el thumb 320 del dhash es DEMASIADO PEQUEÑO para el QR). */
-export const QR_LADO_LARGO = 2048;
-/** Ladder BASE en orden (kit §1.1 — byte-idéntico al banco): A imagen
- *  completa → B banda top-left → C banda ajustada → C×1.5 up-escalado. */
-export const QR_INTENTOS_BASE: readonly string[] = BANDAS_BASE.map((b) => b.id);
+const QR_LADO_LARGO = 2048;
 /** Tier de rotación (kit §1.1): SOLO si el ladder base falla — A completa
  *  @90°→@180°→@270° (evidencia del banco: el QR CAMBIA de esquina al rotar
  *  — durazno1 solo decodifica con A@90°; repetir bandas finas sobre el
  *  rotado no sirve, la imagen completa sí). */
-export const QR_ROTACIONES: readonly number[] = [90, 180, 270];
-/** Espera acotada del caso «original en vuelo» (kit §1.1/§1.2.4): intervalo
- *  × intentos = techo efectivo de 15 s. Re-chequeo SOLO-LECTURA del estado
- *  del original; sin timers globales. */
-export const QR_ESPERA_INTERVALO_MS = 1_500;
-export const QR_ESPERA_INTENTOS = 10;
+const QR_ROTACIONES: readonly number[] = [90, 180, 270];
 
 // ─── e63n (T-PRE) — constantes del tier ZXING ──────────────────────────────
 // (BARRIDO_VENTANAS y TODO el barrido jsQR viven en qr-pixeles.ts desde el
@@ -161,12 +148,6 @@ const ZXING_FORMATO = "QRCode" as const; // SPRINT-A A5: de-export (vivo solo aq
 // (QR_RECORTE_LADO vive en qr-pixeles.ts desde el FIX DICTAMEN-e73 §3.1 —
 // re-exportado arriba; decodificarQrDeRecorte lo consume vía ese import.)
 
-/** Estado del original para la espera acotada — estados de fila + AUSENTE
- *  (la fila fue quitada/vaciada mientras se esperaba). Unión LOCAL: los
- *  estados viven en la cola masiva (ELIMINADA) — la firma se conserva
- *  porque es parte del contrato público del módulo. */
-type EstadoOriginalQr = "PENDIENTE" | "PROCESANDO" | "LISTA" | "ERROR" | "DUPLICADA" | "AUSENTE";
-
 // ─── Núcleo puro del decode: vive en qr-pixeles.ts (KIT e73 §A.2) ───────
 // intentoSobrePixeles (banda → jsQR attemptBoth, puro) y rotar90/rotarPixeles
 // (permutación exacta) se movieron SIN cambiar comportamiento al módulo puro
@@ -174,23 +155,6 @@ type EstadoOriginalQr = "PENDIENTE" | "PROCESANDO" | "LISTA" | "ERROR" | "DUPLIC
 // KIT e14-capa0-qr-worker-v1 — ladderBaseDePixeles vive en qr-pixeles.ts
 // (misma doctrina: import ESTÁTICO del worker, bundle jsQR-only);
 // re-exportada arriba — cero diffs en consumidores.
-
-/**
- * Ladder COMPLETO e63m sobre píxeles (kit §1.1): base A→B→C→C1.5 con
- * early-exit al primer payload; tier de rotación SOLO si el base falla
- * (A@90→A@180→A@270, early-exit ídem). null si nada decodifica. Puro —
- * el QA headless lo ejercita con matrices QR reales (contrato e63m
- * byte-equivalente: mismo conjunto de intentos en el mismo orden).
- */
-export function ladderQrDePixeles(pix: PixelesQr): string | null {
-  const base = ladderBaseDePixeles(pix);
-  if (base != null) return base;
-  for (const grados of QR_ROTACIONES) {
-    const payload = intentoSobrePixeles(rotarPixeles(pix, grados), BANDA_A);
-    if (payload != null) return payload;
-  }
-  return null;
-}
 
 // ─── e63n (T-PRE) — BARRIDO CEÑIDO: vive en qr-pixeles.ts ──────────────────
 // (FIX DICTAMEN-e73 §3.1 — barridoQrDePixeles + Cuadrante/CUADRANTES +
@@ -247,18 +211,6 @@ export async function moduloZxingDe(): Promise<ModZxing | null> {
   return modZxing;
 }
 
-/** e64-qr T-0.1 — Estado del módulo zxing para diagnóstico (doc hermano
- *  F-0.2): "no-intentado" = aún sin intentar · "indisponible" = la carga
- *  falló (rescate degrada a solo-jsQR) · "listo" = wasm cargado. SOLO-
- *  LECTURA: jamás muta el estado, jamás dispara la carga. */
-export function estadoZxingQr(): "no-intentado" | "indisponible" | "listo" {
-  return modZxing === undefined
-    ? "no-intentado"
-    : modZxing === null
-      ? "indisponible"
-      : "listo";
-}
-
 /** Opciones del barrido por ventana (micro-decisión declarada: el barrido
  *  lanza ~700-2300 ventanas — cada una debe ser BARATA; la rotación y la
  *  inversión ya las cubren el tier rotación y jsQR attemptBoth). */
@@ -302,7 +254,7 @@ async function zxingDeVentana(
  * `performance.now() > limite` por ventana; al vencer devuelve null SIN
  * exhaustar). Módulo indisponible → null inmediato (solo-jsQR).
  */
-export async function barridoQrZxingDePixeles(
+async function barridoQrZxingDePixeles(
   pix: PixelesQr,
 ): Promise<string | null> {
   const mod = await moduloZxingDe();
@@ -358,7 +310,7 @@ function trazaQr(tier: string, payload: string, t0: number): void {
  *  MISMO contrato del barrido: QRCode-only, tryHarder/rotate/invert false).
  *  null si nada lee. Jamás throw (red line e64 §7-4). El wrapper DOM
  *  (decodificarQrDeCapture) consume el tier vía decodificarQrDePixeles. */
-export async function decodificarQrDeRecorte(
+async function decodificarQrDeRecorte(
   pix: PixelesQr,
 ): Promise<string | null> {
   const recorte = ventanaDePixeles(pix, 0, 0, QR_RECORTE_LADO);
@@ -390,7 +342,7 @@ export async function decodificarQrDeRecorte(
  * hilo UI sin perder la cobertura de rescate. La detección de pasada NO
  * depende de esta cadena (es solo capa 0 — el OCR va río abajo).
  */
-export async function decodificarQrDePixeles(
+async function decodificarQrDePixeles(
   pix: PixelesQr,
   opciones: { presupuestoMs?: number | null } = {},
 ): Promise<string | null> {
@@ -507,7 +459,7 @@ async function pixelesDeCapture(
  *  fotos ≥12 MP — el downscale a 2048 es la pérdida dominante y el QR
  *  nativo puede tener el doble de px por módulo. 4096²×4 = 64 MB puntual
  *  (aceptable UNA vez, jamás camino por defecto). */
-export const QR_LADO_LARGO_RESCATE = 4096;
+const QR_LADO_LARGO_RESCATE = 4096;
 
 /**
  * API del kit §1.1 — decodificar el QR de UN capture (dataURL de la vía
@@ -591,35 +543,6 @@ export async function decodificarQrDeCapture(
   } catch {
     return null; // fallback limpio — la capa 0 jamás tumba el pipeline
   }
-}
-
-// ─── Espera acotada del caso «original en vuelo» (kit e63m §1.2.4) ──────────
-/**
- * Espera APLAZADA: re-chequeo SOLO-LECTURA del estado del original cada
- * QR_ESPERA_INTERVALO_MS hasta QR_ESPERA_INTENTOS (techo efectivo 15 s —
- * sin timers globales; DEDUP_CINTA_CIERTA=2 intacto). Devuelve "reutiliza"
- * cuando el original aterriza con desenlace final (LISTA/DUPLICADA) y
- * "techo" cuando vence el techo O el original sale del vuelo por otra
- * puerta (ERROR / PENDIENTE / AUSENTE — esperar sería en balde: el
- * reproceso completo honesto manda). Los parámetros son inyectables SOLO
- * para el QA headless (timers cortos); en producción corren los default
- * del kit.
- */
-export async function esperarDesenlaceQr(
-  estadoDe: () => EstadoOriginalQr,
-  intervaloMs: number = QR_ESPERA_INTERVALO_MS,
-  maxIntentos: number = QR_ESPERA_INTENTOS,
-): Promise<"reutiliza" | "techo"> {
-  for (let i = 0; i < maxIntentos; i++) {
-    await new Promise((r) => setTimeout(r, intervaloMs));
-    const estado = estadoDe();
-    if (estado === "LISTA" || estado === "DUPLICADA") return "reutiliza";
-    if (estado === "ERROR" || estado === "PENDIENTE" || estado === "AUSENTE") {
-      return "techo";
-    }
-    // PROCESANDO → sigue en vuelo: la espera continúa (el techo manda).
-  }
-  return "techo";
 }
 
 /** Prefijo corto del payload para trazas/informe (8 chars + «…») — SOLO

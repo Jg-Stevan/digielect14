@@ -27,7 +27,7 @@ export type ActaMapeable = Omit<Acta, "fotoProcesada"> & {
 
 /** Blob → dataURL (FileReader del navegador — null si falla; el caller
  *  salta el acta en vez de inventar una foto). Gemelo de jornada.ts. */
-export function blobADataUrl(blob: Blob): Promise<string | null> {
+function blobADataUrl(blob: Blob): Promise<string | null> {
   return new Promise((resolve) => {
     try {
       const lector = new FileReader();

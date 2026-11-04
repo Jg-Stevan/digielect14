@@ -83,7 +83,7 @@ export interface EventoRastreo {
 }
 
 /** Permanencia por vista (cómo se mueve el operador por la app). */
-export interface NavegacionRastreo {
+interface NavegacionRastreo {
   vista: string;
   ms: number;
   visitas: number;

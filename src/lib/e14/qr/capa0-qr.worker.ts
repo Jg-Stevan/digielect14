@@ -101,7 +101,7 @@ export type FasesCapa0 = {
 export type FinCapa0 = "payload" | "agotado" | "vencido" | "sin-decode";
 
 /** Mensaje que el cliente (capa0-qr.client.ts) postea al worker. */
-export type PeticionCapa0 = {
+type PeticionCapa0 = {
   id: number;
   blob: Blob;
   ladoLargo: number;

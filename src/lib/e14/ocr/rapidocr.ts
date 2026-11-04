@@ -133,37 +133,6 @@ export function rapidOcrPrecalentar(): Promise<boolean> {
   return prewarmHecho;
 }
 
-/** D65 — KIT e14-progreso-watchdog-dedup-v1 (T1): soltar el runtime OCR
- *  cuando el watchdog mata y re-crea los workers del intento vencido.
- *  Best-effort: release() de cada sesión (det/cls/rec) SI la build de ORT
- *  lo expone (los tipos locales son mínimos), luego el singleton FUERA →
- *  la próxima rapidOcrInit() re-crea TODO (sesiones y worker proxy nuevos).
- *  El pre-warm también cae (puede volver a calentar si alguien lo llama).
- *  NOTA honesta: si el cuelgue vive DENTRO del worker proxy compartido de
- *  ORT, el runtime re-creado puede volver a colgarse → el watchdog vence
- *  otra vez (~150 s totales) y manda el veredicto honesto de siempre.
- *  NUNCA lanza: un fallo de limpieza no empeora el reintento. */
-export async function rapidOcrReiniciar(): Promise<void> {
-  if (!rtSingleton) return;
-  try {
-    const rt = await rtSingleton;
-    const sesiones = [rt.det, rt.cls, rt.rec] as Array<
-      OrtSession & { release?: () => unknown }
-    >;
-    for (const s of sesiones) {
-      try {
-        await s.release?.();
-      } catch {
-        /* sesión ya muerta — seguir con la siguiente */
-      }
-    }
-  } catch {
-    /* el singleton ya estaba roto — nada que soltar */
-  }
-  rtSingleton = null;
-  prewarmHecho = null;
-}
-
 async function initReal(): Promise<RapidRuntime> {
   const ort = (await import("onnxruntime-web/wasm")) as unknown as OrtModule;
   ort.env.wasm.wasmPaths = `${PUBLIC_BASE}/vendor/onnxruntime/`;
@@ -240,7 +209,7 @@ function ctxDe(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
 // modelo ni de una sesión nueva): DET_CAP_PROD=1920 es el comportamiento de
 // HOY byte a byte (config det_limit_side_len=1920, det_limit_type='max');
 // DET_CAP_RAPIDO=1280 es la 1.ª pasada del OCR escalonado (banco B3 GO:
-// det −56%, 120/120 votos, 0 cajas perdidas — tools/bench-det1280, PR #34).
+// det −56%, 120/120 votos, 0 cajas perdidas — banco det1280 del PR #34 — decisión D53).
 // op1 (reduce_max_side 1920) queda INTACTO: es el preprocess fijo del paquete,
 // det_limit_side_len es el parámetro que op4 implementa.
 export const DET_CAP_PROD = 1920;

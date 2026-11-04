@@ -25,14 +25,14 @@ import type { Tier } from "../obs/tipos";
 
 // ─── tipos del perfil ───────────────────────────────────────────────────────
 
-export interface GpuInfo {
+interface GpuInfo {
   /** renderer REAL del GPU (WEBGL_debug_renderer_info) — null si oculto. */
   renderer: string | null;
   vendor: string | null;
   webgl: boolean;
 }
 
-export interface PantallaInfo {
+interface PantallaInfo {
   anchoPx: number | null; // CSS px (window.screen.width)
   altoPx: number | null;
   dpr: number | null; // devicePixelRatio
@@ -40,7 +40,7 @@ export interface PantallaInfo {
   pixelesMP: number | null;
 }
 
-export interface CapacidadesWeb {
+interface CapacidadesWeb {
   wasm: boolean;
   /** WASM SIMD — el OCR de RapidOCR corre ~2× más rápido con él. */
   wasmSimd: boolean;
@@ -52,14 +52,14 @@ export interface CapacidadesWeb {
   serviceWorker: boolean;
 }
 
-export interface Benchmarks {
+interface Benchmarks {
   /** operaciones enteras por ms del main thread (bucle ~120 ms). */
   cpuOpsMs: number | null;
   /** ms de 16 iteraciones drawImage+getImageData 96×128 (canvas 2d). */
   canvasMs: number | null;
 }
 
-export interface Subscores {
+interface Subscores {
   cpu: number | null; // 0..100
   ram: number | null;
   gpu: number | null;
@@ -105,7 +105,7 @@ const WASM_SIMD_PROBE = new Uint8Array([
   8, 0, 65, 0, 253, 15, 253, 98, 11,
 ]);
 
-export function capacidadesDe(): CapacidadesWeb {
+function capacidadesDe(): CapacidadesWeb {
   const cap: CapacidadesWeb = {
     wasm: false,
     wasmSimd: false,
@@ -134,7 +134,7 @@ export function capacidadesDe(): CapacidadesWeb {
   return cap;
 }
 
-export function gpuDe(): GpuInfo {
+function gpuDe(): GpuInfo {
   const vacio: GpuInfo = { renderer: null, vendor: null, webgl: false };
   try {
     if (typeof document === "undefined") return vacio;
@@ -166,7 +166,7 @@ export function gpuDe(): GpuInfo {
   }
 }
 
-export function pantallaDe(): PantallaInfo {
+function pantallaDe(): PantallaInfo {
   try {
     if (typeof window === "undefined" || typeof screen === "undefined") {
       return { anchoPx: null, altoPx: null, dpr: null, pixelesMP: null };
@@ -264,7 +264,7 @@ function redDe(): { tipo: string | null; downlinkMbps: number | null; saveData: 
 
 /** CPU: bucle entero FNV-ish hasta agotar ~120 ms del main thread.
  *  Ops/ms comparable entre dispositivos (misma mezcla de instrucciones). */
-export function benchmarkCpu(presupuestoMs = 120): number | null {
+function benchmarkCpu(presupuestoMs = 120): number | null {
   try {
     const t0 = performance.now();
     let h = 0x811c9dc5;
@@ -291,7 +291,7 @@ export function benchmarkCpu(presupuestoMs = 120): number | null {
 
 /** Canvas 2d: 16× (drawImage 320×420 → 96×128 + getImageData + suma de
  *  bytes). Devuelve ms TOTAL (menor = más rápido). null sin canvas. */
-export function benchmarkCanvas(): number | null {
+function benchmarkCanvas(): number | null {
   try {
     if (typeof document === "undefined") return null;
     const fuente = document.createElement("canvas");
@@ -390,7 +390,7 @@ function scoreStorage(libreMB: number | null): number | null {
 
 const PESOS = { cpu: 0.3, ram: 0.3, gpu: 0.15, red: 0.1, storage: 0.15 } as const;
 
-export function puntuar(e: {
+function puntuar(e: {
   benchmarks: Benchmarks;
   memoriaGB: number | null;
   heapLimitMB: number | null;
@@ -574,10 +574,4 @@ export async function obtenerPerfilDispositivo(forzar = false): Promise<PerfilDi
   } finally {
     enVuelo = null;
   }
-}
-
-/** Test interno (reset del cache del módulo). */
-export function __resetPerfilParaTest(): void {
-  cachePerfil = null;
-  enVuelo = null;
 }

@@ -2,7 +2,7 @@
  * KIT e14-ocr-escalonado-v1 (§2.3-§2.4) — decisión del OCR ESCALONADO.
  *
  * Contexto (§0 del kit): el OCR medio mide 17.3 s (68% del total 25.3 s) y el
- * det a 1920 es ~19-21% del OCR real. El banco `tools/bench-det1280/`
+ * det a 1920 es ~19-21% del OCR real. El banco det1280 (docs/DECISIONS.md D53)
  * (PR Agente 3) dio GO: det a 1280 → −56% del det, 120/120 votos, 0 cajas
  * perdidas, FUERTE idénticas. Este kit ACTIVA esa palanca en producción con
  * red de seguridad: 1.ª pasada con det cap 1280 (~0.44× del tiempo de det);

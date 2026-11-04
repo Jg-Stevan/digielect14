@@ -182,7 +182,7 @@ export async function enviarPendientes(
 
 // ─── Sincronización manual (botón SINCRONIZAR AHORA) ───────────────────────
 
-export interface ResumenSincronizacion {
+interface ResumenSincronizacion {
   recuperadas: number;
   enviadas: number;
   fallos: number;

@@ -203,7 +203,7 @@ interface CodigoUnicoE14 {
 
 /** Parseo TOTAL del código de 15 dígitos (prefijo + aritmética). null si
  *  cualquiera de las reglas falla — la llamada decide qué hacer (consenso). */
-export function codigoUnicoE14(crudo: string): CodigoUnicoE14 | null {
+function codigoUnicoE14(crudo: string): CodigoUnicoE14 | null {
   if (!/^\d{15}$/.test(crudo)) return null;
   if (crudo.slice(0, 4) !== "7100") return null;
   const d9 = crudo[8];

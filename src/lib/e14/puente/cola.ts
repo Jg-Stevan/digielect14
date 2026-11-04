@@ -27,7 +27,7 @@ const DB_VERSION = 1;
 const STORE_PENDIENTES = "pendientes";
 
 /** Fila del outbox (store `pendientes`, keyPath `hash`). */
-export interface RegistroPendiente {
+interface RegistroPendiente {
   hash: string;
   entrada: EntradaPuente;
   ts: number;

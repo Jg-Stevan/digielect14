@@ -1,6 +1,6 @@
 /**
  * Declaración de tipos del VENDOR jsQR@1.4.0 (jsQR.js — UMD webpack, MIT).
- * El archivo .js es BYTE-IDÉNTICO al vendido en #72 (tools/bench-qr-identidad/
+ * El archivo .js es BYTE-IDÉNTICO al vendido en el PR #72 (banco qr-identidad,
  * jsQR.js — npm tarball dist/jsQR.js): solo agrega los tipos que el bundler
  * necesita para `import jsQR from "./vendor/jsQR.js"` (el UMD hace
  * `module.exports = factory()["default"]` → el default ES la función).

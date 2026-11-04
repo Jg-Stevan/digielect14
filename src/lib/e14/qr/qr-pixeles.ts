@@ -40,7 +40,7 @@ interface EspecieBanda {
   escala: number;
 }
 
-export const BANDAS_BASE: EspecieBanda[] = [
+const BANDAS_BASE: EspecieBanda[] = [
   { id: "A", x0: 0.0, y0: 0.0, x1: 1.0, y1: 1.0, escala: 1 }, // imagen completa
   { id: "B", x0: 0.0, y0: 0.0, x1: 0.45, y1: 0.25, escala: 1 }, // banda top-left
   { id: "C", x0: 0.08, y0: 0.05, x1: 0.38, y1: 0.2, escala: 1 }, // banda ajustada
@@ -330,7 +330,7 @@ export function ladderBaseDePixeles(pix: PixelesQr): string | null {
  *  sin DOM, sin throw: bordes intactos (y,x ∈ [1,extremo-1] — el marco de
  *  1 px no aporta al decode, el QR nunca vive pegado al filo ABSOLUTO de la
  *  foto). Uint8ClampedArray clampea solo. */
-export const NITIDEZ_K = 0.6;
+const NITIDEZ_K = 0.6;
 
 export function nitidezQrDePixeles(pix: PixelesQr): PixelesQr {
   const { data, width: w, height: h } = pix;
@@ -357,8 +357,8 @@ export function nitidezQrDePixeles(pix: PixelesQr): PixelesQr {
  *  fotos con sombra o iluminación dura donde el binarizado interno de jsQR
  *  falla. Salida RGBA 0/255 — jsQR la consume igual (attemptBoth la invierte
  *  si hace falta). Pura, sin DOM, sin throw. */
-export const BINARIZADA_VENTANA = 0.025; // fracción del lado menor (mín 24 px)
-export const BINARIZADA_DELTA = 12;      // holgura sobre la media local
+const BINARIZADA_VENTANA = 0.025; // fracción del lado menor (mín 24 px)
+const BINARIZADA_DELTA = 12;      // holgura sobre la media local
 
 export function binarizadaQrDePixeles(pix: PixelesQr): PixelesQr {
   const { data, width: w, height: h } = pix;

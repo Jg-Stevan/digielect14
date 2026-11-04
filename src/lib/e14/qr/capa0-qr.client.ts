@@ -38,7 +38,7 @@ export type { FinCapa0, FasesCapa0 } from "./capa0-qr.worker";
  *  R1.1 — presupuestoVencido: undefined (bundle viejo) = conservador.
  *  R1.4-b — fases/fin: telemetría por fase + causa del fin. undefined =
  *  bundle viejo o cadena no completó (catch interno) — jamás inventar. */
-export type ResultadoCapa0Worker = {
+type ResultadoCapa0Worker = {
   corrio: true;
   payload: string | null;
   tier: string | null;
@@ -49,7 +49,7 @@ export type ResultadoCapa0Worker = {
 };
 
 /** Opciones de la cadena (presupuesto por tier — mismos nombres del kit). */
-export type OpcionesCapa0Worker = {
+type OpcionesCapa0Worker = {
   ladoLargo: number;
   rescate4096: boolean;
   presupuestoMs: number | null;
@@ -158,7 +158,7 @@ function terminarWorker(): void {
  * API 1 del kit: la cadena jsQR de la CAPA 0 en el worker. Jamás throw;
  * sin soporte / flag OFF / hard-kill / error → null.
  */
-export function decodificarQrCapa0Worker(
+function decodificarQrCapa0Worker(
   blob: Blob,
   opciones: OpcionesCapa0Worker,
 ): Promise<ResultadoCapa0Worker | null> {

@@ -305,10 +305,6 @@ export interface Mesa {
 }
 
 // ---------- Resumen de trabajo (vista RESUMEN) ----------
-export interface ProgresoPuesto {
-  asignadasHoy: number;
-  completadas: number;
-} // 12 / 9 → 75%
 export interface HistorialRow {
   id: string;
   titulo: string; // "MESA 01 — TRANSMISIÓN P2"
