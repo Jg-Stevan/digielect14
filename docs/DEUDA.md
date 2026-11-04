@@ -85,9 +85,19 @@ en CI sale «omitido» porque no hay checkout hermano, y en local exige
 
 1. **`src/assets/acta-e14-real.jpg`** (348 KB) es **foto real de un acta** y viaja
    empaquetada como fixture SIM (`scanner-core-bridge.ts:104` y `:343`). El repo
-   es público y la regla del proyecto es no commitear actas. Los síndticos
+   es público y la regla del proyecto es no commitear actas. Los sintéticos
    `acta-sim-*.jpg` ya cubren los tiers; reemplazarla cambia el comportamiento
    del modo SIM (y su peso), por eso no se hizo en la limpieza.
+   Mismo tema en el hermano, pero más grave: en `supervision-e14` las páginas 2
+   de `src/modules/supervision/data/actas-reales/assets/*.webp` muestran nombres,
+   cédulas y firmas de jurados (verificado abriendo los archivos). De ahí ya
+   salieron quince capturas de sesión con lo mismo; el detalle y las cuatro
+   opciones están en `docs/DEUDA.md` §4 de ese repo. Acá la foto es OTRA acta
+   (consulado 88, país 680-Portugal, puesto 86, mesa 003) y es solo la página 1:
+   lleva totales de votación, que son públicos, pero no datos de particulares.
+   La decisión, sin embargo, se toma una sola vez para los dos repos: son actas
+   distintas del mismo formulario, y lo que se elija (anonimizar, sustituir por
+   sintéticos o declarar público) aplica igual a los dos.
 2. **Historial de `.git` (≈55 MB)**: son blobs de binarios ML de commits
    antiguos, no ramas. Reducirlo exige reescribir historial
    (`git filter-repo` / BFG) → roto para cualquiera con clon, y la regla del
