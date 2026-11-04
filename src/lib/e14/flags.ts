@@ -63,6 +63,14 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // R1.4-b de supervision-e14). Kill-switch del dueño: false = camino de HOY
   // byte-idéntico (main thread, tiers "base").
   capa0QrWorker: true,
+  // KIT e14-probe-mini768-v1 (port del kit de supervision-e14) — lado mayor de
+  // la MINIATURA del sondeo de orientación. El FALLO SEGURO (miniaturaConfiada)
+  // NO cambia de umbrales: la mini manda solo con evidencia fuerte (corte sana o
+  // confirmada, o rotación aplicada con ≥2 anclas y conf ≥0.6), así que subir la
+  // resolución cambia CUÁNDO se alcanza esa evidencia, no qué se decide. A 320 el
+  // E-14 sub-lee y el probe paga el sondeo completo de 4 rotaciones casi siempre.
+  // Override: {"probeMiniLado":320} = comportamiento anterior byte-idéntico.
+  probeMiniLado: 1280,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -96,6 +104,11 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   }
   // KIT e14-capa0-qr-worker-v1 — whitelist aditiva (booleano).
   if (typeof p.capa0QrWorker === "boolean") limpio.capa0QrWorker = p.capa0QrWorker;
+  // KIT e14-probe-mini768-v1 — whitelist aditiva (número clampado). Fuera de
+  // rango o basura ⇒ la clave no se aplica y manda el default; nunca un 0.
+  if (typeof p.probeMiniLado === "number" && Number.isFinite(p.probeMiniLado)) {
+    limpio.probeMiniLado = Math.max(320, Math.min(1280, Math.round(p.probeMiniLado)));
+  }
   return limpio;
 }
 

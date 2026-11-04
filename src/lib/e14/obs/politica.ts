@@ -141,6 +141,11 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     if (typeof o.presupuestoEscaneoMs === "number" && Number.isFinite(o.presupuestoEscaneoMs)) {
       limpio.presupuestoEscaneoMs = Math.max(30_000, Math.min(900_000, Math.round(o.presupuestoEscaneoMs)));
     }
+    // KIT e14-probe-mini768-v1 — mismo criterio (DOBLE whitelist): el lado de la
+    // miniatura del sondeo, clamp [320, 1280]. 320 = comportamiento anterior.
+    if (typeof o.probeMiniLado === "number" && Number.isFinite(o.probeMiniLado)) {
+      limpio.probeMiniLado = Math.max(320, Math.min(1280, Math.round(o.probeMiniLado)));
+    }
     // NOTA (eliminación del módulo masiva): las puertas de los 17 flags
     // exclusivos de la cola se retiraron junto con el módulo.
     return limpio;

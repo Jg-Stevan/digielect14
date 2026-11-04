@@ -67,11 +67,12 @@
  * solo habilita que el OCR lea de verdad; los caps/gate existentes mandan
  * después (escudo-fondo, recortada, sin-votos — §2.2).
  *
- * KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1) — MINI-PROBE A 320 px:
+ * KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1) — MINI-PROBE:
  * el probe era el costo oculto gigante del lote 1 en campo (5.3–13.6 s por
  * acta, ~488 s de ~10 min; 46/46 actas lo pagaron, incluidas las que luego
  * murieron DUPLICADAS). Ahora sondea PRIMERO una MINIATURA (lado mayor
- * PROBE_MINI_LADO=320, JPEG q0.92, aspecto preservado — helpers del repo:
+ * `probeMiniLado` — 1280 por defecto desde KIT e14-probe-mini768-v1, JPEG
+ * q0.92, aspecto preservado — helpers del repo:
  * loadImageMemo + canvasCon) y solo si su desenlace alcanza la confianza del
  * FALLO SEGURO (miniaturaConfiada: corte sana/confirmada, o rotación
  * aplicada con ≥2 anclas y conf ≥0.6) manda ESA decisión; en CUALQUIER otro
@@ -79,14 +80,19 @@
  * a resolución original — el comportamiento de HOY byte a byte — y ESA es la
  * decisión. Estructura que garantiza la igualdad: UNA sola función de sondeo
  * (sondeoDe) decide en ambos caminos — mismos crops, mismo orden D62, mismos
- * atajos, mismo MARGEN; solo cambia la resolución de la fuente. La miniatura
- * SUB-LEE (crops chicos → conf menor), así que la dirección del sesgo es
- * conocida: hacia «no alcanza confianza» → camino original (conservador).
- * Campo NUEVO ADITIVO en el resultado: orientacionProbeEscala (320 = decidió
- * la miniatura; >320 = decidió la re-corrida original; ≤320 = la foto ya era
- * pequeña — un solo sondeo). Traza: campo `escala=` ADITIVO AL FINAL de la
+ * atajos, mismo MARGEN; solo cambia la resolución de la fuente. Con la
+ * miniatura chica (320) el sesgo era conocido: SUB-LEE (crops chicos → conf
+ * menor) → «no alcanza confianza» → camino original (conservador, pero pago
+ * dos veces). Con 1280 el lienzo ya trae los píxeles por línea que el rec
+ * alcanza de todos modos (REC_WMAX=480), así que la evidencia fuerte se
+ * consigue en el camino barato.
+ * Campo NUEVO ADITIVO en el resultado: orientacionProbeEscala (= el lado mayor
+ * del canvas que decidió: `probeMiniLado` si mandó la miniatura; el lado real
+ * de la fuente si mandó la re-corrida original; ≤`probeMiniLado` si la foto ya
+ * era pequeña — un solo sondeo). Traza: campo `escala=` ADITIVO AL FINAL de la
  * línea de siempre (D51/D56 — los campos previos no cambian de forma). El
- * presupuesto PROBE_BUDGET_MS=12000 cubre el probe COMPLETO (t0 compartido).
+ * presupuesto del probe por tier (D77: ALTO 12 s · MEDIO 60 s · BAJO 150 s)
+ * cubre el probe COMPLETO (t0 compartido).
  */
 
 import { canvasCon, loadImageMemo } from "./image-utils"; // SPRINT-A A3/A1 — factory de canvas + decode memo
@@ -97,6 +103,8 @@ import {
   rapidOcrRecLote,
 } from "./ocr/rapidocr";
 import { logger } from "../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
+// KIT e14-probe-mini768-v1 — el lado de la miniatura del sondeo lo fija el dueño.
+import { leerFlags } from "./flags";
 // KIT e14-ocr-tessbest-v1 — presupuesto del probe de orientación por tier.
 import { presupuestoProbeOrientacionEfectivo } from "./adaptacion/plan";
 
@@ -111,11 +119,11 @@ export interface ProbeOrientacion {
   ms: number;
   // KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1) — campo NUEVO ADITIVO:
   // lado mayor (px) del canvas sobre el que se produjo la decisión final.
-  //  320  → decidió la MINIATURA (camino mini, confianza suficiente — ver
+  //  =probeMiniLado → decidió la MINIATURA (camino mini, confianza suficiente — ver
   //         PROBE_MINI_* abajo).
-  //  >320 → la miniatura NO alcanzó confianza (fallo seguro) → la decisión
+  //  mayor        → la miniatura NO alcanzó confianza (fallo seguro) → la decisión
   //         es del sondeo a resolución original (comportamiento de HOY).
-  //  ≤320 → la foto ya era pequeña: UN solo sondeo (byte-idéntico a hoy).
+  //  ≤probeMiniLado → la foto ya era pequeña: UN solo sondeo (byte-idéntico a hoy).
   // Cero consumidores rotos: el bridge solo lee rot/aplicado/ms; el informe
   // (territorio del Agente C) puede anotarlo después (append-only).
   orientacionProbeEscala: number;
@@ -123,7 +131,7 @@ export interface ProbeOrientacion {
   // (datos de campo para la calibración wave 3 — jamás cambia la decisión de
   // HOY). Solo en el camino fallo seguro CON miniatura corrida; ausente si
   // mini==null (det/rec de la mini falló o no corrió), en el camino confiado
-  // (escala=320 — la mini YA es la decisión) y en foto pequeña (≤320).
+  // (escala=probeMiniLado — la mini YA es la decisión) y en foto pequeña.
   orientacionProbeMini?: {
     rot: Rotacion;
     aplicado: boolean;
@@ -165,7 +173,7 @@ const PROBE_K_CROPS = 8;
  *  saturan la señal; el MARGEN compara igual en 0..10). */
 const TOPE_SCORE = 10;
 
-// ─── KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1): MINI-PROBE a 320 px ─────
+// ─── KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1): MINI-PROBE ──────────────
 // El probe de HOY corre det (cap 1280) + rec ×4 rotaciones sobre la foto a
 // resolución completa — el paso más caro invisible del pipeline (lote 1 del
 // dueño: 5.3–13.6 s por acta, ~488 s del lote, 46/46 actas lo pagaron). La
@@ -175,10 +183,17 @@ const TOPE_SCORE = 10;
 // cambio: o la miniatura decide con evidencia fuerte, o decide la pasada
 // completa de siempre.
 
-/** Lado mayor MÁXIMO de la miniatura (px, aspecto preservado). 320 = un E-14
- *  completo cabe con sus líneas largas legibles por det (las cajas existen;
- *  el rec sobre crops tan chicos SÍ pierde conf — de ahí el fallo seguro). */
-const PROBE_MINI_LADO = 320;
+// KIT e14-probe-mini768-v1 (port del kit de supervision-e14) — el lado de la
+// miniatura lo fija el flag `probeMiniLado` (clamp [320, 1280] en sanearFlags).
+// El FALLO SEGURO de abajo NO cambia de umbrales: la miniatura sigue mandando
+// solo con evidencia fuerte, así que subir la resolución cambia CUÁNDO se
+// alcanza esa evidencia, no QUÉ se decide. A 320 el E-14 «sub-lee» (las tiras
+// verticales dan líneas que el rec submuestrea a REC_WMAX=480) y el sondeo
+// completo de 4 rotaciones — el camino caro — corría casi siempre. Como el det
+// del probe ya va capped a DET_CAP_RAPIDO=1280, un lienzo de 1280 entrega
+// prácticamente los mismos píxeles por línea que el original: mismo veredicto,
+// decidido en el lienzo barato. Override {"probeMiniLado":320} = lo de antes.
+
 /** FALLO SEGURO — umbral conservador Nº 1: la rotación GANADORA de la
  *  miniatura necesita ≥ 2 anclas de ANCLAS_LECTURA (cabecera E-14,
  *  CONSULADO/PAÍS/ZONA/PUESTO/MESA, código 1D — matches regex estructurales,
@@ -512,19 +527,19 @@ function miniaturaConfiada(s: SondeoSalida): boolean {
 }
 
 /** Miniatura JPEG (q0.92 — misma calidad del re-encode de rotarDataUrl) a
- *  PROBE_MINI_LADO del lado mayor, aspecto preservado. Reúsa los helpers del
+ *  `lado` del lado mayor, aspecto preservado. Reúsa los helpers del
  *  repo: decode vía loadImageMemo (LRU compartido — el decode que ya usaba
  *  cropsOrientacion) y canvasCon (factory SPRINT-A A3); el suavizado es el
  *  default del navegador — la MISMA receta de decodeImagenLru/analizarPixeles
  *  (fidelidad byte-idéntica del reescalado). null ante CUALQUIER fallo → el
  *  sondeo corre a resolución original (comportamiento de HOY, jamás tumba). */
-async function miniaturaDataUrlDe(fotoOcr: string): Promise<string | null> {
+async function miniaturaDataUrlDe(fotoOcr: string, lado: number): Promise<string | null> {
   try {
     const img = await loadImageMemo(fotoOcr);
     const w = img.naturalWidth;
     const h = img.naturalHeight;
     if (!w || !h) return null;
-    const escala = Math.min(1, PROBE_MINI_LADO / Math.max(w, h));
+    const escala = Math.min(1, lado / Math.max(w, h));
     const ancho = Math.max(1, Math.round(w * escala));
     const alto = Math.max(1, Math.round(h * escala));
     const cv = canvasCon(ancho, alto);
@@ -543,8 +558,8 @@ async function miniaturaDataUrlDe(fotoOcr: string): Promise<string | null> {
 /** Traza del sondeo DECISOR (formato §2.1 paso 5 — los instrumentos del dueño
  *  parsean por prefijo; UNA línea por probe, los campos previos NO cambian de
  *  forma). `escala=` es ADITIVO AL FINAL (D51/D56): lado mayor del canvas que
- *  produjo la decisión (320 = camino miniatura; >320 = re-corrida original;
- *  ≤320 = foto ya pequeña — un solo sondeo). */
+ *  produjo la decisión (`probeMiniLado` = camino miniatura; el lado real de la
+ *  fuente = re-corrida original o foto que ya era chica). */
 function trazarSondeo(s: SondeoSalida, ms: number, escala: number, gan: Rotacion | null, conExif: boolean): void {
   if (s.vacio) {
     logger.info(
@@ -574,7 +589,7 @@ function resultadoDe(s: SondeoSalida, ms: number, escala: number): ProbeOrientac
  *  NUNCA se alimenta a rec un lote vacío).
  *
  *  KIT REPARTE-3-AGENTES-v1 (Agente A, Cambio 1) — MINI-PROBE: sondea PRIMERO
- *  una miniatura a PROBE_MINI_LADO (320 px del lado mayor). Si su desenlace
+ *  una miniatura a `probeMiniLado` px del lado mayor (1280 por defecto). Si su desenlace
  *  alcanza la confianza del fallo seguro (miniaturaConfiada), ESA es la
  *  decisión (ahorro ~5-13 s/acta). Si NO la alcanza (o la miniatura no pudo
  *  construirse/correr), se corre el sondeo a resolución original — el
@@ -590,12 +605,16 @@ export async function probeOrientacion(
     // D62 T1 — el ganador se lee UNA vez: miniatura y original sondean con el
     // MISMO orden (mismo aspecto ⇒ mismo orden de todas formas).
     const gan = ganadorPersistente();
-    // ¿La foto ya es una «miniatura» (lado mayor ≤ PROBE_MINI_LADO)? Escalarla
+    // KIT e14-probe-mini768-v1 — el lado se lee UNA vez: la miniatura y su traza
+    // tienen que reportar el MISMO lienzo (si el flag cambiara a mitad del probe,
+    // `escala=` mentiría).
+    const ladoMini = leerFlags().probeMiniLado;
+    // ¿La foto ya es una «miniatura» (lado mayor ≤ ladoMini)? Escalarla
     // no cambia nada: UN solo sondeo sobre la fuente real — byte-idéntico a
     // HOY (el det a cap 1280 no la reduce).
     const base = await loadImageMemo(fotoOcr);
     const ladoMayor = Math.max(base.naturalWidth || 0, base.naturalHeight || 0);
-    if (ladoMayor > 0 && ladoMayor <= PROBE_MINI_LADO) {
+    if (ladoMayor > 0 && ladoMayor <= ladoMini) {
       const s = await sondeoDe(rt, fotoOcr, opciones, gan, t0);
       const ms = Math.round(performance.now() - t0);
       trazarSondeo(s, ms, Math.max(s.w, s.h), gan, !!opciones?.confirmar);
@@ -604,7 +623,7 @@ export async function probeOrientacion(
     }
     // Camino MINIATURA (cualquier fallo aquí → null → camino original).
     let mini: SondeoSalida | null = null;
-    const miniUrl = await miniaturaDataUrlDe(fotoOcr);
+    const miniUrl = await miniaturaDataUrlDe(fotoOcr, ladoMini);
     if (miniUrl) {
       try {
         mini = await sondeoDe(rt, miniUrl, opciones, gan, t0);
@@ -614,9 +633,9 @@ export async function probeOrientacion(
     }
     if (mini && miniaturaConfiada(mini)) {
       const ms = Math.round(performance.now() - t0);
-      trazarSondeo(mini, ms, PROBE_MINI_LADO, gan, !!opciones?.confirmar);
+      trazarSondeo(mini, ms, ladoMini, gan, !!opciones?.confirmar);
       if (mini.aplicado) anilloGanadorRegistrar(mini.rot); // D62 T1.4
-      return resultadoDe(mini, ms, PROBE_MINI_LADO);
+      return resultadoDe(mini, ms, ladoMini);
     }
     // FALLO SEGURO — la miniatura no alcanzó confianza (o no corrió): el
     // sondeo a resolución original de SIEMPRE decide (comportamiento de HOY).

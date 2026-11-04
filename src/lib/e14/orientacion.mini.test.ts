@@ -1,7 +1,7 @@
 /**
  * Tests unitarios — MINI-PROBE de orientación (KIT REPARTE-3-AGENTES-v1,
  * Agente A — Cambio 1): probeOrientacion sondea primero una miniatura a
- * 320 px del lado mayor y solo confía en ella si el FALLO SEGURO alcanza
+ * el lado del flag probeMiniLado (1280 por defecto) y solo confía en ella si el FALLO SEGURO alcanza
  * (corte sana/confirmada, o rotación aplicada con ≥2 anclas y conf ≥0.6);
  * en cualquier otro caso re-corre el sondeo a resolución original — el
  * comportamiento de HOY — y ESA es la decisión (orientacionProbeEscala>320).
@@ -58,6 +58,8 @@ let recPorRotacion: Linea[][] = [];
 let detPorFuente: { nCrops: number; w: number; h: number }[] = [];
 /** Llamadas a cropsOrientacion: la fuente que recibió (mini vs original). */
 const fuentesDet: string[] = [];
+/** Dims de cada canvasCon (el lienzo de la miniatura). */
+const dimsCanvas: number[][] = [];
 const lineasInfo: string[] = [];
 
 vi.mock("./image-utils", () => ({
@@ -67,10 +69,13 @@ vi.mock("./image-utils", () => ({
     // La miniatura ya NO se re-escala desde sí misma (el probe solo decodifica
     // la original para medir el lado mayor y para el det de la fuente dada).
     return url === MINI_URL
-      ? { naturalWidth: 240, naturalHeight: 320 }
+      ? { naturalWidth: 960, naturalHeight: 1280 }
       : { naturalWidth: 3000, naturalHeight: 4000 };
   }),
-  canvasCon: vi.fn((w: number, h: number) => new CanvasFalso(w, h)),
+  canvasCon: vi.fn((w: number, h: number) => {
+    dimsCanvas.push([w, h]);
+    return new CanvasFalso(w, h);
+  }),
 }));
 
 vi.mock("./ocr/rapidocr", () => ({
@@ -131,6 +136,7 @@ beforeEach(() => {
   recPorRotacion = [];
   detPorFuente = [];
   fuentesDet.length = 0;
+  dimsCanvas.length = 0;
   lineasInfo.length = 0;
   // node no tiene DOM: `girarFuente` hace `src instanceof HTMLCanvasElement`
   // (dimsDe) — sin el stub, el instanceof lanza TypeError y el probe cae al
@@ -150,22 +156,24 @@ function trazaOrientacion(): string {
 }
 
 describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
-  it("camino feliz: acta SANA decide en la miniatura (escala 320, un solo det)", async () => {
-    detPorFuente = [{ nCrops: 8, w: 240, h: 320 }];
+  it("camino feliz: acta SANA decide en la miniatura (escala 1280, un solo det)", async () => {
+    detPorFuente = [{ nCrops: 8, w: 960, h: 1280 }];
     recPorRotacion = [TEXTO_SANA]; // rot 0 → corte «sana» (h>w: [0,180,…])
     const r = await probeOrientacion(FOTO);
     expect(r).not.toBeNull();
     expect(r!.rot).toBe(0);
     expect(r!.aplicado).toBe(false);
-    expect(r!.orientacionProbeEscala).toBe(320);
+    expect(r!.orientacionProbeEscala).toBe(1280);
     // El det corrió UNA vez (sobre la MINIATURA) y el rec una sola rotación.
     expect(fuentesDet).toEqual([MINI_URL]);
+    // El lienzo de la miniatura sale del flag: 3000×4000 → lado mayor 1280 ⇒ 960×1280.
+    expect(dimsCanvas).toEqual([[960, 1280]]);
     expect(trazaOrientacion()).toContain("cortes=sana");
-    expect(trazaOrientacion()).toContain("escala=320");
+    expect(trazaOrientacion()).toContain("escala=1280");
   });
 
-  it("camino feliz: acta ROTADA con evidencia fuerte decide en la miniatura (aplicado=1, escala 320)", async () => {
-    detPorFuente = [{ nCrops: 8, w: 240, h: 320 }];
+  it("camino feliz: acta ROTADA con evidencia fuerte decide en la miniatura (aplicado=1, escala 1280)", async () => {
+    detPorFuente = [{ nCrops: 8, w: 960, h: 1280 }];
     recPorRotacion = [
       TEXTO_DEBIL, // rot 0 — DEBIL → challengers
       TEXTO_180, // rot 180 — 4 anclas, conf ~0.88 → ganadora FUERTE (≥2 anclas, ≥0.6)
@@ -174,15 +182,15 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
     expect(r).not.toBeNull();
     expect(r!.rot).toBe(180);
     expect(r!.aplicado).toBe(true);
-    expect(r!.orientacionProbeEscala).toBe(320);
+    expect(r!.orientacionProbeEscala).toBe(1280);
     expect(fuentesDet).toEqual([MINI_URL]); // la original JAMÁS se det-ea
     expect(trazaOrientacion()).toContain("rot=180");
-    expect(trazaOrientacion()).toContain("escala=320");
+    expect(trazaOrientacion()).toContain("escala=1280");
   });
 
   it("fallo seguro: miniatura DEBIL (aplicado=0) → re-corre a resolución original y decide ELLA", async () => {
     detPorFuente = [
-      { nCrops: 8, w: 240, h: 320 }, // miniatura: débil → NO confiable
+      { nCrops: 8, w: 960, h: 1280 }, // miniatura: débil → NO confiable
       { nCrops: 8, w: 3000, h: 4000 }, // original: decide de siempre
     ];
     recPorRotacion = [
@@ -205,7 +213,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
 
   it("fallo seguro: rotación ganadora de la miniatura DÉBIL (1 ancla) → no se confía → original", async () => {
     detPorFuente = [
-      { nCrops: 8, w: 240, h: 320 },
+      { nCrops: 8, w: 960, h: 1280 },
       { nCrops: 8, w: 3000, h: 4000 },
     ];
     const unaAncla: Linea[] = [
@@ -226,7 +234,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
 
   it("fallo seguro: det de la miniatura SIN cajas → re-corre a resolución original", async () => {
     detPorFuente = [
-      { nCrops: 0, w: 240, h: 320 }, // miniatura: det sin cajas
+      { nCrops: 0, w: 960, h: 1280 }, // miniatura: det sin cajas
       { nCrops: 8, w: 3000, h: 4000 }, // original: cajas → sondeo de siempre
     ];
     recPorRotacion = [
@@ -261,7 +269,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
 
   it("conf límite: ganadora con conf < 0.6 NO se confía (umbral conservador Nº 2)", async () => {
     detPorFuente = [
-      { nCrops: 8, w: 240, h: 320 },
+      { nCrops: 8, w: 960, h: 1280 },
       { nCrops: 8, w: 3000, h: 4000 },
     ];
     const confBaja: Linea[] = [
@@ -278,7 +286,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
     expect(r!.orientacionProbeEscala).toBe(4000);
   });
 
-  it("foto ya pequeña (lado mayor ≤ 320): UN solo sondeo, byte-idéntico a hoy, escala = lado real", async () => {
+  it("foto ya pequeña (lado mayor ≤ probeMiniLado): UN solo sondeo, byte-idéntico a hoy, escala = lado real", async () => {
     detPorFuente = [{ nCrops: 8, w: 300, h: 320 }];
     recPorRotacion = [
       TEXTO_DEBIL, // rot 0
@@ -298,8 +306,8 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
     expect(fuentesDet).toEqual([FOTO]); // SIN miniatura — un solo sondeo
   });
 
-  it("modo confirmación (e70): miniatura confirmada (anclas ≥3, conf ≥0.7, quadWorker) → escala 320 sin challengers", async () => {
-    detPorFuente = [{ nCrops: 8, w: 240, h: 320 }];
+  it("modo confirmación (e70): miniatura confirmada (anclas ≥3, conf ≥0.7, quadWorker) → escala 1280 sin challengers", async () => {
+    detPorFuente = [{ nCrops: 8, w: 960, h: 1280 }];
     recPorRotacion = [TEXTO_SANA]; // rot 0: 3+ anclas, conf 0.9 → confirmada
     const r = await probeOrientacion(FOTO, {
       confirmar: { quadWorker: true },
@@ -307,18 +315,18 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
     expect(r).not.toBeNull();
     expect(r!.rot).toBe(0);
     expect(r!.aplicado).toBe(false);
-    expect(r!.orientacionProbeEscala).toBe(320);
+    expect(r!.orientacionProbeEscala).toBe(1280);
     expect(fuentesDet).toEqual([MINI_URL]);
     expect(trazaOrientacion()).toContain("cortes=confirmada");
     expect(trazaOrientacion()).toContain("exif=1");
   });
 
   it("la traza es UNA línea por probe con `escala=` ADITIVO AL FINAL (formato D51 intacto)", async () => {
-    detPorFuente = [{ nCrops: 8, w: 240, h: 320 }];
+    detPorFuente = [{ nCrops: 8, w: 960, h: 1280 }];
     recPorRotacion = [TEXTO_SANA];
     await probeOrientacion(FOTO);
     const t = trazaOrientacion();
-    expect(t).toMatch(/^\[e14\] orientacion crop=240x320 rot=0 probe=\{0:[\d.]+\} anclas0=\d+ conf0=[\d.]+ aplicado=0 ms=\d+ cortes=sana orden=[\d,]+ gan=- exif=0 escala=320$/);
+    expect(t).toMatch(/^\[e14\] orientacion crop=960x1280 rot=0 probe=\{0:[\d.]+\} anclas0=\d+ conf0=[\d.]+ aplicado=0 ms=\d+ cortes=sana orden=[\d,]+ gan=- exif=0 escala=1280$/);
   });
 
   it("decisión idéntica (estructura): mismo desenlace de rec ⇒ misma decisión que el sondeo de resolución original", async () => {
@@ -332,7 +340,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
       { texto: "PAIS 3 ZONA 4 PUESTO 9", conf: 0.75 },
     ];
     detPorFuente = [
-      { nCrops: 8, w: 240, h: 320 }, // mini
+      { nCrops: 8, w: 960, h: 1280 }, // mini
       { nCrops: 8, w: 3000, h: 4000 }, // original (para comparar decisión)
     ];
     recPorRotacion = [
@@ -351,7 +359,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
     // mismo desenlace (rot=180, aplicado=1).
     expect(r!.rot).toBe(180);
     expect(r!.aplicado).toBe(true);
-    expect(r!.orientacionProbeEscala).toBe(320);
+    expect(r!.orientacionProbeEscala).toBe(1280);
     expect(fuentesDet).toEqual([MINI_URL]); // la original ni siquiera se det-ea
   });
 
@@ -359,7 +367,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
 
   it("WAVE2 A1: fallo seguro con mini descartada → orientacionProbeMini expone la sub-decisión de la MINI (la decisión sigue siendo de la original)", async () => {
     detPorFuente = [
-      { nCrops: 8, w: 240, h: 320 }, // mini: ganadora 180 con 1 ancla → NO confiable
+      { nCrops: 8, w: 960, h: 1280 }, // mini: ganadora 180 con 1 ancla → NO confiable
       { nCrops: 8, w: 3000, h: 4000 }, // original: decide de siempre
     ];
     const unaAncla: Linea[] = [{ texto: "MESA 33", conf: 0.95 }];
@@ -399,15 +407,15 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
     expect(r!.orientacionProbeMini).toBeUndefined();
   });
 
-  it("WAVE2 A1: camino confiado (escala=320) → SIN orientacionProbeMini (la mini YA es la decisión)", async () => {
-    detPorFuente = [{ nCrops: 8, w: 240, h: 320 }];
+  it("WAVE2 A1: camino confiado (escala=1280) → SIN orientacionProbeMini (la mini YA es la decisión)", async () => {
+    detPorFuente = [{ nCrops: 8, w: 960, h: 1280 }];
     recPorRotacion = [TEXTO_SANA]; // rot 0 → corte «sana»
     const r = await probeOrientacion(FOTO);
-    expect(r!.orientacionProbeEscala).toBe(320);
+    expect(r!.orientacionProbeEscala).toBe(1280);
     expect(r!.orientacionProbeMini).toBeUndefined();
   });
 
-  it("WAVE2 A1: foto ya pequeña (≤320, un solo sondeo) → SIN orientacionProbeMini", async () => {
+  it("WAVE2 A1: foto ya pequeña (≤ probeMiniLado, un solo sondeo) → SIN orientacionProbeMini", async () => {
     detPorFuente = [{ nCrops: 8, w: 300, h: 320 }];
     recPorRotacion = [
       TEXTO_DEBIL, // rot 0
@@ -424,7 +432,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
 
   it("WAVE2 A1: mini corrió pero det SIN cajas → campo presente con el sondeo vacío de la mini (honesto: corrió y no puntúa)", async () => {
     detPorFuente = [
-      { nCrops: 0, w: 240, h: 320 }, // mini: det sin cajas (sondeo vacío)
+      { nCrops: 0, w: 960, h: 1280 }, // mini: det sin cajas (sondeo vacío)
       { nCrops: 8, w: 3000, h: 4000 }, // original: decide de siempre
     ];
     recPorRotacion = [
@@ -441,5 +449,26 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
       conf: 0,
       anclas: 0,
     });
+  });
+
+  it('kill-switch {"probeMiniLado":320}: la mini se pinta a 240×320 y la traza escala=320', async () => {
+    // Override manual del dueño (localStorage) ⇒ el comportamiento anterior byte a byte.
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) => (k === "e14-flags-overrides" ? JSON.stringify({ probeMiniLado: 320 }) : null),
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    detPorFuente = [{ nCrops: 8, w: 240, h: 320 }];
+    recPorRotacion = [TEXTO_SANA];
+    const r = await probeOrientacion(FOTO);
+    expect(r).not.toBeNull();
+    expect(r!.orientacionProbeEscala).toBe(320);
+    // 3000×4000 con lado mayor 320 ⇒ lienzo 240×320 (aspecto preservado).
+    expect(dimsCanvas).toEqual([[240, 320]]);
+    expect(trazaOrientacion()).toContain("escala=320");
   });
 });

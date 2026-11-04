@@ -150,6 +150,14 @@ export interface FlagsApp {
   // ─── fases/fin telemetría; port D40+R1.1+R1.4-b de supervision-e14).
   // ─── false = camino de HOY byte-idéntico (main thread, tiers "base").
   capa0QrWorker: boolean; // default true
+  // ─── KIT e14-probe-mini768-v1 (port de supervision-e14) — campo ADITIVO AL
+  // ─── FINAL (D57): lado mayor de la MINIATURA del sondeo de orientación.
+  // ─── A 320 la miniatura «sub-leía» y el fallo seguro casi siempre devolvía
+  // ─── al sondeo completo; el det del probe ya va capped a DET_CAP_RAPIDO=1280
+  // ─── y el rec a REC_WMAX=480, así que un lienzo de 1280 entrega casi los
+  // ─── mismos píxeles por línea que el original y la mini decide en el lienzo
+  // ─── barato. Los umbrales del FALLO SEGURO NO cambian. 320 = HOY byte-idéntico.
+  probeMiniLado: number; // default 1280 · clamp [320, 1280]
 }
 
 export interface ReporteSesion {

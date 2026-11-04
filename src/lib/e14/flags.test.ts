@@ -68,6 +68,8 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       presupuestoEscaneoMs: null,
       // KIT e14-capa0-qr-worker-v1 — aditivo AL FINAL (contrato D57):
       capa0QrWorker: true,
+      // KIT e14-probe-mini768-v1 — aditivo AL FINAL (contrato D57):
+      probeMiniLado: 1280,
     });
   });
 
@@ -225,5 +227,35 @@ describe("flags · presupuestoEscaneoMs (presupuesto del escaneo — override MA
       },
     });
     expect(leerFlags().presupuestoEscaneoMs).toBe(60_000);
+  });
+});
+
+describe("flags · probeMiniLado (lado de la miniatura del sondeo — KIT e14-probe-mini768-v1)", () => {
+  it('default 1280 · override {"probeMiniLado":320} = kill-switch al comportamiento anterior', () => {
+    stubWindow();
+    expect(leerFlags().probeMiniLado).toBe(1280); // FLAGS_DEFAULT
+  });
+
+  it("saneo: número clampeado 320..1280; inválido → ausente (mandan los defaults)", () => {
+    expect(sanearFlags({ probeMiniLado: 768 })).toEqual({ probeMiniLado: 768 });
+    expect(sanearFlags({ probeMiniLado: 320 })).toEqual({ probeMiniLado: 320 });
+    expect(sanearFlags({ probeMiniLado: 64 })).toEqual({ probeMiniLado: 320 }); // jamás un lienzo 0
+    expect(sanearFlags({ probeMiniLado: 9999 })).toEqual({ probeMiniLado: 1280 });
+    expect(sanearFlags({ probeMiniLado: "ancho" })).toEqual({});
+    expect(sanearFlags({ probeMiniLado: Number.NaN })).toEqual({});
+  });
+
+  it("override manual (localStorage) manda sobre el default (D6)", () => {
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ probeMiniLado: 320 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    expect(leerFlags().probeMiniLado).toBe(320);
   });
 });

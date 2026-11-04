@@ -15,10 +15,15 @@ supervisor masivo, no que el móvil cargue con la cola masiva.
       `clasificacion`, `score`, `status` y la `EntradaPuente` coincidan entre
       `digielect14` y `supervision-e14`. `supervision-e14` ya trae la semilla de
       harness de caracterización (`masiva/__tests__/caracterizacion.harness.ts`).
-- [ ] **Portar la mejora de orientación `probe-mini768`** (sonda chica que llega
-      en hardware lento) desde `supervision-e14/src/modules/digitalizador/lib/e14/orientacion.ts`
-      al `src/lib/e14/orientacion.ts` de este repo, **reconciliándola** con el
-      presupuesto por tier que ya existe aquí (D56) — no sustituirlo.
+- [x] **Portar la mejora de orientación `probe-mini768`** — cerrado el
+      2026-11-04 (D79): el lado de la miniatura del sondeo pasó a ser el flag
+      `probeMiniLado` (default 1280, clamp [320, 1280], doble whitelist) sin
+      tocar los umbrales del fallo seguro ni el presupuesto por tier de D56/D77.
+- [ ] **Medir el port en celular** (es lo único que falta para cerrarlo con
+      evidencia propia): A/B `{"probeMiniLado":320}` vs default sobre las mismas
+      actas, por tier, mirando `escala=` en la traza `[e14] orientacion` (si
+      sigue apareciendo el lado real de la fuente, la miniatura no decide y el
+      cambio no paga). La evidencia actual es del repo hermano, en PC.
 - [ ] **Mantener UN solo motor OCR determinista.** La cascada actual
       (Tesseract best-PSM4 → gate → RapidOCR PP-OCRv4 escalonado) da el mismo
       resultado en todos los dispositivos. El router por hardware del repo

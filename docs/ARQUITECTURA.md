@@ -87,6 +87,16 @@ Cadena de precedencia: `DEFAULTS` ([src/lib/e14/flags.ts](file:///C:/Users/JG/Do
 ← `public/flags.json` (remoto, cacheado 24 h, offline-safe) ← overrides de
 `localStorage` (kill-switch manual del dueño, siempre gana).
 
+**Alta obligada al añadir un flag**: los dos filtros son INDEPENDIENTES y hay
+que escribir la clave en los dos — `sanearFlags()` en
+[flags.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/flags.ts)
+(recibe el JSON remoto) y `leerOverridesFlags()` en
+[obs/politica.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/obs/politica.ts)
+(recibe el localStorage). Si se omite el segundo, el kill-switch del dueño no
+manda y el flag se lee siempre por default — fallo silencioso, no ruidoso. El
+tipo vive en `obs/tipos.ts` (`FlagsApp`, campos ADITIVOS AL FINAL por D57) y el
+literal exhaustivo de `FLAGS_DEFAULT` está fijado en `flags.test.ts`.
+
 `adaptacion/perfil.ts` perfila el dispositivo (SIMD, SAB, hilos, GPU, benchmark
 de canvas) y `adaptacion/plan.ts` traduce el perfil a un plan: hilos de OCR por
 tier (BAJO 2 · MEDIO 3 · ALTO 6), presupuestos de tiempo y knobs de rescate.
