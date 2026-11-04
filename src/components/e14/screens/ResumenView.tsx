@@ -279,7 +279,7 @@ export function ResumenView() {
             Envía las actas ENVIADAS al panel de supervisión en vivo.
           </p>
           {hubUsado && (
-            <p className="text-[11px] font-mono text-slate-500 break-all">
+            <p className="text-[11px] font-mono text-slate-400 break-all">
               hub: {hubUsado}
             </p>
           )}
