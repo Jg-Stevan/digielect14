@@ -1,7 +1,7 @@
 name: Quality Gate
 
 # Gate en PR y push a main: tipos + lint + tests + build estático (consumo real
-# de @jg-stevan/scanner-core desde npm) + los 6 harnesses de contrato QA + los
+# de @jg-stevan/scanner-core desde npm) + los 7 harnesses de contrato QA + los
 # 2 smoke de bundling de worker. Equivale a `bash scripts/check-quality.sh`
 # local, menos knip (informativo, no rompe).
 

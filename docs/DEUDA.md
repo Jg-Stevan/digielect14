@@ -39,9 +39,12 @@ Los dos fallos que arrastraba `scripts/check-quality.sh` se cerraron en la limpi
   exigiendo «modo de diagnóstico», nombre que el dueño renombró a «modo
   desarrollador». Se recalibró **el harness**, no la UI.
 
-Desde el 2026-11-04 esos 6 harnesses **y** los 2 smoke de worker corren en CI
+Desde el 2026-11-04 esos harnesses **y** los 2 smoke de worker corren en CI
 (`.github/workflows/quality.yml`), que además fijó `bun` en 1.4.2 — ver
-"Trampas de entorno" abajo.
+"Trampas de entorno" abajo. Son **7** desde el mismo día con
+`scripts/qa-paridad-motor.ts` (contrato de paridad con `supervision-e14`, D80);
+en CI sale «omitido» porque no hay checkout hermano, y en local exige
+`E14_HERMANO` o que el hermano esté al lado.
 
 ## Trampas de entorno (Windows ↔ CI)
 
@@ -51,6 +54,19 @@ Desde el 2026-11-04 esos 6 harnesses **y** los 2 smoke de worker corren en CI
   (`heartbeat.worker.js`: 5.071 bytes con CRLF vs 4.909 reales). Se resolvió
   fijando `* text=auto eol=lf` y `-text` para `public/scanner/*.js`. El índice ya
   estaba en LF (0 archivos `i/crlf`), así que no hubo renormalización.
+- **…pero `.gitattributes` no reescribe el working tree que ya está materializado.**
+  El clon viejo seguía con 172 archivos en CRLF (el blob en LF, así que
+  `git status` los muestra LIMPIOS — el atributo normaliza al comparar y el cache
+  de stat ni los lee). Se ve con `git ls-files --eol | grep w/crlf`. Consecuencia
+  real, no estética: `public/models/rapidocr/ppocr_keys.txt` servido en DEV tenía
+  **6.622 de 6.623 entradas terminadas en `\r`**, y `ocr/rapidocr.ts` partía por
+  `"\n"` sin quitarlo ⇒ `ctcDecode` empalmaba `C\rO\rN\rS…` — texto que parece
+  legible pero no matchea ni una ancla de `senal-lectura`. En PRODUCCIÓN no se ve
+  (el build publica el blob, que es LF): es un fallo **solo de dev**, que se
+  diagnostica mal porque «en el deploy funciona». Fix en dos partes: el parser
+  ahora es `split(/\r?\n/)` (mismo fix que el hermano, por la misma razón — D80)
+  y se renormalizaron los 13 assets servidos bajo `public/` que seguían en CRLF.
+  El ancla vive en `scripts/qa-paridad-motor.ts`.
 - **`bun` flotante**: los workflows usaban `setup-bun@v2` sin versión → `latest`.
   El minificador cambia entre versiones y el artefacto de capa 0 se commiteó con
   bun 1.3.x, así que la frescura dependía del día que corriera el job. Fijado en

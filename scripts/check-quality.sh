@@ -6,11 +6,13 @@
 #   3. bun run build            → exit 0 (Next 16 Turbopack)
 #   4. bun scripts/smoke-*.mjs  → los dos workers (heartbeat y capa 0 QR)
 #                                  precompilados y frescos, no el .ts crudo
-#   5. bun run test             → vitest verde
-#   6. bun scripts/qa-*.ts      → los 6 harnesses de anclas y contrato
+#   5. bun run test             → vitest verde (17 archivos · 267 tests)
+#   6. bun scripts/qa-*.ts      → los 7 harnesses de anclas y contrato
 #                                  (aa-quickwins 11 · autoenvío 21 ·
 #                                  obs-contract 38 · obs-privacidad 7 ·
-#                                  obs-transporte 8 · obs-ui 8)
+#                                  obs-transporte 8 · obs-ui 8 ·
+#                                  paridad-motor 14 — en CI sin hermano
+#                                  el último sale «omitido», paso 0)
 #   7. bunx knip                → inventario de dead code (informativo — NO
 #                                  rompe el gate). Los exports de src/lib/e14/obs
 #                                  que knip no ve son anclas de contrato: los
@@ -60,11 +62,11 @@ paso "5/7 · Vitest (suite unitaria)"
 bun run test || fail "vitest"
 ok "vitest verde"
 
-paso "6/7 · Los 6 harnesses de regresión + contrato obs + AA quickwins (QA)"
+paso "6/7 · Los 7 harnesses de regresión + contrato obs + AA quickwins (QA)"
 # Orden ALFABÉTICO EXACTO del glob scripts/qa-*.ts (los 4 obs-* quedan
 # al final del alfabeto) — NOMBRES[i-1] debe corresponder 1:1
 # con el i-ésimo archivo del glob (kit A3-C5).
-declare -a NOMBRES=(aa-quickwins autoenvio obs-contract obs-privacidad obs-transporte obs-ui)
+declare -a NOMBRES=(aa-quickwins autoenvio obs-contract obs-privacidad obs-transporte obs-ui paridad-motor)
 i=0
 for f in scripts/qa-*.ts; do
   i=$((i+1))
@@ -85,5 +87,5 @@ types_=$(echo "$knip_out" | grep -A100 "exported types" | grep -cE "^[a-zA-Z]" |
 ok "knip: ~${exports_} exports + ~${types_} types sin uso (NO rompe el gate — solo informativo)"
 
 printf '\n\033[1;32m══════════════════════════════════════════════\033[0m\n'
-printf '\033[1;32m TODO VERDE — tsc · lint · build · vitest · QA 6/6\033[0m\n'
+printf '\033[1;32m TODO VERDE — tsc · lint · build · vitest · QA 7/7\033[0m\n'
 printf '\033[1;32m══════════════════════════════════════════════\033[0m\n'

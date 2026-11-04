@@ -14,7 +14,7 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
 - `bun run build` — bundle de producción (el `prebuild` genera el worker de capa 0).
 - Sueltas: `bun run typecheck` · `bun run lint` · `bun run test` · `bunx knip`.
 - `bash scripts/check-quality.sh` — el gate completo (7 pasos: lo anterior más
-  build, los 2 smoke de worker y los 6 harnesses `scripts/qa-*.ts`). Es lo mismo
+  build, los 2 smoke de worker y los 7 harnesses `scripts/qa-*.ts`). Es lo mismo
   que corre `.github/workflows/quality.yml`.
 
 ## Entorno (bun 1.4.2 y finales de línea)
@@ -64,6 +64,31 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
    `import` de `src/`, pero lo consume `ZoomableVisor` del UI package vía peer:
    quitarlo rompe la pantalla de revisión, y como bun auto-instala peers el
    build local lo sigue tapando (con npm o pnpm fallaría al resolver).
+
+## Paridad con `supervision-e14` (el mismo motor, dos frontends)
+
+Este repo y `supervision-e14` (supervisor masivo) comparten el negocio que
+decide el resultado de un acta: `clasificador.ts`, `completitud.ts`,
+`divipol.ts` y `kits.ts` son la MISMA lógica, y el motor de OCR es el mismo npm
+(`@jg-stevan/scanner-core`, mismo `tesseract.js` con el mismo `spa.traineddata`,
+mismas ONNX PP-OCRv4, mismo `divipol.json`). Lo que NO se comparte ni se porta:
+la cola/bandeja/runner del lote (aquí es un puesto individual) y el PP-OCRv5.
+
+El contrato vive en `src/lib/e14/__fixtures__/contrato-motor.json` (21 cabeceras
+SINTÉTICAS + su salida exacta). Cada repo lo valida contra SU copia del motor:
+
+- `src/lib/e14/contrato-motor.test.ts` (vitest) · `scripts/gen-contrato-motor.ts`
+  (regenera) · `scripts/qa-paridad-motor.ts` (coteja los dos checkouts en disco).
+- **Se toca el negocio clasificador y el test pone rojo** → es un cambio de
+  comportamiento REAL: regenera (`bun scripts/gen-contrato-motor.ts`), revisa el
+  diff del golden descriptor por descriptor y cópialo a
+  `supervision-e14/src/modules/digitalizador/lib/e14/__tests__/__fixtures__/`.
+  Allí el mismo golden pone rojo hasta que el hermano sincronice el código.
+- **NO se escribe un generador en el hermano**: una sola fuente de verdad, si
+  no cada repo "arregla" su esperado hacia su propio comportamiento y la paridad
+  se vuelve decorativa.
+- Salida de OCR sobre píxeles, `quad` y `score` NO están en el contrato
+  (necesitan navegador/wasm). El `puente/` de envío es exclusivo de este repo.
 
 ## Estilo
 

@@ -10,11 +10,36 @@ Ambos repos comparten dueño, dominio y motor de npm. El objetivo es que **un
 mismo acta produzca la misma salida** en el digitalizador móvil y en el
 supervisor masivo, no que el móvil cargue con la cola masiva.
 
-- [ ] **Test de contrato cross-repo.** Fijar una imagen (una de
-      `src/assets/acta-sim-*.jpg`) y exigir que `quad`, `ocrTexto`,
-      `clasificacion`, `score`, `status` y la `EntradaPuente` coincidan entre
-      `digielect14` y `supervision-e14`. `supervision-e14` ya trae la semilla de
-      harness de caracterización (`masiva/__tests__/caracterizacion.harness.ts`).
+- [x] **Test de contrato cross-repo** — cerrado el 2026-11-04 (D80) en la capa
+      que los dos repos comparten de verdad: `src/lib/e14/__fixtures__/contrato-motor.json`
+      (21 cabeceras SINTÉTICAS + su salida exacta + sus derivados + la escalera
+      `score→status`) lo valida cada repo contra SU propia copia del motor
+      (`contrato-motor.test.ts`; aquí vitest, allá `bun:test`) y
+      `scripts/qa-paridad-motor.ts` coteja los dos checkouts cuando el hermano
+      está en el disco. **No cubre `quad` ni `ocrTexto` sobre píxeles ni la
+      `EntradaPuente`** — el primer par necesita navegador+wasm (no corre en un
+      test de repo) y el segundo no existe en el hermano (allá el resultado va
+      a su propia base, no a un hub). Lo que sí queda fijado: la misma entrada
+      de texto produce el mismo veredicto de negocio en los dos productos.
+- [x] **Revisar `divipol.ts` / `clasificador.ts` / `completitud.ts`** — cerrado
+      el 2026-11-04 (D80): los cuatro son literalmente el mismo código (delta
+      declarado: dos `export` que el hermano necesita en sus tests y el
+      `PUBLIC_BASE` de `@/shared/env`), y ahora hay un test que lo exige, no una
+      nota. Se extendió a `kits.ts`, `integridad.ts`, `diagnostico.ts`,
+      `senal-lectura.ts` y `marcadores.ts`.
+- [ ] **Propagar el golden cuando cambie el negocio** (procedimiento en
+      `AGENTS.md` § Paridad): regenerar aquí, revisar el descriptor a descriptor
+      y copiar el archivo al hermano. El mecanismo grita si se olvida — pero el
+      olvido es posible mientras los dos repos tengan CIs separados.
+- [ ] **Costo del clasificador en el camino fuzzy** (medido en PC, bun 1.4.2,
+      3 corridas): las cabeceras que resuelven puesto por NOMBRE con poco match
+      tardan **130-360 ms** por acta (`cairo-lugar-ilegible-sin-kit` 198-330,
+      `berlin-lugar-de-otra-ciudad` 140-200, `ruta-sin-pais` 154-208) contra
+      **0.1-0.3 ms** de las que resuelven por código. Son 2-4 llamadas por acta,
+      así que hoy no come el presupuesto de D77 (120-480 s); si al medir en
+      celular BAJO se vuelve ruido, la salida es memoizar `normalizarNombreLugar`
+      + trigramas en `similitud()` — cambio de rendimiento, cubierto por el
+      golden (no puede alterar una clasificación).
 - [x] **Portar la mejora de orientación `probe-mini768`** — cerrado el
       2026-11-04 (D79): el lado de la miniatura del sondeo pasó a ser el flag
       `probeMiniLado` (default 1280, clamp [320, 1280], doble whitelist) sin
@@ -30,10 +55,6 @@ supervisor masivo, no que el móvil cargue con la cola masiva.
       hermano (PP-OCRv5 en gama alta + sidecar nativo) **no** se porta: en un
       celular BAJO/MEDIO ese router termina en el mismo motor que ya fija este
       repo, y portarlo añadiría 12,7 MB de modelos y ~487 MB de RAM pico.
-- [ ] Revisar `divipol.ts` (difiere del hermano solo en el import de
-      `PUBLIC_BASE`) y `clasificador.ts` / `completitud.ts` (hoy byte-idénticos)
-      para que un cambio de negocio se haga una vez y se sincronice con un test,
-      no a mano en dos repos.
 
 ## 2. QA de contrato en CI
 
@@ -44,9 +65,12 @@ supervisor masivo, no que el móvil cargue con la cola masiva.
       recalibró el harness, no la UI.
 - [x] Correr `scripts/qa-*.ts` dentro de `.github/workflows/quality.yml` —
       cerrado el 2026-11-04. CI ahora valida tipos + lint + vitest + build +
-      los 2 smoke de worker + los 6 harnesses, y `bun` quedó **fijo en 1.4.2**
-      en `quality.yml` y `deploy-pages.yml` (el smoke compara el artefacto
-      commiteado byte a byte y el minificador de bun cambia entre versiones).
+      los 2 smoke de worker + los harnesses (7 con `qa-paridad-motor.ts`, que en
+      CI sale «omitido» porque el checkout hermano no existe: la paridad en CI
+      la sostiene `contrato-motor.test.ts` con el golden commiteado), y `bun`
+      quedó **fijo en 1.4.2** en `quality.yml` y `deploy-pages.yml` (el smoke
+      compara el artefacto commiteado byte a byte y el minificador de bun cambia
+      entre versiones).
 - [x] Recalibrar los contadores que citaban cifras viejas: la cabecera de
       `scripts/check-quality.sh` ya no habla de 162 tests ni del baseline de
       `knip`, y remite a `docs/DEUDA.md` para los falsos positivos.
