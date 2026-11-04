@@ -63,8 +63,15 @@ dev.log
 /tmp-audit/
 /download/
 
-# KIT bench e14-rec-int8-v1 (T1): artifacts locales del banco — NO commitear
-tools/bench-rec-int8/*.onnx
+# ─── PRIVACIDAD Y ARTEFACTOS LOCALES ───────────────────────────────────────
+# Datos electorales reales: fotos de actas, capturas y volcados de corrida NO
+# se commitean. Los modelos que se sirven en producción viven SOLO en
+# public/models/; cualquier .onnx descargado localmente queda fuera.
+/capturas/
+/assets-locales/
+/scratch/
+*.onnx
+!public/models/**/*.onnx
 
 # Evidencia forense conservada a propósito en el repo (regresión D65 / zip 4f9c871):
 # los .log bajo docs/evidence/ son registro de verificación, no basura de dev.

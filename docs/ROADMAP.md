@@ -1,457 +1,85 @@
-# ROADMAP — digitalizador-e14 (FASE GRÁFICA)
-
-Leyenda: [ ] pendiente · [~] en progreso · [x] hecho
-
-- [x] G0 — Scaffold de la app en el monorepo + copiar zip v2 a docs/design/ + docs base + commit
-- [x] G1 — Tokens del tema (globals.css §5) + fuentes (Hanken Grotesk, JetBrains Mono) + primitivas
-- [x] G2 — Shell: TopBar + BottomNav (estilo activo v2 §8) + router de vistas (zustand) + safe-area
-- [x] G3 — Dominio completo (§6) + seed mock (§6.4) + bridge mock
-- [x] G4 — ESCANEAR: placeholder visor + botón disparo + panel de simulación (forzar estados)
-- [x] G5 — ANALIZANDO: anillo + % + línea de escaneo + 4 barras de paso + footer
-- [x] G6 — REVISIÓN: documento (§7.3) + 4 estados (§7.4) + banner rico rechazada (§7.5) + flotantes
-- [x] G7 — ACTAS: CONTROL ACTAS E-14 con acordeón de mesas (§7.6)
-- [x] G8 — RESUMEN: dashboard de trabajo (§7.7)
-- [x] G9 — GitHub Pages: basePath + workflow parametrizado + verificación en /web-scanner/ (luego supersedido por Pages dual — ver D13)
-- [x] G10 — DoD completa (§10) + revisión visual lado a lado con screen.png + QA externa (FIXES-e14-qa.md: 2 fixes aplicados y verificados)
-
-## FASE LÓGICA (SPEC-fase-logica.md §8)
-
-- [x] L0 — Andamiaje: dep workspace `@jg-stevan/scanner-core` + transpilePackages + assets worker/opencv en public/ + bun.lock
-- [x] L1 — Contrato async (mock intacto): tipos §3 + CompositeBridge (D19) + store async con progresoAnalisis + ANALIZANDO event-driven con piso escénico (D18) — regresión cero en SIMULACIÓN
-- [x] L2 — Fuente ARCHIVO real: RealCoreBridge (pipeline §5 + mapeo §4 + gate ILEGIBLE §4.2 + timeout 15 s) + chips de fuente en ScanView + ReviewView "VER FOTO" (D20–D23)
-- [x] L3 — Fuente CÁMARA real + interfaz de escaneo del lab COMPLETA: CameraFrameLoop + HUD + BUSCANDO ACTA… + quad en vivo + IA·AUTO (OFF default, D24) + flash F-FLASH v3 + ZSL best-shot + ruta iOS + destello (D25-D27)
-- [x] L4 — EXPORTAR PDF: adaptador §6 + CTA en REVISIÓN (solo actas reales)
-- [x] L5 — Editor de recorte: COPIAR subsistema CROP de scanner-lab/EditorView.tsx (§7.5) + toolbar real de REVISIÓN (D28–D31)
-- [x] L6 — Persistencia de jornada: IndexedDB vanilla `e14-jornada-v1` (estado liviano + slot del acta en revisión con fotos) + «REINICIAR JORNADA» (2 toques) + mesas reales derivadas (SIM OFF no quema progreso) — kit e14-pwa-persistencia-v1 (PR #38)
-- [ ] L7 — (opcional) Cámara sintética en SIMULACIÓN (SyntheticCamera del core)
-
-## FIDELIDAD AL LAB (SPEC-auditoria-copias.md — fix/e14-fidelidad-lab)
-
-- [x] H1 — F-LENS v4 completo: sondas secuenciales + chooseMainProbe + fix zoom + telemetría `__cameraChoice` (D33)
-- [x] H2 — F-SENSOR-PROFILER: perfilado del track + takePhotoBlob (capas 1-2) + capa 3 decode único/tope por GAMA cubriendo CÁMARA e IMPORTAR (D34)
-- [x] H3 — captureSmart: snapA ANTES del disparo (§5.4 del lab)
-- [x] H4 — TORCH_HINT verbatim completo (diagnóstico de campo para el operador)
-- [x] H5 — IMPORTAR: accept `.heic/.heif` en ambos inputs + guard F-IMPORT/HEIC del lab
-- [x] H6 — PWA instalable + offline: SW network-first del lab + cache del MOTOR OCR al primer uso (~30 MB) + banner de actualización consentido (E-04) — kit e14-pwa-persistencia-v1 (PR #38)
-
-## UX REAL (SPEC-ux-real-bn-editor.md — fix/e14-ux-real)
-
-- [x] R0 — AGENTS.md en la RAÍZ con la REGLA DE ORO #0 (el lab es la fuente de verdad) + enlace al tope de README.md
-- [x] F1 — SIMULACIÓN = pipeline real sobre el acta E-14 REAL incluida (D35): mock retirado, chips de forzado obsoletos, gates esReal por foto
-- [x] F3 — VER FOTO y papel sintético eliminados: la foto real es el visor único (ActaDocument borrado)
-- [x] F5 — barra de controles FIJA en la parte inferior del editor de revisión (D38)
-- [x] F2 — filtro «B/N adaptativo» por defecto + selector de filtros (copia del lab, D36)
-- [x] F4 — QuadEditor con ROTAR 90° y DETECCIÓN AUTOMÁTICA (copia del lab, D37)
-
-**Estado:** PR #8 MERGEADO a `main` (merge commit `eda6714`, 2026-10-10) · CI Pages verde · smoke test de producción OK (golden path + editor + filtros + barra fija al píxel + h-dvh móvil + lab sin regresión — ver worklog 14:40). **En producción:** https://jg-stevan.github.io/web-scanner/
-
-## F-OCR — BOTÓN «TEXTO» (SPEC-texto-ocr-editor.md — feat/e14-texto-ocr)
-
-- [x] B1 — ToolbarBtn.active (re-vestido ToolItem L2208) + barra grid-cols-5 con TEXTO en 4ª posición, `active={hayTexto}` (D39)
-- [x] B2 — bridge.reconocerTexto (requestOcr sobre fotoProcesada) + store.reconocerTextoActa con toasts del lab (D39)
-- [x] B3+B4+B6 — sheet «Texto reconocido» 3 estados + contadores + «Reconocer de nuevo»/«Copiar texto» (patrón del sheet de filtros, sin vaul) (D39)
-- [x] B5 — OcrHighlightedText completo (mark #ffd60a literal, query={null} hoy) (D39)
-- [ ] F-FIND — barra de coincidencias del lab (L2347-2366 + pendingFindQuery): EXCLUIDA de esta copia — su único punto de entrada es la búsqueda de la biblioteca del lab; e14 no tiene biblioteca. `OcrHighlightedText` YA queda listo (solo faltará pasarle la query cuando exista un buscador).
-
-**Estado:** PR #9 MERGEADO a `main` (merge commit `83e5838`, 2026-10-10) · CI Pages verde (run `38012198805`) · smoke test de producción OK (TEXTO con el OCR real del pipeline: 170 palabras | 745 caracteres idénticos al QA dev · Reconocer de nuevo · Copiar texto + toast · botón active · barra fija al píxel con 5 columnas · h-dvh · lab sin regresión — ver worklog 16:15). **En producción:** https://jg-stevan.github.io/web-scanner/
-
-## F-CLASIF — CLASIFICACIÓN DE CABECERA contra DIVIPOL oficial (SPEC-e14-cabecera-clasificacion.md — feat/e14-clasificacion-cabecera)
-
-- [x] §1 — base DIVIPOL del visor oficial (34 deps · 1.189 mun · 3.013 zonas · 14.438 puestos — validada 1:1 con Cairo/Frankfurt/Bremen) + bundle compacto `public/e14/divipol.json` (620 KB) + `scripts/gen-divipol.mjs` con guard de conteos
-- [x] §2 — `divipol.ts`: carga fetch local (basePath, caché, estado, NUNCA falla) + índices + trigramas/Dice sin deps
-- [x] §3 — `clasificador.ts`: anclas VERBATIM §3.2 + normalización NFKD + fuzzy Dice + estrategia §3.3 + veredicto AUTO/SUGERIDA/MANUAL (PATRON_CABECERA nunca es pase libre)
-- [x] §4 — gate REVISADO (evaluarGate único para escaneo y recorte): RECHAZADA solo por CALIDAD · AUTO → status por score · SUGERIDA/MANUAL → EN_REVISION_HUMANA (PROHIBIDO rechazar por cabecera) · log `clasif={...}` (§4.6)
-- [x] §5 — PanelClasificacion: cascada Dep→Mun→Zona→Puesto→Mesa + tipo + páginas, precarga de la sugerencia, GUARDAR UBICACIÓN + REPETIR FOTO, texto libre sin base, max-h-96, touch 44 px
-- [x] §6 — Fase B: archivadas por clave de mesa (ceros) + huecos DELEGADOS|TRANSMISIÓN × 1/2, duplicado → reemplaza y avisa (§G.4.1), ACTAS «MESAS CLASIFICADAS» antes del seed, export `E14_{KIT}_{...}_{TIPO}-{pag}.pdf` (§G.4.5)
-
-**Estado:** **PR #11 MERGEADO a `main`** (merge commit `e8f76ff`, 2026-10-10, método merge contra main@153e303) · CI Pages verde (run `38057755908`) · smoke test de producción OK (móvil + desktop): la acta Frankfurt real se **auto-clasifica AUTO 88·120·15·02·012 y se envía sola** (log `clasif={...}` §4.6 exacto en prod) · ACTAS «Frankfurt Consulado · MESA 12» · `divipol.json` 200 (635 KB, 34 deps) · h-dvh 844/800 exactos · lab sin regresión (ver worklog 18:40). Auditoría del dueño cerrada: el bloqueante «L95/L128» resultó **FALSO POSITIVO** — artefacto del display del sandbox que elimina «`[m`» del texto mostrado por Bash (blob `ea4f390` byte a byte correcto; ver worklog 18:10). **En producción:** https://jg-stevan.github.io/web-scanner/
-
-### Fuera de alcance (decisión del dueño, §0/§8)
-- [ ] Manuscritos G.2/G.3 (votos/firmas/cédulas) — cubiertos por la revisión humana existente
-- [ ] Consulta viva AppSync (§G.4.6, fase futura)
-- [x] H6 PWA — decisión del autor (hecha en e14-pwa-persistencia-v1, PR #38)
-
-## F-INFO — TÍTULO/UBICACIÓN REALES + TIPO HONESTO + dígito 9 del 1D (SPEC-e14-titulo-ubicacion-clasificada.md — feat/e14-info-clasificada)
-
-- [x] S1 (§1) — pass-through de la clasificación al acta: helper ÚNICO `tituloYUbicacionDe` (AUTO con ruta → standName uppercase + ubicación por NOMBRE/CÓDIGO/mesa 3 dígitos; resto → null = seed) aplicado en los 3 puntos de entrada: `construirActa` (gate del escaneo) · `pipelineRecorte` (rescate L5) · `store.guardarUbicacion` (panel §5)
-- [x] S2 (§2) — `detalleUbicacion` (ReviewView): clasificación REAL a cualquier nivel con PAÍS/MUNICIPIO + `MESA ${padStart(3)}` canónica, «—» en lo no leído; `ruta` ahora con `acta.clasificacion` (antes solo AUTO)
-- [x] S3 (§3) — `BANDA_DELEGADOS = /EMBAJADOR|DELEGADOS/` (el `C[OÓ]NSUL` suelto matcheaba la caja «CONSULADO: 88» de TODAS las copias → DELEGADOS falso en la TRANSMISIÓN de El Cairo del dueño) + ancla `ANCLA_CODIGO_1D` (15 dígitos impresos, §D.2/§F 8/8) con d9 como RESPALDO del tipo (3=T/2=D, conf 0.9, solo sin banda; contradictorios → null) y d12-15 como respaldo de PÁGINA (solo código único y aritmética válida)
-
-**Estado:** **MERGEADO ✅** (PR #13 → main `7a0502d`, merged_at 2026-10-10T16:47:41Z, merged_by Jg-Stevan vía API con candado sha `664f4eb` — merge commit, NO squash: `cf1cd09`+`664f4eb` íntegros). Re-auditoría del merge: dry-run local 0 conflictos + gates re-verificados (lint 0 · tsc 0 · unitario verde · lab/packages intactos). CI del merge: Actions run `38069100083` success (~60 s, deploy Pages). Smoke test prod: `/`, `divipol.json`, `/lab/` 200 + código F-INFO confirmado en el bundle (`PUESTO SIN NOMBRE` de `cf1cd09` en chunk 371lkmupx98ru.js). QA completo en worklog 10:45: unitario 22/22 (AC3/AC4/S3-regresión/helpers/guardas/mandos) · navegador 390×844 dev :3001 todo verde (AC1 Frankfurt `CONSULADOS > ALEMANIA > … MESA 012 …` exacto · AC2 «EL CAIRO - CONSULADO» + detalle EGIPTO completo · AC3 d9=3 `tipo:T` AUTO sin palabra de banda y CERO «DELEGADOS» · AC4 banda → `tipo:D` · AC5 borrosa 5.7 RECHAZADA + seed ITALIA + formato historial · AC6 `%PDF` + nombre `E14_SINKIT_88_335_05_02_001_TRANSMISION-1.pdf` + /Title «EL CAIRO - CONSULADO — MESA 001» + visor Esc) · AC7 lint/tsc/build EXIT=0 + `diff apps/scanner-lab packages` VACÍO + 0 errores consola. Registro del merge: worklog 11:47.
-
-## F-SCORE-LEGIBLE — EL OCR/IDENTIFICACIÓN MANDA SOBRE LAS MÉTRICAS DEL CRUDO (SPEC-e14-score-legible.md — feat/e14-score-legible)
-
-- [x] C1 (§1) — `contrasteEfectivoDe` + `scoreDeCalidad(q, señales)`: piso de contraste efectivo 80 con OCR válido (recalcula el `level` con la fórmula del core duplicada `// Fuente:` — packages intocable) + piso de score 8.2 para clasificación AUTO (después de los techos — la identificación manda; SUGERIDA/MANUAL sin piso)
-- [x] C2 (§2) — clasificación ANTES del score en AMBOS pipelines (escaneo y recorte): `evaluarGate` síncrono que recibe la clasificación ya calculada, misma tabla de decisión; logs con `contEff` en `metricas={...}` (trazabilidad §4.6)
-
-**Estado:** **MERGEADO ✅** (PR #16 → main `306c937`, merged_at 2026-10-10T22:15:12Z, merged_by Jg-Stevan vía API con candado sha `bd09edf` — merge commit, NO squash). QA navegador 390×844 build estático (worklog 17:15 Bogotá): AC1 caso del dueño `score=8.5` (antes 6.7 MODERADA) + `contrast:22 contEff:80` + auto-ENVIADA TRANSMISIÓN P1 ✓ · AC2 max puro nunca reduce, SIM `contEff:100=contrast` (matiz: SIM 8.2 por piso §X.2 AUTO per §3; ac3-v5 9.1 — su contrast real 70 con OCR válido → contEff 80) · AC3 blur-14 real `ocrValido=false` → `contEff:15` SIN piso → `3.7` RECHAZADA + INTENTO 1 DE 2 · AC4 nítida sin E-14 `9.3` con panel (sin piso §X.2 en MANUAL) · AC5 negra ruido `2.6` RECHAZADA (el piso no fabrica calidad) · AC6 contEff difiere solo cuando actuó + 0 errores consola · AC7 lint/tsc/build 0 + lab/packages VACÍO. CI 306c937 success; prod: `contEff` + `PUESTO SIN NOMBRE` confirmados en el bundle.
-
-## F-SCORE-10-IDENTIFICADA — ACTA IDENTIFICADA AUTO = 10/10 ÓPTIMA (SPEC-e14-score-10-identificada.md — feat/e14-score-10)
-
-- [x] P1 (§1) — `PISO_IDENTIFICADA` 8.2→10 (2 bloques EXACTOS en scanner-core-bridge.ts, bytes verificados con node fs): una acta identificada AUTO (jerarquía divipol + mesa + tipo) puntúa 10/10 ÓPTIMA — el score describe la CERTEZA de la digitalización, no el crudo; `Math.max` conservado (piso que nunca reduce) · SUGERIDA/MANUAL sin piso (JAMÁS un MANUAL muestra 10) · `PISO_CONTRASTE_LEGIBLE=80` y techos fair 7.9/poor 6.4 intactos
-- [x] P2 — registro CHANGES.md sección 0-quin (petición literal del dueño: «¿cómo podemos establecer para subir el score al 10/10, que no se quede en 8?»)
-
-**Estado:** **MERGEADO ✅** (PR #17 → main `ec7e94f`, merged_at 2026-10-10T23:37:18Z, merged_by Jg-Stevan vía API con candado sha `41b0b59` — merge commit, NO squash). Diff: SOLO scanner-core-bridge.ts + CHANGES.md (+21/−1), 0 líneas en scanner-lab y packages. QA navegador 390×844 build estático (worklog 18:37 Bogotá): AC1 caso del dueño `score=10` (antes 8.5) contrast:22 contEff:80 + «✓ 10.0/10 ÓPTIMA · ENVIADO CORRECTAMENTE · ✓ ENVIADO AUTOMÁTICAMENTE» · AC2 SIM 10 contEff:100 ALEMANIA · AC3 panel honesto 9.3 MANUAL sin 10 · AC4 blur14 `3.7` + negra-ruido `2.6` RECHAZADAS · AC5 recorte sobre RECHAZADA 5.6 SIGUE RECHAZADA + recorte sobre AUTO vía rescate D20 `10` nivel:AUTO · AC6 PDF 18.019 bytes %PDF-1.3 + CERO errores consola · AC7 lint/tsc/build 0. CI ec7e94f success (run `38095664226`); prod: `/` y `divipol.json` 200 + `Math.max(n,10)` confirmado en el chunk `0wa8jkhhu8yio.js` que contiene `contEff` — piso 10 en producción, el 8.2 ya no existe en el bundle.
-
-## F-REDISEÑO-REVISIÓN-AUTOMATIZADA — ADVERTENCIA AL MOCK + FLUJO DE RECHAZOS AUTOMATIZADO (SPEC-e14-rediseno-revision-automatizada.md — feat/e14-rediseno-revision)
-
-- [x] P1 (D1–D6) — TopBar dinámica `[● ⚠ 7.8/10 ADVERTENCIA · TÍTULO]` (score real + palabra por estado —enmienda: «ADVERTENCIA» ámbar— + título truncado + fallback «REVISIÓN DE ACTA») · TarjetaRica de ADVERTENCIA ELIMINADA (info redistribuida) · chips [TRANSMISIÓN][MESA 001][PÁG 1 DE 2] · banner «REVISIÓN REQUERIDA (LEVE DESFOQUE|CONTRASTE|LUMINOSIDAD)» por métrica más baja (display-only) · toolbar de 3 (Filtros/Texto solo RECHAZADA/OPTIMA) · CTAs en pila: verde «✓ CONFIRMAR Y ENVIAR DE TODOS MODOS» (h-13) + «REPETIR CAPTURA (FOTO MÁS NÍTIDA)»
-- [x] P2 (§7) — maxIntentos 2→4, el conteo cuenta CAPTURAS: SUGERIDA/MANUAL con calidad OK → «repetir-primero» (banner CLASIFICACIÓN PENDIENTE, panel oculto) hasta agotar → CONTINGENCIA (panel + toast «ENVIADA A CONTINGENCIA» + historial + VOLVER AL ESCÁNER) · score<6.5 → SOLO «OBLIGATORIO REPETIR FOTO (INTENTO X DE 4)» (botón manual ELIMINADO, enviarRevisionHumana borrada rg=0) · contingencia automática C4 al agotar · recorte NO consume intento · `evaluarGate(score, ocr, clasif, intento, maxIntentos)` en ambos pipelines
-- [x] P3 (D8) — badge rojo en ACTAS con las contingencias del turno (historial REVISION_HUMANA), oculto en 0, aria-label «Contingencias pendientes»
-
-**Estado:** **MERGEADO ✅** (PR #20 → main `5eefe01`, merged_at 2026-10-11T01:12:05Z, merged_by Jg-Stevan vía API con candado sha `4de430c` — merge commit, NO squash; rebase previo sobre `6a99ddf` por PRs #18/#19 paralelos del lab, conflicto CHANGES.md resuelto en orden cronológico). Diff: TopBar/ReviewView/BottomNav/store/bridge/types + CHANGES.md 0-sexto, 0 líneas en scanner-lab y packages. QA navegador 390×844 build estático (worklog 20:12 Bogotá): AC1 ADVERTENCIA=mock completo vía panel→GUARDAR (7.1/10) · AC2 CONFIRMAR→ENVIADA intacta + REPETIR armado · AC3 borrosa 4º intento→contingencia automática+badge 1 · AC4 repetir-primero panel oculto→al 4º contingencia+badge 2 · AC5 score real · AC6 owner 10.0/10 + GENERICO intacta + recorte sin intento · AC7 badge 0→1→2→3 · AC8 lint/tsc/build 0 + rg=0 + CERO errores consola. CI 5eefe01 success (run `38101029343`); prod: literales del rediseño confirmados en el bundle y «ENVIAR A REVISIÓN HUMANA» (botón manual) 0 matches.
-
-## F-REDISÑO-REVISIÓN-R2 — TOOLBAR UNIFICADA DE 3 EN TODOS LOS ESTADOS DE CORRECCIÓN (SPEC-e14-rediseno-revision-automatizada Rev. 2 — feat/e14-rediseno-revision-r2)
-
-- [x] P1 (D5 Rev. 2) — toolbar UNIFICADA `grid-cols-3` (Recortar·Rotar 90°·Pantalla completa) en ADVERTENCIA · RECHAZADA · EN_REVISION_HUMANA (repetir-primero Y contingencia) — Filtros y Texto SALEN de los tres (sheets sobreviven SOLO en OPTIMA-rescate, `grid-cols-5` EXACTO)
-- [x] P2 (AC4b) — RECORTAR re-evalúa sin consumir intento en reintento/contingencia: recorte que produce AUTO + score ≥ 8 → pantalla OPTIMA de rescate (D20); si no → misma fase. Mecanismo verificado: OCR del recorte a resolución nativa (≤1600px) lee la cabecera que el escaneo full-image no leía (reducción ×0.4) — la cura del «quad mal detectado por el sistema»
-
-**Estado:** **MERGEADO ✅** (PR #22 → main `acb778a`, merged_at 2026-10-11T02:49:00Z, merged_by Jg-Stevan vía API con candado sha `3d94d7e` — merge commit, NO squash). Diff: ReviewView.tsx + CHANGES.md 0-septimo (+38/−10), 0 líneas en scanner-lab y packages. QA navegador 390×844 build estático (worklog 21:49 Bogotá): AC1 ADVERTENCIA=mock (7.7) · AC2 ambos CTAs · AC3 RECHAZADA con toolbar de 3 + contingencia automática · AC4 reintento/contingencia con toolbar de 3 · **AC4b ambas ramas: «permanece» (log recorte re-corrió, INTENTO 1 DE 4 intacto) y «OPTIMA» (recorte de cabecera → clasif AUTO → 10.0/10 ÓPTIMA con toolbar de 5)** · AC5-AC8 ✓ + toast contingencia capturado + badge 0→5. CI acb778a success (run `38106368533`); prod: condición unificada `"ADVERTENCIA"||"RECHAZADA"||"EN_REVISION_HUMANA"`→grid-cols-3 confirmada en el bundle, patrón Rev. 1 eliminado (0 matches).
-
-## F-REDISÑO-ENVIADA-R2 — PANTALLA ENVIADA AL MOCK DEL DUEÑO + FLUJO PDF ELIMINADO (SPEC-e14-rediseno-enviada Rev. 2 — feat/e14-rediseno-enviada)
-
-- [x] E1 (D2) — Pill flotante «✓ score/10 ÓPTIMA • Enviado correctamente» de ENVIADA ELIMINADA (la info vive en la TopBar D1 del PR #20 y en la fila de estado E3); pills OPTIMA/GENERICO y banner EN_REVISION_HUMANA intactos
-- [x] E2 (D3) — Tarjeta héroe limpia y tocable SOLO en ENVIADA: `<button aria-label="Ver acta a pantalla completa">` → overlay existente; `bg-white p-1.5 border border-line rounded-xl` SIN brackets (la imagen B/N llega al borde, como el papel del mock)
-- [x] E3 (D4+D5) — chips `[TRANSMISIÓN][MESA 001][PÁG 1 DE 2]` (mesa canónica de 3 dígitos del pipeline) + fila de estado `data-testid="fila-estado"` justify-between: «✓ ENVIADO AUTOMÁTICAMENTE» … hora a la derecha + SHA-256 micro-caption (evidencia de transmisión conservada)
-- [x] E4 (D6) — CTA único «SEGUIR ESCANEANDO» (h-13, verde): el branch `esReal` de 2 botones desaparece
-- [x] E5 (D7) — Flujo de exportación a PDF eliminado de la cadena COMPLETA (botón→`exportarPdfActa` store→contrato bridge→método real + import `pdf-export`); `packages/scanner-core/pdf-export` INTACTO (scanner-lab lo usa — regla de oro) · specifiers de import con usos únicos dentro del método también retirados (higiene) · el PDF NUNCA fue parte del payload de transmisión
-
-**Estado:** **MERGEADO ✅** (PR #24 → main `1b94d2c`, merged_at 2026-10-11T12:52:52Z, merged_by Jg-Stevan vía API con candado sha `7552790` — merge commit, NO squash, 2 padres; **tras aprobación explícita del dueño** — política nueva: PR abierto para prueba en Vercel Preview antes del merge). Diff: ReviewView.tsx + bridge.ts + scanner-core-bridge.ts + store.ts + CHANGES.md 0-noveno (+123/−170), 0 líneas en scanner-lab y packages. QA navegador 390×844 build estático (subagente; worklog 07:58 Bogotá): AC1-AC8 ✓ (héroe blanca tocable sin brackets, breadcrumb divipol real, fila-estado con hora HH:MM:SS + SHA-256, CTA único 52px, `__pdfAttempts=0` con hook anti-descarga, 360×780 sin overflow, 0 errores de consola). Gates del merge re-corridos: lint 0 · tsc 0 · build estático 3/3 · scope confinado · rg vaciado=0. CI `1b94d2c` success (run `38140960522`); **prod: INVERSIÓN del fingerprint verificada** — «EXPORTAR PDF»/«exportarPdfActa»/«PDF GENERADO» **0 matches** en los 8 chunks de la homepage (chunk pre-merge `2p9ebpspmi5f8.js` → 404); «SEGUIR ESCANEANDO»/«fila-estado» VIVOS en el chunk per-ruta `3cf3ylkbge3wl.js` con chips TRANSMISIÓN ×17 · MESA ×20 · PÁG ×4 · SHA-256; piso score-10 intacto (`identificada&&(r=Math.max(r,10))`). PRs paralelos #23/#25 siguen abiertos.
-
-## FIX — e14-recorte-manual-v1 (2026-10-18): el recorte manual dice la verdad
-
-- [x] T1 — Presupuesto propio del recorte (30 s) + patrón `parcial`: el timeout RECHAZA pero MUESTRA el recorte ya horneado (nunca la foto vieja). Escaneo intocable.
-- [x] T2 — El fallo del recorte deja de ser silencioso: `errorRecorte` + píldora en REVISIÓN + `aplicarRecorte` booleano; el editor NO se cierra en error duro (D42).
-- [x] T3 — Recorte manual sin tinta → aviso honesto «TU RECORTE SE APLICÓ — …» (swap §D4 intacto, umbral de tinta intacto).
-
-## CHORE — e14-fuera-informes-v1 (2026-10-18): fuera los informes automáticos
-
-- [x] R-1 — INFORME-TELEMETRÍA v1 fuera completo (informe/ ×7 + InformeDescarga + hook B2 + try-block B8 + evento() de rapidocr) (D43).
-- [x] R-2 — Auto-descarga del ZIP de diagnóstico fuera (consumers B1/B3/B4/B5; diagnostico.ts recortado a construirDiagnostico; fflate fuera de deps).
-- [x] R-3 — Botón manual «Diagnóstico» fuera; barra de REVISIÓN grid-cols-3 fijo.
-- [x] R-4 — `acta.diagnostico` dormante verificado (traza diag=1 intacta).
-
-## PERF — e14-optimizacion-v1 (2026-10-18): velocidad + higiene + contador de motivos
-
-- [x] T1 — Memo de decodificación FIFO tope 2 (`loadImageMemo`): la misma dataURL del acta en vuelo se decodifica UNA vez (bridge ×4 + completitud + image-utils); rapidocr intacto.
-- [x] T2 — ORT `proxy=true`: det/cls/rec al worker interno — el progreso deja de congelarse 10-14 s (misma fidelidad, revertible 1 línea).
-- [x] T3 — Fuera `ort-wasm-simd-threaded.jsep.{wasm,mjs}` (−28.3 MB de repo; runtime jamás los pide).
-- [x] T4 — Higiene: `notaWebgpu` + 13 iconos sin uso fuera.
-- [x] T5 — Contador de sesión «POR QUÉ NO SE ENVIO» (D44): medir antes de calibrar; gate intocable.
-- [ ] T6 — EXPERIMENTO det 1920→1280: espera aprobación del dueño en el PR + validación con ZIPs de campo en su equipo (commit separado revertible).
-- [ ] Plan de carga masiva (AUDITORIA §8.4): con el código limpio y medido — módulo nuevo de orquestación, cero dependencias.
-
-## MASIVA — e14-carga-masiva-v1 (2026-10-19): cola de fotos desktop-first (AUDITORIA §8.4)
-
-- [x] T1 — Tipos + cola persistente IndexedDB VANILLA (DB `e14-masiva-v1`; File+acta en IDB, filas livianas en RAM; `recuperarCola` anti-zombis).
-- [x] T2 — Runner SECUENCIAL singleton (1 foto a la vez; MISMO `escanearActa`; progreso throttled; thumb 320; auto-pausa al abrir acta) + mini-store zustand MASIVA.
-- [x] T3 — Integración mínima aditiva al store principal: Vista+"masiva" · T5 extraído a `contarMotivoNoEnvioActa` (byte-idéntico) · `registrarEnvioMasiva` (registrarEnvio real) · `abrirActaMasiva`+`masivaOrigen`.
-- [x] T4 — MasivaView (dropzone drag&drop, bandeja con filtros/estados, VACIAR 2 toques, ENVIAR ADVERTENCIAS en lote) + ítem MASIVA en nav (StitchStackIcon) + regla de origen.
-- [x] Identidad de desenlace §7.2 verificada: misma foto → mismo desenlace por IMPORTAR y por MASIVA (8.5/7.9/4.6 exactos).
-- [ ] FUERA DE ALCANCE v1 (kit §9): export ZIP/CSV · concurrencia >1 · re-intentos automáticos de RECHAZADAS · OCR por zona · cola en la nube.
-
-## VERCEL-PERF — e14-vercel-perf-v1 (2026-10-19): demo multihilo en Vercel (D46)
-
-- [x] T1 — `vercel.json`: build estático con `NEXT_PUBLIC_BASE_PATH=/digielect14` (paridad GH Pages) + headers `COOP: same-origin` / `COEP: require-corp` en `/(.*)` — activa `crossOriginIsolated` → `numThreads = min(4, cores)` de rapidocr (T2 del kit optimizacion) SIN tocar código. Deploy manual conservado.
-- [x] T2 — Verificación local: lint 0 · tsc 0 · build estático OK · servidor con headers exactos → `crossOriginIsolated=true`, 0 bloqueos COEP, pipeline completo con desenlace idéntico (8.2 ÓPTIMA auto-envío, cod 710007453010102).
-- [x] T3 — Docs: REPORTE + D46 + esta entrada + worklog + AGENTS.
-- [x] T4 — PR DRAFT (merge solo con orden del dueño).
-- [x] ~~Post-merge (dueño, PLAN §6): deploy en Vercel (dashboard o `bunx vercel deploy --prod`) → inspector (`E14.informe()`) sobre las 2-3 actas de la línea base → comparar vs GH Pages (34-68 s / rec 23-34 s, mono-hilo).~~ **OBSOLETO (D73, 2026-10-23):** espejo Vercel retirado — la demo multihilo vive en https://digielect14.pages.dev/ (`docs/DEPLOY-cloudflare.md`).
-- [ ] Opción pendiente de decisión: fase 2 Electron/nativo (solo si la demo web no alcanza).
-
-## MASIVA-UX — e14-masiva-ux-v1 (2026-10-19): detección al importar + formatos + estados de envío
-
-- [x] T1 — Detección al importar espera el worker OpenCV (tope 5 s, mecanismo warmUp/waitReady del core) + 1 reintento si el quad vino de Sobel; log `detectOrigen=`/`detectReintento=1` (solo añadidos al final). Editor manual y SIM intocados.
-- [x] T2 — Masiva acepta ZIP/RAR/HEIC: fflate + node-unrar-js con import DIFERIDO (D47 — bundle eager +0.41 %) · guards PROTEGIDO_O_CORRUPTO / SIN_IMAGENES_DENTRO / ARCHIVO_ANIDADO / LIMITE_500_POR_COMPRIMIDO / FORMATO_NO_SOPORTADO como filas ERROR · aviso «CONVIRTIENDO HEIC…» · accept ampliado.
-- [x] T3 — Estado de envío por fila: «EN COLA» (offline, hashSha256 kit-literal) / «ENVIADA AUTO» / «ENVIADA» + contadores `ENVIADAS · EN COLA · PENDIENTES · ERRORES` + drenaje al reconectar (y al montar — reconciliación idempotente).
-- [x] T4 — `timeoutMs?` en escanearActa (default 15 s individual INTACTO) · masiva 120 s (D48): con multihilo el pipeline real ~21 s ya no vence a los 15 s con resultado descartado; secuencial estricto D45.
-- [ ] Del dueño: RAR con imágenes (aquí no hay `rar`) · HEIC real de iPhone · lote lento ~21 s en SU PC (T4 real) · offline real (avión).
-
-## INFORME — e14-informe-analisis-v1 (2026-10-20): informe de análisis de rechazos en ZIP local (D49)
-
-- [x] T1 — `src/lib/e14/informe.ts` (puro): `generarInformeZip()` — informe.json (sin dataURLs) + informe.txt + carpetas actas/ con original/procesada byte-idénticos + ficha.json completa; secuencial uno-a-la-vez; tope 250 MB/50 actas; `COLA_VACIA` descriptivo.
-- [x] T2 — Botón «INFORME ↓» en RESUMEN (hueco del retirado EXPORTAR REPORTE): disabled con cola vacía (chequeo al montar), GENERANDO… + píldora status, LISTO ✓ 1.5 s, alert ≤48 en fallo — sin toasts (D2), 44px, import diferido (D49).
-- [x] T3 — Docs: REPORTE + D49 + esta entrada + worklog + AGENTS.
-- [x] T4 — PR DRAFT (merge solo con orden del dueño).
-- [ ] Del dueño: merge · prueba con jornada real completa (100+ fotos) · validar el tope de 250 MB si la jornada es muy pesada.
-
-## PROWARM-OCR — e14-prowarm-ocr-v1 (2026-10-19): pre-warm REAL de RapidOCR (cero frío en la 1.ª acta)
-
-- [x] T1 — `rapidOcrPrecalentar()` (rapidocr.ts): UNA inferencia dummy sobre canvas SINTÉTICO 640×480 por det+cls+rec sobre el singleton `rapidOcrInit()`, resultado DESCARTADO (§0.2 — nunca `reconecerRapidOcr` del bridge, `ultimoOcr*` intocables); flag de módulo = 1× por carga; fallo → log + `false` (frío como hoy, init reintentable).
-- [x] T2/T2b — Disparo al montar MASIVA (fire-and-forget, sin UI §0.7) + diferido 2 s en ScanView con clearTimeout (idempotente entre ambos por el flag).
-- [x] V — lint 0-0 · tsc 0 · build OK · SIM 8.2/7.0/4.3 exactos · traza del pipeline intacta (mismo quad/cod/score 8.5, pre-warm NO sumado) · 1 sola traza `[e14-prowarm]` por carga · fallo controlado (onnx bloqueado → fallback honesto + recuperación del pipeline) · bundle +830 B en chunk existente (main chunk idéntico) · heap +8.5 MB movidos a antes de la 1.ª acta.
-- [x] T3 — Docs: REPORTE + D50 + esta entrada + worklog + AGENTS.
-- [x] T4 — PR DRAFT (merge solo con orden del dueño).
-- [x] ~~Del dueño: merge · redeploy manual en Vercel (`docs/DEPLOY-vercel.md` §2) + Ctrl+Shift+R · validar la eliminación del frío en SU entorno: `[e14-prowarm] listo` al montar MASIVA y 1.ª acta real SIN el pico de 35.9 s (comparable a caliente 8.3 s).~~ **OBSOLETO (D73, 2026-10-23):** espejo Vercel retirado — validar el frío en https://digielect14.pages.dev/ (el pre-warm corre igual; `docs/DEPLOY-cloudflare.md` §4).
-## BENCH-REC-INT8 — e14-bench-rec-int8-v1 (2026-10-19): banco int8 del rec (SOLO evidencia, cero producción)
-
-- [x] T1 — `tools/bench-rec-int8/cuantizar.py`: cuantización dinámica del rec (QUInt8 — fallback §3-T2.7 tras salida degenerada de QInt8, hallazgo doble-verificado CPU EP + wasm EP) con paso previo oficial de ORT (`quant_pre_process` skip_symbolic_shape); artifact local ignorado por `.gitignore` (`tools/bench-rec-int8/*.onnx`).
-- [x] T2 — `tools/bench-rec-int8/bench.html` standalone (sin build): EP wasm idéntico a producción (wasmPaths vendido byte-idéntico, SIMD, numThreads COI), corpus sintético determinista de 60 líneas estilo acta, pre/post réplica exacta de `rapidocr.ts` (lote 6 por ratio, W=floor(48·max(320/48,r)), NCHW BGR (x/255−0.5)/0.5, CTC greedy), protocolo caliente+medida, tabla + «DESCARGAR JSON» manual.
-- [x] T3 — `tools/bench-rec-int8/README.md` (reproducción exacta + umbrales GO/NO-GO).
-- [x] Evidencia (2 núcleos, HeadlessChrome 155, numThreads=2): peso −73.5% (10.35→2.75 MiB) · speedup 0.96× (❌ ≥1.3×) · texto idéntico 10% (❌ ≥99%) · Δconf 13.198 pts (❌ ≤0.5) → **VEREDICTO NO-GO (3/3 criterios)** — int8 pierde dígitos de acta (809→89, 2004→26θ4, 48:08→4:08). Determinismo: 2 corridas con texto EXACTO y ms ±10%.
-- [x] Docs: REPORTE + esta entrada + worklog + AGENTS (DECISIONS.md INTACTO por diseño del kit).
-- [x] PR DRAFT (merge solo con orden del dueño; `tools/` no entra en el build — lint/tsc/build OK y diff de producción VACÍO verificado).
-- [ ] Del dueño: correr el banco en SU máquina (4 núcleos/8 GB/Chrome 155) y decidir si archiva la idea int8 del rec o pide otro kit con otra variante (fp16/modelo menor — fuera de alcance aquí).
-
-## ORIENTACION-AUTO — e14-orientacion-auto-v1 (2026-10-19): probe de orientación por confianza de rec (D51)
-
-**Problema:** las 12 RECHAZADAS del informe 19/10 (tira Consulado de Egipto KIT 399) están físicamente rotadas 90°/180° en la foto — el OCR lee de lado → sin anclas → rechazo y reproceso humano (volver a fotografiar).
-
-**Solución:** `probeOrientacion()` en `src/lib/e14/orientacion.ts` (NUEVO) — det (el MISMO singleton) + K=8 crops (3 líneas más largas + 5 repartidas) + rec CRUDO por rotación candidata; `score(r)=anclas·2+conf·(chars/40)`, guard absoluto (no inventar), MARGEN 1.5 sobre score(0), atajos por forma de tira, budget 4000 ms, SIM omitido. Al aplicar: girar `fotoOcr`+`fotoProcesada` (q0.92) ANTES del OCR/esquinas/gate. Traza propia `[e14] orientacion …`.
-
-**Verificado (sandbox, tira real KIT 399):** sana → `aplicado=0` e 8.5 idéntico · girada 90/180/270 → `aplicado=1` (score probe 8.60/8.58/8.37, anclas=3) → **8.5 AUTO las tres** · SIM 8.2/7.0/4.3 exactos con 0 trazas · lint/tsc/build limpios · zona prohibida VACÍA.
-
-**Pendiente:** AC-2 del dueño (las 6 fotos del informe en su equipo) — bloqueante para merge final, no para el PR. Los otros 2 kits del mega-kit (tiempos: B1-B5) van por los Agentes 2/3 en paralelo.
-## BENCH-TIEMPOS — e14-bench-tiempos-v1 (2026-10-19, AGENTE 3): 3 bancos GO/NO-GO para las palancas de tiempo (CERO producción)
-
-- [x] T1 — `tools/bench-lote12/` (B2): rec/cls lote 6 vs 12 — corpus del kit bench-rec-int8 (seed 0xe14be6c5), réplica rapidocr.ts (W=floor(48·max(320/48,r)), NCHW BGR, CTC greedy; cls flags) → **NO-GO rec** (0.99×, 1/60 líneas degrada O→0) / **GO cls** (1.25-1.30×, flags 100%) — decisión global NO-GO, sub-palanca cls para el dueño.
-- [x] T2 — `tools/bench-det1280/` (B3): det 1280 vs 1920 con corpus acta-like sintético (4 págs × 30 votos manuscritos, seed 0xe14de7a2) + senal-lectura congelada → **GO DURO**: 0 votos perdidos, FUERTE/anclas/cajas idénticas, det −56.4% (ratio 0.436 ≈ teoría), ahorro escalonado ~9% del OCR en corpus (más en actas reales: det share 19-21%).
-- [x] T3 — `tools/bench-ep-webgpu/` (B4): 3 brazos (webgpu+jsep / wasm-jsep control / wasm-producción ancla) → **BLOQUEADA-entorno** (requestAdapter null en headless — NO es NO-GO del EP); paridad jsep↔producción EXACTA (calibración del banco).
-- [x] T4 — Determinismo ×2-×3 (texto EXACTO, ms ±10% salvo 1 outlier documentado), «DESCARGAR JSON» manual, window.__benchJson programático.
-- [x] T5 — Docs: REPORTE (3 veredictos + evidencia + repro) + esta entrada + worklog + AGENTS (DECISIONS.md INTACTO por diseño del kit).
-- [x] T6 — PR DRAFT (diff de producción VACÍO — solo tools/ + docs; JAMÁS merge — el dueño mergea).
-- [ ] Del dueño: correr los 3 bancos en SU máquina (4 núcleos/Chrome 155/Windows) · decidir B2 (archivar rec / kit cls-solo) · validar B3 con las fotos reales del informe (16 actas) · correr B4 en SU Chrome con GPU → si GO preliminar, kit de activación (flag gradual + fallback wasm) con su decisión en DECISIONS.md.
-## PWA-PERSISTENCIA — e14-pwa-persistencia-v1 (2026-10-20): auditoría integral + H6 offline + L6 jornada
-
-- [x] A — AUDITORÍA (3 pases core/UI/MASIVA contra doctrina del vault): 6 bugs CRÍTICOS corregidos (C1 `paginaVerPag` grupo Ver→Pág — pág 2 en hueco P1 · C2 hueco duplicado jamás actualizaba estado (RESCANEO eterno) · C3 quad del usuario borrado en re-render (QuadEditor) · C4 `sincronizarAlVolver` código muerto → ediciones MASIVA jamás sincronizaban · C5 `enviarLote` re-entrante (doble envío) · C6 `listarRegistros` materializaba la cola COMPLETA en RAM — OOM en jornadas de 100+) + 14 medios (M1-M14) + 12 menores. Doctrina INTACTA: `evaluarGate`/pisos/techos/telemetría/`hashMock`/D48/chips SIM sin tocar.
-- [x] B — L6 PERSISTENCIA: `jornada.ts` IDB vanilla `e14-jornada-v1` — estado liviano (archivadas, puesto, historial tope 200, contadores, motivos) + slot del acta en revisión CON fotos (solo CÁMARA/ARCHIVO; MASIVA tiene su IDB D45) · `arrancarJornada`/`reiniciarJornada` · persister por suscripción (comparación JSON — el tick SIM no escribe) · mesas REALES derivadas de archivadas+puesto (fix M10: SIM OFF restaura el guion real) · gate multi-pestaña (`persisterActivo`) · REINICIAR JORNADA (2 toques, patrón VACIAR) en RESUMEN.
-- [x] C — H6 PWA: `sw.js` del lab (`escaner-v7`→`e14-v1`) — navigate network-first · `_next/static` cache-first · resto SWR tope 80 · **MOTOR cache-on-first-use** (`/models/rapidocr/` + `/vendor/onnxruntime/` ~30 MB → primer escaneo online = offline para siempre) · precache best-effort opencv+worker · E-04 sin `skipWaiting` incondicional (banner consentido) · limpieza de cachés viejas · iconos (192/512/maskable/apple-touch) · manifest completo · `PwaRegister` (adaptación declarada: sin warm-up — D50 existe).
-- [x] V — E2E con foto REAL del dueño (Galaxy A56): OCR 94% · AUTO `88·120·15·02·012` · score 8.5 · ÓPTIMA auto-enviada · RECARGA restaura jornada+acta ENVIADA con fotos · REINICIAR fresco · MASIVA OK · 0 errores consola · lint 0 · tsc 0.
-- [x] T — Docs: REPORTE + D54/D55 + esta entrada + docs/worklog + AGENTS. (Arreglos de auditoría del PR: `package.json` dev restaurado byte a byte + worklog de sandbox fuera del repo.)
-- [ ] Del dueño: auditar/mergeear PR #38 · decidir D48 (timeout MASIVA 120 s) · probar instalación PWA + offline en SU teléfono (SW exige https) · `unzipSync`→async si el despliegue lo exige.
-
-
-## OCR-ESCALONADO — e14-ocr-escalonado-v1 (2026-10-20): 1.ª pasada det 1280 → re-OCR 1920 solo si hace falta (D53)
-
-**Problema:** OCR medio 17.3 s (68% del total 25.3 s); el det a 1920 es ~19-21% del OCR real. El banco `tools/bench-det1280` (PR #34) dio GO (−56% det, 120/120 votos, 0 cajas perdidas) pero la palanca seguía sin activar en producción.
-
-**Solución:** OCR ESCALONADO en AMBOS pipelines — 1.ª pasada con det cap **1280** (`DET_CAP_RAPIDO`, op4 parametrizable; op1 y la sesión det intactos) → decisión pura (`ocr-escalonado.ts`: FUERTE fin · MEDIA+mesa+4 anclas fin · resto reintenta) → re-OCR a **1920** y `elegirMejor` por anclas+conf (**NUNCA automáticamente la 2.ª** — el gate jamás ve texto degradado si el 1920 lo salva). SIM omitido (flujo de hoy, 0 trazas); presupuesto = timeout EXISTENTE (vencido → no hay 2.ª); 2.ª pasada reusa el MISMO emit de OCR; `ultimoOcr*` con la pasada elegida; traza propia `[e14] ocr-escalonado` (append-only).
-
-**Verificado (sandbox, módulos de producción + corpus VERBATIM del banco):** AC-1 120/120 votos con reocr=0 en 4/4 (FUERTE 10/10 anclas) · AC-2 acta real girada → probe Kit A aplicado → FUERTE reocr=0, desenlace igual a sana · AC-3 acta real por IMPORTAR: OCR **−28.8%** (6.8 vs 9.6 s), score 10, clasif AUTO idéntica (cod:710007453010102) · reocr=1 verificado (elegido=1920 por conf) · SIM 8.2/7.0/4.3 exactos, 0 trazas · lint 0 · tsc 0 · build OK · zona prohibida VACÍA. Desviaciones honestas (proxy headless del sandbox, criterio de identidad AC-1, tiempos ≠ del dueño): REPORTE §4.
-
-**Pendiente:** AC-5 del dueño (16 fotos del informe en SU equipo — media total vs 25.3 s y 0 rechazos nuevos; bloqueante para merge final, no para el PR). Orden de merge: orientacion (#35) → este.
-## MASIVA-TIEMPOS — e14-masiva-tiempos-v1 (2026-10-20, AGENTE 2 terminado por orden del dueño): dedup + prefetch (B1 + B5)
-
-Mandato: «8 de las 16 actas del informe eran duplicados (.heic+.jpg) — cada uno pagó OCR completo» + «ocultar el decode HEIC tras el OCR de la fila anterior».
-
-- [x] T1 (PR-1) — `masiva/dedup.ts` (NUEVO): dhash 64-bit (9×8 gradiente horizontal) sobre thumb 320 (`hacerThumb` reuso) desde la MISMA vía del pipeline (`fileToCaptureDataUrl` — EXIF/HEIC → gemelas .heic/.jpg mismo hash) + `hamming64`.
-- [x] T2 (PR-1) — Cadena FIFO al encolar (`cadenaDedup` en store, fire-and-forget): hash persistente + marca `DUPLICADA` (persistente IDB) con Hamming ≤ 6 + guards anti-zombi. Runner: copia del resultado de la original (<1 s, traza `dupOf=`) con fallback honesto a reproceso completo.
-- [x] T3 (PR-1) — UI: píldora DUPLICADA + `≡ original` + botón «PROCESAR IGUAL» + conteo DUPLICADAS + PROCESAR habilitado con solo-duplicadas.
-- [x] T4 (PR-2) — Prefetch decode N+1 durante OCR de N: memo `WeakMap<File>` transparente en el ÚNICO call site del bridge + `precargarDecodeArchivo` + slot de 1 en el runner (conservado en filas dup; stopFlag lo respeta; fallo → re-decode como hoy).
-- [x] T5 — Verificación E2E arnés: gemelas cross-formato (jpg↔png, jpg↔webp) marcadas al instante; copias 42-141 ms con desenlace idéntico; `decode=0 ms` (HIT) en filas 2..N; pausa/reanudación + archivo corrupto (ERROR honesto, sin crash); identidad sana=8.5 AUTO en los 3 caminos. lint 0 · tsc 0 · build OK (cada rama sola).
-- [x] T6 — Docs: REPORTE (evidencia verbatim + 3 desviaciones documentadas) + D52 + AGENTS + worklog.
-- [ ] Del dueño: merge PR-1 → PR-2 (apilada) · AC-B1 con sus gemelas reales .heic+.jpg en su equipo · medir el ahorro B5 con HEIC reales (aquí jpg 0.3-0.5 s/acta ocultos; HEIC esperado 1-2 s).
-
-## INSTRUMENTOS-ESPERA — e14-instrumentos-espera-v1 (2026-10-20, AGENTE 2): instrumentos de diagnóstico ADITIVOS (D57)
-
-Problema: informe 20/10 07:42 (17 actas, 17 ENVIADAS) con outliers sin explicar — `171125.heic` 55.6 s con OCR 5.2 s y proceso 3.0 s (~47 s sin atribuir), mismo patrón en 37.6 s y 27.0 s. Hipótesis no discriminables con el informe actual: espera en cola, probe de orientación o decode HEIC. Además: 3 avisos `Canvas2D … willReadFrequently` en `handleWarp`/`handleEnhance` del worker.
-
-- [x] T1 — `esperaMs` (cola → inicio del pipeline): capturado en `masiva/runner.ts` JUSTO ANTES de `escanearActa` (`tInicio − fila.agregadaEn`, ≥0) y parcheado INMUTABLEMENTE en el diagnóstico del desenlace; `tiempos.esperaMs?` en types.ts — SOLO masiva lo llena.
-- [x] T2 — `orientacionProbeMs` en el diagnóstico: `probe.ms` persistido en los 2 call-sites de `probeOrientacion` (escaneo + recorte manual), asignación defensiva (jamás lanza; sin diagnóstico → se omite) — la traza de consola D51 ahora es permanente en la ficha.
-- [x] T3 — informe ADITIVO: `esperaMs` en `mediosTiempos`; txt línea nueva «- Espera media en cola: Xms (p50 Yms) — pipeline-real ≈ total − espera»; json `tiemposMediosMs.esperaMs` + por-acta `tiempos.esperaMs` y `orientacionProbeMs` cuando existan. Campos viejos sin cambio de forma (informes previos siguen parseando).
-- [x] T4 — `willReadFrequently: true` en los 5 `getContext("2d")` de `detection-worker.js` (3 del canvas COMPARTIDO detect/warp/enhance — el atributo debe estar en el PRIMERO que crea el contexto — + 2 canvas de salida, inofensivo).
-- [x] Gates: tsc 0 · lint 0 · build OK · `git diff --name-status main` = EXACTAMENTE types.ts (+2 opcionales), runner.ts, informe.ts, scanner-core-bridge.ts (4 regiones aditivas), detection-worker.js, docs — prohibidos (orientacion.ts, ocr/**, dedup.ts, store.ts, sw.js) SIN tocar. CI head: **Quality Gate ✅ · Vercel ✅ · Worker parity ❌ ESPERADO** — el gate exige byte-paridad con el worker del lab `web-scanner` (main), que aún no trae `willReadFrequently`; T4 es mandatario del kit (REPORTE §9: ruta A espejar el cambio en el lab / ruta B sync futuro — precedente `bbc4b01`/`6172456`).
-- [x] T5 — Docs: REPORTE + D57 + esta entrada + worklog.
-- [x] PR DRAFT con `D57` en el título (merge SOLO del dueño).
-- [ ] Del dueño: decidir la ruta del gate Worker parity (A: espejar las 5 líneas en `web-scanner` main → verde sin tocar esta rama / B: sync futuro) · correr MASIVA con 3-4 fotos reales → verificar `esperaMs` (media/p50; la última fila acumula la espera de las anteriores) + `orientacionProbeMs` por acta · consola en escaneo real SIN avisos Canvas2D · desenlace de acta sana idéntico a main · leer outliers con **pipeline-real ≈ totalMs − esperaMs** (lo que quede sin atribuir ≈ probe [queda en su campo] + decode).
-## ORIENTACION-PRESUPUESTO — e14-orientacion-presupuesto-v1 (2026-10-20): el probe que sí llega en hardware lento (D56)
-
-Mandato P0: «es lo único que separa a la flota HP del resultado bueno del informe 20/10» — en la HP 4 cores el probe (D51) agotaba su presupuesto de 4000 ms con el baseline a 0° (det1920 3037 ms + rec0 ~3000 ms) y jamás sondeaba un desafiante → acta rotada 90° = 42 s de OCR vertical = 4.9 RECHAZADA.
-
-- [x] T1 — Atajo de lectura-sana (`orientacion.ts`): scores[0] no-DEBIL → break (la sana sale en ~4 s, sin desafiantes).
-- [x] T2 — det del probe a `DET_CAP_RAPIDO` (`rapidocr.ts`, única edición: `inferDet` de `rapidOcrCropsOrientacion`): 3037 → ~1183 ms en la HP (banco B3).
-- [x] T3 — `PROBE_BUDGET_MS` 4000 → 12000 (solo lo pagan actas DEBIL a 0°; caso roto ~10.2 s < 12 s).
-- [x] T4 — Traza aditiva final `cortes=sana|presupuesto|vacio|completo` (contrato D51 intacto).
-- [x] T5 — Docs: REPORTE + D56 + ROADMAP + worklog.
-- [x] Validación (actas REALES KIT 399): rotada 90° → `aplicado=1 cortes=completo` + 8.5 AUTO cod:710003993010102 · sana → `cortes=sana aplicado=0 ms=3965` (A/B main: 5315 ms sin campo — −25%, desenlace idéntico) · SIM 8.2/7.0/4.3 con 0 trazas · lint 0 · tsc 0 · build OK.
-- [ ] Del dueño: AC-5-D56 en SU flota (HP 4 cores — traza `cortes=` y acta rotada ≥ 7) · merge.
-
-## BANCOS-EVIDENCIA — e14-bancos-b5-b7-pagnull-v1 (2026-10-20, D58): B5 det-960 + B7 dedup-tolerancia + forense pag=None — SOLO EVIDENCIA
-
-Mandato: informe del dueño 20/10 07:42 (17 actas, 17 ENVIADAS, 0 rechazos) con 3 hallazgos: dedup no atrapó 2 pares heic/jpg (171454, 171446 — ambos a pipeline completo), ¿pasada 1 a 960?, y `171446` ENVIADA con `paginaIndex = null` (score 8.5).
-
-- [x] B5 — `tools/bench-det960/` (réplica del patrón bench-det1280 PR #34: misma sesión det, mismo corpus seed 0xe14de7a2, IoU ≥ 0.5 entre AABB de quads): det 960 **pierde 5 cajas en 4/4 páginas** (0 a 1280; 71 cajas/pág idéntico al PR #34 — réplica validada; Σ det 1920/1280/960 = 2788/1274/776 ms) → **NO-GO DURO a 960 — D60 sin evidencia GO; la 1.ª pasada se mantiene en 1280 (D53)**. Determinismo ×2 idéntico.
-- [x] B7 — `tools/bench-dedup-tolerancia/` (dhash copia congelada de `dedup.ts` sobre la vía REAL del pipeline: `fileToCaptureDataUrl` del core): mecanismo OK (gemelas por construcción maxIntra 5 ≤ 6) · dhash robusto al color (+12/canal → 2-3 bits — hipótesis gamma/color DEBILITADA) · hallazgo colateral: minHammingEntreActas **4 < 6** (layouts idénticos → riesgo teórico falso positivo — observación para D61) · hipótesis ORDEN documentada en código (store.ts L174-175 + runner.ts L128/L188 — trazas `sin-original reprocesa-completo` a buscar en capturas del dueño).
-- [x] FORENSE pag=None (solo reporte): cadena causal completa con citas (clasificador.ts L533-560 · bridge L1377-1381 piso 8.5 · evaluarGate L2244-2281 no mira página · store.ts L539 «PÁG ?» + L377-393 hueco primer-libre) — riesgo de integridad: pág-2 real archivada en P1 y reemplazada por la P1 real (pérdida silenciosa del consolidado); foto parcial DESCARTADA (caps 7.9 no aplicaron); fix D62 SOLO PROPUESTA.
-- [x] T4 — Docs: DECISIONS D58 (SOLO-EVIDENCIA) + esta entrada + REPORTE (evidencia completa + continuidad) + línea AGENTS.md + worklog.
-- [ ] Del dueño: correr B5 y B7 con las 9 fotos reales (171125, 170755, 171446, 171454, 171500, 171506, 171512, 171518 — input local, NUNCA se commitean) → cierra NO-GO B5 físico y DESBLOQUEA D61 · buscar trazas `dedup … marcada/sin-original` en sus capturas (decide hash vs ORDEN) · decidir D62 (auto-envío con página null).
-
-## PDF-MASIVA — e14-pdf-masiva-v1 (2026-10-20, D60, AGENTE 2): los E-14 oficiales en PDF entran a la cola MASIVA
-
-Problema: en la corrida real del 20-oct 15:04 los 2 únicos errores del lote fueron PDFs oficiales E-14 → fila ERROR `FORMATO_NO_SOPORTADO` (la clasificación solo aceptaba imágenes y .zip/.rar).
-
-- [x] T1 — `pdfjs-dist` 6.4.299 (pin exacto) con import DEFERIDO (D47 — ídem fflate/unrar): impacto ~0 en bundle inicial y LCP (lib 455 KB verificada LAZY fuera del HTML inicial; worker emitido desde el paquete npm — `public/**` intocable).
-- [x] T2 — `archivos.ts`: `parecePdfMasiva` (MIME o extensión) + `extraerPdf` (render SECUENCIAL página a página → JPEG q0.92 2400px/escala≤4 → `File(base-P#.jpg)`; tope 30 págs → `LIMITE_PAGINAS_PDF` patrón LIMITE_500; `PROTEGIDO_O_CORRUPTO`/`SIN_PAGINAS`/`PDF_WORKER_NO_CARGO` lanzan → fila ERROR; `carga.destroy()` try/finally). Adaptaciones API v6 documentadas (REPORTE §6).
-- [x] T3 — `store.ts` `agregarFiles`: rama PDF antes del `else` final — mismo manejo exacto que zip/rar (las páginas heredan ids reales, temps, `cadenaDedup`, IDB, runner, thumb — TODO).
-- [x] T4 — `MasivaView.tsx`: `accept` + `.pdf` + hints («SUELTA FOTOS, PDF O ZIP/RAR AQUÍ» / «SUELTA MÁS ARCHIVOS AQUÍ — SE SUMAN A LA COLA»).
-- [x] T5 — Gates: tsc 0 · lint 0 · build estático OK · `git diff --name-status origin/main` = zonas exactas del kit · smoke navegador (build COOP/COEP): 2 págs → 2 filas `-P1/-P2` + runner/prowarm sobre páginas renderizadas · corrupto → `PROTEGIDO_O_CORRUPTO` · 35 págs → 30 filas + `LIMITE_PAGINAS_PDF` · dedup-PDF OBSERVACIÓN: hamming 0 cross-archivo (mecanismo GO; GO/NO-GO final con los PDFs reales del dueño). Detalle: docs/REPORTE-e14-pdf-masiva-v1.md.
-- [ ] Del dueño: los 2 PDFs reales del informe 15:04 → 1 fila por página → PROCESAR → score/status/píldora como cualquier foto · PDF protegido real → `PROTEGIDO_O_CORRUPTO` · recarga (IDB) · RAM 30 págs en su hardware · merge del PR DRAFT.
-
-## PROBE-ADAPTATIVO — e14-probe-adaptativo-v1 (2026-10-20, D62, AGENTE 2): el probe aprende la rotación del lote + memo del det (reuso probe→pasada-1)
-
-Problema (kit §0, cifras CITADAS del lote 15:04): el probe costó media 6.0 s/acta (rango 4.0-10.4, ~78 s ≈ 25% del pipeline; firma 8×4.0-4.9 s · 4×6.6-9.0 s · 1×10.4 s) y el patrón del fotógrafo es consistente (CCW → ganador 270) — el orden fijo 0→90→270→180 paga pasadas de más; y el det a 1280 de la pasada-1 repite el del probe cuando `aplicado=0`.
-
-- [x] T1 — `orientacion.ts`: anillo localStorage `e14-probe-ganador-v1` (últimos 10 `aplicado=1`, ganador = más frecuente / empate ⇒ más reciente, try/catch total) + orden adaptativo (`0` SIEMPRE primero; con ganador ⇒ `[0, ganador, resto…]`; sin ganador ⇒ orden de hoy) + traza ` orden=… gan=…` AL FINAL tras `cortes=` (variante `vacio` intocada) + escritura SOLO con `aplicado=1`.
-- [x] T2 — `rapidocr.ts`: memo del det a nivel `inferDet` (clave = dataURL + cap en el valor, tope 2, HIT ⇒ mismo resultado sin re-inferir; MISS ⇒ alimenta) + trazas `detMemo=hit msAhorrado=N`/`miss` al final de la línea `celda:` (prefijo intacto). Guard honesto: jamás decide score/gate.
-- [x] Gates: lint 0 · tsc 0 · build estático OK · whitelist exacta (2 archivos) · anillo 18/18 headless (prueba efímera no commiteada) · atajo T1/`PROBE_BUDGET_MS`/`cortes=`/`DET_CAP_*`/umbrales verificados intactos por diff.
-- [ ] Del dueño: paridad de desenlace A/B 13/13 del lote 15:04 (VETO — procedimiento exacto en REPORTE §6; divergencia = NO-GO y revertir) · tabla ANTES/DESPUÉS del REPORTE §5 con sus fotos · GO/merge del PR DRAFT · reparar marcadores de conflicto pre-existentes en DECISIONS.md/AGENTS.md (hallazgo colateral §4.8 del REPORTE) · REVOCAR el token del chat.
-
-## INFORME-TRAZAS-ESCANEO — e14-informe-trazas-escaneo-v1 (2026-10-20, D63-D, AGENTE 4): ⛔ BLOQUEADO — la base D63-A/B/C no existe
-
-Problema (kit §0): D63-B y D63-C añaden trazas de escaneo (`skewGrados`, `deskewMs`, `limpieza`, `gateMarco`, `quadOrigen:"pagina-completa"`) que por contrato de zonas NINGUNO llevó al informe; este mini-kit las haría visibles en `informe.txt/json` (T1 líneas ACTAS + T2 línea ESCANEOS de D63-A).
-
-- [x] Auditoría de base: `origin/main` `f78a8f6` SIN D63-A/B/C — 0 commits/ramas/PRs (abiertos y cerrados), 0 trazas en el código, informe sin línea ESCANEOS (evidencia reproducible en REPORTE §2).
-- [x] Entrega documental (CERO diff `src/` `public/`): REPORTE (auditoría §2 + mapeo kit↔faltante §3 + por qué no implementar hoy §4 + plan de desbloqueo con gate checklist §5 + sketch de implementación §5.1 + plantilla ANTES/DESPUÉS §5.2) + fila D63-D en DECISIONS + rama `feat/e14-informe-trazas-escaneo-v1` RESERVADA desde `f78a8f6`.
-- [ ] Desbloqueo (dueño/orquestador): ejecutar D63-A (línea ESCANEOS en el informe), D63-B y D63-C (trazas en productores + types) y re-ejecutar D63-D tras el gate del REPORTE §5 paso 2 (el kit dice «se corre AL FINAL»).
-- [ ] Del dueño: lote mixto real (fotos + escaneos) → trazas solo donde hay datos y fotos sin ruido extra · líneas previas byte a byte salvo añadidos al final · lint 0 · merge del PR (el agente NUNCA mergea).
-
-## DECODE-UNICO-PRECALOR — e14-decode-unico-precalor-v1 (2026-10-20, D66, AGENTE 3): un solo master a escala de trabajo + precalor en la espera
-
-Problema (kit §0, informe 122235): HEIC 5.9s / JPG iPhone 8.7s (outlier 19s) de procesoMs — decode a resolución completa + re-escalados múltiples; HEIC paga wasm aunque el navegador pueda nativo; la cola espera sin hacer nada (p50 366 s).
-
-- [x] T1 — `maestroDeImagen(blob)`: UN decodificado a la escala de trabajo DOCUMENTADA 4032 (R4 sin cambio) + runner alimenta el bridge con el master (fallback honesto: original); origen/pre-proceso (D63-A/B) siguen sobre el ORIGINAL.
-- [x] T2 — HEIC nativo primero (`origenDecode:"nativo"`) + reserva wasm `heic2any` 0.0.4 deferida D47 (`origenDecode:"wasm"`) — fallback jamás se borra.
-- [x] T3 — `precalor.ts`: 3 masters FIFO en cola ociosa, flag transitorio `precalentada` (jamás IDB), chip PREPARADA, cancelación (QUITAR/VACIAR/DUPLICADA), pausa en lote, D45 intacto; prefetch D61 re-apuntado a masters.
-- [x] T4 — trazas `decodeMs/origenDecode/precalentada/precalorMs` + 2 líneas aditivas de informe (formato literal del kit) + json/ficha con spread condicional.
-- [x] Gates: tsc 0 · lint 0 · build OK · humo navegador completo (precalor en espera 229/143/37 ms · consumo decode=0 precalentada=true · decode del bridge 342/130/36 ms · cancelación QUITAR/DUPLICADA · SIM 8.2 intacto · chip 360 px · informe byte a byte).
-- [ ] Desviación de base documentada: D65 no existe aún (0 commits/ramas/PRs) — kit autocontenido sobre `2483c42`; convivencia con el futuro watchdog D65 por append-only.
-- [ ] Del dueño: A/B 16/16 veredictos (lote 20261019, corrida 162728, ±0.3 — divergencia = NO-GO y revertir) · tiempos reales JPG/HEIC (registrar qué máquinas dan decode nativo) · 26 actas de memoria · merge (el agente NUNCA mergea).
-
-## D63-A2 — e14-d63a2-deskew-pipeline-v1 (deskew→pipeline + calibración pdf-render) — rama `feat/e14-d63a2-deskew-pipeline-v1`
-
-- [x] T0 — `fuenteMaestro` (corregido cuando aplicado) + forma del maestro del kit + disciplina de memoria (descarte del precalentado) + trazas `fuente=corregido`/`maestroFuente` — el bridge consume el master del CORREGIDO (master único D66 verdadero).
-- [x] T1 — `viaPdf` (FilaMasiva+RegistroMasiva, primer write vía cola.ts) + override `pdf-render → escaneo` con señales píxel preservadas — fotos/WhatsApp/SIM jamás lo tocan.
-- [x] T2 — informe aditivo `preprocesoAplicado` + línea ORIGEN del lote formal verificada por humo puro (`escaneo 8 - foto 16 - null 2`).
-- [x] Gates: tsc 0 · lint 0 · build OK · humo puro 5/5 · humo navegador (SIM 8.2 intacto · PDF recto: override + deskew corre + precalor + pagina-completa · PDF torcido: skew 1.6° deskew 92ms aplicado + descarte de precalor + `fuente=corregido` en el bridge).
-- [ ] Fase D del dueño: revocar/rotar `ghp_` + token one-off · rastreador en la página · revisión diff por diff del arquitecto · merge · deploy canónico con firma de build · lote 20261019 COMPLETO (26) en un pase + informe zip sin editar.
-- [ ] Fase E del agente: A/B vs 200613 — invariancia 18 no-PDF (carve-out 171446.jpg) · escaneos 8/8 `pdf-render+` con atribución mecanística · RED LINES (PDF→ENVIADA AUTO sin cabecera = STOP; RECHAZADA→ENVIADA = triple verificación + vista del dueño; watchdog muerto en PDFs = FAIL) · tabla dedup con pares de nombres.
-
-### e63d — escaneo-ya-recortado-v1 (rama `feat/e63d-escaneo-ya-recortado-v1`, base main @ a742953)
-- [x] F0 — rescate escaneo generalizado (F0.1) + lectura perdona al marco `cortado` (FUERTE + !faltaSeccion) (F0.2).
-- [x] F1 — `tintaAlFiloSimetrica` (lado MIXTO tinta+papel, ≥2 opuestos) + banda E-14 0.22–0.45: ceñido/borde-blanco+E14/E14-sin-blanco → escaneo; WhatsApp 4:3/16:9 sin-EXIF sigue null (invariancia); trazas `tinta-al-filo`/`ratio-e14`.
-- [x] F2 — identidad por construcción (detección de bordes NO corre para escaneos; detect ≈0 ms) + skip `verificarCompletitud` para escaneos (escudo-fondo sin premisa en identidad — efecto declarado).
-- [x] F3 — veredicto marco `ceñido` (líneas EN el filo, ≥2 opuestos — nunca bloquea) + `gateMarco` aditivo "ceñido" + copy INCOMPLETA por origen (escaneo ≠ cámara); `pipelineRecorte`/editor sin cambios.
-- [x] Gates: tsc 0 · lint 0 · build OK · humo puro 22/22 (invariancias + control negativo mutilado) · binario con tokens nuevos verificado.
-- [ ] F4/Fase D del dueño: cola real (zip 20261021-091545) → P1 sin `recortada` · P2 deja de ser RECHAZADA · chips SIM intactos · trazas nuevas en informe (lab/bench del plan con esa evidencia).
-- [ ] Fase E del agente: A/B del informe post-corrida + tabla dedup + atribución.
-## MIGRACIÓN AI STUDIO — ai-studio-web-runtime (2026-10-20, D68): habilitación para ejecución en Google AI Studio
-
-- [x] T1 — `package.json`: scripts `dev` y `start` actualizados a `-p 3000 -H 0.0.0.0` (puerto accesible único de AI Studio).
-- [x] T2 — `next.config.ts`: dominios `*.run.app` y `*.aistudio.google.com` incorporados a `allowedDevOrigins`.
-- [x] T3 — Creación de `.env.example` (variables `NEXT_PUBLIC_BASE_PATH` y `BUILD_STATIC`) y `metadata.json` requerido por la plataforma.
-- [x] T4 — Verificación con `install_applet_dependencies` y compilación exitosa con `compile_applet` y `lint_applet` (cero errores).
-
-## REDISEÑO VISUAL Y CONTINUIDAD DE NEGOCIO — e14-modern-dark-redesign-v1 (2026-10-21, D69): estética slate-noir de campo sin regresión de negocio
-
-- [x] T1 — Paleta y primitivas: tokens slate-noir en `globals.css` + modernización de `primitives.tsx` (`StatusDot`, `Chip`, `SegmentedBar`, `ToolbarBtn`, `PrimaryBtn`).
-- [x] T2 — Navegación y Shell: `TopBar` refinado y `BottomNav` con efecto cristal esmerilado, targets táctiles de 48px e indicador de actas.
-- [x] T3 — Escaneo y Visor (`ScanView.tsx`): selector HUD segmentado `[ CÁMARA | SIM | SUBIR ]`, rescate interactivo de permisos bloqueados en iframe sandbox, visor de simulación con brackets, botón obturador concéntrico y botones de score de simulación (8.2 / 7.0 / 4.3).
-- [x] T4 — Control de Mesas (`ActasView.tsx`): buscador en tiempo real por número de mesa, cabecera de puesto electoral y tarjetas de mesa con jerarquía visual nítida.
-- [x] T5 — Resumen de Jornada (`ResumenView.tsx`): tarjetas KPI (Transmitidas, Pendientes, En Rescaneo), medidor de progreso por segmentos y botones de acción rápida.
-- [x] T6 — Flujos de Análisis y Revisión (`AnalyzingView.tsx`, `ReviewView.tsx`, `MasivaView.tsx`): radar de escaneo visual, editor de revisión con barra fija y panel de carga masiva modernizado.
-- [x] T7 — Verificación: `compile_applet` y `lint_applet` limpios con cero errores.
-
-## MASIVA DROP-ANYWHERE & STICKY HEADER — e14-masiva-drop-anywhere-sticky-v1 (2026-10-21, D70)
-
-- [x] T1 — Drag & drop global estilo DeepSeek: detector por eventos `window` con ref counter anti-parpadeo y overlay a pantalla completa (`fixed inset-0 z-50`) con animaciones, bordes punteados esmeralda e ingesta directa en `agregarFiles()`.
-- [x] T2 — Barra de acciones superior fija (`sticky top-0 z-30`): botón «PROCESAR COLA» / «PAUSAR» accesible permanentemente durante el scroll de actas, con contador dinámico de pendientes y botón «VACIAR».
-- [x] T3 — Scroll fluido sin contenedor rígido: eliminación del `max-h-96` en la lista de filas y padding inferior `pb-24` para no tapar elementos con el BottomNav.
-- [x] T4 — Verificación: `compile_applet` y `lint_applet` limpios con cero errores.
-
-## MASIVA % DE PROCESO DEL ACTA — e14-masiva-pct-proceso-v1 (2026-10-21, D71)
-
-- [x] T1 — Cálculo en tiempo real de porcentaje de proceso (`porcentajeProcesoActa`): 0% en espera, 25% preparando, 50% detección/recorte, 50-95% OCR continuo y 98% verificación, 100% al quedar LISTA.
-- [x] T2 — Transformación de la métrica de fila (`div:nth-of-type(3) > span:nth-of-type(1)`): píldora visual con el porcentaje de proceso y punto animado en la fila activa, manteniendo score y página adyacentes.
-- [x] T3 — Barra de vida inferior sincronizada con la progresión porcentual mediante transición fluida en CSS.
-- [x] T4 — Verificación: `compile_applet` y `lint_applet` limpios con cero errores.
-
-
-## CAPA 0 QR — OBSERVABILIDAD + RESCATE DE DECODE — e64-qr-v1 (2026-10-22): consola y chip QR dicen dónde muere el decode; barrido/zxing/nitidez/binarizada/rescate-4096 lo rescatan
-
-- [x] T-PRE — RECONSTRUCCIÓN DECLARADA de la superficie e63n (`9e45dc9` NUNCA pusheado — API verificada: ni ramas ni PRs; fuente: doc hermano §1): `barridoQrDePixeles` (grilla TL→TR→BL→BR × [0.11,0.14,0.19,0.25] × paso 0.5, jsQR attemptBoth) · `barridoQrZxingDePixeles` (zxing-wasm 3.1.6, GlobalHistogram→LocalAverage, presupuesto 4 s, wasm local `public/wasm/zxing_reader.wasm` sha `5003fb4b…`) · `decodificarQrDePixeles` (base→barrido→zxing→rotación) · `trazaQr [e14] qr-capa0 tier=…` · `ladderBaseDePixeles` refactor (ladderQrDePixeles e63m byte-equivalente, QA 48/48).
-- [x] T-0.1 — Traza de zxing indisponible (catch de `moduloZxingDe` — doc hermano H-3/F-0.2) + getter `estadoZxingQr()` solo-lectura.
-- [x] T-0.2 — `qrEstado` SOLO-VISUAL en fila/registro (aditivo D57) + acción `actualizarFila` (patrón patchFila) + estampado en la fila viva y los 4 writes del runner + chip `QR ✓`/`QR ✗` en MasivaView (✗ solo en LISTA).
-- [x] T-0.3 — Checklist de versión desplegada (sin código; ver docs/worklog.md): traza `tier=` SOLO desde esta rama (e63n no pusheado) · `zxing_reader.wasm` debe cargar 200 (Network, basePath).
-- [x] T-0.4 — Bench con fotos REALES del dueño: BLOQUEADO en sandbox (las fotos están en su máquina). DECISIÓN DE FASE por evidencia existente: banco #77 (REPORTE-e63n, citado por el doc hermano H-4/H-6) midió 8.3% decode del ladder pre-e63n en el corpus real y banco #72 midió 88.2% en el corpus gemelas — ambos < 90% → FASE 1 COMPLETA JUSTIFICADA.
-- [x] T-1.0 — Celda final del cuadrante (hueco del filo H-5) en los 2 barridos (QA F1: payload EXACTO 199ms).
-- [x] T-1.1 — Tier NITIDEZ (unsharp 3×3, k=0.6) — QA F2: blur σ1.5 módulo 3px base/barrido null → rescata (69ms).
-- [x] T-1.2 — Tier BINARIZADA (umbral local por imagen integral, técnica integridad.ts) — QA F3: gradiente 235→60 → rescata (183ms); 2048² bin+scan 3.13s ≈ criterio ~3s.
-- [x] T-1.3 — Escalas de ventana [0.08, 0.32] adicionales — barrido completo 2048² 6 fracs: 4.97s < techo 5s (NO se separa BARRIDO_VENTANAS_ZXING).
-- [x] T-1.4 — Última línea: rescate a resolución nativa ≤4096 — QA F5: módulo 1px sub-pixel a 2048 → nativa decodifica (291ms); guard del intent R-4 (adaptación declarada).
-- [x] T-1.5 — QA headless de los tiers nuevos: Bloque 6 → QA qr-identidad 68/68 (F1-F6 verdes + source-scan + wasm sha == npm).
-- [x] T-2.1 — QR post-captura en el flujo de cámara (bridge): tiers 'base' (techo ~0.5s — timeout 15s intacto, ADAPTACIÓN declarada), en paralelo, aterrizada en construirActa, GUARD masiva (origenActa) — la capa 0 del runner manda.
-- [x] T-2.2 — Chip QR ✓ en ReviewView (solo presencia, jamás payload).
-- [x] T-3.0 — Verificación final + REPORTE + PR: tsc 0 · lint 0 · build estático OK (out/wasm/ desplegado) · QA 68+33+24+30+34 · docs/REPORTE-e64-qr-v1.md.
-
-## DEDUP DE ENVIADAS — NO REPROCESAR POR DEFECTO — e65-dedup-enviadas-v1 (2026-10-22): re-encolar lo ya enviado nace YA-ENVIADA (cero decode, cero OCR, cero envío)
-
-- [x] T-1 — `hashBytesDeArchivo` (dedup.ts): SHA-256 EXACTO de los BYTES del File vía `crypto.subtle` NATIVO (cero dependencias — RL-e65-8); hex 64, fallo → null conservador; JAMÁS identidad del acta ni viaje al envío (RL-e65-1/5).
-- [x] T-2 — tipos: estado `YA-ENVIADA` (SOLO-VISUAL, D-e65-2) + `hashBytes`/`enviadaDe` en FilaMasiva y RegistroMasiva + unión dedup `ya-enviada` — TODO ADITIVO AL FINAL (contrato D57, RL-e65-6).
-- [x] T-3/T-4 — store: ÍNDICE DEL HISTÓRICO de enviadas (D-e65-3 — `listarMapeados` sin Blob ni acta, lección L7; sin llave → fuera) + cadenaDedup ampliada: CAPA BYTES primero (match EXACTO → YA-ENVIADA sin decode) y capa dhash ampliada con el índice (misma cinta — D-e65-6); cinta cierta decide YA-ENVIADA-vs-DUPLICADA leyendo el registro de la original (conservador); hashBytes estampado en el MISMO write del hashDedup (D-e65-4); guards anti-zombi intactos.
-- [x] T-5 — runner: verificación (cero código) — `siguientePendiente` solo toma PENDIENTE/DUPLICADA → YA-ENVIADA jamás entra (D-e65-7).
-- [x] T-6 — recarga/escape/vaciar: `filaDeRegistro` restaura hashBytes SIEMPRE y enviadaDe SOLO-YA-ENVIADA; `vaciar()` invalida el índice (D-e65-8 — el histórico muere con la cola); `procesarIgual` extendido a YA-ENVIADA (PENDIENTE + forzarDedupOff + enviadaDe fuera — RL-e65-7).
-- [x] T-7 — bandeja: píldora + chip «YA ENVIADA» (esmeralda), contador en el resumen, YA-ENVIADA cuenta en terminadas, PROCESAR IGUAL habilitado (escape del dueño); FiltroMasiva sin filtro nuevo (D-e65-2).
-- [x] T-8 — informe: export-only — unión dedup `ya-enviada` (D57) + `totales.yaEnviadas`; hashBytes JAMÁS exporta (RL-e65-1).
-- [x] QA — `scripts/qa-dedup-enviadas.ts` 42/42 (runtime SHA-256 + source-scan F1-F8 + red lines) · suite previa 68/33/24/30/34 cero regresiones · tsc 0 · lint 0 · build estático OK.
-
-## HISTÓRICO PERSISTENTE DE ENVIADAS — el ledger que sobrevive a la cola — e65b-historico-enviadas-v1 (2026-10-22): vaciar + re-subir = YA-ENVIADA (la prueba del dueño: los 46 sin reproceso)
-
-- [x] T-1 — `historico.ts` NUEVO: ledger PERSISTENTE de enviadas en IndexedDB SEPARADA `e14-masiva-historico-v1` (cero migración de la cola; mismo patrón de `abrirCola`); SOLO llaves `EntradaHistorica {id, ts, hashBytes?, hashDedup?, payloadQr?, serie?}` (L7 — jamás Blob/acta); fallo → conservador (RL-e65b-1/3/4); `borrarHistorico()` existe SIN cablear (RL-e65b-5).
-- [x] T-2 — store: índice FUSIONADO ledger+cola (re-put por id, la cola viva manda; ledger NO fatal — M-e65b-2) + `registrarEnviadaHistorico` (ÚNICO punto de crecimiento, actualiza el cache EN MEMORIA al instante) + `enviadaPorPayload` (igualdad EXACTA, catch → null conservador) + `marcarYaEnviada` EXPORTADA con `via "payload"` (D57 — valor NUEVO AL FINAL) + `qrPayload` estampado aditivo + la marca alimenta el ledger.
-- [x] T-3 — hooks de envío fire-and-forget: runner envío PROPIO (T-3a — payload/serie VIVOS de la corrida) + gemela reutilizada con guard `actaCopia.status === "ENVIADA"` (T-3b — M-e65b-5) + manuales REVISIÓN/lote (T-3c — M-e65b-4). `.catch(() => {})` SIEMPRE — el envío jamás espera al ledger.
-- [x] T-4 — capa 0 payload contra el histórico: en la rama `!originalQr`, ANTES de `registrarQrPayload` — `forzarDedupOff` manda SIEMPRE (RL-e65b-6); hit → `marcarYaEnviada(…, "payload", …, true)` + RETURN sin OCR (M-e65b-3: `aceptarProcesando` para la fila ya en PROCESANDO — guard e65 PENDIENTE byte a byte intacto).
-- [x] T-5 — `vaciar()` NO toca el histórico (REVERSA de D-e65-8 → **D-e65b-1**: la cola es el taller, el envío es el hecho); `cola.ts vaciar` y `borrarHistorico` INTACTOS (cero código nuevo — comentario + declaración).
-- [x] T-6 — docs: REPORTE-e65b + ROADMAP + worklog; adenda honesta del QA e65 (scan del índice LIVIANO — la llave se amplió con `qrPayload` por el propio kit T-2b).
-- [x] QA — `scripts/qa-historico-enviadas.ts` **49/49** (source-scan F1-F8 + red lines RL-e65b-1..8 + D57 + M-e65b-*) · regresión TOTAL 7 suites: dedup-enviadas 42/42 · qr-identidad 68/68 · autoenvío 33/33 · escaneo-ya-recortado 24/24 · identidad-acta 30/30 · watchdog-relectura 34/34 · tsc 0 · lint 0 · package.json/bun.lock INTACTOS.
-
-## AUDIT OVERNIGHT 2026-10-22 — pasada de calidad autónoma (rama `audit/overnight-20261022`, base `quality-pass-1`) — dead code 3B + suite Vitest + logger
-
-- [x] PLAN-overnight.md con clasificación 🟢/🟡/🔒 (commit 233600f) — límites 20 commits/6h, gate por commit.
-- [x] 3B-B1a..B3c dead code con protocolo §2.2-proto (8 commits): 7 iconos borrados; de-exports con uso interno en types/primitives/deskew/cola/informe/orientacion/divipol; 🔒 StitchFrameIcon/borrarHistorico/dhash64DeDataUrl documentados. knip 72→37.
-- [x] Suite unitaria Vitest: vitest@5 + 53 casos (clasificador 23 · completitud 10 · divipol 20) — cero cambios de lógica; script `npm run test`.
-- [x] logger.ts (política debug/info gated, warn/error siempre) + divipol migrado.
-- [x] scripts/check-quality.sh — gate único (tsc+lint+build+vitest+7QA+knip).
-- [x] AUDIT.md §6 + MORNING-REPORT.md + worklog + PR (sin merge).
-- [ ] Fase 4 (dueño): decisiones D65 B1/B2, módulos grandes (identidad-qr/store/precalor/rapidocr), migración console grandes, Playwright smoke.
-
-## SPRINT-B — ui-hooks-v1 (capa visual: orden + regresiones del zip 4f9c871) — rama `refactor/ui-hooks-v1`
-
-- [x] B1 — ScanView → 5 hooks dedicados (movimiento puro, 2,487→1,159 L, mismo orden de efectos, lib intacto).
-- [x] B2 — BARRA DE VIDA D65 T3.3 re-cableada verbatim en MasivaView (regresión #1/#2; recienListas/posCola consumidas).
-- [x] B3 — menú §6.3 abandonado + StitchFrameIcon fuera + pulso EN LÍNEA restaurado (regresiones #3/#5/#7) — 3 warnings lint deliberados eliminados.
-- [x] B4 — barrido de higiene: sin hallazgos accionables (a11y ya cubierta; keys posicionales correctas) — cero churn.
-- [x] Gate por commit: tsc 0 · lint 0 err/1 warn (logger.ts fuera de zona) · vitest 53/53 · QA 7/7 · build 0 · humo navegador 5/5 (REPORTE §6).
-- [ ] Dueño: humo con hardware real de cámara + merge del PR + fix logger.ts (fuera de zona) + comentario stale check-quality.sh.
-
-## GAMA ADAPTATIVA — el tier detectado consume presupuestos de recursos — e14-gama-adaptativa-v1 (2026-10-27, D74)
-
-- [x] T-1 — `src/lib/e14/gama.ts` NUEVO (sin dependencias): plan BAJO/MEDIO/ALTO (tabla completa en la cabecera del archivo) + `planGamaActual()` (sync — cachea el TIER, compone el plan por llamada: los flips del flag del dueño se respetan EN VIVO) + `refrescarPlanGama()` (versión COMPLETA con batería+storage — puede BAJAR el tier; fire-and-forget al montar MASIVA) + `flagsMasivaEfectivos()` (leerFlags + override del plan SIN pisar claves de e14-flags-overrides — D6: la mano del dueño manda clave a clave) + `__resetGamaParaTest()`.
-- [x] T-2 — flag `masivaAdaptativoGama` default TRUE: FlagsApp (AL FINAL — D57) + FLAGS_DEFAULT + saneo (sanearFlags) + DOBLE whitelist (leerOverridesFlags en politica.ts — lección dhashResize).
-- [x] T-3 — consumidores EFECTIVOS (flag OFF / ALTO ⇒ byte-idéntico a hoy): runner.ts (pool por corrida `procesamientoConcurrenteEfectivo` + `watchdogMsEfectivo` con `Math.max(WATCHDOG_MS, plan)` — la constante anclada queda intacta y manda como PISO + capa-0 con {ladoLargo, rescate4096, presupuestoMs} del plan) · identidad-qr.ts (opciones ADITIVAS en decodificarQrDeCapture/decodificarQrDePixeles — presupuesto de reló salta los 3 barridos jsQR pesados hacia zxing/rotaciones; las líneas `const barrido/nitido/binarizada = barridoQrDePixeles(...)` se conservan byte-idénticas — anclas qa-qr-identidad) · precalor.ts (tope EFECTIVO de masters) · runner-vida.ts (throttle de progreso efectivo) · archivos.ts (`ladoMaestroEfectivo` — 3072 SOLO en BAJO, excepción D74 documentada junto a MAESTRO_LADO_MAYOR) · store.ts (guard dhash-ingesta OMITIDO en BAJO antes de `marcarOperacion("dhash")` — ancla qa-dedup-enviadas intacta) · ocr/rapidocr.ts (hilos OCR efectivos) · runner-watchdog.ts (re-warm `rapidOcrPrecalentar()` tras `rapidOcrReiniciar()`) · prescan-qr.ts + prescan-qr.client.ts (warpLado/presupuesto de fila efectivos).
-- [x] T-4 — UI: chip ámbar «GAMA {tier} · ADAPTADO» en el header de MASIVA (`hidden sm:inline-flex` — MISMO patrón del contador {terminadas}/{filas}: en <640 px la fila de acciones ya ocupa el ancho; verificado en 390 px sin solapes) con title completo (ajustes + cómo desactivar) + `refrescarPlanGama()` al montar + traza `[e14] gama plan tier=… adaptativo=ON (…)` siempre en consola.
-- [x] T-5 — Verificación: suite Vitest **434/434** · 13 scripts QA OK (ancla Opt-3 del pool de qa-dedup-enviadas actualizada al literal efectivo — INTENT intacto: concurrencia por flags + reserva de fila) · tsc 0 · lint 0 · navegador end-to-end (headless, tier BAJO real del entorno): ingesta de 3 actas (2 gemelas) → dedup SHA-256 instantáneo de la gemela + `dhash OMITIDO (gama adaptativa)` ×3 + prescan `warpLado=1920 presupuesto=6000` + capa-0 `tier=base ms=169` + OCR pasada1=1280 FUERTE score 8.5 + gemela `reutiliza status=DUPLICADA ms=17` + ENVIADAS 2/DUPLICADA 1 · layouts 390/900/1280 px sin solapes · 0 errores de consola y del server.
-- [ ] Dueño: validación de campo con gama baja REAL — el master a 3072 mueve scores ±margen (kit propio registrado en D74; revocable con `masivaAdaptativoGama=false` o override manual por clave) · decidir si el chip sube a móviles (<640 px) con un layout de 2 filas.
-
-## ADAPTACIÓN DE DISPOSITIVO — perfil + plan + informe IA — e14-adaptacion-dispositivo-v1 (2026-11)
-
-- [x] T-1 — `adaptacion/perfil.ts` NUEVO: perfil profundo (GPU real, capacidades web, pantalla, cámaras, 2 micro-benchmarks) + puntuación 0-100 por dimensión + `tierRapido()` sync (contrato obs intacto) — nulls honestos, jamás lanza.
-- [x] T-2 — `adaptacion/plan.ts` NUEVO: plan de knobs por tier con prioridad D6 (override manual > plan > default) — hilos OCR: BAJO 2 · MEDIO 3 · ALTO 6, capados por cores y SAB+COOP/COEP.
-- [x] T-3 — `adaptacion/informe-ia.ts` NUEVO: informe JSON auto-descriptivo para IA (_como_interpretar + leyenda + recomendaciones + plan aplicado) con descarga manual (D1) — solo metadatos.
-- [x] T-4 — Flag `adaptacionDispositivo` default TRUE + DOBLE whitelist (flags.ts + politica.ts) + defaults test al día (protocolo #3).
-- [x] T-5 — Consumo real: rapidocr numThreads vía `numThreadsOcrEfectivos()`. Negocio intacto (DET_CAP, cámara, scores, gates).
-- [x] T-6 — UI PanelDev §8 (chips + barras + plan + INFORME PARA IA) + kill switch §6 + puente delegante.
-- [x] T-7 — Docs: REPORTE-adaptacion-dispositivo-v1.md + worklog + DECISIONS D75 + AGENTS.md · Gates tsc/lint/vitest verdes.
-- [ ] Dueño: validación de campo con gama baja real; decidir knobs futuros (cap det / resolución por tier — requieren kit propio).
-
-## CAPA 0 QR EN WORKER (CÁMARA) — e14-capa0-qr-worker-v1 (2026-10-30): port del D40+R1.1+R1.4-b de supervision-e14 — la cadena completa del QR corre fuera del hilo UI con presupuesto por tier y telemetría de fases
-
-- [x] K-1 — `qr/capa0-qr.worker.ts` NUEVO: cadena jsQR-only (base → recorte-600 → barrido → barrido-nitido unsharp 3×3 → barrido-binarizado umbral local integral → rotaciones 90/180/270 → rescate 4096) con presupuesto de pared + guard R1.1 (cuadrante/fracción/rotación/rescate) + `fases`/`fin` (R1.4-b). RED LINE: zxing JAMÁS en el worker.
-- [x] K-2 — `qr/capa0-qr.client.ts` NUEVO: hard-kill anti-zombi (presupuesto+1500 ms → terminate+respawn), feature-detect, wrapper `decodificarQrCapa0Camara` (presupuesto unificada 8 s · BAJO 5 s sin rescate — floor anti-OOM) + fallback camino de HOY byte-idéntico.
-- [x] K-3 — `qr/qr-pixeles.ts` +`activarGuardBarrido` (R1.1) y +`ladderBaseDePixeles`/`nitidezQrDePixeles`/`binarizadaQrDePixeles` movidas byte a byte desde identidad-qr.ts (doctrina D40 — import estático worker-safe; identidad-qr re-exporta, cero diffs en consumidores).
-- [x] K-4 — Build del artefacto (patrón heartbeat): `scripts/build-capa0-worker.mjs` + `prebuild` + `public/scanner/capa0-qr.worker.js` COMMITTEADO (134.9 KB) + `scripts/smoke-capa0-qr-worker.mjs` en el gate (frescura byte a byte + marcadores + prohibidos).
-- [x] K-5 — Flag kill-switch `capa0QrWorker` default TRUE (false = camino de HOY byte a byte) — whitelist aditiva + ancla de defaults actualizada.
-- [x] K-6 — Bridge: bloque e64-qr T-2.1 de cámara consume el wrapper (catch conserva el camino de hoy).
-- [x] K-7 — Gates: tsc 0 · lint 0/0 · vitest 239/239 · smoke TODO OK. REPORTE + DECISIONS D78 + worklog.
-- [ ] K-8 — (pendiente) Kit 2: knobs del plan (`qrCapa0Nivel`/`qrCapa0PresupuestoMs`/`qrCapa0Rescate4096`) con override manual del dueño (D6).
-- [ ] K-9 — (pendiente) Kit 3: `fases`/`fin`/`qrPresupuestoMs` hacia el informe IA (PanelDev §9 — patrón null honesto).
-- [ ] K-10 — (pendiente) Validación de campo del dueño (móvil + desktop · GH Pages mono-hilo + CF Pages multihilo) + bench con fotos reales (tools/bench-qr-identidad).
+# ROADMAP — digielect14
+
+Trabajo pendiente, ordenado por impacto. La **historia** de lo ya hecho no está
+aquí: vive en `docs/DECISIONS.md` (decisiones `D1…D76`), en los
+`docs/REPORTE-*.md` (evidencia de cada medición) y en `git log`.
+
+## 1. Paridad de resultado con `supervision-e14` (prioridad alta)
+
+Ambos repos comparten dueño, dominio y motor de npm. El objetivo es que **un
+mismo acta produzca la misma salida** en el digitalizador móvil y en el
+supervisor masivo, no que el móvil cargue con la cola masiva.
+
+- [ ] **Test de contrato cross-repo.** Fijar una imagen (una de
+      `src/assets/acta-sim-*.jpg`) y exigir que `quad`, `ocrTexto`,
+      `clasificacion`, `score`, `status` y la `EntradaPuente` coincidan entre
+      `digielect14` y `supervision-e14`. `supervision-e14` ya trae la semilla de
+      harness de caracterización (`masiva/__tests__/caracterizacion.harness.ts`).
+- [ ] **Portar la mejora de orientación `probe-mini768`** (sonda chica que llega
+      en hardware lento) desde `supervision-e14/src/modules/digitalizador/lib/e14/orientacion.ts`
+      al `src/lib/e14/orientacion.ts` de este repo, **reconciliándola** con el
+      presupuesto por tier que ya existe aquí (D56) — no sustituirlo.
+- [ ] **Mantener UN solo motor OCR determinista.** La cascada actual
+      (Tesseract best-PSM4 → gate → RapidOCR PP-OCRv4 escalonado) da el mismo
+      resultado en todos los dispositivos. El router por hardware del repo
+      hermano (PP-OCRv5 en gama alta + sidecar nativo) **no** se porta: en un
+      celular BAJO/MEDIO ese router termina en el mismo motor que ya fija este
+      repo, y portarlo añadiría 12,7 MB de modelos y ~487 MB de RAM pico.
+- [ ] Revisar `divipol.ts` (difiere del hermano solo en el import de
+      `PUBLIC_BASE`) y `clasificador.ts` / `completitud.ts` (hoy byte-idénticos)
+      para que un cambio de negocio se haga una vez y se sincronice con un test,
+      no a mano en dos repos.
+
+## 2. QA de contrato en CI
+
+- [x] `scripts/qa-aa-quickwins.ts` 11/11 — cerrado el 2026-11-04: tres
+      microcopias del panel de desarrollador (`text-slate-500` → `text-slate-400`).
+- [x] `scripts/qa-obs-ui.ts` 8/8 — cerrado el 2026-11-04: el ancla pedía
+      «modo de diagnóstico» y el dueño lo renombró a «modo desarrollador»; se
+      recalibró el harness, no la UI.
+- [x] Correr `scripts/qa-*.ts` dentro de `.github/workflows/quality.yml` —
+      cerrado el 2026-11-04. CI ahora valida tipos + lint + vitest + build +
+      los 2 smoke de worker + los 6 harnesses, y `bun` quedó **fijo en 1.4.2**
+      en `quality.yml` y `deploy-pages.yml` (el smoke compara el artefacto
+      commiteado byte a byte y el minificador de bun cambia entre versiones).
+- [x] Recalibrar los contadores que citaban cifras viejas: la cabecera de
+      `scripts/check-quality.sh` ya no habla de 162 tests ni del baseline de
+      `knip`, y remite a `docs/DEUDA.md` para los falsos positivos.
+- [ ] Medir en la primera corrida de CI con los pasos nuevos: el workflow
+      todavía no se ha ejecutado con esta forma (los smokes se validaron a mano
+      contra un `BUILD_STATIC=1 bunx next build` local).
+
+## 3. Entrada de imágenes
+
+- [ ] Decidir si el puesto puede seleccionar **varias fotos de una vez**. Hoy el
+      picker acepta un archivo por selección
+      (`ScanView.tsx:594` y `:602`, sin atributo `multiple`), coherente con
+      «un acta a la vez», pero molesto cuando hay que corregir la página 2.
+- [ ] Decidir si entran **PDF** (escaneados de acta). El repo hermano los acepta;
+      este no: `pareceImagen()` los rechaza y no hay decodificador de PDF en el
+      pipeline. El texto de ayuda ya no lo promete.
+
+## 4. Decisiones del dueño que frenan la salida a público
+
+- [ ] **Licencia**: sin `LICENSE`, «público» equivale a todos los derechos
+      reservados.
+- [ ] **`src/assets/acta-e14-real.jpg`** es foto real de un acta y se empaqueta
+      como fixture SIM; se reemplaza por las sintéticas o se justifica.
+- [ ] **Siete ramas remotas ya mergeadas**: borrarlas (acción remota).
+- [ ] **Peso del historial** (`.git` ≈55 MB de blobs ML): solo se reduce
+      reescribiendo historia, prohibido por las reglas del repo salvo orden
+      expresa.
+
+## 5. Higiene pendiente (bajo riesgo)
+
+- [ ] `docs/evidence/sim-recursos/` (≈76 KB de scripts y JSON de corridas
+      históricas): decidir si sigue siendo evidencia citable o se retira.
+- [ ] Exports de `src/lib/e14/obs/` que `knip` no ve: valorar marcarlos con
+      `/** @public */` en vez de documentarlos en `docs/DEUDA.md`.
+- [ ] Duplicado `blobADataUrl` (`jornada.ts` / `puente/mapear.ts`): fusionar solo
+      si aparece un tercer consumidor o si se movió a una hoja de utilidades que
+      no arrastre el core.
+- [ ] Los 46 comentarios que citan `apps/scanner-lab/…` con números de línea del
+      lab: son trazabilidad del port, pero envejecen. Reescribirlos a
+      «movido del lab (web-scanner)» al tocar cada archivo, no en un commit
+      masivo.
