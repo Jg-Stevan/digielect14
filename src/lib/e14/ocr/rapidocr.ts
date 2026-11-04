@@ -168,7 +168,14 @@ async function initReal(): Promise<RapidRuntime> {
     fetch(`${PUBLIC_BASE}/models/rapidocr/ppocr_keys.txt`),
   ]);
   if (!dictResp.ok) throw new Error(`ppocr_keys.txt HTTP ${dictResp.status}`);
-  const dict = (await dictResp.text()).split("\n").filter((l) => l.length > 0);
+  // `/\r?\n/` y NO `"\n"`: con autocrlf de Windows el checkout del .txt llega con
+  // CRLF al working tree (dev sirve esos bytes; el build publica el blob, que es
+  // LF). Partiendo solo por LF cada token sale con su `\r` pegado y `ctcDecode`
+  // lo pega entre letra y letra («C\rO\rN\rS\rU\rL\rA...»): el texto parece
+  // legible pero NINGUNA ancla de `senal-lectura.ts` matchea. Medido en el
+  // hermano: 6/6 RECHAZADA en el camino navegador (supervision-e14, misma
+  // línea con el mismo fix).
+  const dict = (await dictResp.text()).split(/\r?\n/).filter((l) => l.length > 0);
   return { ort, det, cls, rec, dict };
 }
 
