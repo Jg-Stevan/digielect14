@@ -1000,7 +1000,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
               <BarraSubscore etiqueta="Red" valor={perfil?.puntuacion.desglose.red ?? null} />
               <BarraSubscore etiqueta="Storage" valor={perfil?.puntuacion.desglose.storage ?? null} />
               {perfil && (
-                <p className="text-[10px] leading-snug text-slate-500 font-mono pt-0.5">
+                <p className="text-[10px] leading-snug text-slate-400 font-mono pt-0.5">
                   {perfil.puntuacion.nota}
                 </p>
               )}
@@ -1041,7 +1041,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
                   ? "INFORME LISTO ✓"
                   : "⬇ INFORME PARA IA (JSON)"}
             </button>
-            <p className="text-[10.5px] leading-snug text-slate-500">
+            <p className="text-[10.5px] leading-snug text-slate-400">
               JSON auto-descriptivo con hardware, GPU, capacidades, benchmarks, plan aplicado y
               recomendaciones — una IA lo interpreta sin contexto del repo. Solo metadatos: sin
               actas ni contenido OCR.

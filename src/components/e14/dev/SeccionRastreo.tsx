@@ -256,7 +256,7 @@ export function SeccionRastreo() {
             </span>
           </div>
           {fase.msVista !== null && (
-            <p className="mt-0.5 font-mono text-[9.5px] text-slate-500 tabular-nums">
+            <p className="mt-0.5 font-mono text-[9.5px] text-slate-400 tabular-nums">
               permanencia en {fase.vista}: {msLegible(fase.msVista)}
             </p>
           )}

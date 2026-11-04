@@ -43,7 +43,7 @@ const PASOS = [
     Icon: StitchCameraIcon,
     titulo: "1 · ESCANEA",
     detalle:
-      "Apunta la cámara al acta E-14 llenando el encuadre. También puedes subir una foto o un PDF.",
+      "Apunta la cámara al acta E-14 llenando el encuadre. También puedes subir la foto desde la galería (JPG, PNG, WEBP, HEIC).",
   },
   {
     Icon: StitchSpinIcon,

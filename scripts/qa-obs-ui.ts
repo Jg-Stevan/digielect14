@@ -8,7 +8,7 @@
  * Anclas del kit A3-C4:
  *   a. ResumenView.tsx ya NO contiene `INFORME ZIP` ni `generarInformeZip`
  *      (grep NEGATIVO — el botón del informe migró al panel dev).
- *   b. aria-label="Abrir modo de diagnóstico" existe en components/e14/**.
+ *   b. aria-label="Abrir modo desarrollador" existe en components/e14/**.
  *   c. `e14-dev-mode` se lee/escribe SOLO vía leerModoDev/guardarModoDev
  *      (grep negativo de acceso directo a la clave en components — la
  *      persistencia es del contrato §4.1, dueño agente 1).
@@ -128,15 +128,16 @@ ok(
 
 console.log("— Bloque b · aria-label de la puerta del modo diagnóstico —");
 
-// CALIBRADO (FASE 1, UI real del agente 2): TuercaResumen.tsx L88 usa un
-// ternario — aria-label={modoDev ? "Abrir modo de diagnóstico" :
-// "Activar modo de diagnóstico"} — el binding + el nombre accesible
-// existen; el ancla exige ambos en lugar del literal concatenado.
+// CALIBRADO (FASE 1, UI real del agente 2; recalibrado 2026-11-04 tras el
+// renombrado del dueño «modo de diagnóstico» → «modo desarrollador»):
+// TuercaResumen.tsx usa un ternario — aria-label={modoDev
+// ? "Abrir modo desarrollador" : "Activar modo desarrollador"} — lo que el
+// ancla exige es el binding + ambos nombres accesibles, no el literal pegado.
 ok(
   /aria-label=\{?/.test(srcDev) &&
-    srcDev.includes('"Abrir modo de diagnóstico"') &&
-    srcDev.includes('"Activar modo de diagnóstico"'),
-  'la puerta del modo diagnóstico tiene aria-label con nombre accesible ("Abrir/Activar modo de diagnóstico" — TuercaResumen; kit A3-C4 b calibrado al ternario)',
+    srcDev.includes('"Abrir modo desarrollador"') &&
+    srcDev.includes('"Activar modo desarrollador"'),
+  'la puerta del modo desarrollador tiene aria-label con nombre accesible ("Abrir/Activar modo desarrollador" — TuercaResumen; kit A3-C4 b calibrado al ternario)',
 );
 
 // ---------- Bloque c · e14-dev-mode SOLO vía helpers del contrato ----------

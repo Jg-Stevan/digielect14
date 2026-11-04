@@ -26,7 +26,7 @@ import type { EstadoPuente } from "@/lib/e14/puente/tipos";
 import { estadoPuente, sincronizarAhora } from "@/lib/e14/puente/envio";
 import { contarPendientes } from "@/lib/e14/puente/cola";
 import { SegmentedBar } from "../primitives";
-// KIT e14-observabilidad-v1 (agente 2 · C1): puerta del modo de diagnóstico.
+// KIT e14-observabilidad-v1 (agente 2 · C1): puerta del modo desarrollador.
 import { TuercaResumen } from "../dev/TuercaResumen";
 // KIT e14-observabilidad-v1 (agente 2 · C4): panel completo del modo dev.
 import { PanelDev } from "../dev/PanelDev";
