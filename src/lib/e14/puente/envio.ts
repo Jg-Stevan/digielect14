@@ -38,6 +38,13 @@ const TOPE_LOTE = 2;
 const TIMEOUT_MS = 8000;
 /** Kill local: 5 fallos seguidos → auto-detención (cola intacta). */
 export const FALLOS_KILL_LOCAL = 5;
+/** Cuota de `keepalive` en Chrome: 64 KB de cuerpo en vuelo POR ORIGEN. Un
+ *  POST más grande no se pone en espera ni falla suave — el fetch RECHAZA con
+ *  `TypeError: Failed to fetch` y el acta queda encolada para siempre (medido
+ *  en un Galaxy A56 real: un acta con miniatura pesa ~205 KB). El keepalive
+ *  solo sirve para sobrevivir al pasar a segundo plano, así que se usa cuando
+ *  el lote cabe y se omite cuando no (la cola y el reintento cubren el resto). */
+const TOPE_KEEPALIVE_BYTES = 60_000;
 
 /** fetch inyectable (pruebas — patrón ledger-remoto histórico). */
 type FetchComo = (input: string, init?: RequestInit) => Promise<Response>;
@@ -131,13 +138,14 @@ async function enviarLote(
 ): Promise<ResultadoLote> {
   const control = new AbortController();
   const timer = setTimeout(() => control.abort(), TIMEOUT_MS);
+  const cuerpo = JSON.stringify({ dispositivo: idDispositivo(), actas: entradas });
   try {
     const res = await doFetch(`${url}/actas`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ dispositivo: idDispositivo(), actas: entradas }),
+      body: cuerpo,
       signal: control.signal,
-      keepalive: true,
+      keepalive: cuerpo.length <= TOPE_KEEPALIVE_BYTES,
     });
     if (!res.ok) return { ok: false, motivo: `HTTP ${res.status}` };
     return { ok: true, motivo: null };

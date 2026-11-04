@@ -286,11 +286,15 @@ async function enviarLote(lote: LoteOutbox, endpoint: string): Promise<void> {
       appVersion: appVersion(),
       eventos: depurarParaEnvio(lote.eventos, leerPolitica()),
     };
+    const cuerpo = JSON.stringify(sobre);
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(sobre),
-      keepalive: true,
+      body: cuerpo,
+      // Cuota de keepalive de Chrome (64 KB por origen): pasarse no encola la
+      // petición, hace que el fetch RECHACE. Ver TOPE_KEEPALIVE_BYTES en
+      // ../puente/envio.ts — mismo motivo, mismo arreglo.
+      keepalive: cuerpo.length <= 60_000,
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     enviado = true;

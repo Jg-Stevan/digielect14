@@ -204,6 +204,15 @@ const srcClasificador = await readFile(new URL("../src/lib/e14/clasificador.ts",
 const srcTypes = await readFile(new URL("../src/lib/e14/types.ts", import.meta.url), "utf8");
 const srcStore = await readFile(new URL("../src/lib/e14/store.ts", import.meta.url), "utf8");
 const srcKits = await readFile(new URL("../src/lib/e14/kits.ts", import.meta.url), "utf8");
+const srcEnvio = await readFile(new URL("../src/lib/e14/puente/envio.ts", import.meta.url), "utf8");
+const srcObsTransporte = await readFile(new URL("../src/lib/e14/obs/transporte.ts", import.meta.url), "utf8");
+
+ok(
+  srcEnvio.includes("keepalive: cuerpo.length <= TOPE_KEEPALIVE_BYTES") &&
+    !/keepalive:\s*true/.test(srcEnvio) &&
+    !/keepalive:\s*true/.test(srcObsTransporte),
+  "RED LINE 8: ningún POST del puente o del obs usa keepalive incondicional — Chrome rechaza el fetch sobre su cuota de 64 KB y el acta se queda encolada para siempre (celular real: 205 KB)",
+);
 
 ok(
   srcClasificador.includes("const UMBRAL_AUTO = 0.82;") &&
