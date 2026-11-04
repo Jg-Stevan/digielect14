@@ -23,7 +23,13 @@ import { PUESTO_SIMULADO } from "@/lib/e14/seed";
 // KIT e14-puente-supervision-v1 (§7): tarjeta del puente al panel de
 // supervisión — estado del singleton + sincronización manual inline.
 import type { EstadoPuente } from "@/lib/e14/puente/tipos";
-import { estadoPuente, sincronizarAhora } from "@/lib/e14/puente/envio";
+import {
+  estadoPuente,
+  sincronizarAhora,
+  hubEnUso,
+  esOrigenLocal,
+  fijarHubLocal,
+} from "@/lib/e14/puente/envio";
 import { contarPendientes } from "@/lib/e14/puente/cola";
 import { SegmentedBar } from "../primitives";
 // KIT e14-observabilidad-v1 (agente 2 · C1): puerta del modo desarrollador.
@@ -73,6 +79,36 @@ export function ResumenView() {
   const [puentePendientes, setPuentePendientes] = useState(0);
   const [puenteSincronizando, setPuenteSincronizando] = useState(false);
   const [puenteFeedback, setPuenteFeedback] = useState<string | null>(null);
+  // E2E LOCAL — el flujo celular → computador del mismo equipo (runbook
+  // `supervision-e14/docs/RUNBOOK-e2e-local-v1.md`). Cuando el digitalizador
+  // se abre desde una IP privada, el hub es el PROPIO origen: sin este botón
+  // habría que escribir `localStorage.setItem("e14-puente-url", …)` en la
+  // consola del celular, que nadie hace. Solo aparece en red local, nunca en
+  // la demo pública.
+  const [enRedLocal, setEnRedLocal] = useState(false);
+  const [hubUsado, setHubUsado] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      setEnRedLocal(esOrigenLocal());
+      setHubUsado(hubEnUso());
+    } catch {
+      /* silencioso — la tarjeta jamás rompe RESUMEN */
+    }
+  }, []);
+
+  const apuntarHubLocal = () => {
+    const origen = window.location.origin;
+    const nuevo = fijarHubLocal(hubUsado !== origen);
+    setHubUsado(nuevo ?? origen);
+    setPuenteFeedback(
+      nuevo === null
+        ? "El navegador bloqueó el almacenamiento: el hub no se pudo cambiar."
+        : nuevo === origen
+          ? "Puente apuntando a este equipo. Las actas llegan al panel en /supervision."
+          : "Puente devuelto al hub de producción."
+    );
+  };
 
   useEffect(() => {
     try {
@@ -104,6 +140,9 @@ export function ResumenView() {
     const t = window.setTimeout(() => setReiniciarArmado(false), 4000);
     return () => window.clearTimeout(t);
   }, [reiniciarArmado]);
+
+  const origenEquipo = typeof window === "undefined" ? "" : window.location.origin;
+  const hubEsLocal = hubUsado === origenEquipo;
 
   const totalPaginas = mesas.reduce((n, m) => n + m.paginas.length, 0);
   const paginasOk = mesas.reduce(
@@ -239,6 +278,11 @@ export function ResumenView() {
           <p className="text-xs text-slate-400 font-mono">
             Envía las actas ENVIADAS al panel de supervisión en vivo.
           </p>
+          {hubUsado && (
+            <p className="text-[11px] font-mono text-slate-500 break-all">
+              hub: {hubUsado}
+            </p>
+          )}
           <div className="text-[11px] font-mono text-slate-400 border-t border-slate-800/80 pt-2 flex flex-col gap-1">
             <span>
               {puentePendientes} pendientes · {puenteEstado?.enviadasOk ?? 0} enviadas
@@ -263,6 +307,27 @@ export function ResumenView() {
           >
             {puenteSincronizando ? "SINCRONIZANDO…" : "SINCRONIZAR AHORA"}
           </button>
+          {enRedLocal && (
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={apuntarHubLocal}
+                aria-pressed={hubEsLocal}
+                aria-label="Apuntar el puente al hub local de este equipo"
+                className="w-full min-h-[44px] px-4 rounded-xl border font-mono text-[11px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer border-sky-500/40 bg-[#10161f] text-sky-300 hover:border-sky-400 hover:bg-sky-500/10"
+              >
+                {hubEsLocal
+                  ? "HUB LOCAL: ESTE EQUIPO · tocar para producción"
+                  : "USAR HUB LOCAL (ESTE EQUIPO)"}
+              </button>
+              <a
+                href="/supervision/"
+                className="w-full min-h-[44px] px-4 py-3 rounded-xl border border-slate-700 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-slate-300 no-underline hover:border-slate-500"
+              >
+                abrir panel de supervisión
+              </a>
+            </div>
+          )}
           {puenteFeedback && (
             <span className="text-[11px] font-mono text-slate-300">
               {puenteFeedback}

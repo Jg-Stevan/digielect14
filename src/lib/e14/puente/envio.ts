@@ -77,6 +77,46 @@ function urlDelHub(): string {
   return HUB_DEFAULT;
 }
 
+/** URL del hub EN USO (la tarjeta del puente la muestra — el operario tiene
+ *  que poder ver a dónde están yendo sus actas). */
+export function hubEnUso(): string {
+  return urlDelHub();
+}
+
+/** ¿El origen actual es una red local (el `hub-local.mjs` del mismo equipo)?
+ *  Solo localhost e IPs privadas: es lo que hace aparecer el botón HUB LOCAL,
+ *  y evita ofrecerlo en la demo pública de GitHub/Cloudflare Pages. */
+export function esOrigenLocal(
+  origen: string = typeof window === "undefined" ? "" : window.location.origin
+): boolean {
+  try {
+    const host = new URL(origen).hostname;
+    return (
+      host === "localhost" ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Apunta el puente al propio origen (el hub local) o lo suelta (`` null`` =
+ *  default de producción). Se lee en CADA envío: no hace falta recargar.
+ *  `localStorage` bloqueado (modo privado de algunos navegadores) → null y la
+ *  tarjeta lo dice; el puente sigue usando el default. */
+export function fijarHubLocal(activo: boolean): string | null {
+  try {
+    if (activo) window.localStorage.setItem(CLAVE_OVERRIDE, window.location.origin);
+    else window.localStorage.removeItem(CLAVE_OVERRIDE);
+    return urlDelHub();
+  } catch {
+    return null;
+  }
+}
+
 // ─── Envío de un lote ───────────────────────────────────────────────────────
 
 interface ResultadoLote {

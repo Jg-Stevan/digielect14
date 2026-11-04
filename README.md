@@ -59,6 +59,16 @@ sirve: construye y sirve con el servidor COOP/COEP.
 bun run build && bun run scripts/serve-coop-coep.mjs 8123 out
 ```
 
+### E2E con el panel de supervisión (una sola máquina)
+
+El puente (`src/lib/e14/puente/`) sube actas procesadas a un hub que acepte
+`POST /actas`. Para probarlo de punta a punta sin desplegar nada, el hermano
+`supervision-e14` trae un hub local que sirve ESTE build en la raíz del equipo y
+el panel en `/supervision/`: en RESUMEN, la tarjeta «PUENTE A SUPERVISIÓN» tiene
+el botón «USAR HUB LOCAL (ESTE EQUIPO)». Pasos y matriz de errores: el
+`docs/RUNBOOK-e2e-local-v1.md` de `https://github.com/Jg-Stevan/supervision-e14`
+(ambos repos clonados como hermanos en la misma carpeta).
+
 ## Deploy
 
 Demo estática: <https://jg-stevan.github.io/digielect14/> (GitHub Pages, sin
