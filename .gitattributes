@@ -1,0 +1,29 @@
+# Normalización de finales de línea.
+#
+# El índice de git ya está en LF (0 archivos con i/crlf), así que esta regla
+# no renormaliza nada: solo garantiza que un clon en Windows checkea los
+# MISMOS bytes que el índice y que CI (Linux).
+#
+# Por qué importa aquí: `scripts/smoke-heartbeat-worker.mjs` y
+# `scripts/smoke-capa0-qr-worker.mjs` comparan el artefacto generado BYTE A
+# BYTE contra su regeneración. Con `core.autocrlf=true` y sin este archivo,
+# Windows materializa los .js con CRLF y el gate corta en verde falso.
+* text=auto eol=lf
+
+# Artefactos GENERADOS que el gate y `worker-parity.yml` comparan byte a byte:
+# se prohíbe cualquier conversión, ni siquiera la auto-detección.
+public/scanner/*.js -text
+public/scanner/*.worker.js -text
+
+# Binarios: nunca intentar EOL-detect (opencv/wasm/modelos/imágenes/fuentes).
+*.wasm binary
+*.onnx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary

@@ -1,7 +1,9 @@
 name: Quality Gate
 
-# Gate en PR y push a main: tipos + lint + build estático (consumo real de
-# @jg-stevan/scanner-core desde npm).
+# Gate en PR y push a main: tipos + lint + tests + build estático (consumo real
+# de @jg-stevan/scanner-core desde npm) + los 6 harnesses de contrato QA + los
+# 2 smoke de bundling de worker. Equivale a `bash scripts/check-quality.sh`
+# local, menos knip (informativo, no rompe).
 
 on:
   pull_request:
@@ -21,6 +23,14 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        # FIJO a propósito: `scripts/smoke-heartbeat-worker.mjs` compara el
+        # artefacto commiteado BYTE A BYTE contra su regeneración, y el
+        # minificador cambia entre versiones de bun. Con `latest` el gate se
+        # vuelve rojo según el día que corra. Si se sube la versión, regenerar
+        # los workers (`bun scripts/build-heartbeat-worker.mjs && bun run
+        # prebuild`) y commitear el artefacto en el mismo PR.
+        with:
+          bun-version: 1.4.2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -31,8 +41,20 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Tests unitarios (vitest)
+        run: bun run test
+
       - name: Build estático (sanity)
         run: bunx next build
         env:
           BUILD_STATIC: "1"
           NEXT_PUBLIC_BASE_PATH: /digielect14
+
+      - name: Smoke de bundling de los workers (anti verde falso)
+        run: |
+          bun scripts/smoke-heartbeat-worker.mjs
+          bun scripts/smoke-capa0-qr-worker.mjs
+
+      - name: Harnesses de contrato QA (los 6)
+        run: |
+          for f in scripts/qa-*.ts; do echo "── $f"; bun "$f" || exit 1; done

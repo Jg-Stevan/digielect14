@@ -1,37 +1,32 @@
 #!/usr/bin/env bash
-# check-quality.sh — GATE ÚNICO de calidad (overnight 2026-10-22, Prioridad 5
-# del docs/archive/PLAN-overnight.md). Corre TODO lo que un commit debe pasar:
+# check-quality.sh — GATE ÚNICO de calidad. Corre TODO lo que un commit debe pasar:
 #
 #   1. bunx tsc --noEmit        → 0 errores
-#   2. bun run lint             → 0 errores / 0 warnings (desde PR #93 NO
-#                                  hay warnings deliberados: recienListas/
-#                                  posCola/modoMenuMontado quedaron resueltos
-#                                  en ui-hooks-v1, y la única preexistente
-#                                  de logger.ts la eliminó el núcleo del
-#                                  agente 1 — obs-flags-qa FASE 1)
+#   2. bun run lint             → 0 errores / 0 warnings
 #   3. bun run build            → exit 0 (Next 16 Turbopack)
-#   4. bun scripts/smoke-heartbeat-worker.mjs → worker de heartbeat
-#                                  precompilado y fresco (KIT
-#                                  e14-obs-hang-atribucion-v1 §C.1)
-#   5. bun run test             → vitest verde (162: base overnight 70 +
-#                                  núcleo obs/flags 83 + transporte 9)
-#   6. bun scripts/qa-*.ts      → los 6 harnesses (2 de regresión: autoenvío
-#                                  + aa-quickwins — anclas byte-idénticas)
-#                                  + 4 de contrato obs del kit
-#                                  e14-observabilidad-v1 (contract 38 ·
-#                                  privacidad 7 · transporte 8 · ui 8)
-#   7. bunx knip                → inventario de dead code (informativo —
-#                                  no rompe el gate; baseline 40 ítems =
-#                                  25 exports + 17 types tras FASE 1,
-#                                  superficie de contrato obs incluida —
-#                                  ver docs/REPORTE-obs-flags-qa-v1.md)
+#   4. bun scripts/smoke-*.mjs  → los dos workers (heartbeat y capa 0 QR)
+#                                  precompilados y frescos, no el .ts crudo
+#   5. bun run test             → vitest verde
+#   6. bun scripts/qa-*.ts      → los 6 harnesses de anclas y contrato
+#                                  (aa-quickwins 11 · autoenvío 21 ·
+#                                  obs-contract 38 · obs-privacidad 7 ·
+#                                  obs-transporte 8 · obs-ui 8)
+#   7. bunx knip                → inventario de dead code (informativo — NO
+#                                  rompe el gate). Los exports de src/lib/e14/obs
+#                                  que knip no ve son anclas de contrato: los
+#                                  exige scripts/qa-obs-contract.ts con regex
+#                                  sobre el fuente y obs.test.ts con import
+#                                  dinámico. Está explicado en docs/DEUDA.md.
 #
 # Uso:    bash scripts/check-quality.sh
 # Sale:   exit 0 si TODO verde; primer fallo corta con contexto.
-# Nota:   los QA validan ANCLAS DE FUENTE (lección 3A.1) — por eso este
-#         gate corre CONTRA EL ÁRBOL COMMITEADO (ver lección e65 T-6: un
-#         source-scan sobre el working tree puede dar verde con cambios
-#         sin commitear). Commitea (o stash) antes de fiarte del verde.
+# Par:    .github/workflows/quality.yml corre los mismos pasos 1-6 (con
+#         `bunx next build` en vez de `bun run build`, y sin knip). Si aquí
+#         cambia un paso, cambiarlo allí también — y viceversa.
+# Nota:   los QA validan ANCLAS DE FUENTE (lección 3A.1 del diagnóstico
+#         original) — por eso este gate corre CONTRA EL ÁRBOL COMMITEADO: un
+#         source-scan sobre el working tree puede dar verde con cambios sin
+#         commitear. Commitea (o stash) antes de fiarte del verde.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -83,11 +78,11 @@ for f in scripts/qa-*.ts; do
   ok "$nombre — $linea"
 done
 
-paso "7/7 · knip (informativo — baseline FASE 1: 40 ítems = 25 exports + 17 types)"
+paso "7/7 · knip (informativo — las anclas de contrato de obs/ se explican en docs/DEUDA.md)"
 knip_out="$(bunx knip 2>/dev/null || true)"
 exports_=$(echo "$knip_out" | grep -A100 "Unused exports" | grep -cE "^[a-zA-Z]" || echo 0)
 types_=$(echo "$knip_out" | grep -A100 "exported types" | grep -cE "^[a-zA-Z]" || echo 0)
-ok "knip: ~${exports_} exports + ~${types_} types sin uso (NO rompe el gate — comparar contra docs/REPORTE-obs-flags-qa-v1.md §FASE 1)"
+ok "knip: ~${exports_} exports + ~${types_} types sin uso (NO rompe el gate — solo informativo)"
 
 printf '\n\033[1;32m══════════════════════════════════════════════\033[0m\n'
 printf '\033[1;32m TODO VERDE — tsc · lint · build · vitest · QA 6/6\033[0m\n'

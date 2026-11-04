@@ -28,6 +28,12 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        # Misma versión fija que `quality.yml`: este workflow usa
+        # `bunx next build` (NO `bun run build`), así que no corre el
+        # `prebuild` que regenera capa0-qr.worker.js → lo que se publica son
+        # los bytes commiteados. El gate valida exactamente esos mismos bytes.
+        with:
+          bun-version: 1.4.2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
