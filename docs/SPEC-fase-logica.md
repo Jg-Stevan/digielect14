@@ -431,9 +431,11 @@ next/react/zustand).
 - **L6 — (opcional) Persistencia:** guardar actas (metadata en localStorage,
   fotos en IndexedDB ~40 líneas sin dependencias) para sobrevivir recargas.
   Si se hace: botón discreto "REINICIAR JORNADA" (limpiar estado) en RESUMEN.
-- **L7 — (opcional) Cámara sintética en SIMULACIÓN:** `SyntheticCamera` del
-  core (genera documento de prueba 1920×2560) para que el demo de Pages tenga
-  "cámara" en desktop. Extra, no bloquea nada.
+- **L7 — (descartada) Cámara sintética en SIMULACIÓN:** era `SyntheticCamera`
+  del core, para que el demo de Pages tuviera "cámara" en desktop. Se podó junto
+  a `demo-page.ts` al vendorizar el motor (ver `src/lib/e14/core/LEEME.md`): el
+  demo de Pages se descarta como tal y el QA del pipeline se hace con el acta
+  real de `public/qa/`. Nadie la importaba en este repo.
 
 ## §9 Riesgos y mitigaciones
 

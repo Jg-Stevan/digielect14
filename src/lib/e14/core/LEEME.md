@@ -55,6 +55,23 @@ normalización), pasar además el golden `contrato-motor.json`.
 Un módulo exclusivo del móvil (cámara, calidad, perfil de sensor, PDF, PWA) vive
 solo aquí y no entra en el contrato del hermano.
 
+## Qué se podó al copiar (y por qué)
+
+Dos cosas del `src` del origen NO se trajeron, y no por olvido:
+
+- `format.ts`, `index.ts`, `mock-data.ts`, `page-store.ts`, `store.ts`,
+  `tags.ts`, `text-export.ts`: el almacén de documentos y el store de páginas
+  del motor genérico. Esta app guarda el acta en IndexedDB (`src/lib/e14/store.ts`).
+- `demo-page.ts` y la clase `SyntheticCamera` (estaba al final de
+  `frame-loop.ts`): una cámara falsa para la demo del laboratorio, con factura
+  generada en memoria y `captureStream(12)`. En un digitalizador de puesto no
+  hay demo que correr — nadie importa `SyntheticCamera` acá, y el QA real se
+  hace con la foto de un acta de verdad. Si algún día hace falta (probar el
+  pipeline sin cámara en una CI de escritorio), se vuelve a traer del origen,
+  no se reinventa.
+
+Después de la poda quedan 12 módulos; `CONTRATO.json` los lista.
+
 ## Actualizar desde el origen
 
 `web-scanner` sigue siendo el repo del motor genérico. Si se vuelve a tomar
@@ -66,8 +83,10 @@ cada importación es una decisión revisable.
 
 `core/__tests__/` trae los tests propios del motor
 (`types` · `quality` · `image-modes-parity` · `parity-worker-filters` ·
-`pdf-export`), copiados de `web-scanner/packages/scanner-core/tests` con dos
-ajustes mecánicos: `from "bun:test"` → `from "vitest"` y `../src/x` → `../x`.
+`pdf-export`), copiados de `web-scanner/packages/scanner-core/tests` con tres
+ajustes mecánicos: `from "bun:test"` → `from "vitest"`, `../src/x` → `../x`, y
+fuera un import de tipo que el upstream dejaba sin usar (el lint de acá sí lo
+correría).
 Son tests PUROS sobre `Uint8ClampedArray` — no necesitan DOM, por eso corren en
 el entorno `node` de vitest. Lo que el propio upstream dejara fuera (decode,
 canvas, jsPDF en runtime) sigue fuera: no se trajo ni un polyfill.

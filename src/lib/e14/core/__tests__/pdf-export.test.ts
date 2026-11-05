@@ -9,12 +9,9 @@
  *    prohibida). Queda documentado en el doc de evidencia del lote.
  */
 import { describe, test, expect } from "vitest";
-import {
-  attemptsFor,
-  sanitizeFileName,
-  PDF_LONG_SIDE_MM,
-  type ExportAttempt,
-} from "../pdf-export";
+// `ExportAttempt` se dejó afuera: el upstream lo importaba sin usarlo y el
+// lint del repo no lo perdona.
+import { attemptsFor, sanitizeFileName, PDF_LONG_SIDE_MM } from "../pdf-export";
 
 describe("attemptsFor (escalera de re-encode §8)", () => {
   test("máxima: 4 intentos, calidad descendente 0.95→0.78", () => {
