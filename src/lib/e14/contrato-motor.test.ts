@@ -94,11 +94,16 @@ describe("contrato de motor · base DIVIPOL", () => {
 });
 
 describe("contrato de motor · clasificación (misma entrada ⇒ mismo resultado que masiva)", () => {
+  // El golden se auto-mide con performance.now() (la escalera del score depende
+  // del tiempo simulado), así que cada descriptor cuesta 392-602 ms solo. Con el
+  // default de 5 s y los 24 workers en isolate, un pico de carga de la máquina lo
+  // hacía TIMED OUT sin que el contrato cambiara: rojo falso. Mismo aire en el
+  // hermano (`__tests__/contrato-motor.test.ts` de supervision-e14).
   for (const d of GOLDEN.descriptores) {
     it(`${d.id} — ${d.nota}`, () => {
       expect(clasificarCabecera(d.ocr, BASE)).toEqual(d.esperado);
       expect(derivadosDe(d)).toEqual(d.derivados);
-    });
+    }, 30_000);
   }
 });
 
