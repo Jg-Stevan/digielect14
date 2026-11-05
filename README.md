@@ -17,7 +17,7 @@ envía al hub de supervision. No hay servidor de procesado: el pipeline entero
 captura (cámara | archivo)
   → capa 0 QR (worker) ─┐
   → detección de bordes ┴→ quad + rotación (brújula QR / probe orientado)
-  → warp + realce (scanner-core)  → foto procesada
+  → warp + realce (core/)  → foto procesada
   → OCR (cascada: Tesseract best-PSM4 → gate → RapidOCR PP-OCRv4 escalonado)
   → clasificación cabecera vs DIVIPOLA + completitud
   → gate de score (AUTO / ÓPTIMA / ADVERTENCIA / RECHAZADA)
@@ -31,7 +31,7 @@ Todo el detalle, por módulo, en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 | pieza | qué usa |
 |---|---|
 | Framework | Next.js 16 · React 19 · TypeScript · Tailwind 4 · zustand |
-| Motor de escaneo | `@jg-stevan/scanner-core` (npm; repo [web-scanner](https://github.com/Jg-Stevan/web-scanner)) — detección de bordes, warp, realce, export |
+| Motor de escaneo | `src/lib/e14/core/` — **código vendorizado** del motor [web-scanner](https://github.com/Jg-Stevan/web-scanner) (detección de bordes, warp, realce, export). Ya no es dependencia de npm; su paridad con `supervision-e14` la fija `core/CONTRATO.json` |
 | OCR | Tesseract.js 5.1.1 (español `spa` best, PSM 4) como intento 1 y RapidOCR **PP-OCRv4** sobre `onnxruntime-web` 1.30 (EP wasm) como intento 2 |
 | QR/1D | `zxing-wasm` 3.1.6 + jsQR 1.4.0 vendorizado, con capa 0 en worker |
 | Estado/flags | cadena `DEFAULTS ← public/flags.json ← overrides de localStorage` (kill-switch del dueño) |

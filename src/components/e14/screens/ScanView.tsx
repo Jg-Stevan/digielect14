@@ -70,12 +70,12 @@
  * captura). En SIMULACIÓN/IMPORTAR la vista queda EXACTAMENTE como en L2.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { warmUpScannerWorker } from "@jg-stevan/scanner-core/detector-client";
-import { SHUTTER_SCORE } from "@jg-stevan/scanner-core/quality";
+import { warmUpScannerWorker } from "@/lib/e14/core/detector-client";
+import { SHUTTER_SCORE } from "@/lib/e14/core/quality";
 // F-SENSOR-PROFILER (PASO 2): tipo del perfil del sensor — el ref es
 // propietario de ScanView (lo llena useSesionCamara vía profileActiveSensor;
 // lo lee useDestello vía archivoDentroDeTope).
-import type { SensorProfile } from "@jg-stevan/scanner-core/sensor-profiler";
+import type { SensorProfile } from "@/lib/e14/core/sensor-profiler";
 import { useE14Store, type BandaSim } from "@/lib/e14/store";
 import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
 // KIT e14-ocr-tessbest-v1 (GO-B): pre-warm de TESSERACT BEST junto al del

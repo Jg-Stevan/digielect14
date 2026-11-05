@@ -30,14 +30,14 @@
  * alimentarAnillo/liberarAnillo (useAnilloBestShot — feed ZSL del loop).
  */
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
-import { CameraFrameLoop, type FrameLoopTelemetry } from "@jg-stevan/scanner-core/frame-loop";
+import { CameraFrameLoop, type FrameLoopTelemetry } from "@/lib/e14/core/frame-loop";
 import {
   clampBlobToSafeCap,
   getSensorSafeCap,
   profileSensor,
   type SensorProfile,
-} from "@jg-stevan/scanner-core/sensor-profiler";
-import type { Quad } from "@jg-stevan/scanner-core/types";
+} from "@/lib/e14/core/sensor-profiler";
+import type { Quad } from "@/lib/e14/core/types";
 import { useE14Store } from "@/lib/e14/store";
 
 /* ── Tipos compartidos del skin (extraídos tal cual de ScanView.tsx) ─────── */

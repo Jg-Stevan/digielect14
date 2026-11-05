@@ -212,7 +212,7 @@ export async function construirReporte(): Promise<ReporteSesion> {
 // ─── descarga (patrón informe.ts / downloadBlob del core) ──────────────────
 
 /** Descarga local: createObjectURL + <a download> + revoke (mismo patrón
- *  del downloadBlob de @jg-stevan/scanner-core — sin dependencia nueva). */
+ *  del downloadBlob del core (`core/pdf-export.ts`) — sin dependencia nueva). */
 function descargarBlob(blob: Blob, nombre: string): void {
   try {
     const url = URL.createObjectURL(blob);

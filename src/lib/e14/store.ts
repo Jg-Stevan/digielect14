@@ -10,8 +10,8 @@
 import { create } from "zustand";
 import { getBridge } from "./get-bridge";
 import { rotateProcessedDataUrl } from "./image-utils";
-import { ocrTextIsValid } from "@jg-stevan/scanner-core/ocr";
-import type { PageFilter } from "@jg-stevan/scanner-core/types";
+import { ocrTextIsValid } from "@/lib/e14/core/ocr";
+import type { PageFilter } from "@/lib/e14/core/types";
 import type { PaginaObjetivo } from "./bridge";
 import type { Acta, FuenteCaptura, HistorialRow, Mesa, ProgresoAnalisis, TipoPagina } from "./types";
 // e67-watchdog-rescate-v1 (cambio B): el tipo de opciones con presupuesto y
@@ -21,7 +21,7 @@ import { type OpcionesEscaneoConTimeout } from "./scanner-core-bridge";
 // §G.2 — ORDEN-WAVE3-add-envio-individual-v1: la red del momento del envío
 // (registrarEnvio G.1 — envioRedTipo/envioDownlinkMbps en el diagnóstico).
 import { redActual } from "./obs/dispositivo";
-import type { Quad } from "@jg-stevan/scanner-core/types";
+import type { Quad } from "@/lib/e14/core/types";
 import {
   claveDeMesa,
   claveDePuesto,

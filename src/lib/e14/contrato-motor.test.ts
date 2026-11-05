@@ -2,7 +2,8 @@
  * Contrato de paridad del motor post-OCR (kit e14-motor-paridad-v1).
  *
  * `digielect14` (móvil, por puesto) y `supervision-e14` (masivo) comparten el
- * motor de OCR (el mismo `@jg-stevan/scanner-core`, mismo `tesseract.js` con el
+ * motor de OCR (el MISMO código, hoy vendorizado en `src/lib/e14/core/` y byte a
+ * byte idéntico al del hermano — ver su `LEEME.md`—, mismo `tesseract.js` con el
  * mismo `spa.traineddata` descomprimido, mismas ONNX PP-OCRv4 y misma base
  * DIVIPOL) y comparten TAMBIÉN el negocio que decide el resultado final:
  * `clasificador.ts`, `completitud.ts` y `divipol.ts`. Este test fija ESE

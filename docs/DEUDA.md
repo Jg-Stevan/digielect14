@@ -114,8 +114,9 @@ en CI sale «omitido» porque no hay checkout hermano, y en local exige
   el próximo reporte que los cite o con decisión del dueño.
 - El helper `blobADataUrl` está duplicado (privado) en `jornada.ts` y
   `puente/mapear.ts`. Doce líneas de glue de `FileReader`; fusionarlas obligaría
-  a `mapear.ts` a importar `image-utils.ts`, que arrastra `@jg-stevan/scanner-core`
-  a la capa de envío. Se prefirió duplicación antes que acoplamiento.
+  a `mapear.ts` a importar `image-utils.ts`, que arrastra el motor
+  (`src/lib/e14/core/`) a la capa de envío. Se prefirió duplicación antes que
+  acoplamiento.
 - `docs/` sigue siendo la mayor parte del peso documental (≈450 KB tras la
   limpieza). `DECISIONS.md` (94 KB) y `SPEC-*` (≈99 KB) son la referencia de
   comportamiento; los `REPORTE-*` son evidencia puntual de cada kit.

@@ -3,7 +3,7 @@
  *
  * Evidencia del dueño (consola, kit §0.3): `Banner not shown:
  * beforeinstallpromptevent.preventDefault() called. The page must call
- * prompt()`. El módulo `@jg-stevan/scanner-core/pwa` captura el evento
+ * prompt()`. El módulo `core/pwa.ts` captura el evento
  * (e.preventDefault()), guarda deferredPrompt y expone promptInstall() /
  * getPwaInstallState() / subscribePwaState() — pero NADIE los consumía en la
  * app: ni banner nativo (fue suprimido) ni prompt de la app ⇒ el usuario no
@@ -25,7 +25,7 @@
  * · Accesible: role="status", aria-labels, tap target ≥ 44 px.
  */
 
-import { promptInstall, subscribePwaState } from "@jg-stevan/scanner-core/pwa";
+import { promptInstall, subscribePwaState } from "@/lib/e14/core/pwa";
 
 export function setupPwaInstalar(): void {
   if (typeof window === "undefined") return;

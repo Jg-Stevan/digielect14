@@ -17,11 +17,12 @@
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
-    "@jg-stevan/scanner-core": "^0.4.0",
     "@jg-stevan/scanner-ui": "^0.1.0",
     "@opennextjs/cloudflare": "^1.20.13",
     "fflate": "^0.8.3",
     "framer-motion": "^12.23.2",
+    "heic2any": "^0.0.4",
+    "jspdf": "^4.2.1",
     "next": "^16.1.1",
     "onnxruntime-web": "1.30.0",
     "react": "^19.0.0",

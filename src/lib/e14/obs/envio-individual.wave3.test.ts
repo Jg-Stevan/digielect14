@@ -25,10 +25,10 @@ vi.mock("../get-bridge", () => ({
 }));
 // ../store → scanner-core/ocr → image-processor (misma resolución rota en
 // node que el patrón runner-veto-postocr — mismos mocks de la hoja):
-vi.mock("@jg-stevan/scanner-core/ocr", () => ({
+vi.mock("@/lib/e14/core/ocr", () => ({
   ocrTextIsValid: vi.fn(() => true),
 }));
-vi.mock("@jg-stevan/scanner-core/image-processor", () => ({
+vi.mock("@/lib/e14/core/image-processor", () => ({
   fileToCaptureDataUrl: vi.fn(() => "data:image/jpeg;base64,CAPTURE"),
 }));
 

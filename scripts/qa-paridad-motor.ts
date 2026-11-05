@@ -146,8 +146,15 @@ const MODULOS: Array<{ archivo: string; permisos: Permiso[] }> = [
   },
 ];
 
+/** Normalización GLOBAL del alias al motor vendorizado: el mismo import del core
+ *  se escribe `@/lib/e14/core/…` acá y `@/modules/digitalizador/lib/e14/core/…`
+ *  allá (cada repo tiene su árbol). Es diferencia de RUTA, no de negocio, así
+ *  que se colapsa antes de cotejar — y solo esa cadena: si cambia un umbral o una
+ *  firma del core, el cotejo la sigue viendo. */
+const ALIAS_CORE = /@\/(?:modules\/digitalizador\/)?lib\/e14\/core\//g;
+
 function sincronizado(texto: string, permisos: Permiso[]): string {
-  let salida = texto;
+  let salida = texto.replace(ALIAS_CORE, "@/e14/core/");
   for (const p of permisos) salida = salida.replace(p.en, p.pone);
   return salida.replace(/\r\n/g, "\n");
 }
@@ -183,9 +190,27 @@ ok(splitDict(rapidocrA), "A parsea el dict de RapidOCR con split(/\\r?\\n/) (tol
 ok(splitDict(rapidocrB), "B parsea el dict de RapidOCR con split(/\\r?\\n/) (misma ancla)");
 
 const escanerA = lee(join(SRC_A, "scanner-core-bridge.ts"));
+
+// El motor es código del repo (src/lib/e14/core/), no npm. Sus imports DINÁMICOS
+// (`import("heic2any")` en el rescate F-HEIC) y directos (`jspdf` en pdf-export)
+// ya no los aporta ningún paquete: si alguien los quita «porque no aparecen en
+// ningún import de src/», el build sigue verde y el HEIC de un iPhone revienta en
+// runtime. Anclados aquí los dos lados.
+const pkgA = JSON.parse(lee(join(RAIZ, "package.json"))) as {
+  dependencies?: Record<string, string>;
+};
+const pkgB = JSON.parse(lee(join(HERMANO, "package.json"))) as {
+  dependencies?: Record<string, string>;
+};
 ok(
-  /heic2any/.test(lee(join(RAIZ, "package.json"))) === false,
-  "A no declara heic2any (lo aporta el peer del core — ver AGENTS.md regla 4)",
+  !!pkgA.dependencies?.heic2any && !!pkgB.dependencies?.heic2any,
+  "los dos declaran heic2any (import dinámico del core vendorizado — HEIC)",
+);
+ok(!!pkgA.dependencies?.jspdf, "A declara jspdf (pdf-export del core vendorizado)");
+ok(
+  !pkgA.dependencies?.["@jg-stevan/scanner-core"] &&
+    !pkgB.dependencies?.["@jg-stevan/scanner-core"],
+  "ninguno de los dos vuelve a depender del paquete npm del motor",
 );
 ok(escanerA.includes("clasificarCabecera"), "A sigue clasificando con el clasificador compartido (no con uno propio)");
 

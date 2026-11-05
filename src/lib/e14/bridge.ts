@@ -13,10 +13,10 @@
  * SIMULACIÓN = pipeline real sobre el acta incluida).
  */
 import type { Acta, ProgresoAnalisis, FuenteCaptura, TipoPagina } from "./types";
-import type { PageFilter, Quad } from "@jg-stevan/scanner-core/types";
+import type { PageFilter, Quad } from "@/lib/e14/core/types";
 // KIT e14-esquinas-suaves-v1 (Q2): origen del quad en el contrato del
 // recorte (ver comentario del contrato — el flag manual viaja con él).
-import type { OrigenQuad } from "@jg-stevan/scanner-core/image-processor";
+import type { OrigenQuad } from "@/lib/e14/core/image-processor";
 
 /** Página de mesa a la que apunta el próximo escaneo (D7: vive en el store). */
 export interface PaginaObjetivo {

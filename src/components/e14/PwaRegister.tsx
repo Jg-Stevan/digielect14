@@ -18,7 +18,7 @@
  * de nueva versión E-04.
  */
 import { useEffect } from "react";
-import { registerServiceWorker, setupPwaListeners } from "@jg-stevan/scanner-core/pwa";
+import { registerServiceWorker, setupPwaListeners } from "@/lib/e14/core/pwa";
 // E-04 — banner «Nueva versión lista»: con el SW sin skipWaiting
 // incondicional, la versión nueva queda waiting hasta que el usuario acepte
 // recargar desde el banner (self-contained en src/lib/e14).

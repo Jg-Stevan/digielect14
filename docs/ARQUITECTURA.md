@@ -89,11 +89,12 @@ el celular. Los dos comparten el motor y el negocio — y este repo **no** debe
 heredar nunca el módulo masivo (cola, runner, dedup de lote): lo que se comparte
 es el pipeline de UN acta y el resultado final de ese acta.
 
-Qué es literalmente el mismo motor (verificado byte a byte, 2026-11-04):
+Qué es literalmente el mismo motor (verificado byte a byte; la fila del core es
+de 2026-11-04, cuando el motor dejó de ser npm y se vendorizó):
 
 | Pieza | Evidencia |
 |---|---|
-| `@jg-stevan/scanner-core` | `^0.4.0` en los dos `package.json` |
+| Motor | `src/lib/e14/core/` en los dos repos: los módulos compartidos son byte a byte idénticos y su md5 está en `core/CONTRATO.json`. Antes era `@jg-stevan/scanner-core` `^0.4.0` en los dos `package.json` — esa garantía la reemplazó `scripts/qa-core-vendorizado.ts` |
 | Tesseract | `tesseract.js` 5.1.1 y el MISMO `spa.traineddata` (md5 `130215a6…` descomprimido; los `.gz` difieren solo por nivel de compresión) |
 | RapidOCR | mismas ONNX PP-OCRv4 (`70e8929d` det · `8e4817a3` rec · `c99c6bfc` cls) y `onnxruntime-web` 1.30.0 |
 | Base DIVIPOL | `public/e14/divipol.json` idéntico (`8d4b0963…`) |

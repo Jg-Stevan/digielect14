@@ -21,14 +21,14 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
-import { OCR_NO_TEXT } from "@jg-stevan/scanner-core/ocr";
-import { defaultQuad, FILTER_PRESETS } from "@jg-stevan/scanner-core/types";
-import type { PageFilter } from "@jg-stevan/scanner-core/types";
+import { OCR_NO_TEXT } from "@/lib/e14/core/ocr";
+import { defaultQuad, FILTER_PRESETS } from "@/lib/e14/core/types";
+import type { PageFilter } from "@/lib/e14/core/types";
 // G4 (KIT camara-visor-v1): descarga de la foto PROCESADA. downloadBlob y
 // sanitizeFileName YA están publicados en el core (pdf-export 0.1.0) —
 // dataUrlToBlob NO existe en el tarball (la instrucción la citaba; se porta
 // como helper local de 5 líneas con fetch → blob, cero dependencias nuevas).
-import { downloadBlob } from "@jg-stevan/scanner-core/pdf-export";
+import { downloadBlob } from "@/lib/e14/core/pdf-export";
 import {
   nombreExportacion,
   tipoDeBanda,

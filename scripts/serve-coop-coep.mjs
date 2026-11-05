@@ -11,8 +11,10 @@
  *        (directorio por defecto: out/)
  * Abrir: http://localhost:8123/
  *
- * También resuelve imports extensionless (`./types` → `./types.js`) porque el
- * core `@jg-stevan/scanner-core` emite imports bundler-style.
+ * También resuelve imports extensionless (`./types` → `./types.js`). Hacía
+ * falta cuando el motor venía como dist de npm con imports bundler-style; con
+ * el core vendorizado (`src/lib/e14/core/`, lo compila Next) ya no se dispara,
+ * pero se deja: es inofensivo y sirve si algún asset suelto vuelve a traerlos.
  */
 import { dirname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";

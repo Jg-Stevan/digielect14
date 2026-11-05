@@ -58,21 +58,35 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
 3. Si el símbolo es ancla de contrato, déjalo exportado y anótalo en
    `docs/DEUDA.md` en vez de tocarlo.
 4. **Lo mismo aplica a `dependencies`**: antes de quitar un paquete de
-   `package.json`, revisa los `peerDependencies` de `@jg-stevan/scanner-core` y
-   `@jg-stevan/scanner-ui` (en sus propios `package.json`) y busca el nombre en
-   `node_modules/@jg-stevan/*/dist/`. `framer-motion` no aparece en ningún
-   `import` de `src/`, pero lo consume `ZoomableVisor` del UI package vía peer:
-   quitarlo rompe la pantalla de revisión, y como bun auto-instala peers el
-   build local lo sigue tapando (con npm o pnpm fallaría al resolver).
+   `package.json`, revisa los `peerDependencies` de `@jg-stevan/scanner-ui` y
+   busca el nombre en `node_modules/@jg-stevan/*/dist/`. `framer-motion` no
+   aparece en ningún `import` de `src/`, pero lo consume `ZoomableVisor` del UI
+   package vía peer: quitarlo rompe la pantalla de revisión, y como bun
+   auto-instala peers el build local lo sigue tapando (con npm o pnpm fallaría
+   al resolver).
+5. El motor ya **no** es un paquete: vive en `src/lib/e14/core/` (ver su
+   `LEEME.md`). `@jg-stevan/scanner-core@0.1.0` sigue apareciendo en
+   `node_modules` solo porque `@jg-stevan/scanner-ui` lo declara como
+   dependencia — y ese `dist` no importa nada del core, así que **no** entra al
+   bundle. No te confundas viéndolo ahí ni lo borres a mano.
 
 ## Paridad con `supervision-e14` (el mismo motor, dos frontends)
 
 Este repo y `supervision-e14` (supervisor masivo) comparten el negocio que
 decide el resultado de un acta: `clasificador.ts`, `completitud.ts`,
-`divipol.ts` y `kits.ts` son la MISMA lógica, y el motor de OCR es el mismo npm
-(`@jg-stevan/scanner-core`, mismo `tesseract.js` con el mismo `spa.traineddata`,
-mismas ONNX PP-OCRv4, mismo `divipol.json`). Lo que NO se comparte ni se porta:
-la cola/bandeja/runner del lote (aquí es un puesto individual) y el PP-OCRv5.
+`divipol.ts` y `kits.ts` son la MISMA lógica, y el motor de OCR es el MISMO
+código: `src/lib/e14/core/` está vendorizado aquí y allá, y los módulos que
+existen en los dos repos son byte a byte idénticos (lo exige
+`scripts/qa-core-vendorizado.ts` + `src/lib/e14/core/__tests__/contrato-core.test.ts`,
+con el md5 de cada módulo en `core/CONTRATO.json`). Igual de compartidos: el
+mismo `tesseract.js` con el mismo `spa.traineddata`, las mismas ONNX PP-OCRv4,
+el mismo `divipol.json`. Lo que NO se comparte ni se porta: la cola/bandeja/
+runner del lote (aquí es un puesto individual) y el PP-OCRv5.
+
+Editar el motor: cambia el archivo en `core/` y **córrelo en los dos repos en
+el mismo commit**, después `bun scripts/qa-core-vendorizado.ts --generar` en
+cada uno. Si solo lo arreglas aquí, el `contrato-core.test.ts` del hermano se
+pone rojo con la misma edición pendiente.
 
 El contrato vive en `src/lib/e14/__fixtures__/contrato-motor.json` (21 cabeceras
 SINTÉTICAS + su salida exacta). Cada repo lo valida contra SU copia del motor:
@@ -96,9 +110,13 @@ SINTÉTICAS + su salida exacta). Cada repo lo valida contra SU copia del motor:
   en español (Conventional Commits: `feat(e14): …`, `fix(e14): …`).
 - Muerto = fuera. Sin `_vars`, sin re-exports de compatibilidad, sin comentarios
   describiendo código removido.
-- No toques el motor (`packages/scanner-core`, npm `@jg-stevan/scanner-core`)
-  desde aquí. Si hace falta un cambio en el core, márcalo `[REQUIERE-CORE]` y
-  proponlo en el repo del motor.
+- El motor **sí** se puede editar (es código de este repo: `src/lib/e14/core/`),
+  pero con tres condiciones: (1) la misma edición en `supervision-e14` en el
+  mismo commit, (2) regenerar `core/CONTRATO.json` en los dos
+  (`bun scripts/qa-core-vendorizado.ts --generar`), (3) si el cambio altera la
+  lectura de un acta —umbral, recorte, normalización de texto—, pasar además el
+  golden `contrato-motor.json`. Todo comportamiento *nuevo* de producción sigue
+  detrás de un flag de `src/lib/e14/flags.ts`.
 - Un commit pequeño y frecuente vale más que un commit gigante.
 
 ## Dónde está qué

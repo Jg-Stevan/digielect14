@@ -22,8 +22,8 @@
  * setProcesando, setArchivoPendiente, dispararEscaneo, mejorarFotoActa.
  */
 import { useCallback, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
-import { fileToCaptureDataUrl, loadImage } from "@jg-stevan/scanner-core/image-processor";
-import { getSensorSafeCap, type SensorProfile } from "@jg-stevan/scanner-core/sensor-profiler";
+import { fileToCaptureDataUrl, loadImage } from "@/lib/e14/core/image-processor";
+import { getSensorSafeCap, type SensorProfile } from "@/lib/e14/core/sensor-profiler";
 import type { Acta } from "@/lib/e14/types";
 import { useE14Store } from "@/lib/e14/store";
 
