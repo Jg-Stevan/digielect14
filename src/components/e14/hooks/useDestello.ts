@@ -19,19 +19,34 @@
  *
  * Todas las dependencias externas son INYECTADAS con la misma identidad que
  * en el original: sensorProfileRef (propietario: ScanView), procesandoRef,
- * setProcesando, setArchivoPendiente, dispararEscaneo, mejorarFotoActa.
+ * setProcesando, setArchivoPendiente, dispararEscaneo, mejorarFotoActa y
+ * mostrarAviso (la franja del visor, también de ScanView).
  */
 import { useCallback, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
-import { fileToCaptureDataUrl, loadImage } from "@/lib/e14/core/image-processor";
+import {
+  ErrorRescateHeic,
+  fileToCaptureDataUrl,
+  loadImage,
+} from "@/lib/e14/core/image-processor";
 import { opcionesRescateHeic } from "@/lib/e14/flags";
 import { getSensorSafeCap, type SensorProfile } from "@/lib/e14/core/sensor-profiler";
 import type { Acta } from "@/lib/e14/types";
 import { useE14Store } from "@/lib/e14/store";
+import { logger } from "@/lib/logger";
 
 /** Destello de captura ~120 ms (spec §7 — duración en globals.css) + margen
  *  antes de navegar a ANALIZANDO (el visor se desmonta). Consumido también
  *  por capturarInteligente (ScanView — último recurso grab del video). */
 export const NAVEGACION_TRAS_MS = 260;
+
+/** KIT e14-heic-tope-v1 (D82). El decodificador de reserva (heic2any 0.0.4) no
+ *  admite `width`/`height` y un HEIC por encima del tope no termina nunca, así
+ *  que el acta no entra. Copy corta y en mayúsculas — el estilo del repo
+ *  (D1/gate-v2): dice el hecho y la salida, sin guía larga. Los 6 s porque el
+ *  operario suele estar con el dedo en el obturador y la franja debe alcanzar a
+ *  leerse antes del siguiente disparo. */
+export const MSG_HEIC_TOPADO = "FOTO HEIC MUY GRANDE · PASA LA ACTA A JPEG";
+export const HEIC_AVISO_MS = 6000;
 
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L245-L290
 // (downscaleImage — función de módulo del lab, canvas puro. NO existe en el
@@ -95,6 +110,11 @@ interface UseDestelloParams {
   /** Acciones del store (identidad exacta del original). */
   setArchivoPendiente: (archivo: File) => void;
   dispararEscaneo: () => Promise<unknown>;
+  /** Franja del visor (propietario: ScanView). KIT e14-heic-tope-v1: un HEIC
+   *  por encima del tope ya no muere en silencio — el puesto tiene que saber
+   *  que la foto no entró, y por qué. Mismo canal de useLinterna y
+   *  useSesionCamara. */
+  mostrarAviso: (texto: string, tono: "crit" | "warn", ms?: number) => void;
   mejorarFotoActa: (url: string, objetivo: Acta) => Promise<unknown> | void;
 }
 
@@ -104,6 +124,7 @@ export function useDestello({
   setProcesando,
   setArchivoPendiente,
   dispararEscaneo,
+  mostrarAviso,
   mejorarFotoActa,
 }: UseDestelloParams) {
   const [destelloKey, setDestelloKey] = useState(0);
@@ -192,7 +213,11 @@ export function useDestello({
         const blob = await (await fetch(scaledUrl)).blob();
         if (!blob.size) return archivo;
         return new File([blob], archivo.name, { type: blob.type || "image/jpeg" });
-      } catch {
+      } catch (e) {
+        // KIT e14-heic-tope-v1: el rechazo del rescate HEIC NO es un fallo
+        // cualquiera — no hay nada que el bridge pueda reintentar (la foto no
+        // entra en el decodificador). Sube y despacharArchivo lo pinta.
+        if (e instanceof ErrorRescateHeic) throw e;
         return archivo; // el bridge reintenta con su propio pipeline robusto
       }
     },
@@ -210,10 +235,22 @@ export function useDestello({
           : new File([blobOArchivo], `acta-camara-${Date.now()}.jpg`, {
               type: blobOArchivo.type || "image/jpeg",
             });
-      const final = (await archivoDentroDeTope(base, robusto)) ?? base;
+      let final: File;
+      try {
+        final = (await archivoDentroDeTope(base, robusto)) ?? base;
+      } catch (e) {
+        if (e instanceof ErrorRescateHeic) {
+          // Sin este corte el rechazo dejaba solo una línea en el registro: el
+          // operario veía el destello y el visor de vuelta, sin explicación.
+          logger.warn("[e14] captura rechazada por el tope HEIC", { mensaje: e.message });
+          mostrarAviso(MSG_HEIC_TOPADO, "crit", HEIC_AVISO_MS);
+          return;
+        }
+        final = base; // lo imprevisto sigue el camino de siempre: despacho intacto
+      }
       despacharCaptura(final);
     },
-    [archivoDentroDeTope, despacharCaptura],
+    [archivoDentroDeTope, despacharCaptura, mostrarAviso],
   );
 
   // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L1806-1842

@@ -307,6 +307,7 @@ export function ScanView() {
     setProcesando,
     setArchivoPendiente,
     dispararEscaneo,
+    mostrarAviso,
     mejorarFotoActa,
   });
   // Selector de fuente §E + handlers de archivo (IMPORTAR + iOS nativa).
