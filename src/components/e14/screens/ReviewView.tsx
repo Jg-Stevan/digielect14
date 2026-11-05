@@ -35,7 +35,7 @@ import {
   type TipoCopia,
 } from "@/lib/e14/clasificador";
 import { QuadEditor } from "../QuadEditor";
-import { ZoomableVisor } from "@jg-stevan/scanner-ui";
+import { ZoomableVisor } from "@/lib/e14/ui/ZoomableVisor";
 import { PanelClasificacion } from "../PanelClasificacion";
 import { Chip, PrimaryBtn, ToolbarBtn } from "../primitives";
 import {

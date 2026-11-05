@@ -1,0 +1,11 @@
+{
+  "//": "md5 de cada archivo de ui/ — ver LEEME.md. Regenerar con `bun scripts/qa-core-vendorizado.ts --generar`.",
+  "origen": {
+    "repo": "Jg-Stevan/web-scanner",
+    "commit": "feba267cb9c01a896f0135ed2e406b7567bec663",
+    "version": "0.1.0"
+  },
+  "modulos": {
+    "ZoomableVisor.tsx": "05f8435da12600ffa900538562e20996"
+  }
+}

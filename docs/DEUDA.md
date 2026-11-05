@@ -13,13 +13,13 @@ el 2026-11-04 tras la limpieza profunda (fuera `tools/`, `lab/`,
   `TipoEvento`): `knip` los reporta como unused porque sus consumidores no son
   imports estáticos. `scripts/qa-obs-contract.ts` los exige con **regex sobre el
   fuente** (contrato §4.3) y `obs.test.ts` los alcanza con **import dinámico**.
-- **`framer-motion` en `dependencies`**: ningún `import` de `src/` lo nombra,
-  pero es `peerDependency` de `@jg-stevan/scanner-ui` y lo usa `ZoomableVisor`
-  (`src/components/e14/screens/ReviewView.tsx:38`). Está en el grafo: hay código
-  de motion en los chunks de `.next/static`. **No quitarlo.**
 - **`heic2any` (SÍ se quitó, el 2026-11-04)**: se declaraba aquí y en el core,
   pero solo el core lo importa (`dist/image-processor.js`). Al ser dependencia
   dura del core, sigue instalando y resolviendo; quedó como transitiva.
+- **`framer-motion`**: desde la capa UI vendorizada (D83) tiene un import estático
+  visible en `src/lib/e14/ui/ZoomableVisor.tsx`, así que `knip` ya no lo reporta.
+  Antes parecía muerto porque solo lo usaba el `dist` de `@jg-stevan/scanner-ui`.
+  **No quitarlo.**
 - **Comentarios que citan `apps/scanner-lab`, `SPEC-*` o `KIT e14-*`**: son
   artefactos de las sesiones de desarrollo (repo del motor y briefs). No son
   enlaces rotos; el catálogo real de decisiones es `docs/DECISIONS.md`.

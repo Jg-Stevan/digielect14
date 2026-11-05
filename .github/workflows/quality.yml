@@ -55,6 +55,6 @@ jobs:
           bun scripts/smoke-heartbeat-worker.mjs
           bun scripts/smoke-capa0-qr-worker.mjs
 
-      - name: Harnesses de contrato QA (los 6)
+      - name: Harnesses de contrato QA (todos los scripts/qa-*.ts)
         run: |
           for f in scripts/qa-*.ts; do echo "── $f"; bun "$f" || exit 1; done

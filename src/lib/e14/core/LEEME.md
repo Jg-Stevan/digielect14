@@ -38,7 +38,7 @@ idénticos**. Lo verifican dos artefactos:
   `src/lib/e14/core/__tests__/contrato-core.test.ts` **en cada CI por separado**
   (no necesita el otro checkout): si editas el motor sin regenerarlo, el test se
   pone rojo.
-- `bun scripts/qa-core-vendorizado.ts` — 17 chequeos: compara byte a byte contra
+- `bun scripts/qa-core-vendorizado.ts` — sus chequeos: compara byte a byte contra
   el hermano cuando los dos checkouts están en disco, comprueba que el cierre
   interno del árbol esté completo, que ningún import vuelva a apuntar al paquete
   npm, y que los dos `CONTRATO.json` coincidan donde se solapan.
