@@ -81,6 +81,17 @@ en CI sale «omitido» porque no hay checkout hermano, y en local exige
   anteponer `MSYS_NO_PATHCONV=1` al comando; en CI (Linux) no aplica.
 
 
+- **Copiar el `src` del motor desde un working tree de Windows trajo CRLF a un
+  repo con `eol=lf`.** `CONTRATO.json` se generó con el md5 de esos bytes y el
+  CI (Linux, que clona en LF) lo iba a cortar en rojo el primer run. Dos
+  arreglo: los md5 se calculan sobre el contenido con saltos normalizados a LF
+  (`SIN_CR` en el harness, ídem en `contrato-core.test.ts`) y el árbol vendorizado
+  se renormalizó a LF. Se comprueba sin esperar al CI: `git show HEAD:<ruta>` da
+  el blob tal como lo verá Linux, y su md5 tiene que coincidir con el contrato.
+  Ojo: `git ls-files --eol | grep w/crlf` muestra que acá casi TODO el working
+  tree está en CRLF aunque el índice esté en LF — por eso el md5 por bytes crudos
+  nunca debió ser la garantía.
+
 ## Pendiente de decisión del dueño
 
 1. **`src/assets/acta-e14-real.jpg`** (348 KB) es **foto real de un acta** y viaja
@@ -112,6 +123,14 @@ en CI sale «omitido» porque no hay checkout hermano, y en local exige
 - `docs/evidence/sim-recursos/*.js` (4 scripts, ≈76 KB) son evidencia histórica
   de las corridas de gama baja; `knip` los ve como archivos sueltos. Se van con
   el próximo reporte que los cite o con decisión del dueño.
+- **El HEIC de 12 MP sigue costando ~6,9 s.** El tope de D82 corta el caso que
+  mataba el acta (50 MP), pero NO acelera el archivo que sí se decodifica:
+  heic2any 0.0.4 decodifica a resolución nativa y no admite `width`/`height`
+  (verificado en su `dist`), así que el recorte en el decode no existe. La
+  salida real sería usar libheif directo (o una lib que sí recorte) dentro del
+  worker propio de `public/scanner/`, con su propio kit de evidencia. Mientras
+  tanto, el camino caro solo se paga en IMPORTAR un HEIC: la cámara del puesto
+  dispara JPEG.
 - El helper `blobADataUrl` está duplicado (privado) en `jornada.ts` y
   `puente/mapear.ts`. Doce líneas de glue de `FileReader`; fusionarlas obligaría
   a `mapear.ts` a importar `image-utils.ts`, que arrastra el motor

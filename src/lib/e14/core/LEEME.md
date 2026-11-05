@@ -23,7 +23,9 @@ del repo de origen.
 - El paquete estaba **incompleto para el producto**: el camino HEIC convierte
   a resolución nativa (`convertHeicToJpegBlob`) y en un HEIC de 50 MP nunca
   termina — lo mata el *watchdog* de 120 s. Arreglarlo por npm implicaba
-  publicar versiones por cada ajuste del móvil.
+  publicar versiones por cada ajuste del móvil. Ya arreglado acá: el rescate
+  va topado (`dimensionesHeic` + `HEIC_TOPE_MP_DEFECTO`, D82) en las dos copias
+  del motor, en el mismo commit.
 - `digielect14` es un digitalizador individual por puesto: no necesita el
   almacén de documentos ni el store de páginas del motor genérico.
 

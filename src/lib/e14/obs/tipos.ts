@@ -158,6 +158,15 @@ export interface FlagsApp {
   // ─── mismos píxeles por línea que el original y la mini decide en el lienzo
   // ─── barato. Los umbrales del FALLO SEGURO NO cambian. 320 = HOY byte-idéntico.
   probeMiniLado: number; // default 1280 · clamp [320, 1280]
+
+  // ─── KIT e14-heic-tope-v1 — el rescate HEIC (F-HEIC del core) se despacha
+  // ─── TOPADO. `heicTopeMp`: megapíxeles máximos del HEIC que se intenta
+  // ─── decodificar (se leen del contenedor, sin decodificar). 0 = sin tope =
+  // ─── camino anterior. `heicLimiteMs`: plazo de la conversión; tiene que
+  // ─── quedar POR DEBAJO del watchdog del puente (120_000) para que el acta
+  // ─── muerta se vea como un HEIC rechazado, no como un misterio. 0 = sin plazo.
+  heicTopeMp: number; // default 24 · clamp [0, 60]
+  heicLimiteMs: number; // default 45000 · clamp [0, 110000]
 }
 
 export interface ReporteSesion {

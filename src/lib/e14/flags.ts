@@ -14,6 +14,11 @@
  */
 import { leerOverridesFlags } from "./obs/politica";
 import type { FlagsApp } from "./obs/tipos";
+import {
+  HEIC_LIMITE_MS_DEFECTO,
+  HEIC_TOPE_MP_DEFECTO,
+  type OpcionesRescateHeic,
+} from "./core/image-processor";
 
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const REFRESH_MS = 24 * 60 * 60 * 1000;
@@ -71,6 +76,15 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // E-14 sub-lee y el probe paga el sondeo completo de 4 rotaciones casi siempre.
   // Override: {"probeMiniLado":320} = comportamiento anterior byte-idéntico.
   probeMiniLado: 1280,
+  // KIT e14-heic-tope-v1 — el rescate HEIC del core topado por producto, no por
+  // el motor: heic2any 0.0.4 no admite `width`/`height`, así que decode a
+  // resolución NATIVA es lo que hay y un 50 MP no termina nunca (medido en el
+  // A56: 12 MP = 6 913 ms; 50 MP = watchdog de 120 s y acta sin rastro). El
+  // default es el mismo que publica el core (HEIC_TOPE_MP_DEFECTO /
+  // HEIC_LIMITE_MS_DEFECTO); override {"heicTopeMp":0,"heicLimiteMs":0} =
+  // camino anterior, sin red de seguridad.
+  heicTopeMp: HEIC_TOPE_MP_DEFECTO,
+  heicLimiteMs: HEIC_LIMITE_MS_DEFECTO,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -109,6 +123,15 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.probeMiniLado === "number" && Number.isFinite(p.probeMiniLado)) {
     limpio.probeMiniLado = Math.max(320, Math.min(1280, Math.round(p.probeMiniLado)));
   }
+  // KIT e14-heic-tope-v1 — whitelist aditiva (números clampados). Acá 0 SÍ es
+  // legal y significa «sin tope / sin límite» = el camino anterior; por eso el
+  // clamp es [0, tope] y no [1, tope]. Basura o fuera de rango ⇒ manda default.
+  if (typeof p.heicTopeMp === "number" && Number.isFinite(p.heicTopeMp)) {
+    limpio.heicTopeMp = Math.max(0, Math.min(60, Math.round(p.heicTopeMp)));
+  }
+  if (typeof p.heicLimiteMs === "number" && Number.isFinite(p.heicLimiteMs)) {
+    limpio.heicLimiteMs = Math.max(0, Math.min(110_000, Math.round(p.heicLimiteMs)));
+  }
   return limpio;
 }
 
@@ -124,6 +147,15 @@ export function leerFlags(): FlagsApp {
     /* silencioso — defaults */
   }
   return flags;
+}
+
+/** Opciones del rescate F-HEIC del core (KIT e14-heic-tope-v1). Un solo lector
+ *  de los dos flags para los DOS sitios que decodifican un File (useDestello y
+ *  la memo del bridge): si cada uno copiara los números, un override del dueño
+ *  se aplicaría a medias y el acta se comportaría distinto según de dónde venga. */
+export function opcionesRescateHeic(): OpcionesRescateHeic {
+  const f = leerFlags();
+  return { topeMpHeic: f.heicTopeMp, limiteMsHeic: f.heicLimiteMs };
 }
 
 /** Un intento de refresco (fetch de flags.json). Distinción honesta para

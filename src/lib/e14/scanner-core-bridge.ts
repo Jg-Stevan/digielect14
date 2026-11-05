@@ -34,6 +34,7 @@
 import {
   detectDocumentEdgesDetail,
   evaluateQuality,
+  ErrorRescateHeic,
   fileToCaptureDataUrl,
   processImage,
 } from "@/lib/e14/core/image-processor";
@@ -128,7 +129,7 @@ import { probeOrientacion, rotarDataUrl } from "./orientacion";
 // cuadrante del QR (bench v8.3: 4/4); el sondeo OCR queda como red de
 // seguridad cuando el QR no lee. leerFlags = kill-switch del dueño (§D).
 import { brujulaQrOrientacion, type BrujulaQr } from "./orientacion-qr";
-import { leerFlags } from "./flags";
+import { leerFlags, opcionesRescateHeic } from "./flags";
 // WAVE2 A1 — tipo del resultado del probe (para el diag de la mini descartada por el fallo seguro).
 import type { ProbeOrientacion } from "./orientacion";
 // KIT e14-ocr-escalonado-v1 (§2): caps del det-preprocess (op4) expuestos por
@@ -180,7 +181,7 @@ const decodeMemo = new WeakMap<File, Promise<string>>();
 function decodeArchivoMemo(file: File): Promise<string> {
   let p = decodeMemo.get(file);
   if (!p) {
-    p = fileToCaptureDataUrl(file);
+    p = fileToCaptureDataUrl(file, opcionesRescateHeic());
     decodeMemo.set(file, p);
     void p.catch(() => {
       if (decodeMemo.get(file) === p) decodeMemo.delete(file);
@@ -1309,6 +1310,13 @@ export class RealCoreBridge implements E14Bridge {
           resolve(acta);
         },
         (error) => {
+          // KIT e14-heic-tope-v1 — el rescate HEIC rechazo o agotó su plazo, la
+          // trazabilidad NO puede depender de que el llamador recuerde loggear:
+          // el dueño necesita ver en el registro que un acta murió por el
+          // formato de la foto, no por el motor.
+          if (error instanceof ErrorRescateHeic) {
+            logger.warn("[e14] rescate HEIC topado", { mensaje: error.message });
+          }
           if (vencido) {
             // e67: el pipeline TARDÍO falló — traza honesta; el acta
             // queda RECHAZADA por tiempo (correcto, caso C del kit).

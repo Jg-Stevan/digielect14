@@ -23,6 +23,7 @@
  */
 import { useCallback, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { fileToCaptureDataUrl, loadImage } from "@/lib/e14/core/image-processor";
+import { opcionesRescateHeic } from "@/lib/e14/flags";
 import { getSensorSafeCap, type SensorProfile } from "@/lib/e14/core/sensor-profiler";
 import type { Acta } from "@/lib/e14/types";
 import { useE14Store } from "@/lib/e14/store";
@@ -170,7 +171,7 @@ export function useDestello({
     async (archivo: File, robusto: boolean): Promise<File | null> => {
       try {
         const rawDataUrl = robusto
-          ? await fileToCaptureDataUrl(archivo)
+          ? await fileToCaptureDataUrl(archivo, opcionesRescateHeic())
           : await blobToDataUrl(archivo);
         if (!rawDataUrl) return null; // F-IMPORT falló → el llamador avisa (lab L954-961)
         // Decode ÚNICO de la captura (antes: downscale + detect + quality

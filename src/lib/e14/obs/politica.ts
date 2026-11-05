@@ -146,6 +146,15 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     if (typeof o.probeMiniLado === "number" && Number.isFinite(o.probeMiniLado)) {
       limpio.probeMiniLado = Math.max(320, Math.min(1280, Math.round(o.probeMiniLado)));
     }
+    // KIT e14-heic-tope-v1 — mismo criterio (DOBLE whitelist). Acá 0 SÍ es un
+    // valor válido y es justo el que el dueño usa como kill-switch: 0 = sin tope
+    // / sin límite = el camino anterior. El clamp es [0, tope] por eso.
+    if (typeof o.heicTopeMp === "number" && Number.isFinite(o.heicTopeMp)) {
+      limpio.heicTopeMp = Math.max(0, Math.min(60, Math.round(o.heicTopeMp)));
+    }
+    if (typeof o.heicLimiteMs === "number" && Number.isFinite(o.heicLimiteMs)) {
+      limpio.heicLimiteMs = Math.max(0, Math.min(110_000, Math.round(o.heicLimiteMs)));
+    }
     // NOTA (eliminación del módulo masiva): las puertas de los 17 flags
     // exclusivos de la cola se retiraron junto con el módulo.
     return limpio;

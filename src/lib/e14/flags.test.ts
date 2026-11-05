@@ -6,7 +6,14 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { __resetFlagsParaTest, FLAGS_DEFAULT, leerFlags, refrescarFlags, sanearFlags } from "./flags";
+import {
+  __resetFlagsParaTest,
+  FLAGS_DEFAULT,
+  leerFlags,
+  opcionesRescateHeic,
+  refrescarFlags,
+  sanearFlags,
+} from "./flags";
 
 afterEach(() => {
   __resetFlagsParaTest();
@@ -70,7 +77,34 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       capa0QrWorker: true,
       // KIT e14-probe-mini768-v1 — aditivo AL FINAL (contrato D57):
       probeMiniLado: 1280,
+      // KIT e14-heic-tope-v1 — aditivo AL FINAL (contrato D57): los mismos
+      // números que publica el core (una sola fuente de verdad).
+      heicTopeMp: 24,
+      heicLimiteMs: 45_000,
     });
+  });
+
+  it("KIT e14-heic-tope-v1 — el kill switch del rescate HEIC es 0, no ausente", () => {
+    vi.stubGlobal("window", {
+      setTimeout: () => 0,
+      clearTimeout: () => {},
+      localStorage: {
+        getItem: (k: string) =>
+          k === "e14-flags-overrides" ? JSON.stringify({ heicTopeMp: 0, heicLimiteMs: 0 }) : null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    });
+    // 0 = «sin tope / sin límite» = el camino anterior (antes de topar, un 50 MP
+    // colgaba 120 s y el acta moría sin traza). Que 0 sobreviva es el punto.
+    expect(opcionesRescateHeic()).toEqual({ topeMpHeic: 0, limiteMsHeic: 0 });
+    // Y el saneo no convierte basura en un número cualquiera: fuera de rango o
+    // no-numérico ⇒ la clave no se aplica y manda el default.
+    expect(sanearFlags({ heicTopeMp: 500, heicLimiteMs: -1 })).toEqual({
+      heicTopeMp: 60,
+      heicLimiteMs: 0,
+    });
+    expect(sanearFlags({ heicTopeMp: "24" })).toEqual({});
   });
 
   it("overrides (localStorage) mandan sobre defaults — kill switch manual", () => {
