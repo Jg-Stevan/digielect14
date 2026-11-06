@@ -162,7 +162,14 @@
 html,
 body {
   width: 100%;
+  /* KIT e14-viewport-fit-v1 (D85): 100vh es el viewport GRANDE del móvil —
+     con la barra de URL visible el documento medía ~60-120 px más que la
+     pantalla y sobraba un bloque vacío bajo el BottomNav en TODAS las vistas.
+     El viewport dinámico (dvh) es el que la barra deja visible; el shell ya
+     vive en él (h-dvh, D38). 100vh queda primero como fallback para
+     navegadores sin unidades dinámicas (Chrome < 108 / Safari < 15.4). */
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background-color: var(--color-brand-black);
   color: #f3f4f6;
