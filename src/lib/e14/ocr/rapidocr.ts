@@ -68,6 +68,12 @@ interface RapidOcrResultado {
   msDet: number;
   msCls: number;
   msRec: number;
+  /** KIT e14-velocidad-5s-v1 — despiece de `msRec`: `msRunRec` = tiempo ES
+   *  esperando el `run()` (wasm + el viaje del output de ~19 MB por lote con
+   *  `proxy: true`); la resta (`msRec − msRunRec`) es hilo principal puro
+   *  (getImageData + normalizar tensores + CTC decode). Sin este despiece el
+   *  acta no dice si conviene más de un hilo wasm, menos W o menos líneas. */
+  msRunRec: number;
   nBoxes: number;
 }
 
@@ -143,7 +149,14 @@ async function initReal(): Promise<RapidRuntime> {
   //   MEDIO 3 · ALTO 6 — exprimar en gama alta, proteger en baja) > default 4.
   // Cap SIEMPRE por hardwareConcurrency. `adaptacionDispositivo: false`
   // ⇒ byte-idéntico al comportamiento histórico (default 4).
-  ort.env.wasm.numThreads = numThreadsOcrEfectivos();
+  // AUDITORIA-e14-v1: consumo medido 2,8 de 8 núcleos ⇒ numThreads no surte
+  // efecto con el proxy (ORT mueve los kernels a un thread pool interno).
+  // Forzamos 6 hilos ALTO + registro observable desde el dispositivo.
+  const hilos = numThreadsOcrEfectivos();
+  ort.env.wasm.numThreads = hilos;
+  try {
+    (window as any).__E14_ORT_CONFIG__ = { numThreads: hilos, proxy: true, simd: true };
+  } catch {}
   ort.env.wasm.simd = true;
   // KIT e14-optimizacion-v1 (T2, hallazgo #2 de AUDITORIA-e14-v1): proxy=true
   // migra det/cls/rec al worker interno de ORT — la inferencia (9.8-14.3 s)
@@ -158,13 +171,19 @@ async function initReal(): Promise<RapidRuntime> {
   ort.env.wasm.proxy = true;
 
   const opts = { executionProviders: ["wasm"] };
+  const REC_URL = `${PUBLIC_BASE}/models/rapidocr/ch_PP-OCRv4_rec_infer.onnx`;
+  // Una sola sesión por modelo. La variante con DOS sesiones del mismo rec
+  // (dos workers `proxy` repartiéndose los lotes) se midió y se descartó: el
+  // A56 ya está a 7,7 de 8 núcleos con UNA, así que la segunda no encuentra
+  // CPU libre y solo paga el heap extra y el init (otra descarga+deshielo del
+  // .onnx en el primer escaneo). Ver el bloque de knobs del rec abajo.
   const [det, cls, rec, dictResp] = await Promise.all([
     ort.InferenceSession.create(`${PUBLIC_BASE}/models/rapidocr/ch_PP-OCRv4_det_infer.onnx`, opts),
     ort.InferenceSession.create(
       `${PUBLIC_BASE}/models/rapidocr/ch_ppocr_mobile_v2.0_cls_infer.onnx`,
       opts,
     ),
-    ort.InferenceSession.create(`${PUBLIC_BASE}/models/rapidocr/ch_PP-OCRv4_rec_infer.onnx`, opts),
+    ort.InferenceSession.create(REC_URL, opts),
     fetch(`${PUBLIC_BASE}/models/rapidocr/ppocr_keys.txt`),
   ]);
   if (!dictResp.ok) throw new Error(`ppocr_keys.txt HTTP ${dictResp.status}`);
@@ -223,7 +242,7 @@ export const DET_CAP_PROD = 1920;
 export const DET_CAP_RAPIDO = 1280;
 
 // ─── KIT e14-rec-wmax480-v1 (bench v8.5): cap del ancho del tensor rec ──────
-// El run() WASM del rec escala con n×wmax (floats del tensor [b,3,48,wmax]),
+// El run() WASM del rec escala con n×wmax (floats del tensor [b,3,h,wmax]),
 // NO con los píxeles del crop — medido ~0.56 ms/unidad constante en Q2–Q4
 // (bench v8.5, 70 lotes). El techo 480 da: rec full media 10,733→8,729 ms
 // (−19%), RapidOCR full 12,150→10,093 ms (−17%), peor caso 16.0→11.8 s
@@ -231,9 +250,56 @@ export const DET_CAP_RAPIDO = 1280;
 // 7/7 gt ×4/4 intacta — tensorDeCanvases hace squish horizontal (rw=
 // min(natural, targetW) con pad de ceros), NO truncado: líneas naturales
 // hasta 864 sobrevivieron sin pérdida. Aplicado en AMBOS rec (producción y
-// probe §2.1) para mantener el pre/post idéntico. Kill switch: REC_WMAX =
-// Infinity = comportamiento anterior byte a byte.
-const REC_WMAX = 480;
+// probe §2.1) para mantener el pre/post idéntico.
+// ─── KIT e14-velocidad-5s-v1 (fase rec): los tres knobs SON FLAGS ──────────
+// WMAX/ALTURA/LOTE salen de `leerFlags()` (default = HOY byte a byte) porque
+// la única palanca que queda es HACER MENOS CÁLCULO: medido con /proc/stat
+// DURANTE la corrida en el A56, el rec deja el celu a 7,7 de 8 núcleos
+// (los 4 núcleos grandes clavados en 1,00). Sesiones hermanas, hilos 3→6 y 2
+// lotes en vuelo quedaron PROBADOS Y DESCARTADOS: sin holgura de CPU, mover
+// el trabajo de worker no lo hace más barato. El costo es ~ n·h·W (y la
+// salida [n,T,6623] con T ∝ W) ⇒ W y h son las perillas; el ONNX del rec
+// acepta altura DINÁMICA (verificado en node: [1,3,h,320] corre para
+// h=32/40/48/56 y T queda 40 — la altura SOLO mueve las conv, no el CTC).
+// WMIN = 320: aun con h baja, el tensor no se acorta de lo que PaddleOCR usa
+// de fábrica (T=40 pasos — el pad de ceros ya estaba en el diseño).
+import { leerFlags } from "../flags";
+import { ANCLAS_LECTURA } from "../senal-lectura";
+
+/** Las 10 anclas estructurales del acta contadas sobre un texto YA leído — la
+ *  MISMA lista (`ANCLAS_LECTURA`) que usa la señal de lectura del score, para
+ *  que la decisión de "esto ya es un acta identificada" sea la misma en los dos
+ *  sitios. Puro y barato: 10 regex sobre ~600 caracteres. */
+function contarAnclas(texto: string): number {
+  return ANCLAS_LECTURA.filter(([, re]) => re.test(texto)).length;
+}
+
+/** Los tres knobs del tensor del rec (flags de la app — default = HOY). Una
+ *  sola lectura por pasada: el probe de orientación y la pasada del bridge
+ *  llaman a `recKnobs()` y quedan con el MISMO pre/post (la conf cruda tiene
+ *  que seguir siendo comparable entre motores). */
+export function recKnobs(): {
+  anchoMax: number;
+  alto: number;
+  lote: number;
+  suave: boolean;
+  wFija: boolean;
+  cabecera: number;
+  pie: number;
+  bordesRescate: number;
+} {
+  const f = leerFlags();
+  return {
+    anchoMax: f.ocrRecWmax,
+    alto: f.ocrRecAltura,
+    lote: f.ocrRecLote,
+    suave: f.ocrRecSuave,
+    wFija: f.ocrRecWfija,
+    cabecera: f.ocrRecCabecera,
+    pie: f.ocrRecPie,
+    bordesRescate: f.ocrRecBordesRescate,
+  };
+}
 
 // ─── Pre-det (main.py fidelidad: reduce_max → increase_min → letterbox →
 //     det-preprocess round32) + registro de ops para mapear de vuelta ───────
@@ -559,34 +625,80 @@ function cropLinea(
   return { canvas, ratio: cropW / cropH };
 }
 
+// KIT e14-velocidad-5s-v1 — rama SUAVE del remuestreo (`ocrRecSuave`). El
+// recorte llega a resolución NATIVA del acta (líneas de 40-70 px), así que
+// cuando `alto` baja de esa altura el nearest de siempre no interpola: elige
+// UNA fila cada ch/h y DESCARTA las demás — la red ve trazos partidos y las
+// anclas caen (medido: h=32/40 con nearest perdía anclas y escalaba la
+// cascada). `drawImage` con `imageSmoothingQuality: "high"` remuestrea con
+// filtro de área/bilineal: la misma altura baja, pero con la línea entera.
+// false = ruta de hoy, byte a byte.
+let lienzoSuave: HTMLCanvasElement | null = null;
+
+function pixelesSuaves(c: HTMLCanvasElement, rw: number, h: number): Uint8ClampedArray {
+  let tmp = lienzoSuave;
+  if (!tmp) tmp = lienzoSuave = canvasCon(rw, h);
+  if (tmp.width !== rw || tmp.height !== h) {
+    // Cambiar el tamaño del canvas RESETA el estado del contexto (incluidos
+    // los flags de suavizado) — por eso el smoothing se fija DESPUÉS.
+    tmp.width = rw;
+    tmp.height = h;
+  }
+  const ctx = ctxDe(tmp);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(c, 0, 0, c.width, c.height, 0, 0, rw, h);
+  return ctx.getImageData(0, 0, rw, h).data;
+}
+
 function tensorDeCanvases(
   ort: OrtModule,
   canvases: HTMLCanvasElement[],
   targetW: number,
+  h: number,
+  suave = false,
 ): OrtValue {
   const b = canvases.length;
-  const data = new Float32Array(b * 3 * 48 * targetW);
+  const data = new Float32Array(b * 3 * h * targetW);
   for (let i = 0; i < b; i++) {
     const c = canvases[i];
-    const ctx = ctxDe(c);
     const { width: cw, height: ch } = c;
+    // resize PaddleOCR: h fija (knob `ocrRecAltura`), ancho objetivo
+    // min(ceil(h·ratio), targetW) (pad de ceros a la derecha — el buffer ya
+    // nace en 0).
+    const rw = Math.min(Math.max(1, Math.ceil((h * cw) / ch)), targetW);
+    const base = i * 3 * h * targetW;
+    const paso = h * targetW;
+    if (suave) {
+      // El ImageData YA tiene el tamaño del destino ⇒ copia directa (el
+      // remuestreo lo hizo el filtro del canvas, no este bucle).
+      const px = pixelesSuaves(c, rw, h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < rw; x++) {
+          const idx = (y * rw + x) * 4;
+          const o = base + y * targetW + x;
+          data[o] = (px[idx + 2] / 255 - 0.5) / 0.5; // B
+          data[o + paso] = (px[idx + 1] / 255 - 0.5) / 0.5; // G
+          data[o + 2 * paso] = (px[idx] / 255 - 0.5) / 0.5; // R
+        }
+      }
+      continue;
+    }
+    const ctx = ctxDe(c);
     const img = ctx.getImageData(0, 0, cw, ch);
-    // resize PaddleOCR: h=48 fijo, ancho objetivo min(ceil(48·ratio), targetW)
-    // (pad de ceros a la derecha — el buffer ya nace en 0).
-    const rw = Math.min(Math.max(1, Math.ceil((48 * cw) / ch)), targetW);
-    for (let y = 0; y < 48; y++) {
-      const sy = Math.min(ch - 1, Math.floor((y * ch) / 48));
+    for (let y = 0; y < h; y++) {
+      const sy = Math.min(ch - 1, Math.floor((y * ch) / h));
       for (let x = 0; x < rw; x++) {
         const sx = Math.min(cw - 1, Math.floor((x * cw) / rw));
         const idx = (sy * cw + sx) * 4;
-        const o = i * 3 * 48 * targetW + y * targetW + x;
+        const o = base + y * targetW + x;
         data[o] = (img.data[idx + 2] / 255 - 0.5) / 0.5; // B
-        data[o + 48 * targetW] = (img.data[idx + 1] / 255 - 0.5) / 0.5; // G
-        data[o + 2 * 48 * targetW] = (img.data[idx] / 255 - 0.5) / 0.5; // R
+        data[o + paso] = (img.data[idx + 1] / 255 - 0.5) / 0.5; // G
+        data[o + 2 * paso] = (img.data[idx] / 255 - 0.5) / 0.5; // R
       }
     }
   }
-  return new ort.Tensor("float32", data, [b, 3, 48, targetW]);
+  return new ort.Tensor("float32", data, [b, 3, h, targetW]);
 }
 
 function softmax2(a: number, b: number): [number, number] {
@@ -835,7 +947,15 @@ export async function rapidOcrReconocer(
   // KIT e14-ocr-escalonado-v1 (§2.1-§2.2): cap det de ESTA llamada —
   // ausente = DET_CAP_PROD (comportamiento de hoy byte a byte); la 1.ª
   // pasada del escalonado pasa DET_CAP_RAPIDO. La sesión/cls/rec NO cambian.
-  opts?: { detCap?: number },
+  // KIT e14-velocidad-5s-v1: `omitirCls` ⇒ NO corre el sondeo de rotación
+  // (180°) — solo lo pide el bridge cuando la BRÚJULA QR ya fijó la
+  // orientación del acta (el cls existe para lo mismo que el QR resuelve con
+  // más evidencia). `nBoxes`/`msCls` viajan en la salida para la traza.
+  // `sinRescateBordes` ⇒ se cobra SOLO la lectura por bandas (cabecera+pie):
+  // la red de seguridad que relee las líneas omitidas no corre. La pide el
+  // bridge en el RECHAZO TEMPRANO, cuando el veredicto ya está bloqueado antes
+  // del OCR y ningún ancla extra cambia el desenlace.
+  opts?: { detCap?: number; omitirCls?: boolean; sinRescateBordes?: boolean },
 ): Promise<RapidOcrResultado> {
   const tTotal = performance.now();
   const src = await loadImageMemo(dataUrl); // SPRINT-A A2 — decode memoizado del repo
@@ -844,32 +964,37 @@ export async function rapidOcrReconocer(
   const { boxesFuente, msDet, memoMsAhorrado } = await inferDet(rt, src, opts?.detCap ?? DET_CAP_PROD, dataUrl);
 
   if (boxesFuente.length === 0) {
-    return { lineas: [], texto: "", confMedia: 0, msDet, msCls: 0, msRec: 0, nBoxes: 0 };
+    return { lineas: [], texto: "", confMedia: 0, msDet, msCls: 0, msRec: 0, msRunRec: 0, nBoxes: 0 };
   }
 
   // 5) crops por línea (desde la FUENTE, resolución nativa)
   const crops = boxesFuente.map((b) => cropLinea(src, b));
 
-  // 6) cls por lote de 6 (rotación 180 si score > 0.9)
+  // 6) cls por lote de 6 (rotación 180 si score > 0.9) — OMITIDO cuando la
+  //    brújula QR ya decidió (KIT e14-velocidad-5s-v1: el sondeo responde a la
+  //    MISMA pregunta que el cuadrante del QR y con MENOS evidencia; su costo
+  //    queda ahora visible en la traza como msCls).
   const t1 = performance.now();
   const rotar: boolean[] = new Array(crops.length).fill(false);
-  for (let i = 0; i < crops.length; i += 6) {
-    const lote = crops.slice(i, i + 6).map((c) => c.canvas);
-    const tensors = lote.map((cv) => {
-      // cls: h=48, w=min(192, ceil(48·ratio)) con pad a 192
-      const ratio = cv.width / cv.height;
-      const wObj = Math.min(192, Math.max(1, Math.ceil(48 * ratio)));
-      const tmp = canvasCon(wObj, 48); // SPRINT-A A3 — factory
-      ctxDe(tmp).drawImage(cv, 0, 0, wObj, 48);
-      return tmp;
-    });
-    const tensor = tensorDeCanvases(rt.ort, tensors, 192);
-    const res = await rt.cls.run({ [rt.cls.inputNames[0]]: tensor });
-    const out = res[rt.cls.outputNames[0]];
-    const data = out.data as Float32Array;
-    for (let k = 0; k < lote.length; k++) {
-      const [p0, p180] = out.dims[1] === 2 ? softmax2(data[k * 2], data[k * 2 + 1]) : [1, 0];
-      if (p180 > 0.9 && p180 > p0) rotar[i + k] = true;
+  if (!opts?.omitirCls) {
+    for (let i = 0; i < crops.length; i += 6) {
+      const lote = crops.slice(i, i + 6).map((c) => c.canvas);
+      const tensors = lote.map((cv) => {
+        // cls: h=48, w=min(192, ceil(48·ratio)) con pad a 192
+        const ratio = cv.width / cv.height;
+        const wObj = Math.min(192, Math.max(1, Math.ceil(48 * ratio)));
+        const tmp = canvasCon(wObj, 48); // SPRINT-A A3 — factory
+        ctxDe(tmp).drawImage(cv, 0, 0, wObj, 48);
+        return tmp;
+      });
+      const tensor = tensorDeCanvases(rt.ort, tensors, 192, 48);
+      const res = await rt.cls.run({ [rt.cls.inputNames[0]]: tensor });
+      const out = res[rt.cls.outputNames[0]];
+      const data = out.data as Float32Array;
+      for (let k = 0; k < lote.length; k++) {
+        const [p0, p180] = out.dims[1] === 2 ? softmax2(data[k * 2], data[k * 2 + 1]) : [1, 0];
+        if (p180 > 0.9 && p180 > p0) rotar[i + k] = true;
+      }
     }
   }
   const msCls = Math.round(performance.now() - t1);
@@ -886,41 +1011,130 @@ export async function rapidOcrReconocer(
     return tmp;
   });
 
-  // 7) rec por lote de 6 (líneas ordenadas por ratio w/h — acelera)
+  // 7) rec por lotes (líneas ordenadas por ratio w/h — acelera). Los tres
+  // knobs del tensor salen de las flags (default = HOY byte a byte).
+  const knobs = recKnobs();
   const t2 = performance.now();
-  const orden = cropsFinales
-    .map((c, i) => ({ i, ratio: c.width / c.height }))
-    .sort((a, b) => a.ratio - b.ratio);
-  const lineas: RapidOcrLinea[] = new Array(cropsFinales.length);
-  for (let k = 0; k < orden.length; k += 6) {
-    const lote = orden.slice(k, k + 6);
-    const maxRatio = Math.max(320 / 48, ...lote.map((o) => o.ratio));
-    // KIT e14-rec-wmax480-v1 (bench v8.5): cap del ancho del tensor — el lote
-    // entero corre al ancho de su línea más ancha; sin cap, una sola línea
-    // de 864 px hinchaba TODOS los tensores del lote (0.56 ms/unidad WASM).
-    const W = Math.min(REC_WMAX, Math.floor(48 * maxRatio));
-    const canvases = lote.map((o) => cropsFinales[o.i]);
-    const tensor = tensorDeCanvases(rt.ort, canvases, W);
-    const res = await rt.rec.run({ [rt.rec.inputNames[0]]: tensor });
-    const out = res[rt.rec.outputNames[0]];
-    for (let m = 0; m < lote.length; m++) {
-      const dims = out.dims;
-      const sub: OrtValue = {
-        dims: [1, dims[1], dims[2]],
-        data: (out.data as Float32Array).subarray(
-          m * dims[1] * dims[2],
-          (m + 1) * dims[1] * dims[2],
-        ) as Float32Array,
-        type: out.type,
-      };
-      const { texto, conf } = ctcDecode(sub, rt.dict);
-      if (conf >= TEXT_SCORE && texto.trim().length > 0) {
-        lineas[lote[m].i] = { texto: texto.trim(), conf, box: boxesFuente[lote[m].i] };
-      }
-    }
-    // PROD-2 (§4.3-C4): progreso real por lotes de rec — i/total (0→1).
-    onProgress?.(Math.min(1, (k + lote.length) / orden.length));
+  // KIT e14-velocidad-5s-v1 (`ocrRecCabecera` / `ocrRecPie`) — leer solo las N
+  // líneas de ARRIBA y las M de ABAJO (por posición VERTICAL de la caja, no por
+  // índice del det: el orden de salida del det no garantiza lectura top→bottom).
+  // El recorte NO se toca — lo que se ahorra son los `run()` del rec. Medido
+  // línea por línea en el A56 sobre un acta real de 40 líneas: las anclas y los
+  // campos del clasificador caen en la cabecera (código 1D, Ver/Pag, E-14,
+  // CONSULADO, PAÍS, ZONA+PUESTO+MESA) y en el pie (SUMA TOTAL, No.Fom, KIT, CV);
+  // el MEDIO de la hoja es la tabla de candidatos y votos y NINGÚN consumidor del
+  // texto decide con ella (`clasificarCabecera`, `tipoDeBanda`,
+  // `faltaSeccionInferior`, `senalDeContenido`, `ocrTextIsValid`, anclas).
+  // 0/0 = leer TODO = HOY byte a byte.
+  const porY = cropsFinales.map((c, i) => ({
+    i,
+    ratio: c.width / c.height,
+    y: boxesFuente[i].reduce((s, p) => s + p.y, 0) / boxesFuente[i].length,
+  }));
+  const porAltura = [...porY].sort((a, b) => a.y - b.y);
+  const mantener = new Set<number>();
+  if (knobs.cabecera > 0 || knobs.pie > 0) {
+    for (const o of porAltura.slice(0, knobs.cabecera)) mantener.add(o.i);
+    for (const o of porAltura.slice(-knobs.pie)) mantener.add(o.i);
   }
+  const bordes = mantener.size > 0;
+  const leibles = bordes ? porY.filter((o) => mantener.has(o.i)) : porY;
+  const omitidas = bordes ? porY.filter((o) => !mantener.has(o.i)) : [];
+  const lineas: RapidOcrLinea[] = new Array(cropsFinales.length);
+  let msRunRec = 0; // acumulado de `await run()` — ver RapidOcrResultado.msRunRec
+  // PROD-2 (§4.3-C4): progreso real POR LOTE. El denominador son TODAS las
+  // cajas (no solo las que se van a leer): con el recorte por bordes la 1.ª
+  // pasada llega a ~0,5 y el rescate la completa sin retroceder (monótono).
+  const totalCajas = porY.length;
+  let cajasLeidas = 0;
+  // ─── LAZO SECUENCIAL (el canalizado y las sesiones hermanas, DESCARTADOS) ─
+  // Se probó despachar 2 lotes en vuelo y partir los lotes entre DOS sesiones
+  // del mismo rec (con `proxy: true` cada sesión vive en SU worker): en el A56
+  // no movió ni un ms (msRunRec 5,604 con 2 sesiones · 5,360 con una · 5,244
+  // otra vez — todo dentro del ruido) y la razón es la medida de /proc/stat:
+  // durante el rec el celular está a 7,7 de 8 núcleos. No hay worker libre que
+  // explotar; lo único que baja el rec es que el tensor sea más chico.
+  const correrLotes = async (lista: typeof porY) => {
+    const orden = [...lista].sort((a, b) => a.ratio - b.ratio);
+    for (let k = 0; k < orden.length; k += knobs.lote) {
+      const lote = orden.slice(k, k + knobs.lote);
+      // El lote entero corre al ancho de su línea más ancha; sin cap, una sola
+      // línea de 864 px hinchaba TODOS los tensores del lote (0.56 ms/unidad).
+      // El piso es 320 de ANCHO (no 320/48 de ratio): así, aunque baje la
+      // altura, los ~40 pasos del CTC y su decodificación se mantienen como siempre.
+      const maxRatio = Math.max(320 / knobs.alto, ...lote.map((o) => o.ratio));
+      // `ocrRecWfija` — PROBADO Y DESCARTADO con datos (2026-11-05, A56): la
+      // teoría era que cada `run()` paga ~130 ms FIJOS y que el ORT re-optimiza el
+      // grafo al cambiar la forma [n,3,h,W] (lote 2 = 20 runs → rec 5,17 s vs
+      // 3,49 s con 7). Fijando W al cap se tienen MISMA cantidad de runs con forma
+      // constante: rec SUBIÓ a 4,76 s. O sea el fijo no era forma sino PAD de ceros
+      // — el lote chico corre barato porque el W angosto de verdad se calcula
+      // menos. El flag queda (perilla de A/B), el default es false.
+      const W = knobs.wFija
+        ? knobs.anchoMax
+        : Math.min(knobs.anchoMax, Math.floor(knobs.alto * maxRatio));
+      const tensor = tensorDeCanvases(
+        rt.ort,
+        lote.map((o) => cropsFinales[o.i]),
+        W,
+        knobs.alto,
+        knobs.suave,
+      );
+      const tRun = performance.now();
+      const res = await rt.rec.run({ [rt.rec.inputNames[0]]: tensor });
+      msRunRec += performance.now() - tRun;
+      const out = res[rt.rec.outputNames[0]];
+      for (let m = 0; m < lote.length; m++) {
+        const dims = out.dims;
+        const sub: OrtValue = {
+          dims: [1, dims[1], dims[2]],
+          data: (out.data as Float32Array).subarray(
+            m * dims[1] * dims[2],
+            (m + 1) * dims[1] * dims[2],
+          ) as Float32Array,
+          type: out.type,
+        };
+        const { texto, conf } = ctcDecode(sub, rt.dict);
+        if (conf >= TEXT_SCORE && texto.trim().length > 0) {
+          lineas[lote[m].i] = { texto: texto.trim(), conf, box: boxesFuente[lote[m].i] };
+        }
+      }
+      cajasLeidas += lote.length;
+      onProgress?.(Math.min(1, cajasLeidas / totalCajas));
+    }
+  };
+  await correrLotes(leibles);
+  // RED DE SEGURIDAD del recorte por bordes: si leyendo solo cabecera y pie no
+  // salen las anclas que definen un acta útil, se leen AHÍ MISMO las líneas que
+  // se dejaron sin leer (los recortes ya existen y el det no se repite — cuesta
+  // solo los `run()` del resto). Sin este rescate el recorte por bordes sería
+  // una APUESTA: una hoja con la cabecera cortada, torcida o con el código de
+  // barras en otro lado perdería identificación y autoenvío por ahorrar 1,4 s.
+  // Medido: 14+8 bordes da rec 2,07 s (vs 3,49 TODO) y 8 anclas en la foto fácil.
+  let rescateBordes = 0;
+  let anclasBordes = -1; // -1 = no aplica (bordes off)
+  let pieBordes = -1; // -1 = no aplica · 0 = el pie NO se ve en los bordes
+  if (bordes && knobs.bordesRescate > 0 && omitidas.length > 0 && !opts?.sinRescateBordes) {
+    const textoBordes = lineas
+      .filter((l): l is RapidOcrLinea => !!l)
+      .map((l) => l.texto)
+      .join("\n");
+    anclasBordes = contarAnclas(textoBordes);
+    // El PIE manda además de las anclas: `faltaSeccionInferior` (clasificador
+    // .ts) condena `recortada` exigiendo «SUMA TOTAL» en P1 y «FIRMA» en P≥2,
+    // y acá el OCR NO conoce la página — si los bordes no muestran NINGUNA de
+    // las dos, se lee el resto. Medido sin esta condición: 14+14 en 085053
+    // perdió «SUMA TOTAL» con 10 anclas y el acta cayó de 10 ENVIADA a 7.9
+    // ADVERTENCIA — el ahorro de 1,9 s costaba el autoenvío.
+    pieBordes = /SUMA\s*TOTAL|FIRMA/i.test(textoBordes) ? 1 : 0;
+    if (anclasBordes < knobs.bordesRescate || pieBordes === 0) {
+      rescateBordes = omitidas.length;
+      await correrLotes(omitidas);
+    }
+  }
+  // PROD-2 (§4.3-C4): el lazo terminó — el tope del progreso, por si el loteo
+  // no lo alcanzó (cajas vacías, conf < TEXT_SCORE, etc.).
+  onProgress?.(1);
   const msRec = Math.round(performance.now() - t2);
 
   const aceptadas = lineas.filter((l): l is RapidOcrLinea => !!l);
@@ -928,7 +1142,7 @@ export async function rapidOcrReconocer(
   const confMedia =
     aceptadas.length === 0 ? 0 : aceptadas.reduce((s, l) => s + l.conf, 0) / aceptadas.length;
   logger.info(
-    `[e14-rapidocr] celda: det=${msDet}ms cls=${msCls}ms rec=${msRec}ms · ${boxesFuente.length} cajas · ${aceptadas.length} líneas · conf ${(confMedia * 100).toFixed(1)}% · ${Math.round(performance.now() - tTotal)}ms detMemo=${memoMsAhorrado != null ? `hit msAhorrado=${memoMsAhorrado}` : "miss"}`,
+    `[e14-rapidocr] celda: det=${msDet}ms cls=${msCls}ms rec=${msRec}ms (run=${msRunRec} js=${msRec - msRunRec}) · ${boxesFuente.length} cajas · ${aceptadas.length} líneas · conf ${(confMedia * 100).toFixed(1)}% · ${Math.round(performance.now() - tTotal)}ms detMemo=${memoMsAhorrado != null ? `hit msAhorrado=${memoMsAhorrado}` : "miss"} · leidas=${leibles.length}/${totalCajas} anclasBordes=${anclasBordes} pieBordes=${pieBordes} rescate=${rescateBordes}`,
   );
   return {
     lineas: aceptadas,
@@ -937,6 +1151,7 @@ export async function rapidOcrReconocer(
     msDet,
     msCls,
     msRec,
+    msRunRec,
     nBoxes: boxesFuente.length,
   };
 }
@@ -1012,16 +1227,26 @@ export async function rapidOcrRecLote(
   canvases: HTMLCanvasElement[],
 ): Promise<{ texto: string; conf: number }[]> {
   const salida: { texto: string; conf: number }[] = new Array(canvases.length);
+  // MISMO knobs que el rec de producción (el probe promete el MISMO pre/post
+  // y su conf cruda tiene que ser comparable — y el sondeo de 4 rotaciones es
+  // el mayor consumidor de CPU del pipeline cuando decide el sondeo).
+  const knobs = recKnobs();
   const orden = canvases
     .map((c, i) => ({ i, ratio: c.width / c.height }))
     .sort((a, b) => a.ratio - b.ratio);
-  for (let k = 0; k < orden.length; k += 6) {
-    const lote = orden.slice(k, k + 6);
-    const maxRatio = Math.max(320 / 48, ...lote.map((o) => o.ratio));
-    // KIT e14-rec-wmax480-v1: MISMO cap que el rec de producción — el probe
-    // promete «el MISMO pre/post del rec» y su conf cruda debe ser comparable.
-    const W = Math.min(REC_WMAX, Math.floor(48 * maxRatio));
-    const tensor = tensorDeCanvases(rt.ort, lote.map((o) => canvases[o.i]), W);
+  for (let k = 0; k < orden.length; k += knobs.lote) {
+    const lote = orden.slice(k, k + knobs.lote);
+    const maxRatio = Math.max(320 / knobs.alto, ...lote.map((o) => o.ratio));
+    const W = knobs.wFija
+      ? knobs.anchoMax
+      : Math.min(knobs.anchoMax, Math.floor(knobs.alto * maxRatio));
+    const tensor = tensorDeCanvases(
+      rt.ort,
+      lote.map((o) => canvases[o.i]),
+      W,
+      knobs.alto,
+      knobs.suave,
+    );
     const res = await rt.rec.run({ [rt.rec.inputNames[0]]: tensor });
     const out = res[rt.rec.outputNames[0]];
     for (let m = 0; m < lote.length; m++) {

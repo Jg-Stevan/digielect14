@@ -28,7 +28,7 @@
  * tope: este módulo solo protege la foto full-sensor del Dual Pipeline.
  */
 
-import { PROCESSED_MAX_LONG_SIDE } from "./image-processor";
+import { PROCESSED_MAX_LONG_SIDE, jpegDimensionsFromBlob } from "./image-processor";
 
 /** Rango de un ajuste de foto según la spec ImageCapture (MediaSettingsRange). */
 export interface SensorSettingRange {
@@ -63,6 +63,23 @@ let lastProfile: SensorProfile | null = null;
  *  profileSensor/overCap; solo desaparece el downgrade por gama. */
 export function getSensorSafeCap(): number {
   return PROCESSED_MAX_LONG_SIDE;
+}
+
+/** KIT captura-fluida-v1 — margen del tope, en píxeles de lado mayor.
+ *  Los sensores anuncian un tamaño unos píxeles por encima del lado de
+ *  trabajo del pipeline (Galaxy A56: 4080 nativo vs 4032 procesado). Recortar
+ *  por 48 px cuesta ~530 ms medidos en el celular (decode 138 + re-encode 393)
+ *  y una segunda compresión JPEG, sin cambiar la clase de memoria: 12,5 MP
+ *  siguen lejos del límite de canvas (~16,7 MP) y el pipeline procesa a 4032
+ *  igual. Un sensor gigante (48/108 MP) excede el margen por mucho y sigue
+ *  pasando por el recorte. */
+export const MARGEN_TOPE_PX = 64;
+
+/** ¿El lado mayor cae dentro del tope (margen incluido)? Decisión ÚNICA para
+ *  las tres capas: clampBlobToSafeCap, ruta corta del dispatch y el re-escalo
+ *  fuera del hilo. */
+export function dentroDelTope(lado: number, capPx: number): boolean {
+  return capPx > 0 && lado <= capPx + MARGEN_TOPE_PX;
 }
 
 /** Lee y valida un MediaSettingsRange que llega «suelto» del DOM. */
@@ -135,11 +152,18 @@ export async function profileSensor(track: MediaStreamTrack): Promise<SensorProf
  *  y el pipeline del editor aplica su propio tope (maxProcessedLongSide). */
 export async function clampBlobToSafeCap(blob: Blob, capPx: number): Promise<Blob> {
   if (!capPx || capPx <= 0) return blob;
+  // KIT captura-fluida-v1: el caso normal (foto dentro del tope) NO se
+  // decodifica. Las dimensiones salen del contenedor JPEG (256 KB); antes
+  // este createImageBitmap decodificaba los 12 MP completos solo para
+  // comparar el lado largo — ~300-500 ms de hilo principal en cada disparo.
+  // Si el header no es legible (HEIC/PNG) se cae al decode de siempre.
+  const dims = await jpegDimensionsFromBlob(blob);
+  if (dims && dentroDelTope(Math.max(dims.w, dims.h), capPx)) return blob;
   try {
     const bitmap = await createImageBitmap(blob);
     try {
       const long = Math.max(bitmap.width, bitmap.height);
-      if (long <= capPx) return blob; // dentro del tope: blob intacto
+      if (dentroDelTope(long, capPx)) return blob; // dentro del tope: blob intacto
       const scale = capPx / long;
       const w = Math.max(1, Math.round(bitmap.width * scale));
       const h = Math.max(1, Math.round(bitmap.height * scale));

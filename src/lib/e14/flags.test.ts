@@ -80,7 +80,36 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       // KIT e14-heic-tope-v1 — aditivo AL FINAL (contrato D57): los mismos
       // números que publica el core (una sola fuente de verdad).
       heicTopeMp: 24,
-      heicLimiteMs: 45_000,
+      heicLimiteMs: 15_000,
+      // KIT e14-gate-v2 — aditivo AL FINAL (contrato D57): auto-envío con recorte
+      autoEnvioConRecorte: true,
+      // KIT e14-velocidad-5s-v1 — aditivo AL FINAL (contrato D57): los tres
+      // knobs del puesto rápido (tope de trabajo, teatro de ANALIZANDO y el
+      // orden del intento 1 de OCR).
+      ladoMaxTrabajoPx: 2560,
+      pisoEscenicoMs: 300,
+      ocrPrimeraPasadaRapida: true,
+      importRutaCorta: true,
+      // KIT e14-velocidad-5s-v1 (fase rec) — aditivo AL FINAL (contrato D57):
+      // los knobs del tensor del rec y el ahorro del segundo warp. `ocrRecWmax`
+      // /`ocrRecLote`/`ocrLeerBw`/`ocrRecSuave`/`ocrRecWfija` siguen en su valor
+      // de siempre; 40/14/14/7 es la candidata A/B/A del 2026-11-05 (6/6
+      // auto-envío con los MISMOS scores de la serie de 48/0/0/8).
+      ocrRecWmax: 480,
+      ocrRecAltura: 40,
+      ocrRecLote: 6,
+      ocrLeerBw: false,
+      ocrRecSuave: false,
+      ocrRecWfija: false,
+      ocrRecCabecera: 14,
+      ocrRecPie: 14,
+      ocrRecBordesRescate: 7,
+      ladoOcrPx: 0,
+      cierreInstantaneo: false,
+      qrBrujulaWarpPases: 0,
+      ocrReOcrRoi: false,
+      ocrSegundaTopeMs: 0,
+      ocrCorteIncompleta: true,
     });
   });
 
@@ -291,5 +320,33 @@ describe("flags · probeMiniLado (lado de la miniatura del sondeo — KIT e14-pr
       },
     });
     expect(leerFlags().probeMiniLado).toBe(320);
+  });
+});
+
+// ─── KIT e14-velocidad-5s-v1 — INVARIANTE del doble whitelist (D6) ─────────
+describe("flags · cada clave de FLAGS_DEFAULT tiene sus DOS puertas", () => {
+  it("sanearFlags (flags.json remoto) Y leerOverridesFlags (localStorage) aceptan todas", async () => {
+    const { leerOverridesFlags } = await import("./obs/politica");
+    const sinPuertaRemota: string[] = [];
+    const sinPuertaLocal: string[] = [];
+    for (const [clave, valor] of Object.entries(FLAGS_DEFAULT)) {
+      if (!(clave in sanearFlags({ [clave]: valor }))) sinPuertaRemota.push(clave);
+      vi.stubGlobal("window", {
+        setTimeout: () => 0,
+        clearTimeout: () => {},
+        localStorage: {
+          getItem: (k: string) =>
+            k === "e14-flags-overrides" ? JSON.stringify({ [clave]: valor }) : null,
+          setItem: () => {},
+          removeItem: () => {},
+        },
+      });
+      if (!(clave in leerOverridesFlags())) sinPuertaLocal.push(clave);
+    }
+    // «cada puerta su línea»: un flag sin su línea en politica.ts es un
+    // kill-switch MUERTO — el override manual del dueño (máxima prioridad, D6)
+    // jamás llega. Dos flag del kit lo estuvieron hasta este test.
+    expect(sinPuertaRemota, `sin puerta en sanearFlags: ${sinPuertaRemota.join(",")}`).toEqual([]);
+    expect(sinPuertaLocal, `sin puerta en leerOverridesFlags: ${sinPuertaLocal.join(",")}`).toEqual([]);
   });
 });

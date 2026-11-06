@@ -130,6 +130,20 @@ export interface DiagnosticoActa {
      *  §G.1 — envioMs SOLO flujo INDIVIDUAL (lo escribe registrarEnvio del
      *  store; envioMs != null ⇔ había red al enviar — null honesto). */
     envioMs?: number;
+    /** KIT e14-velocidad-5s-v1 — tramo NO medido entre el warp y la CALIDAD
+     *  (brújula QR + probe + rotación + esquinas + completitud + procesada
+     *  vacía). En el A56 era ~1,1 s que no aparecían en ningún lado. */
+    orientMs?: number | null;
+    /** KIT e14-velocidad-5s-v1 — subdivisión de orientMs: DECISIÓN de
+     *  orientación (brújula QR, o sondeo OCR si aquella no decidió). */
+    brujulaMs?: number | null;
+    /** KIT e14-velocidad-5s-v1 — MEDICIONES sobre la imagen ya orientada
+     *  (esquinas fiduciales + completitud + visor de tinta) dentro de
+     *  orientMs. orientMs ≈ brujulaMs + esqMs. */
+    esqMs?: number | null;
+    /** KIT e14-velocidad-5s-v1 — desde el fin del OCR hasta que el acta está
+     *  construida y entregada (clasificación + gate + votos + construirActa). */
+    cierreMs?: number | null;
     /** WAVE3 G.5 — ORDEN-WAVE3-add-envio-individual-v1: latencia del CHECK
      *  remoto (ledger D1 — §A.3 hook del runner). null/ausente = sin check
      *  (offline, forzarDedupOff, hash ausente o ledger indisponible) —
@@ -146,6 +160,40 @@ export interface DiagnosticoActa {
    *  Asignación defensiva en el bridge (si no hay diagnóstico, se omite).
    *  Ausente en SIM (el probe no corre) y en registros previos a D57. */
   orientacionProbeMs?: number;
+  /** D57 — KIT e14-velocidad-5s-v1: traza de la CASCADA OCR (qué pasadas se
+   *  pagaron y cuánto tardó cada una). Nace porque el `logger.info` de la
+   *  traza existe SOLO en desarrollo: en producción un OCR de 6 s era un
+   *  agujero sin explicación en la ficha. Ausente en SIM y en el escalonado
+   *  de siempre (sin trazas nuevas) — jamás inventar. */
+  trazaOcr?: {
+    paso: string;
+    elegidoCap: string;
+    motorIntento1: string;
+    msIntento1: number;
+    ms1280: number | null;
+    ms1920: number | null;
+    msRoi: number | null;
+    msMotor: number | null;
+    rescate: boolean;
+    /** KIT e14-velocidad-5s-v1 — tamaño de la pasada elegida (0 = n/d). */
+    nBoxes?: number;
+    nLineas?: number;
+    /** ms esperando el run() del rec (wasm + IPC); recMs − msRunRec = hilo
+     *  principal (construcción de tensores + CTC decode). */
+    msRunRec?: number;
+  };
+  /** KIT e14-velocidad-5s-v1 — QUÉ eslabón de la brújula QR decidió y cuánto
+   *  costó. El bloque de orientación pesa ~0.7-1.0 s en el A56 y hasta ahora
+   *  el acta no decía si fue el jsQR barato sobre el warp o el rescate hi-res
+   *  (ZXing por cuadrantes). null/ausente = la brújula no corrió (SIM, flag
+   *  OFF) o no leyó (entonces decidió el sondeo OCR). */
+  trazaQr?: {
+    via: "jsQR-warp" | "zxing-hr";
+    rot: number;
+    cuadrante: string;
+    ms: number;
+    intentos: number;
+  } | null;
   /** WAVE2 A1 — KIT REPARTE-WAVE2-tiempos-v1 (Agente A, Tarea A1):
    *  sub-decisión de la MINIATURA (lado = flag `probeMiniLado`) descartada por el FALLO SEGURO
    *  del probe de orientación — datos de campo para la calibración wave 3.
@@ -194,6 +242,9 @@ export interface Acta {
   firmas: ActaFirma[];
   codigoBarras: string; // "*E14-SEN-2026-001*"
   score: number; // 0..10 SIEMPRE /10 (D2)
+  /** Score visual = bruto de scoreDeCalidad ANTES de los caps del sitio (para
+   *  diagnóstico/REVISIÓN — no altera el desenlace). */
+  scoreVisual?: number;
   status: ActaStatus;
   /** Motivo del rechazo → define la variante visual (§7.5) */
   rechazo:

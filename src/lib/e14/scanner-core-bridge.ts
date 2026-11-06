@@ -80,6 +80,7 @@ import {
   cuatroEsquinasFaltan,
   ladoEsquinaFaltante,
   marcasEsquina,
+  perdonFaltaFiduciales,
   trazaEsquinas,
   type EsquinasActa,
 } from "./integridad";
@@ -796,6 +797,37 @@ interface OcrEscalonadoSalida {
   conf: number | null;
   detMs: number;
   recMs: number;
+  /** KIT e14-velocidad-5s-v1 — traza de la CASCADA (qué pasadas se pagaron y
+   *  cuánto). Aditiva: el escalonado de siempre y SIM no la llenan (n/d). */
+  traza?: TrazaOcr;
+}
+
+/** Trazas de la cascada — el acta dice desde IndexedDB cuántas pasadas se
+ *  pagaron (antes solo lo decía una logger.info que el build de producción
+ *  recorta: en campo el OCR era un agujero de 6 s sin explicación). */
+export interface TrazaOcr {
+  /** "intento1" | "1280" | "1920" | "roi" | "rescate-motor" — dónde quedó. */
+  paso: string;
+  /** cap de la pasada ELEGIDA (1280 | 1920 | "roi" | "tess"). */
+  elegidoCap: string;
+  motorIntento1: string;
+  msIntento1: number;
+  ms1280: number | null;
+  ms1920: number | null;
+  msRoi: number | null;
+  msMotor: number | null;
+  /** true = el rescate ROI entró a elegirMejor (gane o pierda). */
+  rescate: boolean;
+  /** det/rec de la pasada ELEGIDA (0 = n/d si el motor no separa). */
+  detMs: number;
+  recMs: number;
+  /** Tamaño de la pasada ELEGIDA — el rec es casi lineal en nLineas×W; sin
+   *  esto el acta no explica por qué un rec cuesta 3.5 s y otro 6 s. */
+  nBoxes: number;
+  nLineas: number;
+  /** ms esperando el run() del rec (wasm + IPC con el worker del proxy);
+   *  `recMs − msRunRec` = hilo principal (tensores + CTC decode). */
+  msRunRec: number;
 }
 
 /** Pasada con métricas para elegirMejor (§2.4) — el ganador viaja por
@@ -818,9 +850,19 @@ async function reconocerRapidOcrEscalonado(
     presupuestoMs: number;
     /** performance.now del INICIO del pipeline (base del presupuesto). */
     inicioMs: number;
+    /** KIT e14-velocidad-5s-v1 — la ORIENTACIÓN ya está decidida por otra
+     *  señal (brújula QR). El sondeo cls del motor (¿esta línea va boca
+     *  abajo?) responde la MISMA pregunta del cuadrante del QR; con true se
+     *  omite en TODAS las pasadas de esta llamada. Ausente/false = hoy. */
+    orientacionDecidida?: boolean;
+    /** KIT e14-velocidad-5s-v1 — RECHAZO TEMPRANO: el veredicto ya está
+     *  bloqueado antes del OCR (ver `rechazoTemprano` en el pipeline), así que
+     *  la 2.ª pasada no puede cambiar el desenlace. true = no escalar. */
+    corteIncompleta?: boolean;
   },
 ): Promise<OcrEscalonadoSalida> {
   const rt = await rapidOcrInit(); // sesión ÚNICA (§2.1 — pre-warm en bg)
+  const omitirCls = escalonado.orientacionDecidida === true;
   if (escalonado.simular) {
     // SIM: EXACTAMENTE el flujo de hoy (det 1920, una pasada, 0 trazas).
     const r = await rapidOcrReconocer(rt, fotoOcr, onProgress);
@@ -828,7 +870,11 @@ async function reconocerRapidOcrEscalonado(
   }
   // 1.ª pasada — det cap RÁPIDO (1280) → cls → rec (igual que hoy, §2.2).
   const t1 = performance.now();
-  const r1 = await rapidOcrReconocer(rt, fotoOcr, onProgress, { detCap: DET_CAP_RAPIDO });
+  const r1 = await rapidOcrReconocer(rt, fotoOcr, onProgress, {
+    detCap: DET_CAP_RAPIDO,
+    omitirCls,
+    sinRescateBordes: escalonado.corteIncompleta === true,
+  });
   const ms1 = Math.round(performance.now() - t1);
   const senal1 = senalDeLectura(r1.texto);
   // §2.3 decisión + §3 presupuesto (el timeout existente manda): vencido →
@@ -840,12 +886,29 @@ async function reconocerRapidOcrEscalonado(
   // adaptación OFF ⇒ histórico byte a byte (null = sin tope adicional —
   // manda el presupuesto EXISTENTE del pipeline, §3 del kit escalonado).
   const planOcr = planAdaptativo();
+  // KIT e14-velocidad-5s-v1 — DOS perillas de la escalada (A/B por override, sin
+  // tocar el plan de hardware). La evidencia del corpus (2026-11-05, A56): en
+  // 084939 la 1.ª pasada con rescate interno costó 4,78 s y AUNQUE NO SALIÓ
+  // FUERTE el re-OCR 1920 (+3,99 s) y el ROI (+3,37 s) tampoco cambiaron el
+  // desenlace — acabó en REVISIÓN HUMANA con el mismo texto. Es decir: en las
+  // fotos duras el multiplicador no es el motor, es la ESCALADA que corre por
+  // inercia. `ocrSegundaTopeMs` (>0) pone el tope PARED que el tier MEDIO/ALTO
+  // no trae; `ocrReOcrRoi` fuerza el rescate ROI-cabecera (franja 0-25 % a cap
+  // 1920, ~1/2,5 del re-OCR completo) aunque el plan diga "completo".
+  const fEscalada = leerFlags();
+  const modoReOcr =
+    fEscalada.ocrReOcrRoi || (planOcr.adaptado && planOcr.ocrReOcrModo === "roi-cabecera")
+      ? "roi-cabecera"
+      : "completo";
   const presupuestoSegunda =
-    planOcr.adaptado && planOcr.ocrSegundaPresupuestoMs != null
-      ? Math.min(escalonado.presupuestoMs, planOcr.ocrSegundaPresupuestoMs)
-      : escalonado.presupuestoMs;
+    fEscalada.ocrSegundaTopeMs > 0
+      ? Math.min(escalonado.presupuestoMs, fEscalada.ocrSegundaTopeMs)
+      : planOcr.adaptado && planOcr.ocrSegundaPresupuestoMs != null
+        ? Math.min(escalonado.presupuestoMs, planOcr.ocrSegundaPresupuestoMs)
+        : escalonado.presupuestoMs;
   const tocaSegunda =
     necesitaSegunda(r1.texto) &&
+    escalonado.corteIncompleta !== true &&
     performance.now() - escalonado.inicioMs < presupuestoSegunda;
   let elegido: PasadaEscalonada = {
     texto: r1.texto,
@@ -857,7 +920,7 @@ async function reconocerRapidOcrEscalonado(
   let ms2: number | null = null;
   let anclas2: number | null = null;
   if (tocaSegunda) {
-    if (planOcr.adaptado && planOcr.ocrReOcrModo === "roi-cabecera") {
+    if (modoReOcr === "roi-cabecera") {
       // KIT e14-gama-baja-20s-v1 — rescate ROI CABECERA: franja top 0-25%
       // re-escalada a cap 1920 (MISMO helper y fracciones de la cascada K3 —
       // recortarRoiDataUrl + ROI_FRACCIONES.top) en vez del re-OCR 1920
@@ -909,7 +972,10 @@ async function reconocerRapidOcrEscalonado(
       // 2.ª pasada — det cap PROD (1920) → cls → rec (§2.4); MISMO emit de
       // progreso (§3). Elegir el MEJOR — NUNCA automáticamente la 2.ª.
       const t2 = performance.now();
-      const r2 = await rapidOcrReconocer(rt, fotoOcr, onProgress, { detCap: DET_CAP_PROD });
+      const r2 = await rapidOcrReconocer(rt, fotoOcr, onProgress, {
+        detCap: DET_CAP_PROD,
+        omitirCls,
+      });
       ms2 = Math.round(performance.now() - t2);
       anclas2 = anclasDe(r2.texto);
       const ganadora = elegirMejor(
@@ -925,7 +991,8 @@ async function reconocerRapidOcrEscalonado(
       `reocr=${ms2 != null ? 1 : 0} elegido=${elegido.cap} anclas1=${anclasDe(r1.texto)}` +
       (ms2 != null
         ? ` anclas2=${anclas2} ms1=${ms1} ms2=${ms2}`
-        : ` ms1=${ms1}`),
+        : ` ms1=${ms1}`) +
+      (escalonado.corteIncompleta === true ? " corte=1" : ""),
   );
   return { texto: elegido.texto, conf: elegido.conf, detMs: elegido.detMs, recMs: elegido.recMs };
 }
@@ -993,22 +1060,93 @@ async function recortarRoiDataUrl(
  * escalonado a PP-OCR sigue byte a byte).
  */
 const OCR_CASCADA_TESSERACT_GO = true; // GO-B del dueño (2026-11) — kill-switch: flag `ocrCascada` OFF
+/** KIT e14-velocidad-5s-v1 — pasada Tesseract best (worker propio de la lib).
+ *  El texto vale SOLO por el GATE (jamás `elegirMejor` — regla §1 del kit
+ *  cascada). null = no disponible (presupuesto corto, lib rota, sin texto):
+ *  el caller sigue con lo que tenga; jamás tumba el pipeline. */
+async function tessPasadaParaGate(
+  foto: string,
+  cfg: { presupuestoMs: number; inicioMs: number },
+): Promise<PasadaCascada | null> {
+  const restante = cfg.presupuestoMs - (performance.now() - cfg.inicioMs);
+  try {
+    // tessReconocer decide sola: vence si el restante no alcanza el mínimo
+    // honesto (< 20 s — falla segura), la CREACIÓN lleva presupuesto propio de
+    // 180 s (descarga vendida de la 1.ª vez) capado por este restante, y la
+    // recognize 60 s (bench).
+    const r = await tessReconocer(foto, restante);
+    logger.info(`[e14] tess-best ok conf=${r.conf.toFixed(2)} chars=${r.texto.length}`);
+    return { texto: r.texto, conf: r.conf, cap: "tess", motor: "tesseract" };
+  } catch (e) {
+    logger.warn("[e14] tess-best no disponible", {
+      motivo: e instanceof Error ? e.message : String(e),
+    });
+    return null;
+  }
+}
 async function reconocerRapidOcrCascada(
   fotoOcr: string,
   onProgress: (p: number) => void,
-  cfg: { presupuestoMs: number; inicioMs: number },
+  cfg: {
+    presupuestoMs: number;
+    inicioMs: number;
+    orientacionDecidida?: boolean;
+    /** KIT e14-velocidad-5s-v1 — RECHAZO TEMPRANO: con el veredicto bloqueado
+     *  antes del OCR, el presupuesto restante se declara vencido (la cascada
+     *  cobra SU 1.ª pasada y para: ni re-OCR 1920, ni ROI, ni motor de rescate
+     *  — ninguna de ellas puede volver completa un acta que el guard ya
+     *  condenó con geometría + fiduciales). */
+    corteIncompleta?: boolean;
+  },
 ): Promise<OcrEscalonadoSalida> {
   const rt = await rapidOcrInit(); // sesión ÚNICA (§2.1 — pre-warm en bg)
   const base = await cargarDivipol(); // cacheada — 0 costo tras la 1.ª
+  // KIT e14-velocidad-5s-v1 — ORDEN de la cascada. Flag ON (default): el
+  // INTENTO 1 es la pasada RÁPIDA de RapidOCR (det 1280) y Tesseract best
+  // queda como RESCATE final, solo para el acta que esa pasada no ubicó.
+  // Flag OFF ⇒ GO-B del dueño de siempre (Tess primero). El TEXTO elegido es
+  // el mismo en los dos órdenes: entre motores siempre decidió el GATE.
+  const rapidaPrimero = leerFlags().ocrPrimeraPasadaRapida === true;
+  // KIT e14-velocidad-5s-v1 — la brújula QR ya fijó el cuadrante del acta:
+  // el sondeo cls (¿línea boca abajo?) responde la MISMA pregunta con menos
+  // evidencia, así que se omite en TODAS las pasadas de esta cascada.
+  const omitirCls = cfg.orientacionDecidida === true;
+  const rapid = (foto: string, cap: number): Promise<PasadaCascada> =>
+    rapidOcrReconocer(rt, foto, onProgress, {
+      detCap: cap,
+      omitirCls,
+      sinRescateBordes: cfg.corteIncompleta === true,
+    }).then((r) => ({
+      ...aPasada(r, cap),
+      motor: "rapidocr" as const,
+    }));
+  const rapid1280 = (foto: string): Promise<PasadaCascada> => rapid(foto, DET_CAP_RAPIDO);
   // GATE = el clasificador REAL de prod (mismo juez, FASE 6 del pipeline).
   const clasificarNivel = (texto: string): "AUTO" | "SUGERIDA" | "MANUAL" =>
     clasificarCabecera(texto, base).nivel;
   const aPasada = (
     r: Awaited<ReturnType<typeof rapidOcrReconocer>>,
     cap: number | "roi",
-  ): PasadaCascada => ({ texto: r.texto, conf: r.confMedia, cap, msDet: r.msDet, msRec: r.msRec });
+  ): PasadaCascada => ({
+    texto: r.texto,
+    conf: r.confMedia,
+    cap,
+    msDet: r.msDet,
+    msRec: r.msRec,
+    nBoxes: r.nBoxes,
+    nLineas: r.lineas.length,
+    msRunRec: r.msRunRec,
+  });
   const deps: DepsOcrCascada = {
     intento1: async (foto) => {
+      // KIT e14-velocidad-5s-v1 (flag `ocrPrimeraPasadaRapida`, default ON):
+      // el intento 1 es la pasada RÁPIDA de RapidOCR — barata y ya pagada, y
+      // el caso fácil (gate AUTO) cierra sin tocar Tesseract. Flag OFF ⇒ el
+      // GO-B de siempre (Tess best primero), código intacto debajo.
+      // RECHAZO TEMPRANO: con el veredicto bloqueado el orden manda poco, pero
+      // el motor de rescate NO se paga — Tess es 20-60 s de presupuesto para un
+      // acta que ya es RECHAZADA; acá se va directo por la rápida.
+      if (rapidaPrimero || cfg.corteIncompleta === true) return rapid1280(foto);
       // GO-B (dueño 2026-11): TESSERACT BEST primero (worker propio de la
       // lib, budget capado al restante del pipeline) → su texto vale SOLO
       // por el GATE. Cualquier fallo/vencido/sin-presupuesto-suficiente ⇒
@@ -1016,45 +1154,33 @@ async function reconocerRapidOcrCascada(
       // motor:"rapidocr" para que la cascada la REUSE como 1.ª pasada
       // (jamás se paga dos veces la misma pasada del mismo motor).
       if (OCR_CASCADA_TESSERACT_GO) {
-        const restante = cfg.presupuestoMs - (performance.now() - cfg.inicioMs);
-        try {
-          // tessReconocer decide sola: vence si el restante no alcanza el
-          // mínimo honesto (< 20 s — falla segura → RapidOCR), la CREACIÓN
-          // lleva presupuesto propio de 180 s (descarga vendida de la 1.ª
-          // vez) capado por este restante, y la recognize 60 s (bench).
-          const r = await tessReconocer(foto, restante);
-          logger.info(
-            `[e14] tess-best intento1 ok conf=${r.conf.toFixed(2)} chars=${r.texto.length}`,
-          );
-          return { texto: r.texto, conf: r.conf, cap: "tess", motor: "tesseract" };
-        } catch (e) {
-          logger.warn(
-            "[e14] tess-best no disponible → RapidOCR 1280 (escalonado a pp ocr)",
-            { motivo: e instanceof Error ? e.message : String(e) },
-          );
-        }
+        const p = await tessPasadaParaGate(foto, cfg);
+        if (p) return p;
       }
-      return {
-        ...aPasada(
-          await rapidOcrReconocer(rt, foto, onProgress, { detCap: DET_CAP_RAPIDO }),
-          DET_CAP_RAPIDO,
-        ),
-        motor: "rapidocr",
-      };
+      return rapid1280(foto);
     },
-    mismoMotorIntento1: !OCR_CASCADA_TESSERACT_GO,
-    ocr1280: async (foto) =>
-      aPasada(await rapidOcrReconocer(rt, foto, onProgress, { detCap: DET_CAP_RAPIDO }), DET_CAP_RAPIDO),
-    ocr1920: async (foto) =>
-      aPasada(await rapidOcrReconocer(rt, foto, onProgress, { detCap: DET_CAP_PROD }), DET_CAP_PROD),
+    mismoMotorIntento1: !OCR_CASCADA_TESSERACT_GO || rapidaPrimero,
+    ocr1280: rapid1280,
+    ocr1920: async (foto) => rapid(foto, DET_CAP_PROD),
     // ROI a cap PROD (1920) — brief K3: «RapidOCR sobre ROIs re-escalados a
     // cap 1920». Sin opts = detCap default DET_CAP_PROD (rapidocr.ts).
-    ocrRoi: async (roiDataUrl) => aPasada(await rapidOcrReconocer(rt, roiDataUrl, onProgress), DET_CAP_PROD),
+    ocrRoi: async (roiDataUrl) => rapid(roiDataUrl, DET_CAP_PROD),
     recortarRoi: recortarRoiDataUrl,
     clasificarNivel,
+    // KIT e14-velocidad-5s-v1 — Tesseract best SOLO como rescate final: el
+    // acta que el core RapidOCR no ubicó (gate ≠ AUTO) puede salvarla otro
+    // motor. Con el intento 1 rápido, el caso fácil NUNCA lo paga.
+    rescateMotor: rapidaPrimero
+      ? (foto) => tessPasadaParaGate(foto, cfg)
+      : undefined,
     // Presupuesto EXISTENTE del pipeline (§3 del kit escalonado — sin
-    // presupuestos nuevos).
-    presupuestoVencido: () => performance.now() - cfg.inicioMs >= cfg.presupuestoMs,
+    // presupuestos nuevos). RECHAZO TEMPRANO: se declara vencido de entrada,
+    // que es exactamente lo que significa «quedan 0 s de OCR por cobrar» — las
+    // tres escaladas (1920, ROI, rescate de motor) ya están guardadas por esta
+    // misma señal en el módulo puro, sin regla nueva.
+    presupuestoVencido: () =>
+      cfg.corteIncompleta === true ||
+      performance.now() - cfg.inicioMs >= cfg.presupuestoMs,
   };
   const s = await correrCascadaOcr(fotoOcr, deps);
   // Traza PROPIA (D51 — línea nueva, SOLO con flag ON; parseable).
@@ -1064,7 +1190,9 @@ async function reconocerRapidOcrCascada(
       `gate1=${s.paso === "intento1" ? "AUTO" : "NO"} elegido=${s.elegidoCap} ` +
       `rescate=${s.rescate ? 1 : 0} ms1=${ms1}` +
       (s.ms1920 != null ? ` ms2=${s.ms1920}` : " ms2=-") +
-      (s.msRoi != null ? ` msRoi=${s.msRoi}` : " msRoi=-"),
+      (s.msRoi != null ? ` msRoi=${s.msRoi}` : " msRoi=-") +
+      (s.msMotor != null ? ` msMotor=${s.msMotor}` : " msMotor=-") +
+      (cfg.corteIncompleta === true ? " corte=1" : ""),
   );
   // El downstream (banda condicional, clasificación, gate, diagnóstico)
   // consume SOLO el texto elegido — mismas métricas de la pasada elegida
@@ -1074,6 +1202,22 @@ async function reconocerRapidOcrCascada(
     conf: s.conf,
     detMs: s.detMs ?? 0,
     recMs: s.recMs ?? 0,
+    traza: {
+      paso: s.paso,
+      elegidoCap: String(s.elegidoCap),
+      motorIntento1: s.motorIntento1,
+      msIntento1: s.msIntento1,
+      ms1280: s.ms1280,
+      ms1920: s.ms1920,
+      msRoi: s.msRoi,
+      msMotor: s.msMotor,
+      rescate: s.rescate,
+      detMs: s.detMs ?? 0,
+      recMs: s.recMs ?? 0,
+      nBoxes: s.nBoxes ?? 0,
+      nLineas: s.nLineas ?? 0,
+      msRunRec: Math.round(s.msRunRec ?? 0),
+    },
   };
 }
 
@@ -1283,6 +1427,7 @@ export class RealCoreBridge implements E14Bridge {
         resolve(
           this.construirActa(opciones, parcial, {
             score: 0,
+            scoreVisual: 0,
             status: "RECHAZADA",
             rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_TIMEOUT },
           }),
@@ -1339,7 +1484,20 @@ export class RealCoreBridge implements E14Bridge {
     parcial: ParcialPipeline,
     emitir: (p: ProgresoAnalisis) => void,
   ): Promise<Acta> {
-    const ms = { decode: 0, detect: 0, proceso: 0, calidad: 0, ocr: 0, total: 0 };
+    const ms = {
+      decode: 0,
+      detect: 0,
+      proceso: 0,
+      calidad: 0,
+      ocr: 0,
+      total: 0,
+      orient: 0,
+      cierre: 0,
+      // KIT e14-velocidad-5s-v1 — `orient` era un bloque de ~1 s SIN DUEÑO:
+      // se subdivide (brújula QR vs. lo demás: esquinas/completitud/visor).
+      brujula: 0,
+      esq: 0,
+    };
     const inicio = performance.now();
 
     // 1) Entrada → data URL crudo (F-IMPORT del core: HEIC/EXIF/12MP seguros;
@@ -1387,9 +1545,35 @@ export class RealCoreBridge implements E14Bridge {
         }
       }
     })();
+    // KIT e14-velocidad-5s-v1 — el techo de ESPERA, no el de la cadena: la
+    // señal QR es ADITIVA (líneas arriba: jamás toca score/gate/OCR), así que
+    // el pipeline NO puede pagarla. Con el CPU saturado por el rec, el worker
+    // capa0 no muere — va LENTO, y el único tope real era el hard-kill a
+    // presupuesto+gracia (8 000+1 500 ms) seguido del rescate en MAIN: el
+    // `await` de abajo cargaba con los ~3,1 s que Medición separó como
+    // `cierreMs` en 084854/084939 (chg→rev 14.176 con worker ON vs 9.606 con
+    // el mismo rec cortado). El rescate en MAIN es aún peor: `capa0QrWorker:
+    // false` medido bloqueó el hilo que el warp necesita → procesoMs 4.215
+    // (vs 1.517). Se espera 400 ms (el tier base resuelve en ~0,3-0,5 s) y si
+    // no llega, se sigue SIN ella — la brújula ya aporta el payload cuando lo
+    // vio, así que en el caso común no hay nada que esperar.
+    const ESPERA_QR_CAM_MS = 400;
+    let qrCamAterrizado = false;
     const aterrizarQrCam = async (): Promise<void> => {
-      // idempotente y acotada (el tier base tiene techo propio ~0.5 s)
-      parcial.qrCam = await qrCamPromesa;
+      if (qrCamAterrizado) return;
+      qrCamAterrizado = true;
+      if (parcial.qrCam) return; // la brújula ya la trajo — nada que esperar
+      const noLlego = new Promise<{ listo: false }>((r) =>
+        setTimeout(() => r({ listo: false }), ESPERA_QR_CAM_MS),
+      );
+      const señal = await Promise.race([
+        qrCamPromesa.then(
+          (v) => ({ listo: true, v }) as const,
+          () => ({ listo: true, v: null }) as const,
+        ),
+        noLlego,
+      ]);
+      if (señal.listo) parcial.qrCam = señal.v;
     };
 
     // 2) Detección de bordes (worker OpenCV → fallback Sobel del core).
@@ -1448,6 +1632,7 @@ export class RealCoreBridge implements E14Bridge {
         await aterrizarQrCam(); // e64-qr T-2.1: la señal QR viaja si terminó
         return this.construirActa(opciones, parcial, {
           score: 0,
+          scoreVisual: 0,
           status: "RECHAZADA",
           rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_ILEGIBLE },
         });
@@ -1455,6 +1640,13 @@ export class RealCoreBridge implements E14Bridge {
     }
     ms.detect = performance.now() - tDetect;
     emitir({ etapa: "DETECTANDO", progreso: 1 });
+
+    // KIT e14-velocidad-5s-v1 — la CALIDAD se mide sobre la ORIGINAL + quad
+    // (NO necesita el warp): se LANZA aquí, así su muestreo no suma ~180 ms en
+    // serie justo antes del OCR. El `await` queda en el paso 4 de siempre —
+    // mismos emits, misma semántica, mismo orden de lectura de `infoCrop`.
+    const infoCrop: InfoCrop = { w: 0, h: 0, fallback: false };
+    const calidadPromise = calidadDeActa(fotoOriginal, quad, infoCrop);
 
     // GUARD-BORDE Rev. 2 (§3b, D1/D3/D4): la señal de ACTA COMPLETA ya NO se
     // decide aquí con la geometría (el falso positivo del dueño: quad al filo
@@ -1478,6 +1670,9 @@ export class RealCoreBridge implements E14Bridge {
     //    con quadDetectado = identidad.
     emitir({ etapa: "RECORTANDO", progreso: 0.2 });
     const tProceso = performance.now();
+    // KIT e14-velocidad-5s-v1 — lado mayor de trabajo del warp (flag, con
+    // default del contrato). 4032 = args de siempre (camino byte-idéntico).
+    const ladoTrabajo = leerFlags().ladoMaxTrabajoPx;
     let fotoProcesada: string;
     let filtroActa: PageFilter;
     let motor: "worker" | "canvas";
@@ -1505,15 +1700,37 @@ export class RealCoreBridge implements E14Bridge {
       // si processImage("original") rechaza, Promise.all NO rechaza — decide
       // con el resultado null → bw-fallback (§5). El pipeline NUNCA muere por
       // la variante nueva.
+      // KIT e14-velocidad-5s-v1 (`ocrLeerBw`): el segundo warp cuesta ~0,9 s en
+      // el A56 y la CPU está saturada (7,7 de 8 núcleos durante el rec) — con
+      // el flag ON se lee la bw y el warp del OCR NO corre. Default OFF = HOY
+      // byte a byte; el A/B es el de siempre (override en el celular).
+      const leerBw = leerFlags().ocrLeerBw;
+      // KIT e14-velocidad-5s-v1 (`ladoOcrPx`): el acta que se MUESTRA/GUARDA se
+      // trabaja a `ladoMaxTrabajoPx`, pero la que se LEE no necesita tanto: el
+      // det se capa a 1280 en la 1.ª pasada y el rec lee líneas a 32 px de alto.
+      // 0 = el mismo lado de siempre (byte-idéntico). PISO PRÁCTICO 1920: la
+      // 2.ª pasada del escalonado y el rescate ROI re-leen `fotoOcr` a cap 1920
+      // — por debajo de eso la escalada pierde resolución y son exactamente las
+      // fotos duras las que necesitan escalar.
+      const ladoOcr = leerFlags().ladoOcrPx;
+      const ladoLectura = ladoOcr > 0 ? Math.min(ladoOcr, ladoTrabajo) : ladoTrabajo;
       const [resultado, resultadoOcr] = await conRampa(
         Promise.all([
-          // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L602-604
           // (captura arranca en B/N adaptativo) + types.ts L50 (default del
           // producto) — D36: e14 no tiene ajustes → el default fijo es "bw".
-          processImage(fotoOriginal, quad, "bw"),
+          // KIT e14-velocidad-5s-v1 (`ladoMaxTrabajoPx`): el warp escala
+          // ~cuadrático con el lado y el det del OCR se capa a 1280/1920 de
+          // todos modos — trabajar a 2560 recorta el warp+enhance+encode sin
+          // tocar lo que el motor ve. override {"ladoMaxTrabajoPx":4032} ⇒
+          // args de siempre (byte-idéntico, WYSIWYG a resolución del lente).
+          processImage(fotoOriginal, quad, "bw", 0, { maxLongSide: ladoTrabajo }),
           // PROD-1: la misma geometría (mismo warp, MISMA convención
           // POST-warp — pitfall §9.5), solo cambia el filtro final.
-          processImage(fotoOriginal, quad, "original").catch(() => null),
+          leerBw
+            ? Promise.resolve(null)
+            : processImage(fotoOriginal, quad, "original", 0, {
+                maxLongSide: ladoLectura,
+              }).catch(() => null),
         ]),
         // msEstimados 1400→2200 (§4.1): el segundo warp (~0.6-1.3 s, §1.4)
         // se cubre con la MISMA rampa (el core serializa en su worker).
@@ -1571,6 +1788,10 @@ export class RealCoreBridge implements E14Bridge {
     // Guards: SIM jamás (§2.2 — chips 8.2/7.0/4.3 intactos) · sinRecorte no
     // tiene warp/quad real (SIM-only en esta base → cubierto igualmente).
     let brujula: BrujulaQr | null = null;
+    // KIT e14-velocidad-5s-v1 — el hueco entre el warp y la CALIDAD (brújula
+    // QR + probe + rotación + esquinas + completitud + procesadaVacia) no
+    // estaba medido: en el A56 eran ~1,1 s sin dueño dentro de totalMs.
+    const tOri = performance.now();
     if (!opciones.simular && !sinRecorte && leerFlags().qrBrujulaOrientacion) {
       brujula = await brujulaQrOrientacion(fotoOcr, fotoOriginal, quad);
       if (brujula) {
@@ -1603,6 +1824,11 @@ export class RealCoreBridge implements E14Bridge {
         fotoProcesada = await rotarDataUrl(fotoProcesada, probe.rot);
       }
     }
+    // KIT e14-velocidad-5s-v1 — corte de la medición: todo lo de arriba es
+    // DECISIÓN DE ORIENTACIÓN (brújula QR o, si no, sondeo OCR); lo que sigue
+    // son MEDICIONES SOBRE LA YA ORIENTADA (esquinas/completitud/visor).
+    ms.brujula = performance.now() - tOri;
+    const tEsq = performance.now();
     // KIT consenso-frankfurt-v1 (FASE 2, §3): esquinas fiduciales ANTES del
     // guard — la marca presente es PRUEBA POSITIVA de que el papel está
     // entero dentro del cuadro (ANALISIS §5.1) → verificarCompletitud la
@@ -1633,6 +1859,8 @@ export class RealCoreBridge implements E14Bridge {
     // muestre la ORIGINAL con su nota. Con tinta (aunque poca, p. ej. la
     // borrosa B/N) se muestra la procesada como hoy — sin regresión.
     const procesadaVacia = await procesadaVaciaDataUrl(fotoProcesada);
+    ms.esq = performance.now() - tEsq;
+    ms.orient = performance.now() - tOri;
 
     // 4) Calidad de la página (Laplaciano + contraste + brillo).
     //    KIT visor-accion-score-v1 (FASE S): se evalúa el RECORTE del acta
@@ -1640,10 +1868,34 @@ export class RealCoreBridge implements E14Bridge {
     //    ya no hunde el brillo global (§S.0; fallback al frame como hoy).
     emitir({ etapa: "CALIDAD", progreso: 0 });
     const tCalidad = performance.now();
-    const infoCrop: InfoCrop = { w: 0, h: 0, fallback: false };
-    const calidad = await calidadDeActa(fotoOriginal, quad, infoCrop);
+    // (KIT e14-velocidad-5s-v1: la medición se LANZA tras el detect — ver
+    //  `calidadPromise` — aquí solo se COSECHA; ms.calidad mide la espera)
+    const calidad = await calidadPromise;
     ms.calidad = performance.now() - tCalidad;
     emitir({ etapa: "CALIDAD", progreso: 1 });
+
+    // KIT e14-velocidad-5s-v1 — RECHAZO TEMPRANO (flag `ocrCorteIncompleta`).
+    // La verificación de completitud se COSECHA acá (antes se esperaba junto al
+    // gate) porque es la única condena que se decide SIN leer una letra: sale de
+    // la geometría del quad + los fiduciales sobre `fotoProcesada`, y `completa`
+    // se copia de ella (§F-2) — el veto 4/4 de abajo solo puede volverla MÁS
+    // falsa. Si ya dijo `completa:false`, el desenlace está bloqueado (RECHAZADA
+    // o contingencia, jamás auto-envío) por más texto que saque el OCR, y sin
+    // embargo la escalada se corría por inercia. Medido con una acta recortada
+    // por un lado (corte-lado, 86 % del ancho de 084901): la 1.ª pasada + re-OCR
+    // 1920 (3 269 ms) + ROI (1 979) + Tesseract (1 597) = 24 056 ms para un acta
+    // que terminó 4.9 RECHAZADA igual. Con el corte: 17 231 ms, mismo 4.9.
+    // Se sigue cobrando UNA pasada (el texto alimenta el informe, la nota de
+    // REVISIÓN y el panel de corrección con que el operador puede rescatarla) y
+    // se corta ahí. No se corta la banda del sello ni el sondeo de orientación:
+    // la primera es justamente lo que usa ese panel, y el segundo ya había
+    // corrido (vive antes de las esquinas, que son insumo de este guard).
+    const verificacionResuelta = verificacion ? await verificacion : null;
+    const rechazoTemprano =
+      !opciones.simular &&
+      leerFlags().ocrCorteIncompleta &&
+      verificacionResuelta != null &&
+      !verificacionResuelta.completa;
 
     // 5) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.1: el recorte
     //    SIN filtro — regla del dueño; la bw pasa a ser SOLO la imagen de
@@ -1664,6 +1916,14 @@ export class RealCoreBridge implements E14Bridge {
       simular: opciones.simular === true,
       presupuestoMs: (opciones as OpcionesEscaneoConTimeout).timeoutMs ?? presupuestoEscaneoEfectivo(),
       inicioMs: inicio,
+      // KIT e14-velocidad-5s-v1 — el cuadrante del QR YA dijo cómo va el acta
+      // (rotación aplicada arriba si hacía falta): el sondeo cls del motor es
+      // redundante. Sin brújula (QR no leído) → false = cls de siempre.
+      orientacionDecidida: brujula !== null,
+      // KIT e14-velocidad-5s-v1 — ver `rechazoTemprano` arriba: con el veredicto
+      // bloqueado antes del OCR, ninguna escalada (1920, ROI, motor de rescate)
+      // cambia el desenlace.
+      corteIncompleta: rechazoTemprano,
     };
     // KIT e14-ocr-cascada-v1 (K3 fase 2): SOLO con `ocrCascada` ON (antes
     // `masivaOcrTesseract` — renombrado al retirar la cola MASIVA) y fuera
@@ -1777,9 +2037,12 @@ export class RealCoreBridge implements E14Bridge {
     // del guard llega aquí: la sospecha geométrica SOLO condena con tinta
     // cortada al filo del recorte (D1 — el falso positivo del quad al filo
     // con imagen perfecta queda curado). El resto del pipeline corrió igual
-    // (recorte/calidad/OCR) para que REVISIÓN muestre la imagen y el
-    // operador entienda el problema.
-    const verificacionResuelta = verificacion ? await verificacion : null;
+    // (recorte/calidad/OCR) para que REVISIÓN muestre la imagen y el operador
+    // entienda el problema — con una excepción (KIT e14-velocidad-5s-v1): el
+    // OCR, que con `rechazoTemprano` cobró UNA pasada y paró, porque el
+    // desenlace ya estaba bloqueado antes de leer la primera letra.
+    // (La `verificacionResuelta` se cosecha arriba, antes del OCR — la MISMA
+    //  promesa y el MISMO objeto, solo más temprano.)
     // NOTA (eliminación del módulo masiva): el gate de ESCANEOS por MARCO
     // IMPRESO (D63-C T2) y el perdón de marco (e63d F0.2) corrían SOLO para
     // entradas del runner MASIVA (`origenActa === "escaneo"`) — retirados
@@ -1792,7 +2055,20 @@ export class RealCoreBridge implements E14Bridge {
     // lectura perdona al marco impreso, pero NUNCA a la ausencia total de
     // fiduciales — evidencia física manda). En SIM esquinas=ESQUINAS_OK →
     // el veto es inalcanzable (guard explícito, chips 8.2/7.0/4.3 intactos).
-    if (!opciones.simular && cuatroEsquinasFaltan(esquinas)) {
+    // KIT e14-velocidad-5s-v1 — el perdón por evidencia física fuerte
+    // (`perdonFaltaFiduciales`, helper ÚNICO y MISMO criterio en el recorte,
+    // §9.9): «0 de 4 marcas» ALSO significa «las marcas no se ven» cuando el
+    // resto del pipeline demuestra el papel entero con las varas duras —
+    // lectura FUERTE ≥8 anclas, nitidez ≥90, contraste de papel ≥75 y ningún
+    // guard (geométrico ni de secciones) dice recortada. Evidencia:
+    // 20261028_084854 — visual 10, sharpness 100, 9 anclas, 617 caracteres,
+    // votos 9,7 %, recortada:false → RECHAZADA 6.4 con «EL ACTA ESTÁ CORTADA
+    // EN EL ENCUADRE» en una corrida y 10 ÓPTIMA en las tres siguientes.
+    if (
+      !opciones.simular &&
+      cuatroEsquinasFaltan(esquinas) &&
+      !perdonFaltaFiduciales(pisoPerfecto, recortada)
+    ) {
       completa = false;
     }
     // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) — marcador OBLIGATORIO de
@@ -1976,6 +2252,12 @@ export class RealCoreBridge implements E14Bridge {
             // sin archivo → decode=0; sinRecorte → detect=0) — jamás inventar.
             decodeMs: ms.decode > 0 ? Math.round(ms.decode) : null,
             detectMs: ms.detect > 0 ? Math.round(ms.detect) : null,
+            // KIT e14-velocidad-5s-v1 — los dos tramos que faltaban (ver
+            // tipos.ts): el bloque de orientación/geometría pre-CALIDAD y el
+            // cierre post-OCR.
+            orientMs: Math.round(ms.orient),
+            brujulaMs: Math.round(ms.brujula),
+            esqMs: Math.round(ms.esq),
           },
         });
       } catch {
@@ -1985,6 +2267,9 @@ export class RealCoreBridge implements E14Bridge {
     // D57 — KIT e14-instrumentos-espera-v1 (T2): orientacionProbeMs al
     // diagnóstico — asignación DEFENSIVA (jamás lanza; sin diagnóstico → se
     // omite — kit §4-T2). ADITIVO: no toca score/status/gate/tiempos.
+    if (diag != null && ocrEsc.traza) {
+      diag.trazaOcr = ocrEsc.traza;
+    }
     if (diag != null && probeMsOrientacion != null) {
       diag.orientacionProbeMs = probeMsOrientacion;
     }
@@ -1993,6 +2278,18 @@ export class RealCoreBridge implements E14Bridge {
     // omite — jamás inventar). Datos de calibración wave 3.
     if (diag != null && probeMiniOrientacion != null) {
       diag.orientacionProbeMini = probeMiniOrientacion;
+    }
+    // KIT e14-velocidad-5s-v1 — la brújula QR decide y cobra (0.7-1.0 s en el
+    // A56): el acta ahora dice QUÉ eslabón leyó y cuánto tardó (warp barato vs
+    // rescate hi-res por cuadrantes). ADITIVO, defensivo, jamás inventa.
+    if (diag != null && brujula != null) {
+      diag.trazaQr = {
+        via: brujula.via,
+        rot: brujula.rot,
+        cuadrante: brujula.cuadrante,
+        ms: brujula.ms,
+        intentos: brujula.intentos.length,
+      };
     }
     logger.info(
       `[e14] pipeline ${opciones.fuente}/${"archivo" in entrada ? "file" : "video-grab"} ` +
@@ -2047,6 +2344,7 @@ export class RealCoreBridge implements E14Bridge {
       // en el editor — el acta NO pasó por filtro); pipeline normal "bw".
       filtro: filtroActa,
       score,
+      scoreVisual,
       status: gate.status,
       rechazo: rechazoFinal,
       clasificacion: gate.clasificacion,
@@ -2079,6 +2377,9 @@ export class RealCoreBridge implements E14Bridge {
         )
         .catch(() => {});
     }
+    // KIT e14-velocidad-5s-v1 — el cierre REAL (totalMs se corta tras el OCR;
+    // clasificación + gate + votos + construirActa iban en el hueco).
+    if (diag) diag.tiempos.cierreMs = Math.round(performance.now() - inicio - ms.total);
     return acta;
   }
 
@@ -2386,15 +2687,33 @@ export class RealCoreBridge implements E14Bridge {
     const ladoEsquina = esquinas ? ladoEsquinaFaltante(esquinas) : null;
     const trazaEsq = trazaEsquinas(esquinas);
     const verificacion = await verificarCompletitud(quad, fotoProcesada, esquinas);
+    // KIT e14-velocidad-5s-v1 — las SEÑALES de lectura se SUBEN sobre el veto:
+    // el perdón 4/4 necesita `pisoPerfecto` y `recortada`. Son puras (leen
+    // `texto`/`clasificacion`/`calidad`, que ya están en vuelo), así que
+    // moverlas no cambia ningún valor; `medirZonaVotos` y el resto del orden
+    // quedan donde estaban.
+    const clasificacion = clasificarCabecera(texto, await cargarDivipol());
+    const faltaSeccion = faltaSeccionInferior(texto, clasificacion.pagina);
+    const lazoPerdonado = lazoPerdonadoPorLectura(esquinas, texto, faltaSeccion);
+    const recortada = faltaSeccion || (ladoEsquina !== null && !lazoPerdonado);
+    const senal = senalDeLectura(texto, clasificacion.parciales);
+    const pisoPerfecto =
+      senal.nivel === "FUERTE" &&
+      senal.anclas >= 8 &&
+      calidad.sharpnessHi >= 90 &&
+      calidad.contrastPapel >= 75;
     // e71 (P10) — VETO 4/4 FIDUCIALES (mismo criterio del escaneo — helper
     // ÚNICO cuatroEsquinasFaltan, pitfall §9.9): las 4 marcas ausentes →
-    // `completa` false. En el RECORTE MANUAL el veto NO rechaza (doctrina
-    // Q2 del kit esquinas-suaves: el operador VIO el papel) — degrada al
-    // escudo-manual (techo 7.9) vía vetoIncompleta/escudoManual de abajo;
-    // diag.gate.completa SÍ reporta false (kit P10 — coherencia del
-    // informe con la medición física).
+    // `completa` false. KIT e14-velocidad-5s-v1: el perdón por evidencia
+    // física fuerte (helper ÚNICO perdonFaltaFiduciales — MISMO criterio en
+    // ambos pipelines y en el escaneo, §9.9) aplica acá también. En el
+    // RECORTE MANUAL el veto NO rechaza (doctrina Q2 del kit esquinas-suaves:
+    // el operador VIO el papel) — degrada al escudo-manual (techo 7.9) vía
+    // vetoIncompleta/escudoManual de abajo; diag.gate.completa SÍ reporta
+    // false (kit P10 — coherencia del informe con la medición física).
     const completa =
-      verificacion.completa && !cuatroEsquinasFaltan(esquinas);
+      verificacion.completa &&
+      (!cuatroEsquinasFaltan(esquinas) || perdonFaltaFiduciales(pisoPerfecto, recortada));
     // KIT e14-esquinas-suaves-v1 (Q2): ESCUDO-MANUAL — `!completa` en un recorte
     // MANUAL no rechaza: techo 7.9 (patrón del escudo D10). El operador VIO el
     // papel; a lo sumo su crop cortó un poco de impresión y lo decide mirando.
@@ -2407,22 +2726,15 @@ export class RealCoreBridge implements E14Bridge {
     // §4.4): el recorte re-evalúa TODO el gate, los votos incluidos. Sin
     // excepción: un recorte que deja la zona de votos fuera → SIN_VOTOS
     // (vuelve a captura) — el recorte NUNCA rescata un acta sin votos.
-    // KIT actas-vivas-paginas-v1 (FASE C): clasificación ANTES de
-    // medirZonaVotos (solo depende de texto — ya está en vuelo): el gate de
-    // votos necesita la página (solo P1 tiene zona) y el recorte OCR de
-    // secciones se calcula de paso.
-    const clasificacion = clasificarCabecera(texto, await cargarDivipol());
+    // KIT actas-vivas-paginas-v1 (FASE C): la clasificación y el recorte OCR de
+    // secciones se calcularon ARRIBA (KIT e14-velocidad-5s-v1 — el perdón 4/4
+    // los necesita antes del veto); acá solo se consumen.
     // (KIT consenso-frankfurt-v1 FASE 2: las esquinas se miden ANTES del
     // guard — arriba; aquí solo consume ladoEsquina/trazaEsq.)
-    // KIT actas-vivas-paginas-v1 (FASE C): RECORTADA por OCR de secciones —
-    // mismas señales que el escaneo (helper ÚNICO §4.4). FASE F: OR esquinas.
     // KIT e14-lectura-perdona-lazo-v1 (§4-B): MISMO perdón del escaneo — la
     // LECTURA perdona al lazo (falso positivo margen corto/sombra); la señal
     // de secciones NUNCA se perdona. Mismo criterio en AMBOS pipelines
     // (pitfall §9.9 del kit score-lectura — helper único).
-    const faltaSeccion = faltaSeccionInferior(texto, clasificacion.pagina);
-    const lazoPerdonado = lazoPerdonadoPorLectura(esquinas, texto, faltaSeccion);
-    const recortada = faltaSeccion || (ladoEsquina !== null && !lazoPerdonado);
     const marcadores = await medirZonaVotos(fotoProcesada);
     // KIT actas-vivas-paginas-v1 (FASE C): gate de votos SOLO P1 — la pág 2
     // (constancias) NO tiene zona de votos. Página desconocida → se mide
@@ -2436,18 +2748,10 @@ export class RealCoreBridge implements E14Bridge {
     // §D1 (SPEC-e14-score-ocr): señal de contenido — mismo criterio §4.4
     // (helper único, AMBOS pipelines con el MISMO criterio).
     const senalActa = senalDeContenido(texto, clasificacion);
-    // KIT e14-luz-sim-puntos-v1 (T-D): `senal` se sube aquí (antes vivía
-    // tras scoreDeCalidad) — es PURA (misma entrada → misma salida) y el
-    // piso-10 necesita las anclas dentro del scoreDeCalidad. El bloque C3
-    // de abajo queda idéntico leyendo esta misma const.
-    const senal = senalDeLectura(texto, clasificacion.parciales);
-    // KIT e14-luz-sim-puntos-v1 (T-D): LAS 4 condiciones de §4.1. Todas o
-    // ninguna (conservador — G3).
-    const pisoPerfecto =
-      senal.nivel === "FUERTE" &&
-      senal.anclas >= 8 &&
-      calidad.sharpnessHi >= 90 &&
-      calidad.contrastPapel >= 75;
+    // KIT e14-luz-sim-puntos-v1 (T-D) + e14-velocidad-5s-v1: `senal` y
+    // `pisoPerfecto` ya se calcularon ARRIBA (el perdón 4/4 los necesita antes
+    // del veto) — son PURAS (misma entrada → misma salida) y el bloque C3 de
+    // abajo queda idéntico leyendo esas mismas consts.
     let score = scoreDeCalidad(calidad, {
       ocrLegible,
       identificada: clasificacion.nivel === "AUTO",
@@ -2629,6 +2933,9 @@ export class RealCoreBridge implements E14Bridge {
     // D57 — KIT e14-instrumentos-espera-v1 (T2): orientacionProbeMs al
     // diagnóstico — asignación DEFENSIVA (jamás lanza; sin diagnóstico → se
     // omite — kit §4-T2). ADITIVO: no toca score/status/gate/tiempos.
+    if (diag != null && ocrEsc.traza) {
+      diag.trazaOcr = ocrEsc.traza;
+    }
     if (diag != null && probeMsOrientacion != null) {
       diag.orientacionProbeMs = probeMsOrientacion;
     }
@@ -2864,6 +3171,8 @@ export class RealCoreBridge implements E14Bridge {
        *  producto) en el pipeline normal. */
       filtro?: PageFilter;
       score: number;
+      /** Score visual = bruto de scoreDeCalidad ANTES de los caps del sitio. */
+      scoreVisual?: number;
       status: ActaStatus;
       rechazo: Acta["rechazo"];
       /** Clasificación de cabecera (SPEC-cabecera-clasificacion §4/§6). */
@@ -2918,6 +3227,7 @@ export class RealCoreBridge implements E14Bridge {
       ],
       codigoBarras: ACTA_MOCK.codigoBarras,
       score: campos.score,
+      scoreVisual: campos.scoreVisual,
       status: campos.status,
       rechazo: campos.rechazo,
       intento: opciones.intento,

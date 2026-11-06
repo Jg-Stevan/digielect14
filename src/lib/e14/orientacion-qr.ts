@@ -65,6 +65,7 @@
 import type { Quad } from "@/lib/e14/core/types";
 import type { Binarizer } from "zxing-wasm/reader";
 import { canvasCon, loadImageMemo } from "./image-utils";
+import { leerFlags } from "./flags";
 import { logger } from "../logger";
 // Capa QR reubicada (antes src/lib/e14/masiva/identidad-qr — eliminado el
 // módulo masiva, la capa QR vive en src/lib/e14/qr/).
@@ -438,7 +439,15 @@ async function warpQrJsQrAsync(
     [1100, "dontInvert"],
     [750, "attemptBoth"],
   ];
-  for (const [LADO, inv] of ESCALAS) {
+  // KIT e14-velocidad-5s-v1 (`qrBrujulaWarpPases`): en el bench v8.3 el jsQR
+  // sobre el warp completo acertó 0/4 (el QR queda en ~110 px) y el que salva
+  // es el rescate HR guiado por el quad — o sea los 3 pases de acá son ~250 ms
+  // de CPU saturada que casi nunca aportan. DEFAULT 0 (directo al HR) desde la
+  // serie A/B/A del 2026-11-05 en el A56: la brújula bajó en 6/6 corridas sin
+  // mover score, anclas ni caracteres. 3 = el seguro anterior · 1 = solo el de
+  // 1600 · 0 = ir DIRECTO al rescate HR. Se mide, no se asume.
+  const pases = Math.max(0, Math.min(3, Math.round(leerFlags().qrBrujulaWarpPases)));
+  for (const [LADO, inv] of ESCALAS.slice(0, pases)) {
     const s = Math.min(1, LADO / Math.max(base.width, base.height));
     const c = s < 1 ? escalaCanvas(base, s) : base;
     const ctx = c.getContext("2d", { willReadFrequently: true });
@@ -515,9 +524,13 @@ export async function brujulaQrOrientacion(
       let acierto: { payload: string; idx: 0 | 1 | 2 | 3 } | null = null;
       for (const ronda of [RONDA1, RONDA2] as const) {
         for (const idx of orden) {
+          // El paralelogramo de la esquina NO depende de la escala ni del
+          // binarizador: se recorta UNA vez por esquina (antes se volvía a
+          // calcular por intento — sobre un canvas de 4000×3000 cada recorte
+          // cuesta ~0.1 s y el rescate típico son 4 intentos).
+          const c1 = cropParal(alta, quad, idx, 0);
           for (const [f, bin] of ronda) {
             if (acierto) break;
-            const c1 = cropParal(alta, quad, idx, 0);
             if (!c1) continue;
             const hit = await zxLee(
               escalaCanvas(c1, f),
@@ -530,9 +543,8 @@ export async function brujulaQrOrientacion(
           if (acierto) break;
           if (ronda === RONDA2) {
             // variantes finas por esquina (solo en ronda 2 — baratas y tardías)
-            const c0 = cropParal(alta, quad, idx, 0);
-            if (c0) {
-              const j = jsQrDe(c0, `jsQR-HR·c${idx}${CUADS[idx]}@2`, intentos);
+            if (c1) {
+              const j = jsQrDe(c1, `jsQR-HR·c${idx}${CUADS[idx]}@2`, intentos);
               if (j) acierto = { payload: j.payload, idx };
             }
             for (const [th, f, bin] of [

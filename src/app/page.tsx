@@ -57,6 +57,9 @@ import { iniciarRastreo } from "@/lib/e14/rastreo/motor";
 export default function Page() {
   const vista = useE14Store((s) => s.vista);
   const navegar = useE14Store((s) => s.navegar);
+  // Destello de captura en el SHELL: sobrevive al cambio a ANALIZANDO (antes
+  // vivía en ScanView y la navegación lo cortaba, así que se retrasaba 260 ms).
+  const destelloKey = useE14Store((s) => s.destelloKey);
 
   // KIT L6: arranque de la jornada persistida — UNA vez por carga (la
   // acción es idempotente: guarda de doble montaje incluida). Sin registro
@@ -181,6 +184,15 @@ export default function Page() {
           )}
         </div>
 
+        {/* Destello blanco de captura (320 ms, spec §7) — en el shell para que
+            el paso a ANALIZANDO no lo corte. */}
+        {destelloKey > 0 && (
+          <div
+            key={destelloKey}
+            className="animate-capture-flash pointer-events-none fixed inset-0 z-[999] bg-white"
+            aria-hidden
+          />
+        )}
         {/* F-PWA (H6): SW offline + instalación — SIEMPRE montado (todas las
           vistas) porque el registro vive en el shell, no en una pantalla. */}
         <PwaRegister />

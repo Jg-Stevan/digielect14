@@ -52,4 +52,9 @@ const nextConfig: NextConfig = {
 
 export default nextConfig;
 
-import('@opennextjs/cloudflare').then(m => m.initOpenNextCloudflareForDev());
+// Solo en DEV: initOpenNextCloudflareForDev levanta miniflare para exponer las
+// bindings de Workers. En `next build` no cumple nada (el móvil se sirve como
+// export estático) y ese arranque intermitente corta el build con EPERM.
+if (process.env.NODE_ENV === "development") {
+  import('@opennextjs/cloudflare').then(m => m.initOpenNextCloudflareForDev());
+}

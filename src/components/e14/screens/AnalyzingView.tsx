@@ -12,6 +12,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
+import { leerFlags } from "@/lib/e14/flags";
 import type { EtapaAnalisis, ProgresoAnalisis } from "@/lib/e14/types";
 import { DocScannerIcon, ShieldCheckIcon } from "../icons";
 
@@ -38,8 +39,11 @@ const ORDEN_ETAPAS: readonly EtapaAnalisis[] = [
   "OCR",
 ];
 
-/** Piso escénico (D16): mínimo en pantalla antes de poder cerrar al 100 %. */
-const PISO_ESCENICO_MS = 1200;
+/** Piso escénico (D16): mínimo en pantalla antes de poder cerrar al 100 %.
+ *  KIT e14-velocidad-5s-v1: ahora es flag (`pisoEscenicoMs`, default 300) —
+ *  con el pipeline bajo 5 s, el piso de 1200 ms + el snap de 350 ms eran 1.5 s
+ *  de teatro puro sobre el reloj del dueño. override {"pisoEscenicoMs":1200}
+ *  ⇒ la animación de siempre (snap 350 incluido). */
 /** Constante de tiempo del tween del % (suaviza los saltos de los eventos). */
 const TAU_SUAVIZADO_MS = 140;
 
@@ -72,6 +76,8 @@ export function AnalyzingView() {
   }, [progresoAnalisis, analisisResuelto]);
 
   useEffect(() => {
+    const pisoEscenicoMs = leerFlags().pisoEscenicoMs;
+    const cierreInstantaneo = leerFlags().cierreInstantaneo;
     const inicioReloj = performance.now();
     const inicioFecha = Date.now();
     let raf = 0;
@@ -85,19 +91,30 @@ export function AnalyzingView() {
       const dt = Math.min(Math.max(t - anterior, 1), 120);
       anterior = t;
       const { ponderado, resuelto } = datosRef.current;
-      // Piso escénico D16: nunca 100 hasta (pipeline resuelto && ≥1200 ms).
-      const puedeCerrar = resuelto && t - inicioReloj >= PISO_ESCENICO_MS;
+      // Piso escénico D16: nunca 100 hasta (pipeline resuelto && ≥piso).
+      const puedeCerrar = resuelto && t - inicioReloj >= pisoEscenicoMs;
+      // KIT e14-velocidad-5s-v1 (`cierreInstantaneo`): el teatro de abajo gasta
+      // ~600 ms del reloj del dueño DESPUÉS de que el trabajo ya terminó (el
+      // tween exponencial al 0.995 ≈ 2,3·TAU = 320 ms + el `setTimeout` de
+      // cierre). Con el flag, en cuanto se puede cerrar se cierra.
+      if (puedeCerrar && !cerrado && cierreInstantaneo) {
+        cerrado = true;
+        setProgreso(100);
+        analisisCompletado();
+        return;
+      }
       const objetivo = puedeCerrar ? 1 : Math.min(ponderado, 0.99);
       // Tween corto hacia el objetivo (anti saltos a golpes).
       mostrado += (objetivo - mostrado) * (1 - Math.exp(-dt / TAU_SUAVIZADO_MS));
       mostrado = Math.min(mostrado, puedeCerrar ? 1 : 0.99);
 
       if (puedeCerrar && mostrado >= 0.995) {
-        // Cierre escénico: snap a 100 y navega tras 350 ms (patrón actual).
+        // Cierre escénico: snap a 100 y navega (el snap NUNCA supera el piso
+        // — con piso corto la pantalla no se queda fingiendo después del 100).
         if (!cerrado) {
           cerrado = true;
           setProgreso(100);
-          cierre = setTimeout(() => analisisCompletado(), 350);
+          cierre = setTimeout(() => analisisCompletado(), Math.min(350, pisoEscenicoMs));
         }
         raf = requestAnimationFrame(tick);
         return;

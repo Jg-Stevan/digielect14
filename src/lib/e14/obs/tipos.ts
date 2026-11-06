@@ -167,6 +167,97 @@ export interface FlagsApp {
   // ─── muerta se vea como un HEIC rechazado, no como un misterio. 0 = sin plazo.
   heicTopeMp: number; // default 24 · clamp [0, 60]
   heicLimiteMs: number; // default 45000 · clamp [0, 110000]
+  // ─── KIT e14-autoenvio-recorte-v1 — tras un RECORTE manual que pasa a
+  // ─── OPTIMA: ¿se envía automáticamente (como captura normal) o se queda en
+  // ─── REVISIÓN esperando envío manual? Default true (comportamiento actual
+  // ─── G4 del gate v2); false = el recorte NUNCA auto-envía (dueño decide).
+  autoEnvioConRecorte: boolean; // default true
+  // ─── KIT e14-velocidad-5s-v1 — campos ADITIVOS AL FINAL (D57) ───────────
+  // Tope del lado mayor de la foto que ENTRA al trabajo (importación + warp +
+  // realce). El sensor saca 4032 y el pipeline pagaba decode/warp/OCR a ese
+  // tamaño; el det del OCR ya se capa a 1280 y el rec a 480 de ancho, así que
+  // 4032 solo inflaba el warp y el decode. 4032 = HOY byte-idéntico.
+  ladoMaxTrabajoPx: number; // default 2560 · clamp [1024, 4032]
+  // Piso escénico de ANALIZANDO (D16): mínimo en pantalla antes de cerrar al
+  // 100 %. Con pipeline a 5 s el piso de 1200 ms era el 25 % del tiempo total
+  // del puesto. 1200 = HOY byte-idéntico.
+  pisoEscenicoMs: number; // default 300 · clamp [0, 1200]
+  // Primer intento de la cascada OCR: true = RapidOCR 1280 (pasada única
+  // ~2 s, si el GATE dice AUTO se acabó) y Tesseract best solo como RESCATE;
+  // false = GO-B del dueño byte-idéntico (Tesseract best primero).
+  ocrPrimeraPasadaRapida: boolean; // default true
+  // Ruta corta del IMPORTAR: dims leídas del contenedor JPEG (sin decodificar)
+  // y el File pasa intacto si ya está dentro del tope. false = camino robusto
+  // de siempre (data URL + decode + canvas + FileReader en el hilo principal).
+  importRutaCorta: boolean; // default true
+  // ─── KIT e14-velocidad-5s-v1 (fase rec) — knobs del TENSOR de reconocimiento.
+  // El A56 con el rec corriendo está a 7,7 de 8 núcleos (medido con /proc/stat
+  // durante la corrida) ⇒ NO hay holgura para más workers ni más hilos: la única
+  // palanca que corre es HACER MENOS CÁLCULO. El costo del rec es ~ n × h × W
+  // (más el copiazo del salida [n,T,6625], con T ∝ W), así que W y h son las
+  // dos perillas. 480 sigue en su valor de siempre; 40 es la altura validada
+  // con serie A/B/A el 2026-11-05 (32 pierde «SUMA TOTAL» → techo `recortada`).
+  ocrRecWmax: number; // default 480 · clamp [160, 960]
+  ocrRecAltura: number; // default 40 · clamp [24, 64] (el ONNX acepta H dinámica)
+  // Líneas por corrida del rec: los lotes corren al ancho de su línea más
+  // ancha, así que lotes chicos desperdician menos pad de ceros (y más runs).
+  ocrRecLote: number; // default 6 · clamp [1, 12]
+  // El OCR lee la procesada bw (un solo warp) en vez de la variante sin realce
+  // (dos warps). false = HOY byte-idéntico (dos processImage bajo la misma rampa).
+  ocrLeerBw: boolean; // default false
+  // Remuestreo del recorte → tensor: false = nearest (el de siempre, byte
+  // idéntico) · true = filtro de área del canvas (`imageSmoothingQuality
+  // "high"`). Con `ocrRecAltura` POR DEBAJO de la altura natural del recorte
+  // el nearest tira filas de píxeles reales y la red ve trazos partidos; el
+  // suave deja bajar la altura conservando la línea entera.
+  ocrRecSuave: boolean; // default false
+  // Forma del tensor del rec: false = el ancho de cada lote (HOY) · true =
+  // TODOS los lotes al cap (`ocrRecWmax`). Cada `run()` del ORT-wasm paga
+  // ~130 ms FIJOS y re-optimiza el grafo cuando cambia la forma de entrada;
+  // fijarla cambia ese fijo por el pad de ceros (que cuesta ~2 %).
+  ocrRecWfija: boolean; // default false
+  // Líneas que se LEEN (no que se recortan): las N de ARRIBA y las M de ABAJO,
+  // en el orden vertical del det. 0/0 = leer TODAS (el comportamiento original).
+  // El medio de un E-14 es la tabla de candidatos/votos y ningún consumidor del
+  // texto (cabecera, banda, sección inferior, señal de contenido, anclas) lo
+  // decide. 14/14 es la calibración del 2026-11-05 con el rescate encendido.
+  ocrRecCabecera: number; // default 14 · clamp [0, 60]
+  ocrRecPie: number; // default 14 · clamp [0, 60]
+  // RED DE SEGURIDAD del recorte por bordes: si leyendo solo las líneas de arriba
+  // y abajo salen MENOS de N anclas estructurales (`ANCLAS_LECTURA`, máx 10), se
+  // leen AHÍ MISMO las que se dejaron sin leer. 0 = sin rescate (apuesta pura).
+  ocrRecBordesRescate: number; // default 7 · clamp [0, 10]
+  // Lado de trabajo de la foto que LEE el OCR (distinto del de la que se
+  // muestra/guarda, `ladoMaxTrabajoPx`). 0 = el mismo de siempre. Piso práctico
+  // 1920: la 2.ª pasada del escalonado y el rescate ROI re-leen esta imagen a
+  // cap 1920 — más chica y la escalada (la que salva las fotos duras) se queda
+  // sin pixeles.
+  ladoOcrPx: number; // default 0 · clamp [0, 4032]
+  // Cierre de la pantalla ANALIZANDO: false = el teatro de siempre (el progreso
+  // hace tween al 100 y `Math.min(350, pisoEscenicoMs)` extra antes de navegar)
+  // · true = en cuanto el pipeline resolvió (y se cumplió el piso) se navega
+  // YA. Son ~600 ms de animación sobre el reloj del dueño.
+  cierreInstantaneo: boolean; // default false
+  // Pases de jsQR sobre el warp COMPLETO antes de tirar el rescate HR de la
+  // brújula. Bench v8.3: el warp acertó 0/4 (el QR queda ~110 px) y el rescate
+  // HR 4/4 — cada pase son ~80-120 ms de CPU ya saturada. 0 = directo al HR
+  // (el default desde la serie A/B/A del 2026-11-05 en el A56: −145 a −445 ms de
+  // brújula en 6/6 sin mover score ni lectura) · 3 = el seguro anterior.
+  qrBrujulaWarpPases: number; // default 0 · clamp [0, 3]
+  // Escalada del OCR (la cola de las fotos duras): forzar el 2.º intento en
+  // modo ROI-CABECERA (franja 0-25 % a cap 1920, ~2,5× más barato que el re-OCR
+  // 1920 completo) aunque el plan del hardware diga "completo". false = HOY.
+  ocrReOcrRoi: boolean; // default false
+  // Tope PARED (ms de reloj del pipeline) para PERMITIR el 2.º intento. 0 = el
+  // del plan por tier (MEDIO/ALTO = sin tope, manda el presupuesto del
+  // escaneo). En el A56 la 1.ª pasada con rescate ya tarda ~4,8 s: con 3 000 el
+  // re-OCR y el ROI simplemente no abren.
+  ocrSegundaTopeMs: number; // default 0 · clamp [0, 120000]
+  // RECHAZO TEMPRANO: con el veredicto bloqueado ANTES del OCR (el guard de
+  // completitud ya dijo `completa:false` y el veto solo puede empeorarlo), ¿se
+  // cobra UNA sola pasada y se corta? true = sí · false = la escalada corre
+  // siempre, como hoy.
+  ocrCorteIncompleta: boolean; // default true
 }
 
 export interface ReporteSesion {

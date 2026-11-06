@@ -7,11 +7,9 @@
  * dependencias — el hook no registra efectos).
  *
  * Contiene (extraído tal cual de ScanView.tsx):
- *  · NAVEGACION_TRAS_MS (margen del destello antes de navegar a ANALIZANDO).
- *  · destelloKey (state que dispara el flash blanco) + actaObjetivoRef
- *    (identidad G3 del acta creada por ESTE disparo).
+ *  · actaObjetivoRef (identidad G3 del acta creada por ESTE disparo).
  *  · blobToDataUrl / canvasABlob (encode del ganador).
- *  · despacharCaptura (destello + vibrate + File → store → ANALIZANDO).
+ *  · despacharCaptura (vibrate + File → store → ANALIZANDO inmediato).
  *  · archivoDentroDeTope (decode ÚNICO + capa 3 del F-SENSOR-PROFILER H2).
  *  · despacharArchivo (despacho final ya dentro del tope).
  *  · mejorarSilenciosa (G3 — upgrade silencioso full-res en REVISIÓN).
@@ -22,22 +20,22 @@
  * setProcesando, setArchivoPendiente, dispararEscaneo, mejorarFotoActa y
  * mostrarAviso (la franja del visor, también de ScanView).
  */
-import { useCallback, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import {
   ErrorRescateHeic,
   fileToCaptureDataUrl,
+  jpegDimensionsFromBlob,
   loadImage,
 } from "@/lib/e14/core/image-processor";
-import { opcionesRescateHeic } from "@/lib/e14/flags";
-import { getSensorSafeCap, type SensorProfile } from "@/lib/e14/core/sensor-profiler";
+import { leerFlags, opcionesRescateHeic } from "@/lib/e14/flags";
+import { getSensorSafeCap, dentroDelTope, type SensorProfile } from "@/lib/e14/core/sensor-profiler";
 import type { Acta } from "@/lib/e14/types";
 import { useE14Store } from "@/lib/e14/store";
 import { logger } from "@/lib/logger";
 
-/** Destello de captura ~120 ms (spec §7 — duración en globals.css) + margen
- *  antes de navegar a ANALIZANDO (el visor se desmonta). Consumido también
- *  por capturarInteligente (ScanView — último recurso grab del video). */
-export const NAVEGACION_TRAS_MS = 260;
+/** Destello de captura ~320 ms (spec §7 — duración en globals.css). Vive en
+ *  el shell (store.destelloKey) para que ANALIZANDO entre EN EL MISMO
+ *  INSTANTE de la vibración sin que el cambio de vista corte el destello. */
 
 /** KIT e14-heic-tope-v1 (D82). El decodificador de reserva (heic2any 0.0.4) no
  *  admite `width`/`height` y un HEIC por encima del tope no termina nunca, así
@@ -98,6 +96,46 @@ async function downscaleImage(
   }
 }
 
+/** KIT e14-velocidad-5s-v1 — re-escala FUERA del hilo principal una foto de
+ *  galería más grande que el tope: el decodificador hace el resize (sin pasar
+ *  por un <img> ni por base64) y el encode sale por OffscreenCanvas. null =
+ *  no soportado o fallo ⇒ el llamador cae al camino robusto de siempre. */
+async function reescalarFueraDelHilo(
+  archivo: Blob,
+  dims: { w: number; h: number },
+  cap: number,
+): Promise<File | null> {
+  try {
+    if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas !== "function") return null;
+    const long = Math.max(dims.w, dims.h);
+    if (!long || dentroDelTope(long, cap)) return null;
+    const escala = cap / long;
+    const w = Math.max(1, Math.round(dims.w * escala));
+    const h = Math.max(1, Math.round(dims.h * escala));
+    const bitmap = await createImageBitmap(archivo, {
+      resizeWidth: w,
+      resizeHeight: h,
+      resizeQuality: "high",
+      imageOrientation: "from-image",
+    });
+    try {
+      const lienzo = new OffscreenCanvas(w, h);
+      const ctx = lienzo.getContext("2d", { alpha: false });
+      if (!ctx) return null;
+      ctx.drawImage(bitmap, 0, 0);
+      const blob = await lienzo.convertToBlob({ type: "image/jpeg", quality: 0.95 });
+      if (!blob.size) return null;
+      return new File([blob], archivo instanceof File ? archivo.name : "import.jpg", {
+        type: "image/jpeg",
+      });
+    } finally {
+      bitmap.close?.();
+    }
+  } catch {
+    return null;
+  }
+}
+
 /** Parámetros del hook — inyección de propietarios (movimiento puro). */
 interface UseDestelloParams {
   /** Perfil del sensor de FOTO (propietario: ScanView — lo llena el arranque
@@ -127,7 +165,7 @@ export function useDestello({
   mostrarAviso,
   mejorarFotoActa,
 }: UseDestelloParams) {
-  const [destelloKey, setDestelloKey] = useState(0);
+  const destellar = useE14Store((s) => s.destellar);
   // G3 (upgrade silencioso del lab L1806-1842): identidad del acta que ESTE
   // disparo creó (el pageId del lab) — la captura despacharCaptura al
   // resolver dispararEscaneo; el runner del upgrade la usa como guard.
@@ -155,26 +193,25 @@ export function useDestello({
   }, []);
 
   /** Despacha la captura: destello + vibrate + File → store → ANALIZANDO.
-   *  La navegación se demora ~260 ms para que el destello (~120 ms) se vea
-   *  ANTES de desmontar el visor. G3 (upgrade silencioso): al resolver
+   *  ANALIZANDO entra YA (sincrónico con la vibración): el operario no se
+   *  queda mirando el preview congelado — el destello lo pinta el shell, así
+   *  que el cambio de vista no lo corta. G3 (upgrade silencioso): al resolver
    *  dispararEscaneo captura la IDENTIDAD del acta creada por este disparo
    *  (el pageId del lab) — el runner del upgrade la usa como guard. */
   const despacharCaptura = useCallback(
     (archivo: File) => {
       setArchivoPendiente(archivo);
-      setDestelloKey((k) => k + 1);
+      destellar();
       if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
         navigator.vibrate(30);
       }
-      window.setTimeout(() => {
-        procesandoRef.current = false;
-        setProcesando(false);
-        void dispararEscaneo().then(() => {
-          actaObjetivoRef.current = useE14Store.getState().actaActual;
-        });
-      }, NAVEGACION_TRAS_MS);
+      procesandoRef.current = false;
+      setProcesando(false);
+      void dispararEscaneo().then(() => {
+        actaObjetivoRef.current = useE14Store.getState().actaActual;
+      });
     },
-    [dispararEscaneo, setArchivoPendiente],
+    [destellar, dispararEscaneo, setArchivoPendiente, setProcesando, procesandoRef],
   );
 
   // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L574-L589
@@ -191,6 +228,25 @@ export function useDestello({
   const archivoDentroDeTope = useCallback(
     async (archivo: File, robusto: boolean): Promise<File | null> => {
       try {
+        const cap = sensorProfileRef.current?.safeCapPx ?? getSensorSafeCap();
+        // KIT e14-velocidad-5s-v1 + KIT captura-fluida-v1 — RUTA CORTA del
+        // JPEG. Las dimensiones se leen del contenedor (256 KB, sin
+        // decodificar): si la foto ya está dentro del tope el File pasa
+        // INTACTO y si no se re-escala fuera del hilo. El camino robusto de
+        // abajo hacía lo MISMO pagando data URL + decode + canvas + FileReader
+        // + fetch en el hilo principal (medido 1 500-2 200 ms de congelación
+        // antes de ANALIZANDO). Desde captura-fluida-v1 aplica TAMBIÉN a la
+        // foto de la cámara (takePhoto/ZSL salen en JPEG): era el mismo par
+        // de decodes completos en cada disparo, solo para leer w/h.
+        // HEIC/PNG (sin SOF legible) siguen intactos: esta ruta no decide.
+        if (leerFlags().importRutaCorta) {
+          const dims = await jpegDimensionsFromBlob(archivo);
+          if (dims) {
+            if (dentroDelTope(Math.max(dims.w, dims.h), cap)) return archivo;
+            const reescalado = await reescalarFueraDelHilo(archivo, dims, cap);
+            if (reescalado) return reescalado;
+          }
+        }
         const rawDataUrl = robusto
           ? await fileToCaptureDataUrl(archivo, opcionesRescateHeic())
           : await blobToDataUrl(archivo);
@@ -224,9 +280,8 @@ export function useDestello({
     [blobToDataUrl],
   );
 
-  /** Despacha la captura FINAL (ya dentro del tope H2): destello + vibrate +
-   *  File → store → ANALIZANDO. La navegación se demora ~260 ms para que el
-   *  destello (~120 ms) se vea ANTES de desmontar el visor. */
+  /** Despacha la captura FINAL (ya dentro del tope H2): vibrate + File →
+   *  store → ANALIZANDO inmediato (el destello lo pinta el shell). */
   const despacharArchivo = useCallback(
     async (blobOArchivo: Blob, robusto: boolean) => {
       const base =
@@ -298,8 +353,6 @@ export function useDestello({
   );
 
   return {
-    destelloKey,
-    setDestelloKey,
     canvasABlob,
     archivoDentroDeTope,
     despacharArchivo,

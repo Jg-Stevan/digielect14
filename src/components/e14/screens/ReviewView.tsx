@@ -344,7 +344,11 @@ export function ReviewView() {
       return null;
     }
     // Fix del dueño (14-oct) #2: píldora verde para ÓPTIMA/ENVIADA.
-    if (status === "OPTIMA" || status === "ENVIADA") return { texto: `✓ ${acta.score.toFixed(1)}/10 ÓPTIMA`, tono: "ok" as const };
+    // Score visual = bruto del scoreDeCalidad ANTES de los caps del sitio.
+    if (status === "OPTIMA" || status === "ENVIADA") {
+      const sv = acta.scoreVisual != null ? acta.scoreVisual.toFixed(1) : "—";
+      return { texto: `✓ ${acta.score.toFixed(1)}/10 ÓPTIMA · bruto ${sv}/10`, tono: "ok" as const };
+    }
     return null;
   })();
 

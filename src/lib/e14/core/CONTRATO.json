@@ -18,13 +18,13 @@
     "detector-client.ts": "6317350199bcbab65affe8c64820b441",
     "frame-loop.ts": "8374163b244a6ba30d9f9bae38b1bea6",
     "image-modes.ts": "0b8881cb025bd5adbde1a7421f5c1954",
-    "image-processor.ts": "1439f6e1b05adc7c220522c5e180f875",
+    "image-processor.ts": "1d9457bf8fe7595f6da974375fd89065",
     "motion-stabilizer.ts": "03faeb0185b903dbe50f3803fb5e9b91",
     "ocr.ts": "57eb3786b8705a287dd40cc18801bacb",
     "pdf-export.ts": "4b682f7c591ca7960f4cfb7a2e67b0a6",
     "pwa.ts": "eb491c95f25d6bc7827a25d5ad9db69e",
     "quality.ts": "490e545518a31fdcdf1a1fdbcf7015c4",
-    "sensor-profiler.ts": "2aa743b4074ff571eb7fb70f00559f96",
+    "sensor-profiler.ts": "65e512696d56ef0f356dbed08f737947",
     "types.ts": "54943986fffac5e0b58dc586ebf89a9d"
   }
 }

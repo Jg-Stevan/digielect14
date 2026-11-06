@@ -60,6 +60,14 @@ export interface PasadaCascada extends PasadaOcr {
    *  solo una pasada RapidOCR puede reusarse como 1.ª pasada del core
    *  (mismo espacio de conf); una pasada Tesseract vale SOLO por el gate. */
   motor?: "rapidocr" | "tesseract";
+  /** KIT e14-velocidad-5s-v1 — TAMAÑO de la pasada (cajas del det y líneas
+   *  aceptadas). El costo del rec es casi lineal en `nLineas × W`, sin esta
+   *  métrica el acta no dice por qué un rec tarda 3.5 s y otro 6 s. */
+  nBoxes?: number;
+  nLineas?: number;
+  /** ms ESPERANDO el run() del rec (wasm + IPC) — la resta con msRec es hilo
+   *  principal. Solo RapidOCR lo separa. */
+  msRunRec?: number;
 }
 
 /** Fracciones Y de los ROIs de rescate sobre el warp (brief K3 fase 1):
@@ -134,6 +142,14 @@ export interface DepsOcrCascada {
   /** Presupuesto del pipeline (timeout EXISTENTE) — vencido ⇒ no se abre
    *  ninguna etapa nueva (mismo criterio del kit escalonado §3). */
   presupuestoVencido: () => boolean;
+  /**
+   * KIT e14-velocidad-5s-v1 — rescate FINAL de OTRO motor (Tesseract best).
+   * Ausente ⇒ la cascada es la de siempre byte a byte. Solo se abre cuando el
+   * core RapidOCR (1280 → 1920 → ROI) terminó SIN nivel AUTO: el caso fácil
+   * (una pasada RapidOCR con AUTO) jamás lo paga. Su texto vale SOLO por el
+   * GATE — jamás entra a `elegirMejor` (misma regla §1 entre motores).
+   */
+  rescateMotor?: (foto: string) => Promise<PasadaCascada | null>;
 }
 
 /** Salida de la cascada — el caller (bridge) consume texto/conf y arma su
@@ -146,8 +162,10 @@ interface SalidaCascada {
   /** KIT e14-ocr-tessbest-v1 — motor que produjo el INTENTO 1 (traza). */
   motorIntento1: "rapidocr" | "tesseract";
   /** Etapa donde quedó: "intento1" = gate AUTO directo (ahorro del re-OCR),
-   *  "1280" = core sin 2.ª, "1920" = escalonado completo, "roi" = rescate. */
-  paso: "intento1" | "1280" | "1920" | "roi";
+   *  "1280" = core sin 2.ª, "1920" = escalonado completo, "roi" = rescate,
+   *  "rescate-motor" = KIT e14-velocidad-5s-v1 (el otro motor salvó un acta
+   *  que el core no ubicó). */
+  paso: "intento1" | "1280" | "1920" | "roi" | "rescate-motor";
   /** true = el rescate ROI CORRIÓ (y su compuesta entró a elegirMejor, gane
    *  o pierda — la métrica del banco cuenta INTENTOS de rescate). */
   rescate: boolean;
@@ -155,9 +173,16 @@ interface SalidaCascada {
   ms1280: number | null; // solo cuando el core abrió su 1.ª pasada propia
   ms1920: number | null;
   msRoi: number | null;
+  /** KIT e14-velocidad-5s-v1 — ms del rescate final de OTRO motor (null si
+   *  no corrió: dep ausente, ya había AUTO, o presupuesto vencido). */
+  msMotor: number | null;
   /** Métricas det/rec de la ELEGIDA (n/d → 0 si el motor no separa). */
   detMs?: number;
   recMs?: number;
+  /** Tamaño de la ELEGIDA (0 = n/d, mismo convenio que detMs/recMs). */
+  nBoxes?: number;
+  nLineas?: number;
+  msRunRec?: number;
 }
 
 /** Gate a prueba de fallos (conservador — jamás tumba la cascada). */
@@ -220,8 +245,12 @@ export async function correrCascadaOcr(
       ms1280: null,
       ms1920: null,
       msRoi: null,
+      msMotor: null,
       detMs: r1.msDet,
       recMs: r1.msRec,
+      nBoxes: r1.nBoxes,
+      nLineas: r1.nLineas,
+      msRunRec: r1.msRunRec,
     };
   }
 
@@ -284,6 +313,42 @@ export async function correrCascadaOcr(
     }
   }
 
+  // 4) KIT e14-velocidad-5s-v1 — rescate final de OTRO motor (Tesseract best).
+  //    Dep ausente ⇒ nada de esto corre (cascada de siempre, byte a byte).
+  //    Solo se abre si el core RapidOCR cerró SIN AUTO: con el intento 1 rápido
+  //    el caso fácil (una pasada y puerta AUTO) jamás lo paga. Manda la regla
+  //    §1 — entre motores decide el GATE, jamás `elegirMejor`.
+  let msMotor: number | null = null;
+  if (
+    deps.rescateMotor &&
+    gateSeguro(deps, acumulado.texto) !== "AUTO" &&
+    !deps.presupuestoVencido()
+  ) {
+    const t = performance.now();
+    const rm = await deps.rescateMotor(foto).catch(() => null);
+    msMotor = Math.round(performance.now() - t);
+    if (rm && gateSeguro(deps, rm.texto) === "AUTO") {
+      return {
+        texto: rm.texto,
+        conf: rm.conf,
+        elegidoCap: rm.cap,
+        paso: "rescate-motor",
+        rescate,
+        motorIntento1,
+        msIntento1,
+        ms1280,
+        ms1920,
+        msRoi,
+        msMotor,
+        detMs: rm.msDet,
+        recMs: rm.msRec,
+        nBoxes: rm.nBoxes,
+        nLineas: rm.nLineas,
+        msRunRec: rm.msRunRec,
+      };
+    }
+  }
+
   const paso: SalidaCascada["paso"] = rescate
     ? "roi"
     : ms1920 != null
@@ -304,7 +369,11 @@ export async function correrCascadaOcr(
     ms1280,
     ms1920,
     msRoi,
+    msMotor,
     detMs: acumulado.msDet,
     recMs: acumulado.msRec,
+    nBoxes: acumulado.nBoxes,
+    nLineas: acumulado.nLineas,
+    msRunRec: acumulado.msRunRec,
   };
 }

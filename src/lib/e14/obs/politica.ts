@@ -155,6 +155,61 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     if (typeof o.heicLimiteMs === "number" && Number.isFinite(o.heicLimiteMs)) {
       limpio.heicLimiteMs = Math.max(0, Math.min(110_000, Math.round(o.heicLimiteMs)));
     }
+    // KIT e14-capa0-qr-worker-v1 y KIT e14-autoenvio-recorte-v1 — DOS puertas
+    // que faltaban: sin su línea aquí, el override MANUAL (máxima prioridad,
+    // D6) de esos dos flags era inalcanzable desde localStorage. Cada puerta
+    // su línea — la convención del DOBLE whitelist, no opcional.
+    if (typeof o.capa0QrWorker === "boolean") limpio.capa0QrWorker = o.capa0QrWorker;
+    if (typeof o.autoEnvioConRecorte === "boolean") limpio.autoEnvioConRecorte = o.autoEnvioConRecorte;
+    // ─── KIT e14-velocidad-5s-v1 — mismo criterio (DOBLE whitelist): las
+    // ─── cuatro puertas del puesto rápido. Sin estas líneas el A/B en el
+    // ─── celular (override localStorage) sería inalcanzable.
+    if (typeof o.ladoMaxTrabajoPx === "number" && Number.isFinite(o.ladoMaxTrabajoPx)) {
+      limpio.ladoMaxTrabajoPx = Math.max(1024, Math.min(4032, Math.round(o.ladoMaxTrabajoPx)));
+    }
+    if (typeof o.pisoEscenicoMs === "number" && Number.isFinite(o.pisoEscenicoMs)) {
+      limpio.pisoEscenicoMs = Math.max(0, Math.min(1200, Math.round(o.pisoEscenicoMs)));
+    }
+    if (typeof o.ocrPrimeraPasadaRapida === "boolean") limpio.ocrPrimeraPasadaRapida = o.ocrPrimeraPasadaRapida;
+    if (typeof o.importRutaCorta === "boolean") limpio.importRutaCorta = o.importRutaCorta;
+    // ─── KIT e14-velocidad-5s-v1 (fase rec) — mismo criterio (DOBLE whitelist):
+    // ─── sin estas líneas el A/B del tensor del rec en el celular sería
+    // ─── inalcanzable (el override MANUAL es la máxima prioridad, D6).
+    if (typeof o.ocrRecWmax === "number" && Number.isFinite(o.ocrRecWmax)) {
+      limpio.ocrRecWmax = Math.max(160, Math.min(960, Math.round(o.ocrRecWmax)));
+    }
+    if (typeof o.ocrRecAltura === "number" && Number.isFinite(o.ocrRecAltura)) {
+      limpio.ocrRecAltura = Math.max(24, Math.min(64, Math.round(o.ocrRecAltura / 4) * 4));
+    }
+    if (typeof o.ocrRecLote === "number" && Number.isFinite(o.ocrRecLote)) {
+      limpio.ocrRecLote = Math.max(1, Math.min(12, Math.round(o.ocrRecLote)));
+    }
+    if (typeof o.ocrLeerBw === "boolean") limpio.ocrLeerBw = o.ocrLeerBw;
+    if (typeof o.ocrRecSuave === "boolean") limpio.ocrRecSuave = o.ocrRecSuave;
+    if (typeof o.ocrRecWfija === "boolean") limpio.ocrRecWfija = o.ocrRecWfija;
+    if (typeof o.ocrRecCabecera === "number" && Number.isFinite(o.ocrRecCabecera)) {
+      limpio.ocrRecCabecera = Math.max(0, Math.min(60, Math.round(o.ocrRecCabecera)));
+    }
+    if (typeof o.ocrRecPie === "number" && Number.isFinite(o.ocrRecPie)) {
+      limpio.ocrRecPie = Math.max(0, Math.min(60, Math.round(o.ocrRecPie)));
+    }
+    if (typeof o.ocrRecBordesRescate === "number" && Number.isFinite(o.ocrRecBordesRescate)) {
+      limpio.ocrRecBordesRescate = Math.max(0, Math.min(10, Math.round(o.ocrRecBordesRescate)));
+    }
+    if (typeof o.ladoOcrPx === "number" && Number.isFinite(o.ladoOcrPx)) {
+      limpio.ladoOcrPx = Math.max(0, Math.min(4032, Math.round(o.ladoOcrPx)));
+    }
+    if (typeof o.cierreInstantaneo === "boolean") limpio.cierreInstantaneo = o.cierreInstantaneo;
+    if (typeof o.qrBrujulaWarpPases === "number" && Number.isFinite(o.qrBrujulaWarpPases)) {
+      limpio.qrBrujulaWarpPases = Math.max(0, Math.min(3, Math.round(o.qrBrujulaWarpPases)));
+    }
+    if (typeof o.ocrReOcrRoi === "boolean") limpio.ocrReOcrRoi = o.ocrReOcrRoi;
+    if (typeof o.ocrSegundaTopeMs === "number" && Number.isFinite(o.ocrSegundaTopeMs)) {
+      limpio.ocrSegundaTopeMs = Math.max(0, Math.min(120_000, Math.round(o.ocrSegundaTopeMs)));
+    }
+    // KIT e14-velocidad-5s-v1 — mismo criterio (DOBLE whitelist): el kill-switch
+    // {"ocrCorteIncompleta": false} del rechazo temprano.
+    if (typeof o.ocrCorteIncompleta === "boolean") limpio.ocrCorteIncompleta = o.ocrCorteIncompleta;
     // NOTA (eliminación del módulo masiva): las puertas de los 17 flags
     // exclusivos de la cola se retiraron junto con el módulo.
     return limpio;

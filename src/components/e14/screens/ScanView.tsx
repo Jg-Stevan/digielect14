@@ -105,7 +105,7 @@ import { abrirAyuda } from "../AyudaOverlay";
 // efectos; los imports de lib quedan EXACTAMENTE iguales, solo consumidos).
 import { liberarCanvas, useAnilloBestShot } from "../hooks/useAnilloBestShot";
 import { useLinterna } from "../hooks/useLinterna";
-import { NAVEGACION_TRAS_MS, useDestello } from "../hooks/useDestello";
+import { useDestello } from "../hooks/useDestello";
 import { useSelectorFuente } from "../hooks/useSelectorFuente";
 import { esIOS, useSesionCamara, type CamEstado, type LiveUi } from "../hooks/useSesionCamara";
 
@@ -166,6 +166,7 @@ const COOLDOWN_MS = 1500;
 
 export function ScanView() {
   const dispararEscaneo = useE14Store((s) => s.dispararEscaneo);
+  const destellar = useE14Store((s) => s.destellar);
   const fuente = useE14Store((s) => s.fuente);
   const setFuente = useE14Store((s) => s.setFuente);
   // §D2/§D3 (SPEC-e14-simulacion-scores): los chips disparan la simulación
@@ -295,8 +296,6 @@ export function ScanView() {
   } = useLinterna({ streamRef, camEstado, mostrarAviso });
   // Destello + flujo de captura al store (dispatch L574-589 + G3 upgrade).
   const {
-    destelloKey,
-    setDestelloKey,
     canvasABlob,
     archivoDentroDeTope,
     despacharArchivo,
@@ -420,12 +419,10 @@ export function ScanView() {
       // (frameActual → canvas a resolución del stream).
       const video = videoRef.current;
       if (video && video.readyState >= 2 && video.videoWidth) {
-        setDestelloKey((k) => k + 1);
-        window.setTimeout(() => {
-          procesandoRef.current = false;
-          setProcesando(false);
-          void dispararEscaneo();
-        }, NAVEGACION_TRAS_MS);
+        destellar();
+        procesandoRef.current = false;
+        setProcesando(false);
+        void dispararEscaneo();
       } else {
         procesandoRef.current = false;
         setProcesando(false);
@@ -466,7 +463,7 @@ export function ScanView() {
     loopRef,
     puedeTomarFotoRef,
     takePhotoBrokenRef,
-    setDestelloKey,
+    destellar,
   ]);
 
   /** Ref fresca del captureSmart para los listeners del loop (lab L887-888). */
@@ -981,14 +978,6 @@ export function ScanView() {
                 </div>
               )}
 
-              {/* Destello blanco de captura */}
-              {destelloKey > 0 && (
-                <div
-                  key={destelloKey}
-                  className="animate-capture-flash pointer-events-none absolute inset-0 z-50 bg-white"
-                  aria-hidden
-                />
-              )}
             </>
           ) : (
             /* SIMULACIÓN/ARCHIVO: Visor con marco táctico E-14. Task 2-b: en

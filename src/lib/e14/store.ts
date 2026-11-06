@@ -18,6 +18,7 @@ import type { Acta, FuenteCaptura, HistorialRow, Mesa, ProgresoAnalisis, TipoPag
 // rescate post-timeout — MISMO patrón del runner MASIVA (variable tipada →
 // sin excess-check en la llamada al bridge).
 import { type OpcionesEscaneoConTimeout } from "./scanner-core-bridge";
+import { leerFlags } from "./flags";
 // §G.2 — ORDEN-WAVE3-add-envio-individual-v1: la red del momento del envío
 // (registrarEnvio G.1 — envioRedTipo/envioDownlinkMbps en el diagnóstico).
 import { redActual } from "./obs/dispositivo";
@@ -97,6 +98,10 @@ interface OpcionesSimEscaneo {
 
 interface E14Store {
   vista: Vista;
+  /** Destello blanco de captura (~320 ms). Vive en el SHELL, no en ScanView:
+   *  así sobrevive al cambio de vista y ANALIZANDO puede entrar en el mismo
+   *  instante de la vibración (antes eran 260 ms de preview congelado). */
+  destelloKey: number;
   online: boolean;
   actaActual: Acta | null;
   /** Página de mesa apuntada por el escaneo en curso (D7). */
@@ -174,6 +179,8 @@ interface E14Store {
    *  SIMULACION + asset fijo de la banda + score inyectado; los guards de
    *  ARCHIVO/CAMARA no aplican y no consume archivoPendiente/framePendiente. */
   dispararEscaneo: (intento?: number, sim?: OpcionesSimEscaneo) => Promise<void>;
+  /** Destello de captura del shell (key nueva = animación desde cero). */
+  destellar: () => void;
   /** §D2/§D3 (SPEC-e14-simulacion-scores): los 3 chips de calidad encima del
    *  obturador SON botones de simulación — disparan el MISMO camino de
    *  dispararEscaneo (REVISIÓN, banner, toast y ACTAS idénticos) con la fuente
@@ -569,6 +576,7 @@ export const useE14Store = create<E14Store>((set, get) => {
 
   return {
     vista: "escanear",
+    destelloKey: 0,
     online: true,
     actaActual: null,
     paginaObjetivo: null,
@@ -605,6 +613,8 @@ export const useE14Store = create<E14Store>((set, get) => {
 
     navegar: (vista) =>
       set({ vista }),
+
+    destellar: () => set((s) => ({ destelloKey: s.destelloKey + 1 })),
 
     // KIT actas-vivas-paginas-v1 (FASE A): ENCENDER → guion FRESCO (seed
     // nuevo + SIM reiniciado — AC-SIM2); APAGAR → solo apaga. Overlay de
@@ -1080,7 +1090,10 @@ export const useE14Store = create<E14Store>((set, get) => {
         // flag, sin banner de envío manual y sin CTA especial. La razón
         // de ser de D20 (no hay doble transmisión) se conserva por otra
         // vía: el recorte SOLO existe en actas NO enviadas.
-        if (acta.status === "OPTIMA") {
+        // KIT e14-autoenvio-recorte-v1: flag autoEnvioConRecorte — si
+        // false, el recorte NUNCA auto-envía aunque pase a OPTIMA.
+        const { autoEnvioConRecorte } = leerFlags();
+        if (acta.status === "OPTIMA" && autoEnvioConRecorte) {
           const hora = bridge.horaEnvio();
           registrarEnvio(tituloPaginaActual());
           set({

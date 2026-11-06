@@ -85,6 +85,78 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // camino anterior, sin red de seguridad.
   heicTopeMp: HEIC_TOPE_MP_DEFECTO,
   heicLimiteMs: HEIC_LIMITE_MS_DEFECTO,
+  // KIT e14-autoenvio-recorte-v1 — tras un RECORTE manual que pasa a
+  // OPTIMA: ¿se envía automáticamente (como captura normal) o se queda en
+  // REVISIÓN esperando envío manual? Default true (comportamiento actual
+  // G4 del gate v2); false = el recorte NUNCA auto-envía (dueño decide).
+  autoEnvioConRecorte: true,
+  // ─── KIT e14-velocidad-5s-v1 — tres knobs ADITIVOS AL FINAL (D57) ───────
+  // Lado mayor de la foto que entra al trabajo (importación + warp + realce).
+  // Medido en el A56: a 4032 el warp+realce paga 2 256 ms y el decode 1 300;
+  // a 2560 el área cae 2,5× y la lectura del OCR no se mueve (el det ya va
+  // capped a 1280 y el rec a REC_WMAX=480). 4032 = hoy byte-idéntico.
+  ladoMaxTrabajoPx: 2560,
+  // Piso escénico de ANALIZANDO (D16). Era 1 200 ms + 350 de cierre: con un
+  // pipeline de 4 s eso solo era el 40 % del tiempo del puesto.
+  pisoEscenicoMs: 300,
+  // Intento 1 de la cascada: RapidOCR 1280 (una sola pasada ~2 s si el GATE
+  // dice AUTO) y Tesseract best solo como rescate final. false = GO-B del
+  // dueño de siempre (Tesseract primero).
+  ocrPrimeraPasadaRapida: true,
+  // Ruta corta del IMPORTAR: las dimensiones se leen del contenedor del JPEG
+  // (256 KB, sin decodificar) y la foto que ya está dentro del tope pasa como
+  // llegó. false = el camino robusto de siempre (data URL + decode + canvas +
+  // FileReader), medido en 1 500-2 200 ms CONGELANDO el hilo principal.
+  importRutaCorta: true,
+  // ─── KIT e14-velocidad-5s-v1 (fase rec) — el A56 con el rec corre a 7,7 de 8
+  // núcleos (medido con /proc/stat DURANTE la corrida, 2026-11-05): no hay
+  // holgura para más workers/hilos, solo menos cálculo. Estos tres knobs mueven
+  // el tensor del rec (n·h·W) y el flag `ocrLeerBw` ahorra UN warp completo.
+  // `ocrRecWmax`/`ocrRecLote`/`ocrLeerBw`/`ocrRecSuave`/`ocrRecWfija` siguen en
+  // su valor de siempre (byte-idéntico); los cuatro de abajo se movieron con
+  // serie A/B/A encima — ver el bloque de evidencia pegado a `ocrRecAltura`.
+  ocrRecWmax: 480,
+  // A/B/A del 2026-11-05 en el A56 (series A1/A2 con 48/0/0/8, D1 y E1 con
+  // 40/14/14/7 sobre las 6 actas del corpus): los desenlaces son IDÉNTICOS
+  // (10/8.5/10/8.9/10/8.6, 6/6 auto-envío, mismas anclas y chars) y el `rec`
+  // baja de ~4,7 s a ~3,9 s de mediana. ALTURA 40 es el piso útil: con 32 se
+  // pierde «SUMA TOTAL» y aparece el techo `recortada`. CABECERA/PIE 14 leen
+  // solo las dos zonas con contenido del acta y BORDES 7 deja el rescate por
+  // bordes encendido como red — 085053 (35 cajas) lo dispara y no ahorra nada,
+  // pero ninguna de las dos series perdió una letra con él apagado.
+  ocrRecAltura: 40,
+  ocrRecLote: 6,
+  ocrLeerBw: false,
+  ocrRecSuave: false,
+  ocrRecWfija: false,
+  ocrRecCabecera: 14,
+  ocrRecPie: 14,
+  ocrRecBordesRescate: 7,
+  ladoOcrPx: 0,
+  cierreInstantaneo: false,
+  // Pases del jsQR sobre el WARP completo antes del rescate HR guiado por el
+  // quad. 0 = directo al HR. Medido en el A56 con las 6 actas reales y la
+  // Serie A/B/A del 2026-11-05 (override 0 vs default 3, misma config por lo
+  // demás): la brújula bajó en 6/6 corridas (−145 a −445 ms) y el desenlace NO
+  // cambió en ninguna — same score (10/8.5/10/8.9/10/8.6), mismas anclas y
+  // MISMO número de caracteres, y las 6 leyeron el QR por `zxing-hr` (el bench
+  // v8.3 ya decía 0/4 de acierto del warp: la marca queda en ~110 px). Riesgo
+  // asumido y acotado: si a un acta le hiciera falta un pase de warp y el HR
+  // falla, no se pierde información — cae al sondeo de orientación (lento,
+  // 6-14 s, pero correcto). override {"qrBrujulaWarpPases":3} = el seguro de
+  // la config anterior.
+  qrBrujulaWarpPases: 0,
+  ocrReOcrRoi: false,
+  ocrSegundaTopeMs: 0,
+  // KIT e14-velocidad-5s-v1 — RECHAZO TEMPRANO. El guard de completitud condena
+  // sin leer una letra (geometría del quad + fiduciales medidos sobre la
+  // procesada), y `completa` se copia de esa verificación: si ya dijo
+  // `completa:false`, NINGÚN texto del mundo cambia el desenlace — el acta es
+  // RECHAZADA/contingencia igual. Sin embargo la escalada de OCR se corría por
+  // inercia: 084939 pagó 4,78 s de 1.ª pasada + 3,99 de re-OCR 1920 + 3,37 de
+  // ROI para un acta ya condenada. true = cuando el veredicto está bloqueado AN
+  // TES del OCR se cobra UNA sola pasada (1280) y se corta ahí; false = hoy.
+  ocrCorteIncompleta: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -132,6 +204,54 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.heicLimiteMs === "number" && Number.isFinite(p.heicLimiteMs)) {
     limpio.heicLimiteMs = Math.max(0, Math.min(110_000, Math.round(p.heicLimiteMs)));
   }
+  // KIT e14-autoenvio-recorte-v1 — whitelist aditiva (booleano).
+  if (typeof p.autoEnvioConRecorte === "boolean") limpio.autoEnvioConRecorte = p.autoEnvioConRecorte;
+  // KIT e14-velocidad-5s-v1 — whitelist aditiva. El tope de trabajo solo se
+  // aplica en múltiplos útiles y jamás por encima de lo que saca el sensor.
+  if (typeof p.ladoMaxTrabajoPx === "number" && Number.isFinite(p.ladoMaxTrabajoPx)) {
+    limpio.ladoMaxTrabajoPx = Math.max(1024, Math.min(4032, Math.round(p.ladoMaxTrabajoPx)));
+  }
+  if (typeof p.pisoEscenicoMs === "number" && Number.isFinite(p.pisoEscenicoMs)) {
+    limpio.pisoEscenicoMs = Math.max(0, Math.min(1200, Math.round(p.pisoEscenicoMs)));
+  }
+  if (typeof p.ocrPrimeraPasadaRapida === "boolean") limpio.ocrPrimeraPasadaRapida = p.ocrPrimeraPasadaRapida;
+  if (typeof p.importRutaCorta === "boolean") limpio.importRutaCorta = p.importRutaCorta;
+  // ─── KIT e14-velocidad-5s-v1 (fase rec) — whitelist aditiva. 0 no es un
+  // valor útil acá (un tensor de alto 0 revienta el run), por eso el piso es
+  // el propio del modelo, no cero.
+  if (typeof p.ocrRecWmax === "number" && Number.isFinite(p.ocrRecWmax)) {
+    limpio.ocrRecWmax = Math.max(160, Math.min(960, Math.round(p.ocrRecWmax)));
+  }
+  if (typeof p.ocrRecAltura === "number" && Number.isFinite(p.ocrRecAltura)) {
+    limpio.ocrRecAltura = Math.max(24, Math.min(64, Math.round(p.ocrRecAltura / 4) * 4));
+  }
+  if (typeof p.ocrRecLote === "number" && Number.isFinite(p.ocrRecLote)) {
+    limpio.ocrRecLote = Math.max(1, Math.min(12, Math.round(p.ocrRecLote)));
+  }
+  if (typeof p.ocrLeerBw === "boolean") limpio.ocrLeerBw = p.ocrLeerBw;
+  if (typeof p.ocrRecSuave === "boolean") limpio.ocrRecSuave = p.ocrRecSuave;
+  if (typeof p.ocrRecWfija === "boolean") limpio.ocrRecWfija = p.ocrRecWfija;
+  if (typeof p.ocrRecCabecera === "number" && Number.isFinite(p.ocrRecCabecera)) {
+    limpio.ocrRecCabecera = Math.max(0, Math.min(60, Math.round(p.ocrRecCabecera)));
+  }
+  if (typeof p.ocrRecPie === "number" && Number.isFinite(p.ocrRecPie)) {
+    limpio.ocrRecPie = Math.max(0, Math.min(60, Math.round(p.ocrRecPie)));
+  }
+  if (typeof p.ocrRecBordesRescate === "number" && Number.isFinite(p.ocrRecBordesRescate)) {
+    limpio.ocrRecBordesRescate = Math.max(0, Math.min(10, Math.round(p.ocrRecBordesRescate)));
+  }
+  if (typeof p.ladoOcrPx === "number" && Number.isFinite(p.ladoOcrPx)) {
+    limpio.ladoOcrPx = Math.max(0, Math.min(4032, Math.round(p.ladoOcrPx)));
+  }
+  if (typeof p.cierreInstantaneo === "boolean") limpio.cierreInstantaneo = p.cierreInstantaneo;
+  if (typeof p.qrBrujulaWarpPases === "number" && Number.isFinite(p.qrBrujulaWarpPases)) {
+    limpio.qrBrujulaWarpPases = Math.max(0, Math.min(3, Math.round(p.qrBrujulaWarpPases)));
+  }
+  if (typeof p.ocrReOcrRoi === "boolean") limpio.ocrReOcrRoi = p.ocrReOcrRoi;
+  if (typeof p.ocrSegundaTopeMs === "number" && Number.isFinite(p.ocrSegundaTopeMs)) {
+    limpio.ocrSegundaTopeMs = Math.max(0, Math.min(120_000, Math.round(p.ocrSegundaTopeMs)));
+  }
+  if (typeof p.ocrCorteIncompleta === "boolean") limpio.ocrCorteIncompleta = p.ocrCorteIncompleta;
   return limpio;
 }
 
