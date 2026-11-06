@@ -18,6 +18,7 @@ public/scanner/*.worker.js -text
 # Binarios: nunca intentar EOL-detect (opencv/wasm/modelos/imágenes/fuentes).
 *.wasm binary
 *.onnx binary
+*.gz binary
 *.png binary
 *.jpg binary
 *.jpeg binary

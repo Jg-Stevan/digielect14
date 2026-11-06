@@ -65,13 +65,22 @@ dev.log
 
 # ─── PRIVACIDAD Y ARTEFACTOS LOCALES ───────────────────────────────────────
 # Datos electorales reales: fotos de actas, capturas y volcados de corrida NO
-# se commitean. Los modelos que se sirven en producción viven SOLO en
-# public/models/; cualquier .onnx descargado localmente queda fuera.
+# se commitean. Los modelos se materializan en build: ver el bloque de abajo.
 /capturas/
 /assets-locales/
 /scratch/
 *.onnx
-!public/models/**/*.onnx
+
+# ─── BINARIOS MATERIALIZADOS (bun run preparar) ────────────────────────────
+# scripts/sincronizar-vendor.mjs copia el vendor de node_modules y
+# scripts/preparar-assets.mjs baja OpenCV/modelos con URL y SHA-256 fijados en
+# scripts/assets.lock.json. Nada de esto se versiona.
+public/vendor/onnxruntime/
+public/vendor/tesseract/
+public/vendor/opencv-4.5.5-core.js
+public/wasm/zxing_reader.wasm
+public/models/tess/*.traineddata.gz
+public/models/rapidocr/*.onnx
 
 # Evidencia forense conservada a propósito en el repo (regresión D65 / zip 4f9c871):
 # los .log bajo docs/evidence/ son registro de verificación, no basura de dev.

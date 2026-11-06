@@ -39,19 +39,23 @@ Todo el detalle, por módulo, en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
 Los modelos y runtimes que se sirven en runtime viven en `public/`
 (`models/rapidocr` ≈16 MB, `models/tess/spa.traineddata.gz` ≈12 MB,
-`vendor/onnxruntime` ≈14 MB, `vendor/tesseract` ≈14 MB, `vendor/opencv` ≈8 MB).
+`vendor/onnxruntime` ≈14 MB, `vendor/tesseract` ≈13 MB, `vendor/opencv` ≈8 MB).
 No son basura: el OCR y la detección los cargan por red desde ahí, y el
-service worker los guarda en caché para operar sin señal.
+service worker los guarda en caché para operar sin señal. **No se versionan**:
+`bun run preparar` los materializa (vendor copiado de `node_modules` y el resto
+descargado con URL y SHA-256 fijados en `scripts/assets.lock.json`).
 
 ## Desarrollo
 
 ```bash
 bun install
 bun run dev            # http://localhost:3000 (modo simple, un hilo de OCR)
-bun run verificar      # typecheck + lint + test — la puerta de salida
+bun run verificar      # preparar + typecheck + lint + test — la puerta de salida
 ```
 
 `bun run verificar` es obligatorio antes de dar por terminado cualquier cambio.
+Un clon limpio necesita `bun run preparar` antes de correr la suite a mano
+(`bun run dev` y `bun run build` ya lo encadenan).
 Para medir OCR/QR con multihilo real (`crossOriginIsolated`), `next dev` no
 sirve: construye y sirve con el servidor COOP/COEP.
 

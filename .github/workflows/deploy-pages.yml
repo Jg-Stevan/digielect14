@@ -38,6 +38,22 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # Los binarios de public/ no se versionan: este step materializa el
+      # vendor de node_modules y baja los modelos/OpenCV con hash fijado. NO
+      # recompila el worker (eso lo sigue haciendo el commit), así que la
+      # premisa de abajo se mantiene intacta.
+      - name: Cache de assets externos
+        uses: actions/cache@v4
+        with:
+          path: |
+            public/models/rapidocr/*.onnx
+            public/models/tess/*.traineddata.gz
+            public/vendor/opencv-4.5.5-core.js
+          key: assets-${{ runner.os }}-${{ hashFiles('scripts/assets.lock.json') }}
+
+      - name: Preparar (vendor + assets)
+        run: bun run preparar
+
       - name: Build estático (raíz del sitio)
         run: bunx next build
 

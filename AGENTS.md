@@ -7,9 +7,10 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
 ## Comandos (verificados contra `package.json`)
 
 - `bun install` — gestor: **bun**. No uses npm ni pnpm.
+- `bun run preparar` — materializa lo que no se versiona: vendor copiado de `node_modules` y modelos/OpenCV descargados con SHA-256 fijado (`scripts/assets.lock.json`). Un clon limpio lo necesita antes de `bun run test`.
 - `bun run dev` — Next.js en el puerto 3000 (OCR a un hilo: `next dev` no emite
   cabeceras COOP/COEP, así que `crossOriginIsolated` es falso).
-- `bun run verificar` — typecheck + lint + test. **Es la puerta de salida**: nada
+- `bun run verificar` — preparar + typecheck + lint + test. **Es la puerta de salida**: nada
   se declara terminado sin este comando en verde, y se reporta su salida real.
 - `bun run build` — bundle de producción (el `prebuild` genera el worker de capa 0).
 - Sueltas: `bun run typecheck` · `bun run lint` · `bun run test` · `bunx knip`.
@@ -45,7 +46,13 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
 - Son datos electorales reales: **no commitees actas, capturas ni credenciales**,
   y no envíes actas a endpoints distintos del hub (`POST {hub}/actas`).
 - No añadas dependencias, telemetría ni servicios externos sin preguntarlo antes.
-- Nunca `git push --force` ni reescritura de historial.
+- Nunca `git push --force` ni reescritura de historial. **Excepción única y
+  autorizada por el dueño**: purgas puntuales de binarios del historial
+  (p. ej. `git filter-repo` para dejar de versionar modelos). Requisitos:
+  bundle de respaldo con `--all`, verificación post-reescritura,
+  `--force-with-lease` (nunca `--force` a secas) y registrar en
+  `docs/DECISIONS.md` el SHA previo y el motivo. Cualquier otro caso sigue
+  prohibido.
 
 ## Antes de borrar código que parece muerto
 
