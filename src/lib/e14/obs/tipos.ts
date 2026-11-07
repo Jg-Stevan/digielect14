@@ -2,7 +2,10 @@
  * KIT e14-observabilidad-v1 — contratos del módulo obs.
  * SOLO tipos: cero lógica runtime. Fuente de verdad: README-KITS.md §4.
  */
-import type { ResumenLectura } from "@jg-stevan/scanner-core/obs-base/eventos-lectura";
+import type {
+  AgregadoLectura,
+  ResumenLectura,
+} from "@jg-stevan/scanner-core/obs-base/eventos-lectura";
 
 export type TipoEvento = "error" | "warn" | "perf" | "salud" | "uso" | "hang"; // ANEXO Agente C: "hang" NUEVO AL FINAL (contrato D57: append-only)
 export type Tier = "ALTO" | "MEDIO" | "BAJO";
@@ -320,6 +323,11 @@ export interface ReporteSesion {
    *  reporte (informes previos no cambian de forma). Correlación, NO prueba
    *  de causalidad (§A — el sesgo viaja en opEdadMs). */
   hangPorOp?: HangPorOp[];
+  /** FASE C3 (medición §6.7) — agregado de las lecturas retenidas en el
+   *  buffer (actas con `PerfActa.lectura`): ms/acta aceptada por motor, el
+   *  numerador/denominador del criterio de la decisión C4/C5. Aditivo
+   *  OPCIONAL al final (D57): ausente = ninguna acta con lectura. */
+  lecturaResumen?: AgregadoLectura;
 }
 
 /** KIT e14-obs-hang-atribucion-v1 (§B) — fila de hangPorOp (tipado del
