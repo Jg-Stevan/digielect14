@@ -70,7 +70,7 @@
  * captura). En SIMULACIÓN/IMPORTAR la vista queda EXACTAMENTE como en L2.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { warmUpScannerWorker } from "@/lib/e14/core/detector-client";
+import { warmUpScannerWorker } from "@jg-stevan/scanner-core/core/detector-client";
 import { SHUTTER_SCORE } from "@/lib/e14/core/quality";
 // F-SENSOR-PROFILER (PASO 2): tipo del perfil del sensor — el ref es
 // propietario de ScanView (lo llena useSesionCamara vía profileActiveSensor;

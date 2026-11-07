@@ -13,7 +13,7 @@
  * conexión) queda INTACTA de D1 — solo re-vestida.
  */
 import { useE14Store } from "@/lib/e14/store";
-import type { Acta, ActaStatus } from "@/lib/e14/types";
+import type { Acta, ActaStatus } from "@jg-stevan/scanner-core/dominio/types";
 import { StitchArrowLeftIcon, StitchCloudCheckIcon } from "./icons";
 // KIT e14-observabilidad-v1 (agente 2 · C2): badge DEV — chip no intrusivo
 // que recuerda que el modo de diagnóstico está activo. Re-render barato:

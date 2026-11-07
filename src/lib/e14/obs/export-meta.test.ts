@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mocks de los 4 orígenes de datos del reporte (construirReporte queda
 // pura lógica de agregación — exactamente lo que §F toca).
-vi.mock("./buffer", () => ({
+vi.mock("@jg-stevan/scanner-core/obs-base/buffer", () => ({
   eventosPorDigest: vi.fn(async () => []),
   leerEventos: vi.fn(async () => []),
   purgarBuffer: vi.fn(async () => undefined),
@@ -41,7 +41,7 @@ vi.mock("../store", () => ({
   useE14Store: { getState: () => ({ actaActual: null }) },
 }));
 
-import * as buffer from "./buffer";
+import * as buffer from "@jg-stevan/scanner-core/obs-base/buffer";
 import { construirReporte, lecturaResumenDe } from "./export";
 import type { EventoObs } from "./tipos";
 

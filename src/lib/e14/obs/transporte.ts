@@ -36,7 +36,7 @@
  */
 import { leerFlags } from "../flags";
 import { logger } from "../../logger";
-import { leerEventos } from "./buffer";
+import { leerEventos } from "@jg-stevan/scanner-core/obs-base/buffer";
 import { appVersion, idDispositivo, nuevoUuid } from "./identidad";
 import { leerPolitica } from "./politica";
 import type { EventoObs, PoliticaDatos } from "./tipos";

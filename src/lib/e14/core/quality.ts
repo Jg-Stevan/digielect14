@@ -18,7 +18,7 @@
  * frame ≈ crop y la fórmula del usuario queda intacta.
  */
 
-import type { Quad } from "./types";
+import type { Quad } from "@jg-stevan/scanner-core/core/types";
 
 // ─── Constantes DADAS (NO recalcular — origen: quality.ts del usuario) ──────
 

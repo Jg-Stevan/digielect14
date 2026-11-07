@@ -26,10 +26,10 @@ import {
   fileToCaptureDataUrl,
   jpegDimensionsFromBlob,
   loadImage,
-} from "@/lib/e14/core/image-processor";
+} from "@jg-stevan/scanner-core/core/image-processor";
 import { leerFlags, opcionesRescateHeic } from "@/lib/e14/flags";
 import { getSensorSafeCap, dentroDelTope, type SensorProfile } from "@/lib/e14/core/sensor-profiler";
-import type { Acta } from "@/lib/e14/types";
+import type { Acta } from "@jg-stevan/scanner-core/dominio/types";
 import { useE14Store } from "@/lib/e14/store";
 import { logger } from "@/lib/logger";
 

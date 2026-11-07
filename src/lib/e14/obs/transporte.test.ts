@@ -16,7 +16,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { appendEvento, purgarBuffer } from "./buffer";
+import { appendEvento, purgarBuffer } from "@jg-stevan/scanner-core/obs-base/buffer";
 import { appVersion, idDispositivo } from "./identidad";
 import { guardarOverridesFlags } from "./politica";
 import {

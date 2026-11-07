@@ -28,7 +28,7 @@
  * tope: este módulo solo protege la foto full-sensor del Dual Pipeline.
  */
 
-import { PROCESSED_MAX_LONG_SIDE, jpegDimensionsFromBlob } from "./image-processor";
+import { PROCESSED_MAX_LONG_SIDE, jpegDimensionsFromBlob } from "@jg-stevan/scanner-core/core/image-processor";
 
 /** Rango de un ajuste de foto según la spec ImageCapture (MediaSettingsRange). */
 export interface SensorSettingRange {

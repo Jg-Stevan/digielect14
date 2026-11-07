@@ -15,8 +15,8 @@
  *   "TRANSMISION" → "TRANSMISION" · "DELEGADOS" → "DELEGADOS"; cualquier
  *   otro valor (tipo null / desconocido) → null (se salta).
  */
-import type { Acta } from "../types";
-import type { ClasificacionE14, TipoCopia } from "../clasificador";
+import type { Acta } from "@jg-stevan/scanner-core/dominio/types";
+import type { ClasificacionE14, TipoCopia } from "@jg-stevan/scanner-core/dominio/clasificador";
 import type { EntradaPuente, FormularioPuente, ImpresionPuente } from "./tipos";
 
 /** Acta mapeable: igual al contrato Acta pero tolerante a la foto como Blob

@@ -25,17 +25,20 @@ vi.mock("../get-bridge", () => ({
 }));
 // ../store → scanner-core/ocr → image-processor (misma resolución rota en
 // node que el patrón runner-veto-postocr — mismos mocks de la hoja):
-vi.mock("@/lib/e14/core/ocr", () => ({
+vi.mock("@jg-stevan/scanner-core/core/ocr", () => ({
   ocrTextIsValid: vi.fn(() => true),
 }));
-vi.mock("@/lib/e14/core/image-processor", () => ({
+// Parcial: flags.ts importa las constantes HEIC del mismo módulo — el mock
+// debe conservar el resto de exports reales.
+vi.mock("@jg-stevan/scanner-core/core/image-processor", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@jg-stevan/scanner-core/core/image-processor")>()),
   fileToCaptureDataUrl: vi.fn(() => "data:image/jpeg;base64,CAPTURE"),
 }));
 
 import { perfDeDiags, enviosDetalleDe, type FragDiag } from "./export";
 import { redActual } from "./dispositivo";
 import { useE14Store } from "../store";
-import type { Acta } from "../types";
+import type { Acta } from "@jg-stevan/scanner-core/dominio/types";
 
 /** Acta individual con diagnóstico (status OPTIMA — el envío manual pasa). */
 function actaIndividual(): Acta {

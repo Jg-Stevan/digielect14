@@ -29,9 +29,9 @@
  * Errores de IDB NUNCA tumban la app: la jornada vive mejor en RAM que
  * romper el escaneo (mismo criterio del kit carga-masiva §3).
  */
-import type { Acta } from "./types";
+import type { Acta } from "@jg-stevan/scanner-core/dominio/types";
 import type { ActaArchivada, PuestoActual } from "./store";
-import type { HistorialRow, Mesa, MesaPagina } from "./types";
+import type { HistorialRow, Mesa, MesaPagina } from "@jg-stevan/scanner-core/dominio/types";
 
 const DB_NOMBRE = "e14-jornada-v1";
 const DB_VERSION = 1;

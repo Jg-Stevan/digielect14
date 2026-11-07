@@ -20,13 +20,13 @@
  * en quality.ts).
  */
 
-import type { Quad } from "./types";
+import type { Quad } from "@jg-stevan/scanner-core/core/types";
 import { MotionStabilizer } from "./motion-stabilizer";
 import {
   computeProcessDims,
   getScannerWorker,
   type ScannerWorkerClient,
-} from "./detector-client";
+} from "@jg-stevan/scanner-core/core/detector-client";
 import {
   computeEccentricityScore,
   computeExposureScore,

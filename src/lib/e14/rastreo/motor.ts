@@ -26,7 +26,7 @@
  */
 import { useE14Store } from "../store";
 import { fnv1a8 } from "../obs/identidad";
-import type { Acta } from "../types";
+import type { Acta } from "@jg-stevan/scanner-core/dominio/types";
 import type {
   EventoRastreo,
   FuenteRastreo,

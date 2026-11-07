@@ -25,7 +25,7 @@ import {
   ROI_FRACCIONES,
   type DepsOcrCascada,
   type PasadaCascada,
-} from "./ocr-cascada";
+} from "@jg-stevan/scanner-core/orquestacion/cascada";
 
 // fileURLToPath, no `.pathname`: en Windows .pathname devuelve "/C:/..." y
 // readFileSync falla — los anclas de contrato jamás corrían en ese SO.

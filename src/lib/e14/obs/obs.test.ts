@@ -11,7 +11,7 @@
  */
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { agregarErrores, archivoDeStack, digestDe, normalizarMensaje } from "./digest";
+import { agregarErrores, archivoDeStack, digestDe, normalizarMensaje } from "@jg-stevan/scanner-core/obs-base/digest";
 import { appVersion, fnv1a8, idSesion } from "./identidad";
 import {
   appendEvento,
@@ -22,7 +22,7 @@ import {
   purgarBuffer,
   TOPE_EVENTOS,
   TTL_MS,
-} from "./buffer";
+} from "@jg-stevan/scanner-core/obs-base/buffer";
 import { calcularTier, osDeUA } from "./dispositivo";
 import type { EventoObs, SaludSnapshot } from "./tipos";
 
@@ -435,7 +435,7 @@ describe("buffer · IDB (fake mínimo — roundtrip, tope, TTL, digest)", () => 
     vi.resetModules();
     vi.stubGlobal("indexedDB", undefined);
     try {
-      const buffer = await import("./buffer");
+      const buffer = await import("@jg-stevan/scanner-core/obs-base/buffer");
       await expect(buffer.appendEvento(evtBase("uso", 1))).resolves.toBeUndefined();
       expect(await contarEventos()).toBe(0);
       expect(await buffer.leerEventos()).toEqual([]);
@@ -542,7 +542,7 @@ describe("logger · transporte obs (C3)", () => {
 
 describe("breadcrumbs · ring 30 (C4)", () => {
   it("ring FIFO: conserva los últimos 30 en orden cronológico", async () => {
-    const bc = await import("./breadcrumbs");
+    const bc = await import("@jg-stevan/scanner-core/obs-base/breadcrumbs");
     for (let i = 0; i < 35; i++) {
       bc.registrarBreadcrumb({ tipo: "click", detalle: `b${i}` });
     }
@@ -556,14 +556,14 @@ describe("breadcrumbs · ring 30 (C4)", () => {
   });
 
   it("registrarVista breadcrumb tipo vista", async () => {
-    const bc = await import("./breadcrumbs");
+    const bc = await import("@jg-stevan/scanner-core/obs-base/breadcrumbs");
     bc.registrarVista("resumen");
     const snap = bc.obtenerBreadcrumbs();
     expect(snap[snap.length - 1]).toMatchObject({ tipo: "vista", detalle: "resumen" });
   });
 
   it("detalleDeTarget: aria-label > data-accion > null (y nunca lanza)", async () => {
-    const { detalleDeTarget } = await import("./breadcrumbs");
+    const { detalleDeTarget } = await import("@jg-stevan/scanner-core/obs-base/breadcrumbs");
     expect(
       detalleDeTarget({
         closest: () => ({ getAttribute: (n: string) => (n === "aria-label" ? "ENVIAR LOTE" : null) }),
@@ -586,7 +586,7 @@ describe("breadcrumbs · ring 30 (C4)", () => {
   });
 
   it("iniciarBreadcrumbs en node (sin window) NO lanza", async () => {
-    const { iniciarBreadcrumbs } = await import("./breadcrumbs");
+    const { iniciarBreadcrumbs } = await import("@jg-stevan/scanner-core/obs-base/breadcrumbs");
     expect(() => iniciarBreadcrumbs()).not.toThrow();
   });
 });
@@ -1049,7 +1049,7 @@ describe("export · construirReporte (C6)", () => {
 describe("captura · eventoDeError (C7)", () => {
   it("Error real → mensaje/constructor/stack/digest/archivo/breadcrumbs", async () => {
     const { eventoDeError } = await import("./captura");
-    const bc = await import("./breadcrumbs");
+    const bc = await import("@jg-stevan/scanner-core/obs-base/breadcrumbs");
     bc.registrarBreadcrumb({ tipo: "click", detalle: "btn-enviar" });
     const err = new TypeError("lectura de null");
     const { tipo, datos } = eventoDeError(err, "WindowError");

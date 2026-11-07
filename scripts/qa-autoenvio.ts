@@ -27,8 +27,8 @@ import {
   normalizarNombre,
   normalizarNombreLugar,
   similitud,
-} from "../src/lib/e14/clasificador";
-import type { DivipolBase } from "../src/lib/e14/divipol";
+} from "@jg-stevan/scanner-core/dominio/clasificador";
+import type { DivipolBase } from "@jg-stevan/scanner-core/dominio/divipol";
 
 let pasadas = 0;
 let fallos = 0;
@@ -210,10 +210,12 @@ ok(
 
 console.log("— Bloque 4 · invariancias (source-scan) —");
 
-const srcClasificador = await leerImplementacion("src/lib/e14/clasificador.ts");
-const srcTypes = await leerImplementacion("src/lib/e14/types.ts");
+// FASE D (migración v2.3 cerrada): los shims ya no existen — se lee la
+// implementación directamente del paquete.
+const srcClasificador = await leerImplementacion("packages/scanner-core/src/dominio/clasificador.ts");
+const srcTypes = await leerImplementacion("packages/scanner-core/src/dominio/types.ts");
 const srcStore = await readFile(new URL("../src/lib/e14/store.ts", import.meta.url), "utf8");
-const srcKits = await leerImplementacion("src/lib/e14/kits.ts");
+const srcKits = await leerImplementacion("packages/scanner-core/src/dominio/kits.ts");
 const srcEnvio = await readFile(new URL("../src/lib/e14/puente/envio.ts", import.meta.url), "utf8");
 const srcObsTransporte = await readFile(new URL("../src/lib/e14/obs/transporte.ts", import.meta.url), "utf8");
 

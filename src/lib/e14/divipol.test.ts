@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import type { DivipolBase } from "./divipol";
+import type { DivipolBase } from "@jg-stevan/scanner-core/dominio/divipol";
 import {
   buscarPuestosPorNombre,
   departamentosDe,
@@ -20,7 +20,7 @@ import {
   municipiosDe,
   puestosDe,
   zonasDe,
-} from "./divipol";
+} from "@jg-stevan/scanner-core/dominio/divipol";
 
 const base: DivipolBase = {
   "11": {

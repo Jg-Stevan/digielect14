@@ -16,12 +16,12 @@
  * FINAL) y la agregación por sesión la calcula resumenHangsDe (PURO,
  * testable — la consume export.ts para ReporteSesion.hangResumen).
  */
-import { appendEvento } from "./buffer";
-import { obtenerBreadcrumbs } from "./breadcrumbs";
+import { appendEvento } from "@jg-stevan/scanner-core/obs-base/buffer";
+import { obtenerBreadcrumbs } from "@jg-stevan/scanner-core/obs-base/breadcrumbs";
 import { appVersion, idDispositivo, idSesion } from "./identidad";
 // KIT e14-obs-hang-atribucion-v1 (§B) — la marca D58 de la operación activa
 // enriquece AMBOS sensores (spread condicional — eventos legacy intactos).
-import { operacionActa } from "./operacion";
+import { operacionActa } from "@jg-stevan/scanner-core/obs-base/operacion";
 import type { EventoObs, HangEvento, HangPorOp } from "./tipos";
 
 /** Tick del sensor drift (kit: setInterval de 500 ms). */

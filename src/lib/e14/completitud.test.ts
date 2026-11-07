@@ -27,10 +27,10 @@ vi.mock("@jg-stevan/scanner-core/dominio/image-utils", () => ({
   loadImageMemo: vi.fn(() => Promise.reject(new Error("SIN_DOM_EN_UNIT_TEST"))),
 }));
 
-import type { Quad } from "@/lib/e14/core/types";
+import type { Quad } from "@jg-stevan/scanner-core/core/types";
 
-import type { EsquinasActa } from "./integridad";
-import { motorTinta, verificarCompletitud } from "./completitud";
+import type { EsquinasActa } from "@jg-stevan/scanner-core/dominio/integridad";
+import { motorTinta, verificarCompletitud } from "@jg-stevan/scanner-core/dominio/completitud";
 
 const FOTO = "data:image/png;base64,x"; // irrelevante: el motor se mockea
 

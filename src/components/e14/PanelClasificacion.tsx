@@ -31,8 +31,8 @@ import {
   puestosDe,
   zonasDe,
   type DivipolBase,
-} from "@/lib/e14/divipol";
-import type { ClasificacionE14, TipoCopia } from "@/lib/e14/clasificador";
+} from "@jg-stevan/scanner-core/dominio/divipol";
+import type { ClasificacionE14, TipoCopia } from "@jg-stevan/scanner-core/dominio/clasificador";
 import { CheckIcon, MapPinIcon, RefreshIcon } from "./icons";
 import { PrimaryBtn } from "./primitives";
 
