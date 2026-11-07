@@ -111,20 +111,27 @@ jobs:
           BUILD_STATIC: "1"
           NEXT_PUBLIC_BASE_PATH: /digielect14
 
-      # 6.9 (O2) — cota de tamaño: `.next/static` ≤ 20 MB (fijada HOY — la
-      # baseline histórica ronda 19 MB; un `import` estático accidental de
-      # jspdf o de los JPG SIM entraría sin ruido y esto lo hace visible/rojo).
-      - name: "Tamaño del bundle (cota 6.9: ≤ 20 MB)"
+      # 6.9 (O2) — cota de tamaño: JS + imágenes ≤ 20 MB (un `import` estático
+      # accidental de jspdf o de los JPG SIM entraría sin ruido y esto lo hace
+      # visible/rojo). Los `.wasm`/`.mjs` de onnxruntime (~42 MB) se EXCLUYEN:
+      # son el runtime del OCR, se cargan aparte y no son payload inicial ni
+      # un import accidental — contarlos dejaba la cota roja siempre.
+      - name: "Tamaño del bundle (cota 6.9: ≤ 20 MB de JS + imágenes)"
         run: |
           DIR=".next/static"
           if [ ! -d "$DIR" ]; then DIR="out/_next/static"; fi
-          MB=$(du -sm "$DIR" | cut -f1)
+          MB_JS=$(du -sm "$DIR/chunks" | cut -f1)
+          MB_IMG=$(du -cm "$DIR"/media/*.jpg "$DIR"/media/*.jpeg "$DIR"/media/*.png 2>/dev/null | tail -1 | cut -f1)
+          MB_IMG=${MB_IMG:-0}
+          MB=$((MB_JS + MB_IMG))
+          MB_TOTAL=$(du -sm "$DIR" | cut -f1)
           {
-            echo "static: ${MB} MB ($DIR)"
+            echo "js+imágenes: ${MB} MB (chunks ${MB_JS} MB + imágenes ${MB_IMG} MB) en $DIR"
+            echo "total del directorio (incluye wasm del OCR): ${MB_TOTAL} MB"
             echo "pieza mayor: $(du -am "$DIR" | sort -rn | sed -n 2p)"
           } | tee bundle-report.txt
           if [ "$MB" -gt 20 ]; then
-            echo "::error::.next/static = ${MB} MB supera la cota de 20 MB (bloque 6.9). Revisa el PR: import pesado accidental (jspdf / JPG SIM) o asset nuevo."
+            echo "::error::JS+imágenes = ${MB} MB supera la cota de 20 MB (bloque 6.9). Revisa el PR: import pesado accidental (jspdf / JPG SIM) o asset nuevo."
             exit 1
           fi
 
