@@ -44,6 +44,16 @@ const base = JSON.parse(
   await readFile(new URL("../public/e14/divipol.json", import.meta.url), "utf8"),
 ) as DivipolBase;
 
+/** FASE 1 (mapa v2.3): varios módulos de src/lib/e14 son shims que reexportan
+ *  del paquete. El source-scan tiene que leer la IMPLEMENTACIÓN (las RED LINES
+ *  viven ahí), no la línea `export * from` — si no, el harness queda ciego. */
+async function leerImplementacion(rel: string): Promise<string> {
+  const texto = await readFile(new URL(`../${rel}`, import.meta.url), "utf8");
+  const shim = texto.match(/export \* from "@jg-stevan\/scanner-core\/([^"]+)"/);
+  if (!shim) return texto;
+  return readFile(new URL(`../packages/scanner-core/src/${shim[1]}.ts`, import.meta.url), "utf8");
+}
+
 /** Cabecera EL CAIRO (mun 335, zona 05, puesto 02 «El Cairo - Consulado»
  *  t:1 — base divipol del repo). Código 1D: los 15 dígitos YA CITADOS en el
  *  propio clasificador.ts (ejemplo del kit identificacion-codigo) — kit 399,
@@ -200,10 +210,10 @@ ok(
 
 console.log("— Bloque 4 · invariancias (source-scan) —");
 
-const srcClasificador = await readFile(new URL("../src/lib/e14/clasificador.ts", import.meta.url), "utf8");
-const srcTypes = await readFile(new URL("../src/lib/e14/types.ts", import.meta.url), "utf8");
+const srcClasificador = await leerImplementacion("src/lib/e14/clasificador.ts");
+const srcTypes = await leerImplementacion("src/lib/e14/types.ts");
 const srcStore = await readFile(new URL("../src/lib/e14/store.ts", import.meta.url), "utf8");
-const srcKits = await readFile(new URL("../src/lib/e14/kits.ts", import.meta.url), "utf8");
+const srcKits = await leerImplementacion("src/lib/e14/kits.ts");
 const srcEnvio = await readFile(new URL("../src/lib/e14/puente/envio.ts", import.meta.url), "utf8");
 const srcObsTransporte = await readFile(new URL("../src/lib/e14/obs/transporte.ts", import.meta.url), "utf8");
 
