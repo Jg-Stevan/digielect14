@@ -4,7 +4,10 @@ import nextTypescript from "eslint-config-next/typescript";
 const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   rules: {
     // TypeScript rules
-    "@typescript-eslint/no-explicit-any": "off",
+    // 7.7 (plan de remediación, C1): no-explicit-any sube a WARN (había 0
+    // `any` en producción al reactivarlo — barato de mantener; tria los
+    // avisos que salgan antes de subir a error).
+    "@typescript-eslint/no-explicit-any": "warn",
     "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
     "@typescript-eslint/no-non-null-assertion": "off",
     "@typescript-eslint/ban-ts-comment": "off",
@@ -13,7 +16,11 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
 
     // React rules (mismo criterio que scanner-lab; las dos últimas son las
     // reglas nuevas de eslint-plugin-react-hooks 7.1.x del lockfile raíz)
-    "react-hooks/exhaustive-deps": "off",
+    // 7.7: exhaustive-deps WARN global — el bloque por-archivo de ScanView
+    // se elimina (sus directivas justificadas línea a línea ya están
+    // puestas; los avisos nuevos se trian con plan de limpieza, no se
+    // silencian a ciegas).
+    "react-hooks/exhaustive-deps": "warn",
     "react-hooks/purity": "off",
     "react-hooks/refs": "off",
     "react-hooks/set-state-in-effect": "off",
@@ -42,15 +49,28 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  // exhaustive-deps ACTIVA SOLO en ScanView.tsx: los 3 useEffect con refs
-  // deliberados ya llevan directiva justificada línea a línea (el loop de
-  // cámara usa refs a propósito para evitar staleness — ver docs/DEUDA.md,
-  // hallazgo ALTO de hooks). El resto del repo sigue sin la regla hasta el
-  // análisis de Fase 4; al activarla global, este bloque se elimina (1 línea) y
-  // las directivas ya están puestas. Reemplaza el enfoque «reportUnusedDisable
-  // Directives: off» (7de9fd7) para no perder la higiene de directivas.
-  files: ["src/components/e14/screens/ScanView.tsx"],
-  rules: { "react-hooks/exhaustive-deps": "warn" },
+  // 7.5 (plan de remediación, A4): las VISTAS no tocan el motor — los
+  // componentes importan por la fachada `@/lib/e14/fachada`. MODO `warn`
+  // TRANSITORIO: el swap de los ~22 imports existentes lo hace el agente de
+  // UI; cuando termine, subir a "error" (queda anotado en
+  // docs/PENDIENTES-INTEGRACION.md).
+  files: ["src/components/**"],
+  rules: {
+    "no-restricted-imports": ["error", {
+      patterns: [{
+        group: ["@jg-stevan/scanner-core", "@jg-stevan/scanner-core/*"],
+        message:
+          "Las vistas no tocan el motor: re-exporta desde src/lib/e14/fachada.ts (7.5/A4; swap hecho en la misma remediación).",
+      }],
+    }],
+  },
+}, {
+  // 7.7 — la capa politica/ (extraída en 7.1–7.2) NACE limpia: se defiende
+  // desde el día uno con la regla en error.
+  files: ["src/lib/e14/politica/**"],
+  rules: {
+    "@typescript-eslint/no-explicit-any": "error",
+  },
 }, {
   // Vendor y artefactos: `eslint .` no debe parsear JS minificado de terceros
   // ni bundles de build/deploy. src/lib/e14/qr/vendor/jsQR.js es el UMD

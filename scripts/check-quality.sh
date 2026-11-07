@@ -4,9 +4,13 @@
 #   1. bunx tsc --noEmit        → 0 errores
 #   2. bun run lint             → 0 errores / 0 warnings
 #   3. bun run build            → exit 0 (Next 16 Turbopack)
-#   4. bun scripts/smoke-*.mjs  → los dos workers (heartbeat y capa 0 QR)
-#                                  precompilados y frescos, no el .ts crudo
-#   5. bun run test             → vitest verde (17 archivos · 267 tests)
+#   4. bun scripts/smoke-*.mjs  → los tres workers (heartbeat, capa 0 QR y
+#                                  fallback canvas) precompilados y frescos,
+#                                  no el .ts crudo
+#   5. bun run test             → vitest verde (el conteo real lo imprime el
+#                                  runner; NO hardcodear cifras — F16: el
+#                                  «17 archivos · 267 tests» anterior quedó
+#                                  desfasado 164 tests en dos meses)
 #   6. bun scripts/qa-*.ts      → los 7 harnesses de anclas y contrato
 #                                  (aa-quickwins 11 · autoenvío 21 ·
 #                                  obs-contract 38 · obs-privacidad 7 ·
@@ -56,7 +60,8 @@ paso "4/7 · Smoke de bundling del worker de heartbeat (KIT e14-obs-hang-atribuc
 # .worker.js precompilado.
 bun scripts/smoke-heartbeat-worker.mjs || fail "smoke heartbeat-worker (worker NO compilado de verdad)"
 bun scripts/smoke-capa0-qr-worker.mjs || fail "smoke capa0-qr-worker (worker NO compilado de verdad — KIT e14-capa0-qr-worker-v1)"
-ok "workers de heartbeat y capa 0 QR precompilados y frescos · cliente limpio"
+bun scripts/smoke-fallback-canvas-worker.mjs || fail "smoke fallback-canvas-worker (el §5.4 quedaría copiando el .ts crudo)"
+ok "workers de heartbeat, capa 0 QR y fallback canvas precompilados y frescos · cliente limpio"
 
 paso "5/7 · Vitest (suite unitaria)"
 bun run test || fail "vitest"

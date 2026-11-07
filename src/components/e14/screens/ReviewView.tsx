@@ -21,9 +21,9 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
-import { OCR_NO_TEXT } from "@jg-stevan/scanner-core/core/ocr";
-import { defaultQuad, FILTER_PRESETS } from "@jg-stevan/scanner-core/core/types";
-import type { PageFilter } from "@jg-stevan/scanner-core/core/types";
+import { OCR_NO_TEXT } from "@/lib/e14/fachada";
+import { defaultQuad, FILTER_PRESETS } from "@/lib/e14/fachada";
+import type { PageFilter } from "@/lib/e14/fachada";
 // G4 (KIT camara-visor-v1): descarga de la foto PROCESADA. downloadBlob y
 // sanitizeFileName YA están publicados en el core (pdf-export 0.1.0) —
 // dataUrlToBlob NO existe en el tarball (la instrucción la citaba; se porta
@@ -33,7 +33,7 @@ import {
   nombreExportacion,
   tipoDeBanda,
   type TipoCopia,
-} from "@jg-stevan/scanner-core/dominio/clasificador";
+} from "@/lib/e14/fachada";
 import { QuadEditor } from "../QuadEditor";
 import { ZoomableVisor } from "@/lib/e14/ui/ZoomableVisor";
 import { PanelClasificacion } from "../PanelClasificacion";

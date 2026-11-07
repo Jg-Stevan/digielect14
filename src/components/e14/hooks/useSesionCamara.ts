@@ -37,7 +37,7 @@ import {
   profileSensor,
   type SensorProfile,
 } from "@/lib/e14/core/sensor-profiler";
-import type { Quad } from "@jg-stevan/scanner-core/core/types";
+import type { Quad } from "@/lib/e14/fachada";
 import { useE14Store } from "@/lib/e14/store";
 
 /* ── Tipos compartidos del skin (extraídos tal cual de ScanView.tsx) ─────── */
@@ -514,6 +514,28 @@ export function useSesionCamara({
 }: UseSesionCamaraParams) {
   const fuente = useE14Store((s) => s.fuente);
   const [avisoCamara, setAvisoCamara] = useState<null | "denied" | "perdido">(null);
+  // ── Ola 3.3 (U3 — plan 3.3, snippet S-3 corregido): pausa/reanudación de la
+  // sesión de cámara por visibilitychange/pagehide. Al OCULTAR se libera el
+  // stream (LED apagado, Android no mata la pestaña con la cámara viva); al
+  // VOLVER se re-corre el ARRANQUE completo (mismo camino de reintentoCamara)
+  // si la sesión seguía activa; si la reanudación falla → aviso accionable
+  // CAMARA_NO_DISPONIBLE del store (KIT errores-operador-v1, bloque 3.1).
+  // · pausadaRef: la sesión estaba VIVA al ocultar → al volver hay que reabrir.
+  // · reanudandoRef: el arranque en curso ES una reanudación (su fallo sube
+  //   el aviso del store, no solo el overlay §E).
+  // · descartarFramesHastaRef: ventana (~0.8 s) en la que el frame loop
+  //   descarta frames — el <video> puede re-decodificar el último fotograma
+  //   congelado de antes de pausar (ring ZSL/telemetría no se envenenan).
+  // · cicloReanudar: token que re-dispara el efecto de ARRANQUE (deps) —
+  //   mismo mecanismo de reintentoCamara, interno al hook.
+  const pausadaRef = useRef(false);
+  const reanudandoRef = useRef(false);
+  const descartarFramesHastaRef = useRef(0);
+  const [cicloReanudar, setCicloReanudar] = useState(0);
+  // Espejo del camEstado para el listener global (sin staleness — el efecto
+  // de visibilidad se registra UNA vez con deps []).
+  const camEstadoRef = useRef<CamEstado>(camEstado);
+  camEstadoRef.current = camEstado;
   // Fuente: lab CameraView.tsx L770 (takePhotoBrokenRef) — FIX v4 4.1: lista
   // negra temporal del sensor. Un takePhoto que expira la marca para que
   // captureSmart NO vuelva a colgar en cada disparo; se rehabilita al abrir
@@ -526,6 +548,61 @@ export function useSesionCamara({
 
   const modoCamara = fuente === "CAMARA";
   const camaraViva = modoCamara && camEstado === "viva";
+
+  // ── Ola 3.3 (U3): listener de visibilidad — función NOMBRADA con add/remove
+  // simétricos (S-3: el snippet del plan registraba una arrow inline y el
+  // cleanup intentaba remover otra cosa — listener huérfano en cada remonte).
+  useEffect(() => {
+    // ESCALERA DE PAUSA (misma liberación que el cleanup del ARRANQUE):
+    // frame loop + ring ZSL + tracks del stream. La reanudación re-corre el
+    // arranque completo (sondas/caché/cascada intactas) — conservar el estado
+    // (jornada, fuente, autoArmado) es gratis: nada de eso se toca aquí.
+    const alOcultar = () => {
+      // Solo hay sesión que pausar si la cámara está VIVA en modo CÁMARA
+      // (iniciando/no-disponible: el arranque en vuelo se deja terminar).
+      if (useE14Store.getState().fuente !== "CAMARA") return;
+      if (camEstadoRef.current !== "viva") return;
+      pausadaRef.current = true;
+      loopRef.current?.stop();
+      loopRef.current = null;
+      liberarAnillo();
+      const stream = streamRef.current;
+      if (stream) {
+        const t = stream.getVideoTracks()[0];
+        if (t) t.onended = null; // stop() no dispara "ended" (lab B3)
+        stream.getTracks().forEach((st) => st.stop());
+      }
+      streamRef.current = null;
+      // La UI honesta al volver: «INICIANDO CÁMARA…» mientras reabre (el
+      // aviso §E NO se monta en la pausa — no hubo pérdida de señal real).
+      setCamEstado("iniciando");
+    };
+    const alVolver = () => {
+      if (!pausadaRef.current) return; // no había sesión pausada
+      pausadaRef.current = false;
+      // La sesión sigue activa (no cambió la fuente) → reabrir conservando
+      // estado. Si mientras tanto el operador cambió de modo, no hay nada.
+      if (useE14Store.getState().fuente !== "CAMARA") return;
+      reanudandoRef.current = true;
+      // Descarta el primer frame tras reanudar (ver ref arriba).
+      descartarFramesHastaRef.current = performance.now() + 800;
+      setCicloReanudar((n) => n + 1); // re-corre el ARRANQUE
+    };
+    const alCambioVisibilidad = () => {
+      if (document.visibilityState === "hidden") alOcultar();
+      else alVolver();
+    };
+    document.addEventListener("visibilitychange", alCambioVisibilidad);
+    // pagehide → alOcultar (mismo tratamiento: soltar la cámara SIEMPRE).
+    window.addEventListener("pagehide", alOcultar);
+    return () => {
+      document.removeEventListener("visibilitychange", alCambioVisibilidad);
+      window.removeEventListener("pagehide", alOcultar);
+    };
+    // deps []: los handlers leen SOLO refs y useE14Store.getState() (sin
+    // staleness) + setters/acciones estables — registro único, S-3 simétrico.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L444-L454
   /** F-SENSOR-PROFILER: sondea el sensor del stream REAL una vez por
@@ -904,6 +981,21 @@ export function useSesionCamara({
       if (!stream) stream = await abrirConCascada();
       if (!stream) {
         if (cancelado) return;
+        // Ola 3.3: si este arranque era la REANUDACIÓN tras visibilitychange,
+        // el fallo TAMBIÉN sube el aviso accionable del store (franja con
+        // Reintentar → re-abre la cámara) — no solo el overlay §E.
+        if (reanudandoRef.current) {
+          reanudandoRef.current = false;
+          try {
+            useE14Store.getState().mostrarAvisoVisor({
+              tipo: "error",
+              motivo: "CAMARA_NO_DISPONIBLE",
+              accion: "reintentar",
+            });
+          } catch {
+            /* regla de oro: el aviso jamás rompe la cámara */
+          }
+        }
         // §E (SPEC-camara-funcional): fracaso tras sondas+cascada → overlay
         // con [ACTIVAR CÁMARA] (reintento) / [VOLVER A SIMULACIÓN] — SIN
         // rebote automático. abrirCamaraPrincipal/abrirConCascada intactas.
@@ -918,6 +1010,9 @@ export function useSesionCamara({
 
       streamRef.current = stream;
       setCamEstado("viva");
+      // Ola 3.3: la reanudación LLEGÓ — el fallo posterior ya no es «de la
+      // reanudación» (es un fallo normal del §E).
+      reanudandoRef.current = false;
       // D9 (SPEC-e14-guard-borde Rev. 2): cada APERTURA de cámara nace ARMADA
       // — primera vez, [ACTIVAR CÁMARA] tras un aviso, o reabrir tras cambiar
       // de fuente («repetir captura» remonta el componente → useState(true)).
@@ -987,8 +1082,10 @@ export function useSesionCamara({
     // congelado. Justificación original, línea a línea: las ausentes son
     // estables — setFramePendiente (acción Zustand), mostrarAviso/
     // profileActiveSensor y aplicarLinternaGuardada (useCallback estables);
-    // el arranque SOLO debe correr al cambiar fuente/reintentoCamara.)
-  }, [fuente, reintentoCamara]);
+    // el arranque SOLO debe correr al cambiar fuente/reintentoCamara — y,
+    // desde la Ola 3.3, al REANUDAR tras visibilitychange (cicloReanudar,
+    // mismo mecanismo de reintento, interno al hook).)
+  }, [fuente, reintentoCamara, cicloReanudar]);
 
   /** Re-asigna el stream al <video> (lab L1255-1261) por si el elemento se
    *  remontó (cambio de vista ida/vuelta manteniendo la fuente viva). */
@@ -1027,6 +1124,10 @@ export function useSesionCamara({
     loopRef.current = loop;
     loop.start(video, {
       onFrame: (t) => {
+        // Ola 3.3: descarta los primeros frames tras reanudar — el <video>
+        // puede seguir sirviendo el fotograma congelado de antes de pausar
+        // mientras re-decodifica (ring ZSL/telemetría sin frames viejos).
+        if (performance.now() < descartarFramesHastaRef.current) return;
         if (typeof window !== "undefined") window.__e14Telemetria = t;
         // F-ZSL: alimenta el ring (~5 Hz) — cubre la ventana pre-tap.
         alimentarAnillo();

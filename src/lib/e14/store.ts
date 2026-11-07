@@ -30,8 +30,23 @@ import {
   tituloYUbicacionDe,
   type ClasificacionE14,
 } from "@jg-stevan/scanner-core/dominio/clasificador";
+// KIT errores-operador-v1 (plan 3.1 — C5/U1): clasificador de errores del
+// pipeline → motivo de operador + forma del aviso del visor.
+import {
+  clasificarErrorPipeline,
+  type AvisoOperador,
+  type MotivoOperador,
+} from "./errores";
+// KIT sincronia-pestanas-v1 (plan 6.12 — parte store): coordinación mínima
+// entre pestañas (Web Locks + BroadcastChannel). Silencioso por contrato.
+import {
+  emitirJornadaCambiada,
+  reclamarEdicionExclusiva,
+  suscribirseAJornadaCambiada,
+} from "./sincronia-pestanas";
 import { cargarDivipol, mesasDePuesto } from "@jg-stevan/scanner-core/dominio/divipol";
 import { logger } from "../logger";
+import { MAX_INTENTOS_ESCANEO } from "./politica/umbrales"; // 7.1/C3 — única fuente de los números del producto
 // KIT L6: persistencia de la jornada (IDB vanilla — mismo patrón de la cola
 // masiva) + derivación del guion real (fix M10).
 import {
@@ -243,6 +258,26 @@ interface E14Store {
    *  kit e14-optimizacion-v1 T5 A2): MISMAS claves, mismo Set anti-dup por
    *  id, mismo incremento. Lo llama el flujo normal (analisisCompletado). */
   contarMotivoNoEnvioActa: (acta: Acta) => void;
+  /** KIT errores-operador-v1 (plan 3.1 — U1/C5): aviso PERSISTENTE del visor.
+   *  Lo setean el catch de dispararEscaneo, la cuota IDB (6.10-parte) y la
+   *  reanudación de cámara fallida (3.3). Los de tipo "error" NO se
+   *  autodestruyen (bloque 4.3.1): salen por Reintentar o descartar. */
+  avisoVisor: AvisoOperador | null;
+  /** Monta el aviso del visor (ts lo estampa el store). */
+  mostrarAvisoVisor: (aviso: {
+    tipo: AvisoOperador["tipo"];
+    motivo: MotivoOperador;
+    accion: AvisoOperador["accion"];
+  }) => void;
+  /** Descarta el aviso del visor (botón × de la franja). */
+  descartarAvisoVisor: () => void;
+  /** Ola 3.2 (U4 — plan 3.2): salida del ANALIZANDO estancado. Marca el
+   *  desenlace como RECHAZADA/CANCELADA (fila de historial RESCANEO_REQUERIDO
+   *  con la nota «— CANCELADA POR EL OPERADOR» + contador de motivos), limpia
+   *  el slot de análisis y vuelve a "escanear" SIN recargar ni perder la
+   *  jornada. El desenlace tardío del pipeline en vuelo se descarta (bandera
+   *  escaneoCancelado) — sin acta fantasma ni rescate del watchdog. */
+  cancelarAnalisis: () => void;
   /**
    * KIT camara-visor-v1 (G3 — upgrade silencioso del lab L1789-1842):
    * re-procesa el acta con la foto FULL-RES del sensor que aterrizó en
@@ -446,6 +481,14 @@ function hashMock(): string {
  *  rotación rápida es async y un doble tap giraría 180°). */
 let rotandoFotoEnVuelo = false;
 
+/** Ola 3.2 (U4 — plan 3.2): el operador CANCELÓ un análisis en vuelo. El
+ *  pipeline del bridge no tiene abort (el watchdog vive en bridge:1505-1520,
+ *  archivo intocable) — esta bandera hace que el desenlace TARDÍO se
+ *  descarte al resolver: sin acta fantasma, sin actasSesion+1, sin rescate
+ *  del watchdog (actaVencida queda null). Un solo disparo en vuelo existe
+ *  (guard de vista "analizando"), así que una bandera de módulo basta. */
+let escaneoCancelado = false;
+
 // ---------- KIT L6: estado del PERSISTER (módulo — declarado ANTES del
 // create para excluir cualquier TDZ con HMR re-evaluando el módulo) ----------
 let arrancada = false; // idempotencia de arrancarJornada (doble montaje incl.)
@@ -457,6 +500,150 @@ let persisterActivo = false; // gate multi-instancia (se abre al terminar arranc
 // acta en revisión ANTES de poder restaurarlo (la recarga perdía el acta).
 let ultimaActaPersistida: Acta | null | undefined = null;
 let ultimoEstadoJson = "";
+
+// ---------- Ola 6.12 (parte store): firma BARATA del suscriptor ----------
+// Antes de serializar el estado completo se compara por REFERENCIA de los
+// objetos persistidos + contadores escalares: un tick de progreso
+// (progresoAnalisis) o cualquier set de UI NO debe pagar un
+// JSON.stringify del estado. Zustand reemplaza los objetos en cada set →
+// la identidad de referencia es el detector exacto de cambio por campo.
+let ultimaFirmaBarata = "";
+let refArchivadas: unknown = null;
+let refHistorial: unknown = null;
+let refMotivosNoEnvio: unknown = null;
+let refPuestoActual: unknown = null;
+
+// ---------- Ola 6.10 (parte store): cuota + persistencia del almacenamiento ----------
+// jornada.ts traga sus errores de IDB internamente (archivo intocable para
+// esta ola) → el rechazo QuotaExceeded jamás llega al call-site. El store
+// cubre el hueco con dos redes: catch defensivo en las llamadas + sondeo
+// navigator.storage.estimate() tras las escrituras GRANDES (slot del acta,
+// 2.4–16.9 MB por acta) con umbral de alerta. Sin pérdida silenciosa: el
+// aviso ALMACENAMIENTO_LLENO es accionable y persistente.
+const UMBRAL_CUOTA = 0.9; // ≥90 % del origen → avisar
+let ultimaVigilanciaCuota = 0; // throttle del sondeo estimate (60 s)
+
+/** ¿el error ES de cuota? (por nombre o mensaje — cubre los 3 navegadores). */
+function esErrorCuota(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { name?: unknown; message?: unknown };
+  const nombre = typeof e.name === "string" ? e.name.toLowerCase() : "";
+  const mensaje = typeof e.message === "string" ? e.message.toLowerCase() : "";
+  return (
+    nombre === "quotaexceedederror" ||
+    nombre === "ns_error_dom_quota_reached" ||
+    /quota|almacenamiento lleno/.test(mensaje)
+  );
+}
+
+/** Sube el aviso ALMACENAMIENTO_LLENO del visor (una vez — si ya está en
+ *  pantalla no se re-monta; es persistente hasta descarte, 4.3.1). */
+function avisarAlmacenamientoLleno(): void {
+  try {
+    if (useE14Store.getState().avisoVisor?.motivo === "ALMACENAMIENTO_LLENO") return;
+    useE14Store.getState().mostrarAvisoVisor({
+      tipo: "error",
+      motivo: "ALMACENAMIENTO_LLENO",
+      accion: null, // la acción es del dueño (enviar/eliminar) — solo descartable
+    });
+  } catch {
+    /* regla de oro: el aviso jamás rompe la escritura */
+  }
+}
+
+/** Red 1 del manejo de cuota: catch del call-site (por si un día jornada.ts
+ *  re-lanza; HOY traga dentro — ver comentario del bloque). */
+function manejarErrorEscrituraIdb(err: unknown): void {
+  try {
+    if (esErrorCuota(err) || clasificarErrorPipeline(err) === "ALMACENAMIENTO_LLENO") {
+      logger.error("[e14] IDB sin cuota — jornada/slot sin persistir (aviso al operador)", err);
+      avisarAlmacenamientoLleno();
+      return;
+    }
+    // Otros fallos de IDB: la jornada vive en RAM (política del módulo) —
+    // razonable en consola, sin aviso (no es algo que el operador pueda arreglar).
+    logger.warn("[e14] escritura IDB falló (la jornada vive en RAM)", err);
+  } catch {
+    /* silencioso */
+  }
+}
+
+/** Red 2 del manejo de cuota: sondeo estimate() tras las escrituras grandes
+ *  (slot del acta). Throttle 60 s — estimate() es async y no es gratis. */
+async function vigilarCuotaTrasEscrituraGrande(): Promise<void> {
+  try {
+    const ahora = Date.now();
+    if (ahora - ultimaVigilanciaCuota < 60_000) return;
+    ultimaVigilanciaCuota = ahora;
+    if (typeof navigator === "undefined") return;
+    const est = await navigator.storage?.estimate?.();
+    if (!est || !est.quota || est.usage == null) return;
+    if (est.usage / est.quota < UMBRAL_CUOTA) return;
+    logger.warn("[e14] cuota del origen ≥90 %", { usage: est.usage, quota: est.quota });
+    avisarAlmacenamientoLleno();
+  } catch {
+    /* sin estimate() (Firefox privado) → nada — regla de oro */
+  }
+}
+
+/** Ola 6.10: pide persistencia del almacenamiento UNA sola vez por sesión
+ *  (guard con bandera de módulo). Sin la marca, el navegador puede expulsar
+ *  la IDB de la jornada bajo presión de espacio (evicción best-effort). */
+let persistAlmacenamientoPedido = false;
+async function pedirPersistenciaAlmacenamiento(): Promise<void> {
+  if (persistAlmacenamientoPedido) return;
+  persistAlmacenamientoPedido = true;
+  try {
+    if (typeof navigator === "undefined") return;
+    const storage = navigator.storage;
+    if (!storage?.persist) return;
+    const ya = await storage.persisted();
+    if (!ya) await storage.persist();
+  } catch {
+    /* sin persist() o denegado → best-effort igual que hoy (regla de oro) */
+  }
+}
+
+/** Ola 6.12: re-hidratación PASIVA de la jornada cuando OTRA pestaña avisa
+ *  que persistió. Sobreescribe SOLO el estado liviano (jamás el acta en
+ *  revisión ni la vista) y se salta a sí misma si hay un análisis en vuelo.
+ *  Escritor simultáneo → último-escritor-gana (igual que hoy, sin locks). */
+async function rehidratarJornadaPasiva(): Promise<void> {
+  try {
+    const antes = useE14Store.getState();
+    if (antes.vista === "analizando") return; // pasiva: nada en vuelo
+    const j = await cargarJornada();
+    if (!j) return;
+    useE14Store.setState({
+      archivadas: j.archivadas,
+      puestoActual: j.puestoActual,
+      historial: j.historial.slice(0, TOPE_HISTORIAL),
+      completadas: j.completadas,
+      asignadasHoy: Math.max(j.asignadasHoy, j.completadas),
+      actasSesion: j.actasSesion,
+      colaOffline: j.colaOffline,
+      solicitudesRescaneo: j.solicitudesRescaneo,
+      motivosNoEnvio: j.motivosNoEnvio,
+    });
+    // mesas DERIVADAS del puesto real (fix M10) — solo fuera del SIM.
+    const puesto = j.puestoActual;
+    if (puesto && !useE14Store.getState().modoSimulacion) {
+      const [dep, mun, zon, std] = puesto.clave.split("-");
+      void cargarDivipol()
+        .then((base) => {
+          const total = mesasDePuesto(base, dep, mun, zon, std);
+          if (total && !useE14Store.getState().modoSimulacion) {
+            useE14Store.setState({ mesas: mesasRealesDe(j.archivadas, puesto, total) });
+          }
+        })
+        .catch(() => {
+          /* sin base → mesas queda como esté (degradación honesta) */
+        });
+    }
+  } catch {
+    /* regla de oro: la sincronía jamás rompe la app */
+  }
+}
 
 export const useE14Store = create<E14Store>((set, get) => {
   const bridge = getBridge();
@@ -610,6 +797,8 @@ export const useE14Store = create<E14Store>((set, get) => {
     historial: [],
     // KIT e14-optimizacion-v1 (T5): contador de sesión arranca vacío.
     motivosNoEnvio: {},
+    // KIT errores-operador-v1 (plan 3.1): sin aviso al arrancar.
+    avisoVisor: null,
 
     navegar: (vista) =>
       set({ vista }),
@@ -703,6 +892,49 @@ export const useE14Store = create<E14Store>((set, get) => {
 
     setFramePendiente: (frame) => set({ framePendiente: frame }),
 
+    // ─── KIT errores-operador-v1 (plan 3.1): aviso del visor ───
+    mostrarAvisoVisor: (aviso) =>
+      set({ avisoVisor: { ...aviso, ts: Date.now() } }),
+
+    descartarAvisoVisor: () => set({ avisoVisor: null }),
+
+    // ─── Ola 3.2 (U4): cancelar el análisis estancado ───
+    cancelarAnalisis: () => {
+      if (get().vista !== "analizando") return;
+      // El desenlace tardío del pipeline se descarta al resolver (ver
+      // comentario de escaneoCancelado — sin abort real en el bridge).
+      escaneoCancelado = true;
+      // "Acta RECHAZADA con nota de diagnóstico": durante ANALIZANDO aún no
+      // existe objeto Acta (el bridge no resolvió) — el registro HONESTO del
+      // desenlace es la fila de historial RESCANEO_REQUERIDO (la MISMA que
+      // estampa un rechazo real, analisisCompletado §F-6) con la nota en el
+      // título + el contador de motivos no-envío. La página queda pendiente
+      // de re-escaneo (solicitudesRescaneo +1) — jamás un fantasma ENVIADA.
+      const fila: HistorialRow = {
+        id: idHistorial(),
+        titulo: `${tituloPaginaActual()} — CANCELADA POR EL OPERADOR`,
+        estado: "RESCANEO_REQUERIDO",
+        hora: bridge.horaHistorial(),
+      };
+      logger.info(
+        "[e14] análisis cancelado por el operador (estancamiento) — nota: cancelada por el operador tras estancamiento",
+      );
+      const motivos = get().motivosNoEnvio;
+      set({
+        vista: "escanear",
+        actaActual: null,
+        progresoAnalisis: null,
+        analisisResuelto: false,
+        solicitudesRescaneo: get().solicitudesRescaneo + 1,
+        historial: [fila, ...get().historial],
+        motivosNoEnvio: {
+          ...motivos,
+          "rechazo:cancelada-por-operador":
+            (motivos["rechazo:cancelada-por-operador"] ?? 0) + 1,
+        },
+      });
+    },
+
     alternarConexion: () => {
       const { online, colaOffline, actaActual } = get();
       if (online) {
@@ -771,6 +1003,9 @@ export const useE14Store = create<E14Store>((set, get) => {
         actaActual: null,
         progresoAnalisis: null,
         analisisResuelto: false,
+        // KIT errores-operador-v1 (plan 3.1): el operador ACTUÓ (re-disparó)
+        // → el aviso de error previo sale de la franja.
+        avisoVisor: null,
       });
       try {
         // e67-watchdog-rescate-v1 (cambio B): variable tipada — MISMO patrón
@@ -785,7 +1020,7 @@ export const useE14Store = create<E14Store>((set, get) => {
         const opcionesEscaneo: OpcionesEscaneoConTimeout = {
           objetivo,
           intento,
-          maxIntentos: 4,
+          maxIntentos: MAX_INTENTOS_ESCANEO, // 7.1 — única fuente (politica/umbrales.ts)
           fuente: fuenteEfectiva,
           archivo: simActiva ? undefined : (archivoPendiente ?? undefined),
           frameActual:
@@ -808,6 +1043,15 @@ export const useE14Store = create<E14Store>((set, get) => {
               }),
         };
         const acta = await bridge.escanearActa(opcionesEscaneo);
+        // Ola 3.2 (U4): el operador canceló durante el análisis → el desenlace
+        // TARDÍO se descarta completo: no adopta el acta, no cuenta
+        // actasSesion, no deja analisisResuelto encendido y deja actaVencida
+        // en null (un rescate tardío del watchdog no tiene a quién rescatar).
+        if (escaneoCancelado) {
+          escaneoCancelado = false;
+          logger.info("[e14] escaneo cancelado por el operador — desenlace tardío descartado");
+          return;
+        }
         actaVencida = acta;
         set({
           actaActual: acta,
@@ -837,7 +1081,30 @@ export const useE14Store = create<E14Store>((set, get) => {
         // lo previsible; esto cubre lo imprevisto: asset SIM caído, decode
         // de archivo corrupto, video no listo).
         logger.error("[e14] dispararEscaneo falló:", err);
-        set({ vista: "escanear", progresoAnalisis: null, analisisResuelto: false });
+        // KIT errores-operador-v1 (plan 3.1 — U1/C5): el fallo YA NO regresa
+        // mudo — se clasifica a motivo de operador y sube el aviso
+        // PERSISTENTE del visor (franja con Reintentar/descartar; los avisos
+        // de error no se autodestruyen — bloque 4.3.1). Jamás se expone el
+        // stack al operador (el log conserva el detalle para ti).
+        // Cancelación en vuelo + rechazo tardío del pipeline: NO es un fallo
+        // que el operador deba ver — vuelve al visor en silencio.
+        const cancelada = escaneoCancelado;
+        escaneoCancelado = false;
+        set({
+          vista: "escanear",
+          progresoAnalisis: null,
+          analisisResuelto: false,
+          ...(cancelada
+            ? {}
+            : {
+                avisoVisor: {
+                  tipo: "error",
+                  motivo: clasificarErrorPipeline(err),
+                  accion: "reintentar",
+                  ts: Date.now(),
+                } satisfies AvisoOperador,
+              }),
+        });
       }
     },
 
@@ -1294,6 +1561,28 @@ export const useE14Store = create<E14Store>((set, get) => {
     arrancarJornada: async () => {
       if (arrancada) return; // idempotente (StrictMode double-mount incl.)
       arrancada = true;
+      // Ola 6.10 (parte store): persistencia del almacenamiento UNA vez
+      // (init del store en cliente — el shell llama arrancarJornada al monte).
+      void pedirPersistenciaAlmacenamiento();
+      // Ola 6.12 (parte store): edición exclusiva entre pestañas. Sin lock →
+      // aviso INFO pasajero (OTRA_PESTANA_ACTIVA) — nunca bloquea el arranque.
+      try {
+        const exclusiva = await reclamarEdicionExclusiva();
+        if (!exclusiva) {
+          get().mostrarAvisoVisor({
+            tipo: "info",
+            motivo: "OTRA_PESTANA_ACTIVA",
+            accion: null,
+          });
+        }
+      } catch {
+        /* regla de oro: el lock jamás tumba el arranque */
+      }
+      // Ola 6.12: «jornada-cambiada» de OTRA pestaña → re-hidratar pasivo
+      // (suscripción única — el guard `arrancada` hace el efecto idempotente).
+      suscribirseAJornadaCambiada(() => {
+        void rehidratarJornadaPasiva();
+      });
       try {
         const j = await cargarJornada();
         if (!j) return; // arranque fresco (seed demo, como hoy)
@@ -1392,22 +1681,48 @@ if (typeof window !== "undefined" && typeof indexedDB !== "undefined") {
     // Gate multi-instancia: sin arranque completado no se persiste NADA
     // (ni el estado ni el slot del acta) — ver comentario del finally.
     if (!persisterActivo) return;
-    const estado = {
-      version: 1,
-      archivadas: s.archivadas,
-      puestoActual: s.puestoActual,
-      historial: s.historial.slice(0, TOPE_HISTORIAL),
-      completadas: s.completadas,
-      asignadasHoy: s.asignadasHoy,
-      actasSesion: s.actasSesion,
-      colaOffline: s.colaOffline,
-      solicitudesRescaneo: s.solicitudesRescaneo,
-      motivosNoEnvio: s.motivosNoEnvio,
-    };
-    const json = JSON.stringify(estado);
-    if (json !== ultimoEstadoJson) {
-      ultimoEstadoJson = json;
-      void guardarJornada(estado);
+    // Ola 6.12 — GATE BARATO por referencias+contadores: un tick de progreso
+    // (progresoAnalisis) o cualquier set de UI no paga stringify. Zustand
+    // reemplaza los objetos en cada set → la referencia es el detector
+    // exacto de cambio por campo (los escalares van por valor).
+    const firmaBarata = `${s.completadas}|${s.asignadasHoy}|${s.actasSesion}|${s.colaOffline}|${s.solicitudesRescaneo}|${s.historial.length}`;
+    if (
+      firmaBarata !== ultimaFirmaBarata ||
+      s.archivadas !== refArchivadas ||
+      s.historial !== refHistorial ||
+      s.motivosNoEnvio !== refMotivosNoEnvio ||
+      s.puestoActual !== refPuestoActual
+    ) {
+      ultimaFirmaBarata = firmaBarata;
+      refArchivadas = s.archivadas;
+      refHistorial = s.historial;
+      refMotivosNoEnvio = s.motivosNoEnvio;
+      refPuestoActual = s.puestoActual;
+      const estado = {
+        version: 1,
+        archivadas: s.archivadas,
+        puestoActual: s.puestoActual,
+        historial: s.historial.slice(0, TOPE_HISTORIAL),
+        completadas: s.completadas,
+        asignadasHoy: s.asignadasHoy,
+        actasSesion: s.actasSesion,
+        colaOffline: s.colaOffline,
+        solicitudesRescaneo: s.solicitudesRescaneo,
+        motivosNoEnvio: s.motivosNoEnvio,
+      };
+      const json = JSON.stringify(estado);
+      if (json !== ultimoEstadoJson) {
+        ultimoEstadoJson = json;
+        // Ola 6.10: cuota con aviso accionable (sin pérdida silenciosa) ·
+        // Ola 6.12: emitir «jornada-cambiada» SOLO tras persistir.
+        void guardarJornada(estado)
+          .then(() => {
+            emitirJornadaCambiada();
+          })
+          .catch((err: unknown) => {
+            manejarErrorEscrituraIdb(err);
+          });
+      }
     }
     if (s.actaActual !== ultimaActaPersistida) {
       ultimaActaPersistida = s.actaActual;
@@ -1415,7 +1730,15 @@ if (typeof window !== "undefined" && typeof indexedDB !== "undefined") {
         s.actaActual && s.actaActual.fuente !== "SIMULACION" // chips/demo jamás ocupan el slot
           ? s.actaActual
           : null;
-      void guardarActaEnRevision(persistible);
+      // Ola 6.10: la escritura GRANDE del slot (fotos como Blobs) es la que
+      // puede reventar la cuota → vigilancia estimate() tras escribir.
+      void guardarActaEnRevision(persistible)
+        .then(() => {
+          return vigilarCuotaTrasEscrituraGrande();
+        })
+        .catch((err: unknown) => {
+          manejarErrorEscrituraIdb(err);
+        });
     }
   });
 }

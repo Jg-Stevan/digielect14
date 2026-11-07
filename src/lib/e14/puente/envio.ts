@@ -1,26 +1,35 @@
 /**
- * KIT e14-puente-supervision-v1 (§5) — TRANSPORTE hacia el hub del panel de
- * supervisión (`supervision-e14` desplegado en Cloudflare Workers).
+ * KIT e14-puente-supervision-v2 (§5) — TRANSPORTE hacia el hub del panel de
+ * supervisión (`e14-puente` en Cloudflare Workers — fuente versionado en el
+ * paquete de remediación `e14-puente/`).
  *
- *   POST {hub}/actas  ← { dispositivo, actas: EntradaPuente[] }  (tope 10/lote)
- *     → { ok, recibidas, publicadas, insertadas, rechazadas: [{indice,motivo}] }
+ *   POST {hub}/v1/actas  ← { dispositivo, actas: EntradaPuente[] } (tope 10)
+ *     headers x-e14-ts + x-e14-firma (HMAC del body CRUDO — firma.ts, S-1)
+ *     → { ok, recibidas, publicadas, insertadas, duplicados, rechazadas }
  *
- * · LOTES DE A 2 entradas por POST (el tope del hub es 10 — 2 mantiene cada
- *   request liviano en gama baja: cada entrada viaja con su foto dataURL).
- * · Timeout de 8 s con AbortController (gama baja / red de mesa).
- * · Éxito (HTTP ok) → el lote se BORRA de la cola (aunque el hub reporte
- *   rechazadas individuales: reintentar un sobre inválido sería veneno —
- *   la corrección llega con la próxima captura). Fallo → intentos++ en la
- *   cola y CORTE del ciclo (backoff implícito: el próximo envío lo repite).
+ * CAMBIOS OLA 0 (plan de remediación):
+ *  · 0.1/S-1 — el lote se serializa UNA vez; se firma ESE string y se envían
+ *    LOS MISMOS bytes (`headersDeLote(cuerpo, clave)`). Cada reintento
+ *    RE-FIRMA el body que reenvía (nada de firmas recicladas).
+ *  · 0.1 — sin clave de jornada provisionada → NO envía a producción (falla
+ *    cerrado): la cola queda intacta y `estado.sinClaveJornada` enciende la
+ *    tarjeta. El HUB LOCAL (LAN, `hub-local.mjs`) sigue sin firma: es mismo
+ *    origen del equipo y su contrato no pide auth (esOrigenLocal).
+ *  · 0.7/H-4 — ruta `/v1/actas`; el legado `/actas` responde 410 →
+ *    `estado.contratoObsoleto` pausa la cola para el banner «actualiza la
+ *    PWA» (NUNCA marca las actas como fallidas).
+ *  · 0.3 — un 429 es fallo TRANSITORIO: sube intentos y corta el ciclo, pero
+ *    jamás marca el acta como fallida definitiva (la cola re-intenta).
+ * · LOTES DE A 2 entradas por POST (tope del hub: 10 — 2 mantiene cada
+ *   request liviano en gama baja).
+ * · Timeout de 8 s con AbortController. Éxito → el lote se BORRA de la cola.
  * · KILL LOCAL (FALLOS_KILL_LOCAL = 5): tras 5 fallos seguidos estado.activo
- *   = false — la cola queda INTACTA y solo `sincronizarAhora()` manual la
- *   reactiva (mismo criterio del kill del transporte obs, tope distinto por
- *   el volumen de fotos).
- * · Override de URL: localStorage["e14-puente-url"] (leído en CADA envío —
- *   cambiar el hub no exige recargar; default HUB_DEFAULT).
- * · fetch INYECTABLE (parámetro opcional — patrón del ledger-remoto
- *   histórico de la cola masiva) para pruebas sin red. Sin tests en esta
- *   sesión por política.
+ *   = false — la cola queda INTACTA y solo `sincronizarAhora()` la reactiva.
+ * · Override de URL: localStorage["e14-puente-url"] leído en CADA envío,
+ *   normalizado con `normalizarHubUrl` (SOLO https — 0.5/S3; el intento
+ *   rechazado queda en el log).
+ * · fetch INYECTABLE (parámetro opcional) para pruebas sin red — la suite
+ *   `envio.test.ts` (Ola 2) encodea este contrato completo.
  *
  * REGLA DE ORO §2.4: TODO try/catch silencioso — el puente jamás rompe la
  * app; cero consola nativa (logger del repo).
@@ -28,8 +37,10 @@
 import { logger } from "../../logger";
 import { idDispositivo } from "../obs/identidad";
 import { borrarPendiente, contarPendientes, leerPendientes, marcarIntentos } from "./cola";
+import { claveJornada, headersDeLote } from "./firma";
 import { recuperarActasPuente } from "./recuperar";
-import type { EntradaPuente, EstadoPuente } from "./tipos";
+import { esOrigenLocalDe, normalizarHubUrl } from "./url-hub";
+import { RUTA_ACTAS, type EntradaPuente, type EstadoPuente } from "./tipos";
 
 const HUB_DEFAULT = "https://e14-puente.julistevan02.workers.dev";
 const CLAVE_OVERRIDE = "e14-puente-url";
@@ -60,6 +71,8 @@ const estado: EstadoPuente = {
   fallosSeguidos: 0,
   ultimoError: null,
   ultimaSyncTs: null,
+  contratoObsoleto: false,
+  sinClaveJornada: false,
 };
 
 /** Un envío a la vez (debounce del auto-push y del botón — sin solaparse). */
@@ -70,13 +83,42 @@ export function estadoPuente(): EstadoPuente {
   return { ...estado };
 }
 
-/** URL del hub: override de localStorage leído en cada envío (http(s) sólo —
- *  una clave corrupta cae al default; localStorage bloqueado → default). */
+/**
+ * SOLO TESTS (`envio.test.ts`): el singleton vive por módulo — la suite lo
+ * resetea entre casos (el kill local/410 son estado persistente por diseño:
+ * en producción solo `sincronizarAhora()` reactiva, pero esa ruta arrastra
+ * `recuperarActasPuente`, demasiado para un reset de suite).
+ */
+export function __resetEstadoParaTests(): void {
+  estado.activo = true;
+  estado.contratoObsoleto = false;
+  estado.sinClaveJornada = false;
+  estado.fallosSeguidos = 0;
+  estado.ultimoError = null;
+  estado.enviadasOk = 0;
+  estado.ultimaSyncTs = null;
+}
+
+/** URL del hub: override de localStorage leído en cada envío, normalizado
+ *  con `normalizarHubUrl` (SOLO https — 0.5/S3: `http://` o basura → null →
+ *  default, y el intento queda registrado). */
 function urlDelHub(): string {
   try {
     if (typeof window !== "undefined") {
-      const override = window.localStorage.getItem(CLAVE_OVERRIDE);
-      if (override && /^https?:\/\//i.test(override)) return override;
+      const cruda = window.localStorage.getItem(CLAVE_OVERRIDE);
+      const normalizada = normalizarHubUrl(cruda);
+      if (normalizada) return normalizada;
+      if (cruda && cruda.trim()) {
+        // 0.5.3 — el intento de override inválido queda registrado (sin PII:
+        // no se loguea la URL completa, solo que hubo intento rechazado).
+        try {
+          logger.warn(
+            `[e14] puente: override de hub RECHAZADO (no-https o inválido) — se usa el hub por defecto`,
+          );
+        } catch {
+          /* silencioso */
+        }
+      }
     }
   } catch {
     /* privado/iOS/SSR → default */
@@ -112,12 +154,14 @@ export function esOrigenLocal(
 
 /** Apunta el puente al propio origen (el hub local) o lo suelta (`` null`` =
  *  default de producción). Se lee en CADA envío: no hace falta recargar.
- *  `localStorage` bloqueado (modo privado de algunos navegadores) → null y la
- *  tarjeta lo dice; el puente sigue usando el default. */
+ *  Solo acepta orígenes https (o LAN local para el hub-local.mjs). */
 export function fijarHubLocal(activo: boolean): string | null {
   try {
-    if (activo) window.localStorage.setItem(CLAVE_OVERRIDE, window.location.origin);
-    else window.localStorage.removeItem(CLAVE_OVERRIDE);
+    if (activo) {
+      const origen = window.location.origin;
+      if (!normalizarHubUrl(origen) && !esOrigenLocalDe(origen)) return null;
+      window.localStorage.setItem(CLAVE_OVERRIDE, origen);
+    } else window.localStorage.removeItem(CLAVE_OVERRIDE);
     return urlDelHub();
   } catch {
     return null;
@@ -138,16 +182,60 @@ async function enviarLote(
 ): Promise<ResultadoLote> {
   const control = new AbortController();
   const timer = setTimeout(() => control.abort(), TIMEOUT_MS);
+  // S-1: serializar UNA vez — la firma va sobre ESTE string y el body son
+  // LOS MISMOS bytes (jamás re-serializar).
   const cuerpo = JSON.stringify({ dispositivo: idDispositivo(), actas: entradas });
+  // 0.1 — autenticación: el hub LOCAL (LAN) no pide firma (hub-local.mjs);
+  // producción EXIGE la clave de jornada provisionada en el dispositivo.
+  const esLocal = esOrigenLocalDe(url);
+  let headers: Record<string, string>;
+  if (esLocal) {
+    headers = { "content-type": "application/json" };
+  } else {
+    const clave = claveJornada();
+    if (!clave) {
+      // Falla cerrado: sin clave NO se publica en producción. La cola queda
+      // intacta y la tarjeta lo muestra (estado.sinClaveJornada).
+      estado.sinClaveJornada = true;
+      return { ok: false, motivo: "SIN_CLAVE_JORNADA" };
+    }
+    estado.sinClaveJornada = false;
+    try {
+      // Re-firma en CADA intento con el body que se va a reenviar (S-1,
+      // checklist «la cola offline re-firma con el body que reenvía»). El
+      // ts fresco también mantiene la ventana de 5 min del anti-replay.
+      headers = await headersDeLote(cuerpo, clave);
+    } catch {
+      // crypto.subtle ausente (contexto no seguro) → falla cerrado, cola intacta.
+      return { ok: false, motivo: "FIRMA_NO_DISPONIBLE" };
+    }
+  }
   try {
-    const res = await doFetch(`${url}/actas`, {
+    const res = await doFetch(`${url}${RUTA_ACTAS}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       body: cuerpo,
       signal: control.signal,
       keepalive: cuerpo.length <= TOPE_KEEPALIVE_BYTES,
     });
-    if (!res.ok) return { ok: false, motivo: `HTTP ${res.status}` };
+    if (res.status === 410) {
+      // H-4b — contrato obsoleto: pausa con banner «actualiza la PWA», no
+      // fallo del acta (la cola queda intacta y reanuda al actualizar).
+      estado.contratoObsoleto = true;
+      estado.activo = false;
+      try {
+        logger.warn("[e14] puente: hub respondió 410 (contrato obsoleto) — cola en pausa hasta actualizar la PWA");
+      } catch {
+        /* silencioso */
+      }
+      return { ok: false, motivo: "CONTRATO_OBSOLETO" };
+    }
+    if (!res.ok) {
+      // 0.3 — el 429 es transitorio: intentos++ y corte, sin marcar el acta
+      // como fallida definitiva (Retry-After lo respeta el backoff implícito
+      // del corte de ciclo).
+      return { ok: false, motivo: `HTTP ${res.status}` };
+    }
     return { ok: true, motivo: null };
   } catch (e) {
     const motivo =
@@ -194,10 +282,12 @@ export async function enviarPendientes(
         estado.enviadasOk += lote.length;
         estado.fallosSeguidos = 0;
         estado.ultimoError = null;
+        estado.contratoObsoleto = false;
         continue;
       }
       // Fallo → cargo de intentos persistido + CORTE (backoff implícito:
-      // el siguiente envío repite desde el lote caído).
+      // el siguiente envío repite desde el lote caído). El acta JAMÁS se
+      // marca fallida definitiva (429/timeout/kill son transitorios).
       for (const fila of lote) await marcarIntentos(fila.hash, fila.intentos + 1);
       fallos += 1;
       estado.fallosSeguidos += 1;
@@ -253,6 +343,8 @@ export async function sincronizarAhora(
     estado.activo = true; // reactivación manual — presupuesto fresco
     estado.fallosSeguidos = 0;
     estado.ultimoError = null;
+    // El 410 no se limpia aquí: solo una PWA actualizada (nuevo bundle) lo
+    // resuelve — sincronizarAhora() contra un hub obsoleto volvería a pausar.
     const recuento = await recuperarActasPuente();
     const envio = await enviarPendientes(fetchImpl);
     recuperadas = recuento.recuperadas;
@@ -261,7 +353,11 @@ export async function sincronizarAhora(
     const pendientes = await contarPendientes();
     estado.pendientes = pendientes;
     detalle = `${recuperadas} listas · ${enviadas} enviadas · ${pendientes} pendientes`;
-    if (!estado.activo) {
+    if (estado.contratoObsoleto) {
+      detalle = `${detalle} — actualiza la PWA: el hub ya no acepta este contrato`;
+    } else if (estado.sinClaveJornada) {
+      detalle = `${detalle} — provisiona la clave de jornada para enviar`;
+    } else if (!estado.activo) {
       detalle = `${detalle} — puente detenido por fallos (${estado.ultimoError ?? "desconocido"})`;
     }
   } catch {

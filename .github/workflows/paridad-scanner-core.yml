@@ -12,8 +12,11 @@
 # El invariante (§6.1): mismo fixture → misma lectura aceptada por la misma
 # cascada en ambas apps, aunque el orden de motores configurado difiera.
 name: paridad-scanner-core
+# 6.8 (S8) — mínimo privilegio también en el workflow REUTILIZABLE.
 on:
   workflow_call:
+permissions:
+  contents: read
 
 jobs:
   paquete:
@@ -22,7 +25,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          # 6.14 (O4) — FIJA (era `latest`): era el único workflow de bun sin
+          # fijar y el minificador cambia entre versiones — el gate se volvería
+          # rojo según el día que corra (misma lección del comentario de
+          # quality.yml). Si se sube la versión, alinear TODOS los workflows.
+          bun-version: 1.4.2
       - name: "Instalar (workspace: el paquete entra por packages/*)"
         run: bun install --frozen-lockfile || bun install
       - name: Materializar assets del kit (e14-assets-materializados-v1)

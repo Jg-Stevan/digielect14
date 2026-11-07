@@ -40,14 +40,11 @@ import {
 } from "@jg-stevan/scanner-core/dominio/completitud";
 import { medirZonaVotos } from "@jg-stevan/scanner-core/dominio/marcadores";
 import {
-  PISO_LECTURA_FUERTE,
-  TECHO_LECTURA_DEBIL,
   lazoPerdonadoPorLectura,
   senalDeLectura,
 } from "@jg-stevan/scanner-core/dominio/senal-lectura";
 import type {
   Acta,
-  ActaStatus,
   DiagnosticoActa,
   ProgresoAnalisis,
 } from "@jg-stevan/scanner-core/dominio/types";
@@ -59,6 +56,13 @@ import { brujulaQrOrientacion } from "./orientacion-qr";
 import type { BrujulaQr } from "./orientacion-qr";
 import { leerFlags } from "./flags";
 import { esperaWorkerEfectiva, presupuestoEscaneoEfectivo } from "./adaptacion/plan";
+// 7.2 (plan de remediación, cierra A1) — LA política del gate (bloque ÚNICO
+// que antes vivía duplicado a mano aquí y en pipelineRecorte).
+import { aplicarPoliticaGate } from "./politica/gate";
+// 7.1 (C3): piso de lectura FUERTE — única fuente (re-export del paquete).
+import { PISO_LECTURA_FUERTE } from "./politica/umbrales";
+// 7.9 (C4): ÚNICO constructor del log-contrato D51 (+ su orden canónico).
+import { construirLogD51, ORDEN_LOG_D51, type EntradaD51 } from "./log-contrato";
 import { logger } from "../logger";
 // Tipos del bridge — SOLO tipos (el emit no lleva require alguno).
 import type {
@@ -67,7 +71,6 @@ import type {
   OpcionesEscaneoConTimeout,
   ParcialPipeline,
   PasosPipelineL2,
-  ResultadoGate,
 } from "./scanner-core-bridge";
 
 export async function correrPipelineL2(
@@ -586,7 +589,7 @@ export async function correrPipelineL2(
     senal.anclas >= 8 &&
     calidad.sharpnessHi >= 90 &&
     calidad.contrastPapel >= 75;
-  let score = pasos.scoreDeCalidad(calidad, {
+  const scoreBruto = pasos.scoreDeCalidad(calidad, {
     ocrLegible,
     identificada: clasificacion.nivel === "AUTO",
     conSenal: senalActa,
@@ -597,33 +600,14 @@ export async function correrPipelineL2(
   // incompleta/sin-votos) — el `final` es el que imprime el log.
   // ORDEN del merge (kit e14-diag-campos-aditivos-v1 §4-A.3):
   // scoreDeCalidad → scoreVisual → bloque C3 → inyección SIM → caps.
-  const scoreVisual = score;
-  // KIT e14-score-lectura-v1 (C3): ajuste por LECTURA — el OCR manda (§3):
-  // FUERTE (mesa+4 anclas o 6) sube el score a ≥8.5 (el piso vence al techo
-  // fair pero NUNCA al poor — level del core "poor" es evidencia física
-  // dura); DEBIL techo 5.9; MEDIA no toca. El texto es el POST-banda
-  // (ocrBanda ya sumó — pitfall §9.8; SIN llamada OCR nueva — costo 0).
-  // Va EXACTAMENTE aquí (§4-B3): tras scoreDeCalidad y ANTES de la
-  // inyección SIM (pitfall §9.5 — los chips 8.2/7.0/4.3 mandan) y de los
-  // caps posteriores (escudo fondo/recortada/gate siguen MANDANDO —
-  // pitfall §9.4). Mismo criterio en el pipelineRecorte (pitfall §9.9).
-  // KIT e14-luz-sim-puntos-v1 (T-D): la declaración de `senal` se SUBIÓ
-  // (ahora vive antes de scoreDeCalidad — el piso-10 necesita las anclas
-  // dentro del score). Este bloque C3 queda byte a byte leyendo esa const.
-  if (senal.nivel === "FUERTE" && calidad.level !== "poor") {
-    score = Math.max(score, PISO_LECTURA_FUERTE);
-  } else if (senal.nivel === "DEBIL") {
-    score = Math.min(score, TECHO_LECTURA_DEBIL);
-  }
-  // §D3 (SPEC-e14-simulacion-scores): inyección determinista del chip —
-  // reemplaza el calculado DESPUÉS de scoreDeCalidad y ANTES del gate.
-  // §G3 (KIT e14-gate-v2): SIN re-aplicación del piso de identificada
-  // (la constante ya no existe) — el chip manda: 8.2 → OPTIMA por
-  // statusDeScore (auto-envío normal) · 7.0 → ADVERTENCIA · 4.3 →
-  // RECHAZADA (§D4). Nada se fuerza a mano: `evaluarGate` decide.
-  if (opciones.simular && opciones.scoreSimulado != null) {
-    score = opciones.scoreSimulado;
-  }
+  const scoreVisual = scoreBruto;
+  // KIT e14-score-lectura-v1 (C3) + §D3 (chip SIM) + escudos/caps del sitio
+  // + gate INCOMPLETA/SIN_VOTOS + caps de coherencia + rechazoFinal +
+  // techosDiag — TODO eso es la política del gate y desde 7.2 (A1) vive en
+  // UN solo bloque: `aplicarPoliticaGate` (./politica/gate.ts), consumido
+  // byte a byte IGUAL por el pipelineRecorte (golden: gate.paridad.test.ts).
+  // Aquí solo se arma la entrada con lo que este camino ya tiene en vuelo
+  // (el escaneo jamás recorta a mano: `manual` es false).
   // §F-2 (SPEC-camara-funcional) + GUARD-BORDE Rev. 2: acta INCOMPLETA →
   // resolución por la vía de rechazo SIN tocar evaluarGate (el veto sigue
   // VIVIENDO FUERA del gate — §7 score-ocr intocado, D6/AC10). La decisión
@@ -680,110 +664,53 @@ export async function correrPipelineL2(
   // líneas impresas: de la suerte). Página desconocida → se mide
   // (conservador). Log: votos=skip-pag2 cuando aplique.
   const votosSkipPag2 = clasificacion.pagina?.index === 2;
-  const marcadoresOk = completa ? (votosSkipPag2 ? true : marcadores.hayVotos) : true;
-  // D10 — escudo anti-fondo: franja(s) ≥85% oscura(s) al filo = fondo/sombra
-  // incluida por el warp (NO tinta cortada) → el acta pasa al gate con
-  // TECHO 7.9 (nunca ÓPTIMA — statusDeScore: ≥8; el recorte trae fondo y el
-  // operador puede preferir repetir) sin copy nuevo. SOLO actas completas
-  // (la condenada por tinta no llega al gate).
-  if (completa && verificacionResuelta?.fondo) {
-    score = Math.min(score, pasos.TECHO_ESCUDO_FONDO);
-  }
-  // KIT actas-vivas-paginas-v1 (FASE C): acta RECORTADA (OCR de secciones)
-  // → techo 7.9 — ADVERTENCIA, NO rechazo (conservador en campo). Cap
-  // DESPUÉS de la inyección SIM (mismo sitio que el escudo de fondo — el
-  // recorte físico manda sobre cualquier score).
-  if (recortada) {
-    score = Math.min(score, pasos.TECHO_ESCUDO_FONDO);
-  }
-  const gate: ResultadoGate = !completa
-    ? {
-        // intento < maxIntentos → RECHAZADA · al AGOTAR → contingencia
-        // automática C4 (EN_REVISION_HUMANA con el MISMO rechazo).
-        status:
-          opciones.intento >= opciones.maxIntentos
-            ? ("EN_REVISION_HUMANA" as ActaStatus)
-            : ("RECHAZADA" as ActaStatus),
-        rechazo: {
-          tipo: "INCOMPLETA",
-          detalle: pasos.DETALLE_INCOMPLETA,
-        },
-        clasificacion: null,
-      }
-    : !marcadoresOk
-      ? {
-          // KIT e14-gate-v2 (G2): rechazo DIRECTO por marcador
-          // obligatorio fallido — mismo desenlace por intentos que
-          // INCOMPLETA (repetir; al AGOTAR, contingencia C4 con el
-          // MISMO rechazo SIN_VOTOS — un impreso sin votos no puede
-          // quedarse en bucle infinito). Copy CORTO, sin guía.
-          status:
-            opciones.intento >= opciones.maxIntentos
-              ? ("EN_REVISION_HUMANA" as ActaStatus)
-              : ("RECHAZADA" as ActaStatus),
-          rechazo: { tipo: "SIN_VOTOS", detalle: pasos.DETALLE_SIN_VOTOS },
-          clasificacion: null,
-        }
-      : pasos.evaluarGate(score, texto, clasificacion, opciones.intento, opciones.maxIntentos);
-  if (!completa) score = Math.min(score, 6.4);
-  // Cap del veto de votos (mismo patrón del INCOMPLETA): RECHAZADA
-  // implica <6.5 (statusDeScore) — el score queda coherente con el status.
-  if (completa && !marcadoresOk) score = Math.min(score, 6.4);
+  // 7.2 (A1) — LA política del gate, bloque ÚNICO (antes: marcadoresOk,
+  // escudo-fondo D10, cap recortada FASE C, gate INCOMPLETA/SIN_VOTOS con
+  // contingencia C4, caps 6.4, rechazoFinal BAJO §D3 y techosDiag — ~90
+  // líneas espejo de pipelineRecorte). C3 + chip SIM también viven allí:
+  // el scoreBruto de arriba entra y sale el score FINAL con el desenlace.
+  const {
+    score,
+    gate,
+    rechazoFinal,
+    marcadoresOk,
+    techosDiag,
+  } = aplicarPoliticaGate(
+    {
+      score: scoreBruto,
+      scoreSimulado: opciones.simular ? (opciones.scoreSimulado ?? null) : null,
+      senal,
+      calidad,
+      senalActa,
+      texto,
+      clasificacion,
+      completa,
+      manual: false, // el escaneo jamás recorta a mano — veto completo (Q1)
+      hayVotos: marcadores.hayVotos,
+      votosSkipPag2,
+      fondo: verificacionResuelta?.fondo ?? false,
+      recortada,
+      intento: opciones.intento,
+      maxIntentos: opciones.maxIntentos,
+    },
+    {
+      evaluarGate: pasos.evaluarGate,
+      DETALLE_INCOMPLETA: pasos.DETALLE_INCOMPLETA,
+      DETALLE_SIN_VOTOS: pasos.DETALLE_SIN_VOTOS,
+      DETALLE_BAJO: pasos.DETALLE_BAJO,
+    },
+  );
 
-  // §D3 (SPEC-e14-score-ocr): desenlace «SCORE BAJO» determinista — sin
-  // señal de contenido, el rechazo se sustituye por BAJO SEA CUAL SEA el
-  // status (el status lo sigue decidiendo el gate/los intentos: al agotar,
-  // contingencia C4 con su rechazo BAJO real). Con señal, nada cambia
-  // (INCOMPLETA/ILEGIBLE/GENERICO como hoy). Mismo patrón que INCOMPLETA:
-  // FUERA de evaluarGate (§7 prohibido tocarlo).
-  const rechazoFinal: Acta["rechazo"] = senalActa
-    ? gate.rechazo
-    : { tipo: "BAJO", detalle: pasos.DETALLE_BAJO };
-
-  const evidenciaSim =
-    opciones.simular && opciones.scoreSimulado != null ? ` sim=${opciones.scoreSimulado}` : "";
-  // §D8.3: traza de auditoría del as-is (solo cuando sinRecorte).
-  const evidenciaAsis = sinRecorte ? " recorte=as-is" : "";
-  // §3c (GUARD-BORDE) — log de auditoría del guard: SOLO cuando hubo
-  // sospecha geométrica se añaden los campos nuevos (AC8: sin sospecha el
-  // log queda como hoy). `borde=` lados sospechosos ("S|E"), `tintaFilo=`
-  // condena, `franja=` densidades de tinta en % por lado sospechoso (mismo
-  // orden que borde) y `fondo=` escudo D10.
-  // KIT e14-esquinas-suaves-v1 (Q1): token `perdon=` añadido AL FINAL del
-  // segmento (tokens NUEVOS solo al final — la línea `senal=` queda byte a
-  // byte; perdón por PAR fiducial del lado — Q1).
-  const evidenciaBorde =
-    verificacionResuelta && verificacionResuelta.sospecha
-      ? ` borde=${verificacionResuelta.sospecha}` +
-        ` tintaFilo=${verificacionResuelta.tintaFilo}` +
-        ` franja=[${verificacionResuelta.densidades.map((d) => d.toFixed(1)).join(",")}]` +
-        ` fondo=${verificacionResuelta.fondo}` +
-        (verificacionResuelta.perdonLado ? ` perdon=${verificacionResuelta.perdonLado}` : "")
-      : "";
+  // Bandera del chip SIM para el sufijo del log (el token `sim=` es aditivo).
+  const evidenciaSimActiva = opciones.simular && opciones.scoreSimulado != null;
   // FASE S (§S.1.5): crop= bbox real usado por calidadDeActa (px) — WxH;
   // `full` si el fallback al frame completo se activó (diagnóstico en campo).
   const cropLog = infoCrop.fallback ? "full" : `${infoCrop.w}x${infoCrop.h}`;
-  // KIT e14-diagnostico-autoenvio-v1 (C1/§6-B): techos capturados con las
-  // MISMAS condiciones que ya aplicaron los caps — orden real de aplicación
-  // (techo-fair/poor/sin-senal de scoreDeCalidad → escudo-fondo → recortada
-  // → incompleta → sin-votos). Los de lectura-DEBIL/piso-FUERTE llegan con
-  // score-lectura (PR #13, §8 — campos aditivos).
-  const techosDiag: string[] = [];
-  if (calidad.level === "fair") techosDiag.push("techo-fair:7.9");
-  if (calidad.level === "poor") techosDiag.push("techo-poor:6.4");
-  if (!senalActa) techosDiag.push(`sin-senal:${pasos.TECHO_SIN_SENAL}`);
-  // KIT e14-diag-campos-aditivos-v1 (§8 score-lectura): ajustes de LECTURA
-  // del score v2 — NO son caps: observabilidad del ajuste (piso sube,
-  // techo baja). Condición espejo exacta del C3 (L1050-1055) — el C3
-  // aplica DESPUÉS de scoreDeCalidad y ANTES de los caps del sitio.
-  if (senal.nivel === "FUERTE" && calidad.level !== "poor")
-    techosDiag.push("piso-lectura-FUERTE:8.5");
-  if (senal.nivel === "DEBIL") techosDiag.push("lectura-DEBIL:5.9");
-  if (completa && verificacionResuelta?.fondo)
-    techosDiag.push(`escudo-fondo:${pasos.TECHO_ESCUDO_FONDO}`);
-  if (recortada) techosDiag.push(`recortada:${pasos.TECHO_ESCUDO_FONDO}`);
-  if (!completa) techosDiag.push("incompleta:6.4");
-  if (completa && !marcadoresOk) techosDiag.push("sin-votos:6.4");
+  // KIT e14-diagnostico-autoenvio-v1 (C1/§6-B): techosDiag nace dentro de
+  // `aplicarPoliticaGate` (7.2) con las MISMAS condiciones que aplicaron
+  // los caps — orden real de aplicación (techo-fair/poor/sin-senal →
+  // escudo-fondo → recortada → incompleta → sin-votos; los de lectura
+  // llegan del C3).
   // C1: el registro nace junto al log (todo en scope — §9.6). SIM nunca
   // (§9.2). Observación PASIVA: si falla, el desenlace NO se toca (§9.7).
   let diag: DiagnosticoActa | null = null;
@@ -884,36 +811,89 @@ export async function correrPipelineL2(
       intentos: brujula.intentos.length,
     };
   }
+  // 7.9 (C4) — el log-contrato D51 nace del ÚNICO constructor
+  // (./log-contrato.ts): tokens conocidos en ORDEN canónico (ORDEN_LOG_D51,
+  // huecos permitidos) y campos aditivos SIEMPRE al final. Formato
+  // byte-idéntico a la concatenación manual que reemplaza (golden:
+  // log-contrato.test.ts). Los condicionales se empujan solo cuando aplican.
+  const entradasD51: EntradaD51[] = [
+    ["decode", Math.round(ms.decode)],
+    ["detect", Math.round(ms.detect)],
+    ["proceso", Math.round(ms.proceso)],
+    ["calidad", Math.round(ms.calidad)],
+    ["ocr", Math.round(ms.ocr)],
+    ["motor", motor],
+    ["ocrValido", String(ocrTextIsValid(texto))],
+    ["cabeceraE14", String(PATRON_CABECERA.test(texto))],
+    ["completa", String(completa)],
+    ["senal", String(senalActa)],
+    ["vacia", String(procesadaVacia)],
+    ["votos", votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`],
+  ];
+  if (!marcadoresOk) entradasD51.push(["SIN_VOTOS", true]);
+  if (recortada) entradasD51.push(["recortada", 1]);
+  if (ladoEsquina) entradasD51.push(["lado", ladoEsquina]);
+  if (lazoPerdonado) entradasD51.push(["lazo", "perdonado"]);
+  entradasD51.push(["esquinas", trazaEsq]);
+  if (sinRecorte) entradasD51.push(["recorte", "as-is"]);
+  // KIT e14-esquinas-suaves-v1 (Q1): `perdon=` al FINAL del segmento del
+  // guard (perdón por PAR fiducial del lado).
+  if (verificacionResuelta?.sospecha) {
+    entradasD51.push(["borde", verificacionResuelta.sospecha]);
+    entradasD51.push(["tintaFilo", String(verificacionResuelta.tintaFilo)]);
+    entradasD51.push(
+      ["franja", `[${verificacionResuelta.densidades.map((d) => d.toFixed(1)).join(",")}]`],
+    );
+    entradasD51.push(["fondo", String(verificacionResuelta.fondo)]);
+    if (verificacionResuelta.perdonLado) {
+      entradasD51.push(["perdon", verificacionResuelta.perdonLado]);
+    }
+  }
+  entradasD51.push(["quad", `[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}]`]);
+  // KIT e14-luz-sim-puntos-v1 (T-D): piso-10 aplicado (grep-able).
+  entradasD51.push(["piso10", pisoPerfecto ? 1 : 0]);
+  if (quadOrigen) entradasD51.push(["origen", quadOrigen]);
+  entradasD51.push(["score", score]);
+  entradasD51.push(["filtro", filtroActa]);
+  entradasD51.push(["ocrIn", ocrIn]);
+  // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor de
+  // producción (el 2º `ocr=` del contrato — el constructor consume los
+  // duplicados en orden). conf/det/rec de la pasada ELEGIDA, antes de banda.
+  entradasD51.push(["ocr", "rapidocr"]);
+  entradasD51.push(["conf", confOcr != null ? confOcr.toFixed(2) : "?"]);
+  entradasD51.push(["det", `${Math.round(detOcr)}ms`]);
+  entradasD51.push(["rec", `${Math.round(recOcr)}ms`]);
+  // KIT e14-score-lectura-v1 (REBASE): señal de lectura v2 en la traza.
+  entradasD51.push(["lectura", senal.nivel]);
+  entradasD51.push(["anclas", senal.anclas]);
+  entradasD51.push(["piso", String(score >= PISO_LECTURA_FUERTE && senal.nivel === "FUERTE")]);
+  entradasD51.push(["clasif", `{${pasos.fmtClasif(gate.clasificacion)}}`]);
+  entradasD51.push(["crop", cropLog]);
+  entradasD51.push([
+    "metricas",
+    `{sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
+      `contrast:${calidad.contrast} contEff:${pasos.contrasteEfectivoDe(calidad, ocrLegible)} ` +
+      `level:${calidad.level}}`,
+  ]);
+  const cuerpoD51 = construirLogD51(entradasD51, ORDEN_LOG_D51);
+  // Sufijo EXTERNO al paréntesis: TODOS aditivos (D51) — orden de inserción.
+  const sufijosD51: EntradaD51[] = [];
+  if (evidenciaSimActiva) sufijosD51.push(["sim", String(opciones.scoreSimulado)]);
+  if (diag) sufijosD51.push(["diag", 1]);
+  // KIT e14-masiva-ux-v1 (T1.3): quién fabricó el quad EN la detección + si
+  // corrió el reintento post-Sobel (campos AÑADIDOS al final — formato
+  // previo intacto).
+  if (quadOrigen) sufijosD51.push(["detectOrigen", quadOrigen]);
+  if (detectReintento) sufijosD51.push(["detectReintento", 1]);
+  // KIT e63f-autoenvio-v1 (F0): balde fino del no-AUTO — token ADITIVO AL
+  // FINAL. Ausente si AUTO o sin motivo de los listados.
+  if (gate.clasificacion?.clasifDebil) {
+    sufijosD51.push(["ClasifDebil", gate.clasificacion.clasifDebil]);
+  }
+  const sufijoD51 = construirLogD51(sufijosD51, []);
   logger.info(
     `[e14] pipeline ${opciones.fuente}/${"archivo" in entrada ? "file" : "video-grab"} ` +
-      `total=${Math.round(ms.total)}ms ` +
-      `(decode=${Math.round(ms.decode)} detect=${Math.round(ms.detect)} ` +
-      `proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
-      `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
-      `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-      `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaAsis}${evidenciaBorde} ` +
-      // KIT e14-luz-sim-puntos-v1 (T-D): piso-10 aplicado (grep-able).
-      `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] piso10=${pisoPerfecto ? 1 : 0}${quadOrigen ? ` origen=${quadOrigen}` : ""} ` +
-      `score=${score} filtro=${filtroActa} ocrIn=${ocrIn} ` +
-      // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor
-      // de producción, junto al ocrIn= del PROD-1 (conf/det/rec del OCR
-      // principal — capturados antes de la banda).
-      `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +
-      // KIT e14-score-lectura-v1 (REBASE): señal de lectura v2 en la traza.
-      `lectura=${senal.nivel} anclas=${senal.anclas} piso=${score >= 8.5 && senal.nivel === "FUERTE"} ` +
-      `clasif={${pasos.fmtClasif(gate.clasificacion)}} ` +
-      `crop=${cropLog} ` +
-      `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
-      `contrast:${calidad.contrast} contEff:${pasos.contrasteEfectivoDe(calidad, ocrLegible)} ` +
-      `level:${calidad.level}})${evidenciaSim}${diag ? " diag=1" : ""}` +
-      // KIT e14-masiva-ux-v1 (T1.3): quién fabricó el quad EN la detección
-      // del pipeline + si corrió el reintento post-Sobel (campos AÑADIDOS
-      // al final — formato previo intacto).
-      `${quadOrigen ? ` detectOrigen=${quadOrigen}` : ""}${detectReintento ? " detectReintento=1" : ""}` +
-      // KIT e63f-autoenvio-v1 (F0): balde fino del no-AUTO — token ADITIVO
-      // AL FINAL (contrato D51). Ausente si AUTO o sin motivo de los
-      // listados (puesto-lugar/tipo/mesa-registro/ruta).
-      `${gate.clasificacion?.clasifDebil ? ` ClasifDebil=${gate.clasificacion.clasifDebil}` : ""}`,
+      `total=${Math.round(ms.total)}ms (${cuerpoD51})${sufijoD51 ? " " + sufijoD51 : ""}`,
   );
 
   // KIT e14-diagnostico-autoenvio-v1 (C1): adjuntar el registro con el id

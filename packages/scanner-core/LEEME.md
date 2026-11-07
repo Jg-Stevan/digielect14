@@ -11,6 +11,18 @@
 > original — 6 módulos md5-idénticos en ambos repos, verificados). Ver
 > `CHANGELOG.md` y `src/core/LICENSE-scanner-core.md`.
 
+## Estado de la API pública (bloque 6.2 — F7)
+
+**API INTERNA CON PUBLICACIÓN PÚBLICA.** El paquete se publica en npm
+(`@jg-stevan/scanner-core`, 183 descargas/semana medidas en la auditoría) para
+consumo del workspace (`workspace:*`), pero **la API NO está soportada para
+terceros**: no hay semver garantizado entre minor, los sub-exports
+(`core/*`, `dominio/*`, `orquestacion/*`) pueden moverse con el mapa de
+migración v2.3. Si un consumidor externo depende de esto, es bajo su riesgo y
+sin canal de soporte. La versión publicada (0.4.1) quedó DESFASADA frente al
+workspace (0.5.0): publicar 0.5.0 es acción del dueño (`bun publish` — ver
+`docs/DEUDA.md`); este desfase está anotado como F7 en el plan de remediación.
+
 ## La regla que gobierna todo
 
 *Si el motor diverge, dos puestos leen un acta distinto.* Todo lo que

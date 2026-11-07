@@ -1,0 +1,32 @@
+# Ola 6 §6.1 (S7+F8) — Dependabot para el monorepo.
+#
+# `bun audit` reporta 12 advisories TODAS en tooling de build (wrangler/knip/
+# @dotenvx/…) y ninguna en runtime — este archivo hace que las siguientes
+# lleguen como PR, no como sorpresa.
+#
+# NOTA (del propio plan): el ecosistema "bun" en Dependabot es REIENTE — si
+# tu instancia de GitHub aún no lo soporta, el primer run del job fallará con
+# "Unsupported package manager": cambiar `package-ecosystem: "bun"` a "npm"
+# (bun.lock también es leído por el ecosistema npm en versiones recientes) y
+# re-habilitar. El error queda visible en el primer run — no en silencio.
+version: 2
+updates:
+  # App (raíz del workspace) — semanal; las dev-dependencies de tooling van
+  # agrupadas para que un bump de cadena (wrangler+miniflare+knip) sea UN PR.
+  - package-ecosystem: "bun" # si no está soportado: cambiar a "npm" (nota arriba)
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      tooling:
+        dependency-type: "development"
+  # Paquete del motor (@jg-stevan/scanner-core).
+  - package-ecosystem: "bun" # idem nota de arriba
+    directory: "/packages/scanner-core"
+    schedule:
+      interval: "weekly"
+  # Las propias actions (checkout, setup-bun, wrangler-action…) — mensual.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

@@ -29,11 +29,14 @@
           return;
         }
         const req = indexedDB.open(DB_NOMBRE, DB_VERSION);
-        req.onupgradeneeded = () => {
+        req.onupgradeneeded = (e) => {
           try {
             const db = req.result;
-            if (!db.objectStoreNames.contains(STORE_MARCAS)) {
-              db.createObjectStore(STORE_MARCAS, { keyPath: "id" });
+            const vieja = e?.oldVersion ?? 0;
+            if (vieja < 1) {
+              if (!db.objectStoreNames.contains(STORE_MARCAS)) {
+                db.createObjectStore(STORE_MARCAS, { keyPath: "id" });
+              }
             }
           } catch {}
         };

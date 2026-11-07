@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import { leerFlags } from "@/lib/e14/flags";
-import type { EtapaAnalisis, ProgresoAnalisis } from "@jg-stevan/scanner-core/dominio/types";
+import type { EtapaAnalisis, ProgresoAnalisis } from "@/lib/e14/fachada";
 import { DocScannerIcon, ShieldCheckIcon } from "../icons";
 
 const ETAPAS = [
@@ -65,8 +65,26 @@ export function AnalyzingView() {
   const progresoAnalisis = useE14Store((s) => s.progresoAnalisis);
   const analisisResuelto = useE14Store((s) => s.analisisResuelto);
   const analisisCompletado = useE14Store((s) => s.analisisCompletado);
+  // Ola 3.2 (U4 — plan 3.2): salida del ANALIZANDO estancado (hasta 120 s de
+  // watchdog encerrados sin botón). El store limpia y vuelve a ESCANEAR.
+  const cancelarAnalisis = useE14Store((s) => s.cancelarAnalisis);
   const [progreso, setProgreso] = useState(0);
   const [latencia, setLatencia] = useState(0);
+  // Ola 4.2.5: anuncio throttled del % para lectores de pantalla — el span
+  // aria-live cambia cada ~10 % (no en cada frame, que sería ininterrumpible).
+  const [anuncioPct, setAnuncioPct] = useState(0);
+  // Ola 3.2: 15 s sin EVENTOS de progreso del pipeline → estancado. Los
+  // eventos (no el tween local) son la señal: el tween converge ~1 s después
+  // del último evento, así que eventos congelados ≡ % congelado en pantalla.
+  const [estancado, setEstancado] = useState(false);
+
+  useEffect(() => {
+    // Resuelto (o cambio de progreso) → apaga el botón y re-arma la ventana.
+    setEstancado(false);
+    if (analisisResuelto) return;
+    const t = window.setTimeout(() => setEstancado(true), 15_000);
+    return () => window.clearTimeout(t);
+  }, [progresoAnalisis, analisisResuelto]);
 
   // Últimos datos del store, leídos por el loop de rAF (no se re-crea).
   const datosRef = useRef({ ponderado: 0, resuelto: false });
@@ -84,6 +102,7 @@ export function AnalyzingView() {
     let anterior = performance.now();
     let mostrado = 0; // fracción 0..1 mostrada (suavizada)
     let ultimoPct = 0;
+    let ultimoBoteAnuncio = 0; // Ola 4.2.5: último múltiplo de 10 anunciado
     let cerrado = false; // ya se disparó analisisCompletado
     let cierre: ReturnType<typeof setTimeout> | undefined;
 
@@ -100,6 +119,7 @@ export function AnalyzingView() {
       if (puedeCerrar && !cerrado && cierreInstantaneo) {
         cerrado = true;
         setProgreso(100);
+        setAnuncioPct(100);
         analisisCompletado();
         return;
       }
@@ -114,6 +134,7 @@ export function AnalyzingView() {
         if (!cerrado) {
           cerrado = true;
           setProgreso(100);
+          setAnuncioPct(100);
           cierre = setTimeout(() => analisisCompletado(), Math.min(350, pisoEscenicoMs));
         }
         raf = requestAnimationFrame(tick);
@@ -124,6 +145,13 @@ export function AnalyzingView() {
       if (pct !== ultimoPct) {
         ultimoPct = pct;
         setProgreso(pct);
+        // Ola 4.2.5: anuncio SOLO cuando cruza un múltiplo de 10 (throttle
+        // — el aria-live no puede hablar en cada frame).
+        const bote = Math.floor(pct / 10) * 10;
+        if (bote > ultimoBoteAnuncio) {
+          ultimoBoteAnuncio = bote;
+          setAnuncioPct(bote);
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -209,9 +237,24 @@ export function AnalyzingView() {
                 <div className="relative z-10 flex items-center justify-center mb-1">
                   <DocScannerIcon className="w-9 h-9 text-[#10b981] drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                 </div>
-                <span className="relative z-10 font-mono text-xs font-bold text-white tabular-nums">
-                  {Math.round(progreso)}%
-                </span>
+                {/* Ola 4.2.5 (U5 — plan 4.2.5): el % es progressbar con
+                    aria-valuenow real y un span role="status" aria-live="polite"
+                    que anuncia cada ~10 % (throttle en el loop rAF, sr-only). */}
+                <div
+                  role="progressbar"
+                  aria-label="Progreso del análisis del acta"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(progreso)}
+                  className="relative z-10 flex flex-col items-center"
+                >
+                  <span className="font-mono text-xs font-bold text-white tabular-nums">
+                    {Math.round(progreso)}%
+                  </span>
+                  <span role="status" aria-live="polite" className="sr-only">
+                    {`Progreso del análisis: ${anuncioPct} por ciento`}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -240,6 +283,24 @@ export function AnalyzingView() {
                 }`}
               />
             ))}
+          </div>
+
+          {/* Ola 3.2 (U4): salida del estancamiento — «Cancelar análisis» SOLO
+              aparece tras 15 s sin progreso. Live region para que el lector
+              anuncie la aparición; fila reservada (min-h) para NO tapar el
+              porcentaje ni mover el sello de abajo. */}
+          <div aria-live="polite" className="min-h-[64px] flex items-start justify-center pt-3">
+            {estancado && !analisisResuelto ? (
+              <button
+                type="button"
+                onClick={cancelarAnalisis}
+                className="min-h-11 rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 font-mono text-[11px] font-bold uppercase tracking-widest text-amber-300 hover:bg-amber-500/20 active:scale-95 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+              >
+                Cancelar análisis
+              </button>
+            ) : (
+              <span className="sr-only">Análisis en curso</span>
+            )}
           </div>
         </div>
 

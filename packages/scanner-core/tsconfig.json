@@ -12,7 +12,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "types": ["bun-types"]
+    "types": ["bun-types"],
+    "noImplicitAny": true
   },
   "include": ["src/**/*.ts", "workers/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]
 }
