@@ -27,7 +27,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, test, expect } from "vitest";
+import { describe, test, expect } from "bun:test";
 import {
   whitePointStretchPct,
   textClaroContrast,
@@ -43,12 +43,12 @@ import {
 } from "../image-modes";
 
 // ─── Extracción del código espejado del worker ──────────────────────────────
-// Vendored: las rutas apuntan a ESTE repo (en el upstream apuntaban al lab del
-// monorepo). El worker espejado es el que de verdad se sirve, commiteado en
-// public/scanner/, y el core es el de src/lib/e14/core/.
+// Paquete (mapa v2.3 · D6): el detection-worker es un ASSET VERSIONADO del
+// paquete (assets/scanner/ — IIFE precompilada del origen vendorizado, sin
+// fuente compilable). El core espejado es el de src/core/ del paquete.
 const AQUI = dirname(fileURLToPath(import.meta.url));
-const RAIZ = resolve(AQUI, "..", "..", "..", "..", "..");
-const WORKER_PATH = join(RAIZ, "public", "scanner", "detection-worker.js");
+const RAIZ = resolve(AQUI, "..", "..", "..");
+const WORKER_PATH = join(RAIZ, "assets", "scanner", "detection-worker.js");
 const CORE_IMAGEMODES_PATH = join(AQUI, "..", "image-modes.ts");
 
 /** Lexer mínimo: avanza saltando strings ('' "" ``), comentarios (// /**) y

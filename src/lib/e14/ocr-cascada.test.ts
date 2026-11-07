@@ -428,7 +428,7 @@ describe("e14-velocidad-5s-v1 · rechazo temprano (source-scan)", () => {
   it("el rescate de bordes del motor también se corta (sin rescate = 26/42 líneas leídas)", () => {
     expect(bridge).toContain("sinRescateBordes: cfg.corteIncompleta === true");
     expect(bridge).toContain("sinRescateBordes: escalonado.corteIncompleta === true");
-    const motor = lee("src/lib/e14/ocr/rapidocr.ts");
+    const motor = lee("packages/scanner-core/src/ocr/rapidocr.ts");
     expect(motor).toContain("sinRescateBordes?: boolean");
     expect(motor).toContain("&& !opts?.sinRescateBordes) {");
   });

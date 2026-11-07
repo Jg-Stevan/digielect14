@@ -22,7 +22,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("./image-utils", () => ({
+vi.mock("@jg-stevan/scanner-core/dominio/image-utils", () => ({
   // El motor de tinta NO puede decodificar en node → rama §7 determinista.
   loadImageMemo: vi.fn(() => Promise.reject(new Error("SIN_DOM_EN_UNIT_TEST"))),
 }));

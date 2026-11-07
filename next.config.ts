@@ -26,8 +26,9 @@ const basePath = isStatic
 const nextConfig: NextConfig = {
   // Repo plano: la raíz del workspace ES la raíz del repo.
   turbopack: { root: path.resolve(__dirname) },
-  // El motor vive en el repo (src/lib/e14/core/, TypeScript) — no hay
-  // transpilePackages ni dist de npm que bundlear.
+  // El motor vive en el PAQUETE (@jg-stevan/scanner-core, TypeScript fuente
+  // vía bun workspaces) — se transpila junto a la app.
+  transpilePackages: ["@jg-stevan/scanner-core"],
   // NOTA (eliminación del módulo masiva): la API route del ledger remoto
   // (src/app/api/e14/envios) se retiró con la cola MASIVA.
   ...(isStatic

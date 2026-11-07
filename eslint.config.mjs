@@ -58,7 +58,7 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   // public/vendor + public/scanner son los assets copiados del core
   // (opencv/detection-worker); .open-next/.wrangler son bundles del deploy y
   // sin este ignore el lint los parsea y muere por RAM (SIGABRT).
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", ".open-next/**", ".wrangler/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "src/lib/e14/qr/vendor/jsQR.js"]
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", ".open-next/**", ".wrangler/**", "next-env.d.ts", "docs/**", "public/vendor/**", "public/scanner/**", "src/lib/e14/qr/vendor/jsQR.js", "packages/scanner-core/src/qr/vendor/**", "packages/scanner-core/assets/**"]
 }];
 
 export default eslintConfig;

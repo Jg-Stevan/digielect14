@@ -452,13 +452,13 @@ describe("buffer · IDB (fake mínimo — roundtrip, tope, TTL, digest)", () => 
 describe("logger · transporte obs (C3)", () => {
   it("logger.error transporta ErrorEvento completo (lazy, no bloquea)", async () => {
     const capturados: Array<{ tipo: string; datos: Record<string, unknown> }> = [];
-    vi.doMock("./buffer", async (importOriginal) => ({
+    vi.doMock("@jg-stevan/scanner-core/obs-base/buffer", async (importOriginal) => ({
       ...(await importOriginal<Record<string, unknown>>()),
       appendEvento: async (e: { tipo: string; datos: Record<string, unknown> }) => {
         capturados.push(e);
       },
     }));
-    vi.doMock("./breadcrumbs", async (importOriginal) => ({
+    vi.doMock("@jg-stevan/scanner-core/obs-base/breadcrumbs", async (importOriginal) => ({
       ...(await importOriginal<Record<string, unknown>>()),
       obtenerBreadcrumbs: () => [{ t: 7, tipo: "click" as const, detalle: "btn-sim" }],
     }));
@@ -475,15 +475,15 @@ describe("logger · transporte obs (C3)", () => {
       expect(ev.datos.digest).toMatch(/^[0-9a-f]{8}$/);
       expect(ev.datos.breadcrumbs).toEqual([{ t: 7, tipo: "click", detalle: "btn-sim" }]);
     } finally {
-      vi.doUnmock("./buffer");
-      vi.doUnmock("./breadcrumbs");
+      vi.doUnmock("@jg-stevan/scanner-core/obs-base/buffer");
+      vi.doUnmock("@jg-stevan/scanner-core/obs-base/breadcrumbs");
       vi.resetModules();
     }
   });
 
   it("logger.warn transporta con tipo LoggerWarn", async () => {
     const capturados: Array<{ tipo: string; datos: { tipo: string } }> = [];
-    vi.doMock("./buffer", async (importOriginal) => ({
+    vi.doMock("@jg-stevan/scanner-core/obs-base/buffer", async (importOriginal) => ({
       ...(await importOriginal<Record<string, unknown>>()),
       appendEvento: async (e: { tipo: string; datos: { tipo: string } }) => {
         capturados.push(e);
@@ -496,14 +496,14 @@ describe("logger · transporte obs (C3)", () => {
       expect(capturados[0].tipo).toBe("warn");
       expect(capturados[0].datos.tipo).toBe("LoggerWarn");
     } finally {
-      vi.doUnmock("./buffer");
+      vi.doUnmock("@jg-stevan/scanner-core/obs-base/buffer");
       vi.resetModules();
     }
   });
 
   it("trunca mensaje a 500 y stack a 2000 (contrato ErrorEvento)", async () => {
     const capturados: Array<{ datos: { mensaje: string; stack: string } }> = [];
-    vi.doMock("./buffer", async (importOriginal) => ({
+    vi.doMock("@jg-stevan/scanner-core/obs-base/buffer", async (importOriginal) => ({
       ...(await importOriginal<Record<string, unknown>>()),
       appendEvento: async (e: { datos: { mensaje: string; stack: string } }) => {
         capturados.push(e);
@@ -516,13 +516,13 @@ describe("logger · transporte obs (C3)", () => {
       expect(capturados[0].datos.mensaje).toHaveLength(500);
       expect(String(capturados[0].datos.stack).length).toBeLessThanOrEqual(2000);
     } finally {
-      vi.doUnmock("./buffer");
+      vi.doUnmock("@jg-stevan/scanner-core/obs-base/buffer");
       vi.resetModules();
     }
   });
 
   it("si el import del buffer falla (SSR/edge), el logger NO lanza y sigue", async () => {
-    vi.doMock("./buffer", () => {
+    vi.doMock("@jg-stevan/scanner-core/obs-base/buffer", () => {
       throw new Error("SSR sin obs");
     });
     try {
@@ -532,7 +532,7 @@ describe("logger · transporte obs (C3)", () => {
       // y la consola nativa sigue llamándose (la política del logger intacta)
       await new Promise((r) => setTimeout(r, 10)); // deja morir el Promise.all en .catch
     } finally {
-      vi.doUnmock("./buffer");
+      vi.doUnmock("@jg-stevan/scanner-core/obs-base/buffer");
       vi.resetModules();
     }
   });
@@ -600,7 +600,7 @@ describe("uso · contadores (C4)", () => {
     vi.doMock("../store", () => ({
       useE14Store: { subscribe: () => () => {} },
     }));
-    vi.doMock("./buffer", async (importOriginal) => ({
+    vi.doMock("@jg-stevan/scanner-core/obs-base/buffer", async (importOriginal) => ({
       ...(await importOriginal<Record<string, unknown>>()),
       appendEvento: async (e: { tipo: string; datos: unknown }) => {
         capturados.push(e);
@@ -611,7 +611,7 @@ describe("uso · contadores (C4)", () => {
 
   function limpiarMocks(): void {
     vi.doUnmock("../store");
-    vi.doUnmock("./buffer");
+    vi.doUnmock("@jg-stevan/scanner-core/obs-base/buffer");
     vi.resetModules();
   }
 
@@ -755,7 +755,7 @@ describe("politica · defaults / corrupto / overrides (C5-C6)", () => {
 
   it("sin clave → defaults D4 (metadatos ON, textoOcr OFF, miniaturas OFF, salud ON)", async () => {
     const capturados: unknown[] = [];
-    vi.doMock("./buffer", async (importOriginal) => ({
+    vi.doMock("@jg-stevan/scanner-core/obs-base/buffer", async (importOriginal) => ({
       ...(await importOriginal<Record<string, unknown>>()),
       appendEvento: async (e: unknown) => void capturados.push(e),
     }));
@@ -771,7 +771,7 @@ describe("politica · defaults / corrupto / overrides (C5-C6)", () => {
       expect(store.size).toBe(0);
       expect(capturados).toHaveLength(0); // ausente NO avisa (estado de fábrica)
     } finally {
-      vi.doUnmock("./buffer");
+      vi.doUnmock("@jg-stevan/scanner-core/obs-base/buffer");
       vi.unstubAllGlobals();
       vi.resetModules();
     }
@@ -779,7 +779,7 @@ describe("politica · defaults / corrupto / overrides (C5-C6)", () => {
 
   it("JSON corrupto → defaults + evento warn PoliticaCorrupta", async () => {
     const capturados: Array<{ tipo: string; datos: { tipo: string } }> = [];
-    vi.doMock("./buffer", async (importOriginal) => ({
+    vi.doMock("@jg-stevan/scanner-core/obs-base/buffer", async (importOriginal) => ({
       ...(await importOriginal<Record<string, unknown>>()),
       appendEvento: async (e: { tipo: string; datos: { tipo: string } }) => {
         capturados.push(e);
@@ -799,7 +799,7 @@ describe("politica · defaults / corrupto / overrides (C5-C6)", () => {
       expect(capturados[0].tipo).toBe("warn");
       expect(capturados[0].datos.tipo).toBe("PoliticaCorrupta");
     } finally {
-      vi.doUnmock("./buffer");
+      vi.doUnmock("@jg-stevan/scanner-core/obs-base/buffer");
       vi.unstubAllGlobals();
       vi.resetModules();
     }
@@ -982,7 +982,7 @@ describe("export · construirReporte (C6)", () => {
         subscribe: () => () => {},
       },
     }));
-    vi.doMock("./buffer", async () => ({
+    vi.doMock("@jg-stevan/scanner-core/obs-base/buffer", async () => ({
       eventosPorDigest: async () => [{ digest: "dd000001", severidad: "error", veces: 1, breadcrumbsRecientes: [] }],
       leerEventos: async (f?: (e: EventoObs) => boolean) => {
         const eventos: EventoObs[] = [
@@ -1035,7 +1035,7 @@ describe("export · construirReporte (C6)", () => {
       expect(reporte.saludMuestras).toHaveLength(2);
       expect(reporte.uso).toEqual([{ dia: "2026-10-23", vista: "resumen", accion: "abrir-vista", n: 5 }]);
     } finally {
-      vi.doUnmock("./buffer");
+      vi.doUnmock("@jg-stevan/scanner-core/obs-base/buffer");
       vi.doUnmock("./dispositivo");
       vi.doUnmock("../store");
       vi.unstubAllGlobals();

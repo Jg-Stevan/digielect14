@@ -10,7 +10,7 @@
  * la duda devuelva null — porque un falso positivo rechazaría el acta de un
  * puesto que funciona.
  */
-import { describe, test, expect } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { dimensionesHeic, HEIC_TOPE_MP_DEFECTO } from "../image-processor";
 
 const u32 = (n: number): number[] => [(n >>> 24) & 255, (n >> 16) & 255, (n >> 8) & 255, n & 255];

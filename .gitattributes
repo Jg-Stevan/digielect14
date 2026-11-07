@@ -14,6 +14,9 @@
 # se prohíbe cualquier conversión, ni siquiera la auto-detección.
 public/scanner/*.js -text
 public/scanner/*.worker.js -text
+# Paquete del motor (mapa v2.3): vendor y assets viajan byte a byte.
+packages/scanner-core/src/qr/vendor/*.js -text
+packages/scanner-core/assets/** -text
 
 # Binarios: nunca intentar EOL-detect (opencv/wasm/modelos/imágenes/fuentes).
 *.wasm binary

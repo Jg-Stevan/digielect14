@@ -62,7 +62,7 @@ const fuentesDet: string[] = [];
 const dimsCanvas: number[][] = [];
 const lineasInfo: string[] = [];
 
-vi.mock("./image-utils", () => ({
+vi.mock("@jg-stevan/scanner-core/dominio/image-utils", () => ({
   // El decode del repo: la «foto» mide 3000×4000 (acta vertical de campo).
   loadImageMemo: vi.fn(async (url: string) => {
     if (url !== FOTO && url !== MINI_URL) throw new Error("URL_DESCONOCIDA");
@@ -78,7 +78,7 @@ vi.mock("./image-utils", () => ({
   }),
 }));
 
-vi.mock("./ocr/rapidocr", () => ({
+vi.mock("@jg-stevan/scanner-core/ocr/rapidocr", () => ({
   rapidOcrInit: vi.fn(async () => ({ rt: "singleton-falso" })),
   rapidOcrCropsOrientacion: vi.fn(
     async (
@@ -104,7 +104,7 @@ vi.mock("./ocr/rapidocr", () => ({
   }),
 }));
 
-vi.mock("../logger", () => ({
+vi.mock("@jg-stevan/scanner-core/dominio/logger", () => ({
   logger: {
     info: vi.fn((msg: string) => {
       lineasInfo.push(msg);
