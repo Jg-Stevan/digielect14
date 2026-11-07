@@ -35,7 +35,7 @@ function ok(cond, msg) {
 }
 
 const ART = "./public/scanner/capa0-qr.worker.js";
-const SRC = "./src/lib/e14/qr/capa0-qr.worker.ts";
+const SRC = "./packages/scanner-core/workers/capa0-qr.worker.ts";
 
 // ── 1 · FRESCURA (regenerar a /tmp y comparar byte a byte) ──────────────────
 const TMP_DIR = await mkdtemp(join(tmpdir(), "capa0-qr-smoke-"));

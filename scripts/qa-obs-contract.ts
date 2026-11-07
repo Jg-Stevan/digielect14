@@ -40,10 +40,20 @@ function ok(cond: boolean, etiqueta: string): void {
 // sincronizado con los ok() de abajo.
 const TOTAL_ANCLAS = 38;
 
-/** Lee un archivo del repo relativo a la raíz; null si aún no existe. */
+/** Lee un archivo del repo relativo a la raíz; null si aún no existe.
+ *  FASE 1 (mapa v2.3): si el archivo es un shim que reexporta del paquete,
+ *  devuelve shim + implementación — el contrato se custodia en la
+ *  implementación, no en la línea `export * from`. */
 async function leerFuente(rel: string): Promise<string | null> {
   try {
-    return await readFile(new URL(`../${rel}`, import.meta.url), "utf8");
+    const texto = await readFile(new URL(`../${rel}`, import.meta.url), "utf8");
+    const shim = texto.match(/export \* from "@jg-stevan\/scanner-core\/([^"]+)"/);
+    if (!shim) return texto;
+    const paquete = await readFile(
+      new URL(`../packages/scanner-core/src/${shim[1]}.ts`, import.meta.url),
+      "utf8",
+    ).catch(() => null);
+    return paquete === null ? texto : `${texto}\n${paquete}`;
   } catch {
     return null;
   }
@@ -129,7 +139,7 @@ for (const tipo of TIPOS) {
 
 // ---------- Bloque 2 · claves de persistencia §4.1 (literales EXACTOS) ----------
 
-console.log("— Bloque 2 · claves de persistencia §4.1 (en src/lib/**) —");
+console.log("— Bloque 2 · claves de persistencia §4.1 (en src/lib/** ∪ paquete) —");
 
 const CLAVES = [
   "e14-obs", // DB IndexedDB del buffer (agente 1)
@@ -143,7 +153,7 @@ const CLAVES = [
 for (const clave of CLAVES) {
   ok(
     srcLib.includes(`"${clave}"`),
-    `clave "${clave}" existe con literal EXACTO en src/lib/** (§4.1)`,
+    `clave "${clave}" existe con literal EXACTO en src/lib/** o paquete (§4.1)`,
   );
 }
 
