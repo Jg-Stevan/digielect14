@@ -15,9 +15,9 @@
  */
 
 import { jsPDF } from "jspdf";
-import { loadImage } from "./image-processor";
-import { blobToDataUrl } from "./codec";
-import { PNG_FILTERS, type ScanDocument } from "./types";
+import { loadImage } from "@jg-stevan/scanner-core/core/image-processor";
+import { blobToDataUrl } from "@jg-stevan/scanner-core/core/codec";
+import { PNG_FILTERS, type ScanDocument } from "@jg-stevan/scanner-core/core/types";
 
 const MB = 1024 * 1024;
 

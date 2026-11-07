@@ -39,9 +39,9 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { detectDocumentEdges, loadImage } from "@/lib/e14/core/image-processor";
-import { defaultQuad } from "@/lib/e14/core/types";
-import type { Point, Quad } from "@/lib/e14/core/types";
+import { detectDocumentEdges, loadImage } from "@jg-stevan/scanner-core/core/image-processor";
+import { defaultQuad } from "@jg-stevan/scanner-core/core/types";
+import type { Point, Quad } from "@jg-stevan/scanner-core/core/types";
 import { RotateIcon, SparklesIcon } from "./icons";
 
 /** Tween de aterrizaje del quad (lab TWEEN_MS — 280 ms). */

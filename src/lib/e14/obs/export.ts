@@ -20,7 +20,7 @@
  * miniaturas OFF (default) → el ZIP no lleva muestras. Sin excepciones.
  */
 import { agregarLecturas, type ResumenLectura } from "@jg-stevan/scanner-core/obs-base/eventos-lectura";
-import { eventosPorDigest, leerEventos, purgarBuffer } from "./buffer";
+import { eventosPorDigest, leerEventos, purgarBuffer } from "@jg-stevan/scanner-core/obs-base/buffer";
 import { hangsPorOp, resumenHangsDe } from "./hang"; // ANEXO Agente C (Pieza 2) · KIT e14-obs-hang-atribucion-v1 (§B)
 import { obtenerDispositivo } from "./dispositivo";
 // KIT e14-obs-hang-atribucion-v1 (§F) — leerModoDev: meta auto-descriptivo
@@ -35,7 +35,7 @@ import { appVersion, idDispositivo, idSesion } from "./identidad";
 // queda legible desde el artefacto.
 import { leerFlags } from "../flags";
 import { useE14Store } from "../store";
-import type { DiagnosticoActa } from "../types";
+import type { DiagnosticoActa } from "@jg-stevan/scanner-core/dominio/types";
 import type {
   EnvioDetalle,
   EventoObs,

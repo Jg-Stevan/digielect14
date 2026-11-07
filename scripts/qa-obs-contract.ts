@@ -83,10 +83,11 @@ async function listarTs(dirRel: string): Promise<string[]> {
 // ---------- Objetivos del contrato ----------
 
 const srcTipos = await leerFuente("src/lib/e14/obs/tipos.ts");
-const srcBuffer = await leerFuente("src/lib/e14/obs/buffer.ts");
-const srcBreadcrumbs = await leerFuente("src/lib/e14/obs/breadcrumbs.ts");
+// FASE D (migración v2.3 cerrada): implementación en el paquete.
+const srcBuffer = await leerFuente("packages/scanner-core/src/obs-base/buffer.ts");
+const srcBreadcrumbs = await leerFuente("packages/scanner-core/src/obs-base/breadcrumbs.ts");
 const srcUso = await leerFuente("src/lib/e14/obs/uso.ts");
-const srcDigest = await leerFuente("src/lib/e14/obs/digest.ts");
+const srcDigest = await leerFuente("packages/scanner-core/src/obs-base/digest.ts");
 const srcDispositivo = await leerFuente("src/lib/e14/obs/dispositivo.ts");
 const srcPolitica = await leerFuente("src/lib/e14/obs/politica.ts");
 const srcExport = await leerFuente("src/lib/e14/obs/export.ts");
@@ -95,7 +96,9 @@ const srcCaptura = await leerFuente("src/lib/e14/obs/captura.ts");
 const srcTransporte = await leerFuente("src/lib/e14/obs/transporte.ts");
 const srcFlags = await leerFuente("src/lib/e14/flags.ts");
 
-const archivosLib = await listarTs("src/lib/");
+// FASE D (migración v2.3 cerrada): la mitad del contrato ya vive en el
+// paquete (obs-base) — las claves se buscan en src/lib/** ∪ paquete.
+const archivosLib = [...(await listarTs("src/lib/")), ...(await listarTs("packages/scanner-core/src/obs-base/"))];
 const srcLib = (await Promise.all(archivosLib.map((r) => leerFuente(r))))
   .map((s) => s ?? "")
   .join("\n");

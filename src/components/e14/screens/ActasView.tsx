@@ -16,9 +16,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useE14Store, type ActaArchivada, type PuestoActual } from "@/lib/e14/store";
 // KIT actas-vivas-paginas-v1 (FASE A): mesasIniciales ya NO se importa — el
 // guion del SIM vive en el store (mesas) y avanzan con el tick de 5 s.
-import { PUESTO_SIMULADO } from "@/lib/e14/seed";
-import { cargarDivipol, mesasDePuesto } from "@/lib/e14/divipol";
-import type { Mesa, MesaPagina } from "@/lib/e14/types";
+import { PUESTO_SIMULADO } from "@jg-stevan/scanner-core/dominio/seed";
+import { cargarDivipol, mesasDePuesto } from "@jg-stevan/scanner-core/dominio/divipol";
+import type { Mesa, MesaPagina } from "@jg-stevan/scanner-core/dominio/types";
 import { ChevronDownIcon, MapPinIcon, SensorsIcon } from "../icons";
 
 function chipPagina(p: MesaPagina): { label: string; clases: string } {

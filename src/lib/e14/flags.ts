@@ -18,7 +18,7 @@ import {
   HEIC_LIMITE_MS_DEFECTO,
   HEIC_TOPE_MP_DEFECTO,
   type OpcionesRescateHeic,
-} from "./core/image-processor";
+} from "@jg-stevan/scanner-core/core/image-processor";
 
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const REFRESH_MS = 24 * 60 * 60 * 1000;

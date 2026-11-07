@@ -22,7 +22,7 @@
  */
 import { useState, type ChangeEvent, type RefObject } from "react";
 import { useE14Store } from "@/lib/e14/store";
-import type { FuenteCaptura } from "@/lib/e14/types";
+import type { FuenteCaptura } from "@jg-stevan/scanner-core/dominio/types";
 
 // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx L927-L948
 // (F-IMPORT robusto + F-HEIC — el MISMO onFilePicked del lab sirve a sus dos

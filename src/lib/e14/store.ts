@@ -9,11 +9,11 @@
  */
 import { create } from "zustand";
 import { getBridge } from "./get-bridge";
-import { rotateProcessedDataUrl } from "./image-utils";
-import { ocrTextIsValid } from "@/lib/e14/core/ocr";
-import type { PageFilter } from "@/lib/e14/core/types";
-import type { PaginaObjetivo } from "./bridge";
-import type { Acta, FuenteCaptura, HistorialRow, Mesa, ProgresoAnalisis, TipoPagina } from "./types";
+import { rotateProcessedDataUrl } from "@jg-stevan/scanner-core/dominio/image-utils";
+import { ocrTextIsValid } from "@jg-stevan/scanner-core/core/ocr";
+import type { PageFilter } from "@jg-stevan/scanner-core/core/types";
+import type { PaginaObjetivo } from "@jg-stevan/scanner-core/dominio/bridge";
+import type { Acta, FuenteCaptura, HistorialRow, Mesa, ProgresoAnalisis, TipoPagina } from "@jg-stevan/scanner-core/dominio/types";
 // e67-watchdog-rescate-v1 (cambio B): el tipo de opciones con presupuesto y
 // rescate post-timeout — MISMO patrón del runner MASIVA (variable tipada →
 // sin excess-check en la llamada al bridge).
@@ -22,15 +22,15 @@ import { leerFlags } from "./flags";
 // §G.2 — ORDEN-WAVE3-add-envio-individual-v1: la red del momento del envío
 // (registrarEnvio G.1 — envioRedTipo/envioDownlinkMbps en el diagnóstico).
 import { redActual } from "./obs/dispositivo";
-import type { Quad } from "@/lib/e14/core/types";
+import type { Quad } from "@jg-stevan/scanner-core/core/types";
 import {
   claveDeMesa,
   claveDePuesto,
   tipoPaginaDe,
   tituloYUbicacionDe,
   type ClasificacionE14,
-} from "./clasificador";
-import { cargarDivipol, mesasDePuesto } from "./divipol";
+} from "@jg-stevan/scanner-core/dominio/clasificador";
+import { cargarDivipol, mesasDePuesto } from "@jg-stevan/scanner-core/dominio/divipol";
 import { logger } from "../logger";
 // KIT L6: persistencia de la jornada (IDB vanilla — mismo patrón de la cola
 // masiva) + derivación del guion real (fix M10).
@@ -45,7 +45,7 @@ import {
 // KIT e14-sin-relleno-v1: el seed DEMO solo vive dentro del MODO SIMULACIÓN
 // (toggle «SIM» de ACTAS). El arranque/jornada real nace SIEMPRE vacío —
 // cero mesas falsas, cero progreso 12/9, cero historial de mentira.
-import { guionDePuesto, mesasIniciales } from "./seed";
+import { guionDePuesto, mesasIniciales } from "@jg-stevan/scanner-core/dominio/seed";
 
 // NOTA (eliminación del módulo masiva): la vista "masiva" salió de la unión
 // junto con la cola/bandeja (src/lib/e14/masiva/ y MasivaView retirados).

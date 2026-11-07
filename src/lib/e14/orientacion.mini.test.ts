@@ -294,7 +294,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
     ];
     // La foto ENTRA chica (lado mayor EXACTO 320): el mock del decode debe
     // devolver 300×320 para FOTO.
-    const { loadImageMemo } = await import("./image-utils");
+    const { loadImageMemo } = await import("@jg-stevan/scanner-core/dominio/image-utils");
     (loadImageMemo as ReturnType<typeof vi.fn>).mockImplementationOnce(
       async () => ({ naturalWidth: 300, naturalHeight: 320 }),
     );
@@ -421,7 +421,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
       TEXTO_DEBIL, // rot 0
       TEXTO_180, // rot 180
     ];
-    const { loadImageMemo } = await import("./image-utils");
+    const { loadImageMemo } = await import("@jg-stevan/scanner-core/dominio/image-utils");
     (loadImageMemo as ReturnType<typeof vi.fn>).mockImplementationOnce(
       async () => ({ naturalWidth: 300, naturalHeight: 320 }),
     );

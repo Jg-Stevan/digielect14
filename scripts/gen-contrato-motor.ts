@@ -28,9 +28,9 @@ import {
   nombreExportacion,
   tituloYUbicacionDe,
   tipoPaginaDe,
-} from "../src/lib/e14/clasificador";
-import type { DivipolBase } from "../src/lib/e14/divipol";
-import { statusDeScore } from "../src/lib/e14/types";
+} from "@jg-stevan/scanner-core/dominio/clasificador";
+import type { DivipolBase } from "@jg-stevan/scanner-core/dominio/divipol";
+import { statusDeScore } from "@jg-stevan/scanner-core/dominio/types";
 import { DESCRYPTORES } from "./contrato-vectores";
 
 const RUTA_GOLDEN = new URL("../src/lib/e14/__fixtures__/contrato-motor.json", import.meta.url);

@@ -10,7 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { appendEvento } from "./buffer";
+import { appendEvento } from "@jg-stevan/scanner-core/obs-base/buffer";
 import {
   DRIFT_UMBRAL_MS,
   LONGTASK_UMBRAL_MS,
@@ -20,7 +20,7 @@ import {
   resumenHangsDe,
 } from "./hang";
 
-vi.mock("./buffer", () => ({
+vi.mock("@jg-stevan/scanner-core/obs-base/buffer", () => ({
   appendEvento: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -159,7 +159,7 @@ describe("iniciarDetectorHang (bootstrap) — idempotente y apagable", () => {
 });
 
 // ─── KIT e14-obs-hang-atribucion-v1 (§B, T2 ≥ 4) — D58 + hangsPorOp ────────
-import { __resetOperacionParaTest, marcarOperacion } from "./operacion";
+import { __resetOperacionParaTest, marcarOperacion } from "@jg-stevan/scanner-core/obs-base/operacion";
 import { hangsPorOp } from "./hang";
 
 describe("D58 — los sensores enriquecen el hang con la operación activa (§B)", () => {

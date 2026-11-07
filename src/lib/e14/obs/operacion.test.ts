@@ -14,7 +14,7 @@ import {
   __resetOperacionParaTest,
   marcarOperacion,
   operacionActa,
-} from "./operacion";
+} from "@jg-stevan/scanner-core/obs-base/operacion";
 
 beforeEach(() => {
   __resetOperacionParaTest();

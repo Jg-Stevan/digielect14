@@ -47,7 +47,7 @@ import {
   contarEventos as nucleoContarEventos,
   eventosPorDigest as nucleoEventosPorDigest,
   purgarBuffer as nucleoPurgarBuffer,
-} from "@/lib/e14/obs/buffer";
+} from "@jg-stevan/scanner-core/obs-base/buffer";
 import {
   detenerMuestreoSalud as nucleoDetenerMuestreoSalud,
   iniciarMuestreoSalud as nucleoIniciarMuestreoSalud,

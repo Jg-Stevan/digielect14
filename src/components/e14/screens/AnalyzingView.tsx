@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import { leerFlags } from "@/lib/e14/flags";
-import type { EtapaAnalisis, ProgresoAnalisis } from "@/lib/e14/types";
+import type { EtapaAnalisis, ProgresoAnalisis } from "@jg-stevan/scanner-core/dominio/types";
 import { DocScannerIcon, ShieldCheckIcon } from "../icons";
 
 const ETAPAS = [

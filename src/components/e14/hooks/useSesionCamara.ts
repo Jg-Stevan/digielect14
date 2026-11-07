@@ -37,7 +37,7 @@ import {
   profileSensor,
   type SensorProfile,
 } from "@/lib/e14/core/sensor-profiler";
-import type { Quad } from "@/lib/e14/core/types";
+import type { Quad } from "@jg-stevan/scanner-core/core/types";
 import { useE14Store } from "@/lib/e14/store";
 
 /* ── Tipos compartidos del skin (extraídos tal cual de ScanView.tsx) ─────── */

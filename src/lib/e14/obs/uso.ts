@@ -17,8 +17,8 @@
  * vista/acción/estado, nunca ids de fila ni contenido (§2.5).
  */
 import { useE14Store } from "../store";
-import { appendEvento } from "./buffer";
-import { registrarVista } from "./breadcrumbs";
+import { appendEvento } from "@jg-stevan/scanner-core/obs-base/buffer";
+import { registrarVista } from "@jg-stevan/scanner-core/obs-base/breadcrumbs";
 import { idDispositivo, idSesion, appVersion } from "./identidad";
 import type { UsoContador } from "./tipos";
 

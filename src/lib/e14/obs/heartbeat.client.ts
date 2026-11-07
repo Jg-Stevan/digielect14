@@ -55,7 +55,7 @@
  * PRIVACIDAD dura (qa-obs-privacidad): cero `console.`, cero
  * `localStorage.setItem`, jamás blob/File/dataURL/contenido de actas.
  */
-import { appendEvento } from "./buffer";
+import { appendEvento } from "@jg-stevan/scanner-core/obs-base/buffer";
 import { appVersion, idDispositivo, idSesion } from "./identidad";
 import { leerFlags } from "../flags";
 import {

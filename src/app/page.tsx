@@ -38,7 +38,7 @@ import { AyudaOverlay, abrirAyuda } from "@/components/e14/AyudaOverlay";
 // transporte (stub → agente 3) + refresco de flags. TODO idempotente y
 // silencioso (§2.4): la app se comporta IDÉNTICA con esto en marcha.
 import { ErrorBoundaryObs, instalarCaptura } from "@/lib/e14/obs/captura";
-import { iniciarBreadcrumbs } from "@/lib/e14/obs/breadcrumbs";
+import { iniciarBreadcrumbs } from "@jg-stevan/scanner-core/obs-base/breadcrumbs";
 import { iniciarUso } from "@/lib/e14/obs/uso";
 import { iniciarMuestreoSalud } from "@/lib/e14/obs/dispositivo";
 import { iniciarDetectorHang } from "@/lib/e14/obs/hang"; // ANEXO Agente C (Pieza 2) — sensor de congelones

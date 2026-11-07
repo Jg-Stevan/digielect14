@@ -21,7 +21,7 @@ import {
   normalizarNombre,
   similitud,
   tipoDeDigito,
-} from "./clasificador";
+} from "@jg-stevan/scanner-core/dominio/clasificador";
 
 // ─── normalizarNombre (§3.1) ───────────────────────────────────────────────
 

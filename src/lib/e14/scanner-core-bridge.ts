@@ -37,29 +37,29 @@ import {
   ErrorRescateHeic,
   fileToCaptureDataUrl,
   processImage,
-} from "@/lib/e14/core/image-processor";
-import type { OrigenQuad } from "@/lib/e14/core/image-processor";
+} from "@jg-stevan/scanner-core/core/image-processor";
+import type { OrigenQuad } from "@jg-stevan/scanner-core/core/image-processor";
 // KIT e14-masiva-ux-v1 (T1): mecanismo de warm-up del worker OpenCV que ya
 // expone el core (el mismo que ScanView.tsx:757 invoca al montar) — la
 // detección al importar espera al worker en vez de caer al Sobel de una.
 import {
   getScannerWorker,
   warmUpScannerWorker,
-} from "@/lib/e14/core/detector-client";
-import { ocrTextIsValid } from "@/lib/e14/core/ocr";
+} from "@jg-stevan/scanner-core/core/detector-client";
+import { ocrTextIsValid } from "@jg-stevan/scanner-core/core/ocr";
 // KIT e14-motor-rapidocr-v1 (PROD-2 §3): motor de OCR de producción — módulo
 // compartido con el informe (singleton de sesión ÚNICO, pitfall §9.6). El
 // requestOcr del core SOLO vive en motores.ts (celda «actual» de la matriz —
 // instrumento congelado, pitfall §9.2).
-import { defaultQuad } from "@/lib/e14/core/types";
+import { defaultQuad } from "@jg-stevan/scanner-core/core/types";
 import type {
   PageFilter,
   PageQuality,
   Quad,
-} from "@/lib/e14/core/types";
-import { ACTA_MOCK } from "./seed";
-import { statusDeScore } from "./types";
-import { cargarDivipol } from "./divipol";
+} from "@jg-stevan/scanner-core/core/types";
+import { ACTA_MOCK } from "@jg-stevan/scanner-core/dominio/seed";
+import { statusDeScore } from "@jg-stevan/scanner-core/dominio/types";
+import { cargarDivipol } from "@jg-stevan/scanner-core/dominio/divipol";
 import {
   clasificarCabecera,
   faltaSeccionInferior,
@@ -67,11 +67,11 @@ import {
   tituloYUbicacionDe,
   tipoDeBanda,
   type ClasificacionE14,
-} from "./clasificador";
+} from "@jg-stevan/scanner-core/dominio/clasificador";
 // KIT e14-optimizacion-v1 (T1): los 4 decodes del bridge (calidad ×2,
 // esquinas, banda) pasan por el memo FIFO tope 2 de image-utils — misma
 // imagen, una sola decodificación por dataURL del acta en vuelo.
-import { loadImageMemo, procesadaVaciaDataUrl } from "./image-utils";
+import { loadImageMemo, procesadaVaciaDataUrl } from "@jg-stevan/scanner-core/dominio/image-utils";
 // KIT identificacion-codigo-v1 (FASE F, Task 120): marcas fiduciales de
 // esquina sobre el crop ya enderezado — señal «sin recortar» que ve los
 // recortes SUPERIORES que faltaSeccionInferior (kit 118, solo inferior) no ve.
@@ -83,21 +83,21 @@ import {
   perdonFaltaFiduciales,
   trazaEsquinas,
   type EsquinasActa,
-} from "./integridad";
+} from "@jg-stevan/scanner-core/dominio/integridad";
 // GUARD-BORDE Rev. 2 (SPEC-e14-guard-borde §2-§3, D1/D3): la verificación de
 // completitud vive en helper ÚNICO (completitud.ts) — «la geometría sospecha,
 // la tinta condena» — usado por AMBOS pipelines (escaneo y recorte, AC11).
-import { verificarCompletitud, type ResultadoCompletitud } from "./completitud";
+import { verificarCompletitud, type ResultadoCompletitud } from "@jg-stevan/scanner-core/dominio/completitud";
 // KIT e14-gate-v2 (FASE G2): marcador OBLIGATORIO de votos — helper ÚNICO
 // compartido con el guard de completitud (motorTinta, cero duplicación).
-import { medirZonaVotos } from "./marcadores";
+import { medirZonaVotos } from "@jg-stevan/scanner-core/dominio/marcadores";
 // KIT e14-score-lectura-v1: señal de LECTURA del score v2 (módulo puro — §4-A).
 import {
   PISO_LECTURA_FUERTE,
   TECHO_LECTURA_DEBIL,
   lazoPerdonadoPorLectura,
   senalDeLectura,
-} from "./senal-lectura";
+} from "@jg-stevan/scanner-core/dominio/senal-lectura";
 // §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
 // import estático: Next resuelve el basePath /web-scanner del deploy estático.
 // REFRESCO 2026-10-21 (lote JPG.rar del dueño): el contenido del asset es
@@ -117,8 +117,8 @@ import actaSimIntermediaUrl from "@/assets/acta-sim-intermedia.jpg";
 import actaSimBajaUrl from "@/assets/acta-sim-baja.jpg";
 import actaSimExtra1Url from "@/assets/acta-sim-extra-1.jpg";
 import actaSimExtra2Url from "@/assets/acta-sim-extra-2.jpg";
-import type { Acta, ActaFirma, ActaStatus, DiagnosticoActa, ProgresoAnalisis } from "./types";
-import type { E14Bridge, OpcionesEscaneo } from "./bridge";
+import type { Acta, ActaFirma, ActaStatus, DiagnosticoActa, ProgresoAnalisis } from "@jg-stevan/scanner-core/dominio/types";
+import type { E14Bridge, OpcionesEscaneo } from "@jg-stevan/scanner-core/dominio/bridge";
 // KIT e14-motor-rapidocr-v1 (PROD-2 §3): adaptador del motor de producción.
 import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
 // KIT e14-orientacion-auto-v1 (T-A2/A3): probe de orientación por confianza
@@ -141,7 +141,7 @@ import {
   elegirMejor,
   necesitaSegunda,
   rescateAporta,
-} from "./ocr-escalonado";
+} from "@jg-stevan/scanner-core/dominio/ocr-escalonado";
 // KIT e14-ocr-cascada-v1 (K3 fase 2): núcleo PURO de la cascada (gate entre
 // motores + rescate ROI) — flag ocrCascada (default OFF ⇒ escalonado
 // de siempre byte a byte). Decision/eleccion de siempre: NEEDS ocr-escalonado.
@@ -151,7 +151,7 @@ import {
   ROI_FRACCIONES,
   type DepsOcrCascada,
   type PasadaCascada,
-} from "./ocr-cascada";
+} from "@jg-stevan/scanner-core/orquestacion/cascada";
 // FASE C del plan post-v2.3 (medición §6.7): resumen de UNA corrida de
 // lectura (motor aceptante, intentos con gate, ms por motor) — se persiste
 // en `PerfActa.lectura` junto al perf del acta.
@@ -174,8 +174,8 @@ import {
 } from "./adaptacion/plan";
 // KIT e14-diagnostico-autoenvio-v1 (C1): registro del DESENLACE montado justo
 // donde hoy se escribe el log de auditoría (UNA sola fuente de verdad — §9.6).
-import { construirDiagnostico } from "./diagnostico";
-import { canvasCon } from "./image-utils"; // SPRINT-A A3 — factory de canvas
+import { construirDiagnostico } from "@jg-stevan/scanner-core/dominio/diagnostico";
+import { canvasCon } from "@jg-stevan/scanner-core/dominio/image-utils"; // SPRINT-A A3 — factory de canvas
 import { logger } from "../logger"; // SPRINT-A A6 — console→logger (mensajes byte-idénticos)
 
 /** Memo de decode POR INSTANCIA de File (WeakMap — GC-friendly, no retiene
@@ -1554,7 +1554,7 @@ export class RealCoreBridge implements E14Bridge {
         return await decodificarQrCapa0Camara(fotoOriginal);
       } catch {
         try {
-          const { decodificarQrDeCapture } = await import("./qr/identidad-qr");
+          const { decodificarQrDeCapture } = await import("@jg-stevan/scanner-core/qr/identidad-qr");
           return await decodificarQrDeCapture(fotoOriginal, { tiers: "base" });
         } catch {
           return null; // sin-payload — el flujo de cámara sigue intacto

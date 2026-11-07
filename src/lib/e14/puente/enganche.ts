@@ -19,7 +19,7 @@
  * REGLA DE ORO §2.4: TODO el cuerpo en try/catch — el auto-push jamás rompe
  * la app ni el flujo de envío individual del store.
  */
-import type { Acta } from "../types";
+import type { Acta } from "@jg-stevan/scanner-core/dominio/types";
 import { useE14Store } from "../store";
 import { encolarActa } from "./cola";
 import { enviarPendientes } from "./envio";

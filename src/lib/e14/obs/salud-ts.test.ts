@@ -11,7 +11,7 @@ vi.mock("@jg-stevan/scanner-core/obs-base/buffer", () => ({
   appendEvento: vi.fn(async () => undefined),
 }));
 
-import { appendEvento } from "./buffer";
+import { appendEvento } from "@jg-stevan/scanner-core/obs-base/buffer";
 import { detenerMuestreoSalud, iniciarMuestreoSalud } from "./dispositivo";
 
 const appendMock = vi.mocked(appendEvento);
