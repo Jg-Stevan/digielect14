@@ -10,6 +10,10 @@ on:
   push:
     branches: [main]
 
+# 6.8 (S8) — mínimo privilegio: el gate solo lee código. Sin secrets.
+permissions:
+  contents: read
+
 concurrency:
   group: quality-${{ github.ref }}
   cancel-in-progress: true
@@ -34,6 +38,14 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      # 6.1 (S7+F8) — audit INFORMATIVO (no rompe el gate hoy): las advisory
+      # conocidas viven en tooling de build (wrangler/knip/@dotenvx), no en
+      # runtime. La salida queda visible aquí para triarlas; el gate duro
+      # llegará cuando la tria deje la lista en 0 (nota en DEUDA.md).
+      - name: Audit de dependencias (informativo — 6.1)
+        run: bun audit
+        continue-on-error: true
 
       # Los modelos OCR y OpenCV no se versionan (scripts/preparar-assets.mjs).
       # El cache evita bajar ~35 MB por corrida; la clave cuelga del manifiesto,
@@ -61,16 +73,73 @@ jobs:
       - name: Tests unitarios (vitest)
         run: bun run test
 
+      # 6.9-side — Cobertura INFORMATIVA (umbral 33 % statements en
+      # vitest.config.ts; si sube, este paso lo hace visible). El provider de
+      # cobertura NO está instalado hoy: continue-on-error para que el gate no
+      # dependa de eso; cuando se instale @vitest/coverage-v8, el reporte sale
+      # y el artifact queda publicado.
+      - name: Cobertura (informativa — artifact coverage/)
+        run: bunx vitest run --coverage
+        continue-on-error: true
+      - name: Subir cobertura como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage
+          if-no-files-found: ignore
+
+      # 6.6 (R6) — VERSION del SW y `?v=` del detection-worker derivadas del
+      # SHA del commit (misma receta que deploy-pages.yml y deploy-cf.yml).
+      # Se corre DESPUÉS de los tests para que la suite vea las fuentes tal
+      # cual, y ANTES del build para que el artefacto lleve la marca.
+      - name: Derivar versión del SW del build (6.6)
+        run: |
+          VERSION="e14-$(git rev-parse --short HEAD)"
+          sed -i "s/const VERSION = \".*\";/const VERSION = \"$VERSION\";/" public/sw.js
+          # NOTA (ajuste verificado sobre el patrón del plan): el cache-busting
+          # `?v=` del detection-worker NO vive en public/scanner/detection-worker.js
+          # sino en el FUENTE del consumidor (packages/scanner-core/src/core/
+          # detector-client.ts, `detection-worker.js?v=8`) — el sed apunta ahí.
+          VQ=$(echo "$VERSION" | md5sum | cut -c1-6)
+          sed -i "s/?v=[0-9]*/?v=$VQ/g" packages/scanner-core/src/core/detector-client.ts
+          echo "VERSION del SW = $VERSION · ?v = $VQ"
+
       - name: Build estático (sanity)
         run: bunx next build
         env:
           BUILD_STATIC: "1"
           NEXT_PUBLIC_BASE_PATH: /digielect14
 
+      # 6.9 (O2) — cota de tamaño: JS + imágenes ≤ 20 MB (un `import` estático
+      # accidental de jspdf o de los JPG SIM entraría sin ruido y esto lo hace
+      # visible/rojo). Los `.wasm`/`.mjs` de onnxruntime (~42 MB) se EXCLUYEN:
+      # son el runtime del OCR, se cargan aparte y no son payload inicial ni
+      # un import accidental — contarlos dejaba la cota roja siempre.
+      - name: "Tamaño del bundle (cota 6.9: ≤ 20 MB de JS + imágenes)"
+        run: |
+          DIR=".next/static"
+          if [ ! -d "$DIR" ]; then DIR="out/_next/static"; fi
+          MB_JS=$(du -sm "$DIR/chunks" | cut -f1)
+          MB_IMG=$(du -cm "$DIR"/media/*.jpg "$DIR"/media/*.jpeg "$DIR"/media/*.png 2>/dev/null | tail -1 | cut -f1)
+          MB_IMG=${MB_IMG:-0}
+          MB=$((MB_JS + MB_IMG))
+          MB_TOTAL=$(du -sm "$DIR" | cut -f1)
+          {
+            echo "js+imágenes: ${MB} MB (chunks ${MB_JS} MB + imágenes ${MB_IMG} MB) en $DIR"
+            echo "total del directorio (incluye wasm del OCR): ${MB_TOTAL} MB"
+            echo "pieza mayor: $(du -am "$DIR" | sort -rn | sed -n 2p)"
+          } | tee bundle-report.txt
+          if [ "$MB" -gt 20 ]; then
+            echo "::error::JS+imágenes = ${MB} MB supera la cota de 20 MB (bloque 6.9). Revisa el PR: import pesado accidental (jspdf / JPG SIM) o asset nuevo."
+            exit 1
+          fi
+
       - name: Smoke de bundling de los workers (anti verde falso)
         run: |
           bun scripts/smoke-heartbeat-worker.mjs
           bun scripts/smoke-capa0-qr-worker.mjs
+          bun scripts/smoke-fallback-canvas-worker.mjs
 
       - name: Harnesses de contrato QA (todos los scripts/qa-*.ts)
         run: |

@@ -1,0 +1,93 @@
+# Ola 5 §5.3 (O1) — deploy AUTOMÁTICO de Cloudflare Pages.
+#
+# HOY el deploy multihilo (el bueno — COOP/COEP vía public/_headers) es MANUAL
+# tras cada merge (docs/DEPLOY.md §1) mientras GH Pages se publica solo: con
+# el tiempo la demo buena queda atrás sin señal. Este workflow lo automatiza:
+# un push a main (o dispatch manual) construye el export estático en la RAÍZ
+# (NEXT_PUBLIC_BASE_PATH vacío) y lo publica en el proyecto Pages
+# `digielect14` con wrangler-action.
+#
+# Requisitos (fuera del repo): secreto del repo `CF_API_TOKEN` con permiso
+# Cloudflare Pages: Edit (jamás pegado en el repo — ver SECURITY.md). Si el
+# secreto no existe, este job falla VISIBLEMENTE: la señal de frescura sigue
+# en el job diario `frescura-deploys.yml` (mismo bloque 5.3).
+#
+# El `?v=` del detection-worker se deriva del build (6.6) en el paso marcado;
+# el VERSION del SW también (misma receta que quality.yml y deploy-pages.yml
+# — así el check diario de frescura compara la misma marca en los dos deploys).
+name: Deploy Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 6.8 — mínimo privilegio: solo leer el código (el token de deploy entra por
+# secrets al paso de wrangler, no por el GITHUB_TOKEN).
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cf
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      BUILD_STATIC: "1"
+      # "" explícito = SIN basePath: el deploy de CF vive en la raíz del
+      # dominio (digielect14.pages.dev) — docs/DEPLOY.md §1.
+      NEXT_PUBLIC_BASE_PATH: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun (versión FIJA — jamás `latest`, bloque 6.14)
+        uses: oven-sh/setup-bun@v2
+        # Misma fijación que quality.yml/deploy-pages.yml: el gate compara
+        # artefactos generados con la MISMA cadena de herramientas.
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Los binarios de public/ no se versionan (~35 MB): cache por hash del
+      # lock de assets, misma receta de quality.yml/deploy-pages.yml.
+      - name: Cache de assets externos
+        uses: actions/cache@v4
+        with:
+          path: |
+            public/models/rapidocr/*.onnx
+            public/models/tess/*.traineddata.gz
+            public/vendor/opencv-4.5.5-core.js
+          key: assets-${{ runner.os }}-${{ hashFiles('scripts/assets.lock.json') }}
+
+      - name: Preparar (vendor + assets)
+        run: bun run preparar
+
+      - name: Derivar versión del SW del build (6.6)
+        run: |
+          VERSION="e14-$(git rev-parse --short HEAD)"
+          sed -i "s/const VERSION = \".*\";/const VERSION = \"$VERSION\";/" public/sw.js
+          # NOTA (ajuste verificado sobre el patrón del plan): el cache-busting
+          # `?v=` del detection-worker NO vive en public/scanner/detection-worker.js
+          # sino en el FUENTE del consumidor (packages/scanner-core/src/core/
+          # detector-client.ts, `detection-worker.js?v=8`) — el sed apunta ahí.
+          VQ=$(echo "$VERSION" | md5sum | cut -c1-6)
+          sed -i "s/?v=[0-9]*/?v=$VQ/g" packages/scanner-core/src/core/detector-client.ts
+          echo "VERSION del SW = $VERSION · ?v = $VQ"
+
+      # `bun run build` corre el `prebuild` (regenera capa0-qr.worker.js +
+      # prepara assets) y el export estático de Next → out/.
+      - name: Build estático (raíz del dominio)
+        run: bun run build
+
+      # Deploy del export: `out/` contiene public/_headers tal cual (COOP/COEP
+      # + CSP de 6.7) — es lo que habilita el multihilo en el Pages.
+      - name: Deploy a Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          command: pages deploy out --project-name=digielect14

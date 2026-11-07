@@ -4,9 +4,24 @@
 # COOP/COEP — habilita SharedArrayBuffer → WASM multihilo (onnxruntime-web
 # ort-wasm-simd-threaded + OpenCV). Mismo contrato que vercel.json en Vercel.
 # GH Pages NO puede enviarlas → ahí el wasm corre mono-hilo; en CF Pages sí.
+#
+# Ola 6 §6.7 (S4+F10) — cabeceras de SEGURIDAD del deploy de Cloudflare Pages.
+#  · `script-src 'unsafe-inline'`: necesario con el export estático de App
+#    Router (el bootstrap de Flight va embebido en el HTML). Primer paso =
+#    CSP con el safe-listing mínimo; ENDURECER DESPUÉS con hashes/nonces.
+#  · `style-src 'unsafe-inline'`: necesario con Tailwind/estilos inline.
+#  · `connect-src`: incluye el hub del puente; cuando la fase 2 §10 active el
+#    endpoint de obs remoto, añadirlo AQUÍ (y en el meta-CSP de GH Pages).
+#  · S-7 (nota honesta): el meta-CSP del deploy de GH Pages NO gobierna los
+#    workers — un worker servido desde self recibe SU CSP de las cabeceras de
+#    su propia respuesta, que GH Pages no controla. Esta cabecera de CF sí
+#    cubre los workers servidos de este origen.
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https://e14-puente.julistevan02.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'
 
 # Chunks de Next con hash de contenido → inmutables
 /_next/static/*
