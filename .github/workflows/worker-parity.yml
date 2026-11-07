@@ -1,6 +1,10 @@
 name: Worker parity
 
-on: [push, pull_request, workflow_dispatch]
+# Sustituido por el workflow de paridad del paquete (3.8 —
+# paridad-scanner-core.yml), que corre los 120 tests y el build único del
+# worker capa-0 en ambos repos. Queda solo manual, como referencia del
+# detection-worker del laboratorio.
+on: [workflow_dispatch]
 
 jobs:
   parity:
