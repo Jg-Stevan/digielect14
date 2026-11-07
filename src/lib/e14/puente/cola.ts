@@ -48,11 +48,19 @@ function abrirPuente(): Promise<IDBDatabase> {
       return;
     }
     const req = indexedDB.open(DB_NOMBRE, DB_VERSION);
-    req.onupgradeneeded = () => {
+    // 6.11 (F18) — ESCALERA de migración: cada cambio de esquema sube la
+    // versión y AÑADE un bloque `vieja < N`; jamás editar un bloque anterior.
+    // Hoy v1 = la creación original (lo que antes hacía contains() plano).
+    req.onupgradeneeded = (e: IDBVersionChangeEvent) => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_PENDIENTES)) {
-        db.createObjectStore(STORE_PENDIENTES, { keyPath: "hash" });
+      const vieja = e.oldVersion ?? 0;
+      if (vieja < 1) {
+        // v1 — store único `pendientes` (creación original).
+        if (!db.objectStoreNames.contains(STORE_PENDIENTES)) {
+          db.createObjectStore(STORE_PENDIENTES, { keyPath: "hash" });
+        }
       }
+      // if (vieja < 2) { /* futuro: nueva store/índice — nunca tocar v1 aquí */ }
     };
     req.onsuccess = () => {
       dbSingleton = req.result;
