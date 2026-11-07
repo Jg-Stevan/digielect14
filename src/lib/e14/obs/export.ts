@@ -19,6 +19,7 @@
  * en ningún campo (por diseño el ReporteSesion no tiene campo de texto);
  * miniaturas OFF (default) → el ZIP no lleva muestras. Sin excepciones.
  */
+import { agregarLecturas, type ResumenLectura } from "@jg-stevan/scanner-core/obs-base/eventos-lectura";
 import { eventosPorDigest, leerEventos, purgarBuffer } from "./buffer";
 import { hangsPorOp, resumenHangsDe } from "./hang"; // ANEXO Agente C (Pieza 2) · KIT e14-obs-hang-atribucion-v1 (§B)
 import { obtenerDispositivo } from "./dispositivo";
@@ -35,7 +36,14 @@ import { appVersion, idDispositivo, idSesion } from "./identidad";
 import { leerFlags } from "../flags";
 import { useE14Store } from "../store";
 import type { DiagnosticoActa } from "../types";
-import type { EnvioDetalle, EventoObs, ReporteSesion, SaludSnapshot, UsoContador } from "./tipos";
+import type {
+  EnvioDetalle,
+  EventoObs,
+  PerfActa,
+  ReporteSesion,
+  SaludSnapshot,
+  UsoContador,
+} from "./tipos";
 
 /** percentil nearest-rank sobre lista ASCENDENTE (PURA — testeada). */
 export function percentilDe(asc: number[], p: number): number | null {
@@ -159,6 +167,18 @@ export function enviosDetalleDe(diags: FragDiag[]): EnvioDetalle[] | undefined {
   return filas.length ? filas : undefined;
 }
 
+/** FASE C3 (§6.7) — agregado de lectura desde los eventos perf del buffer.
+ *  PURA: sin `PerfActa.lectura` no hay agregado (undefined honesto). */
+export function lecturaResumenDe(eventos: EventoObs[]): ReporteSesion["lecturaResumen"] {
+  const resumenes: ResumenLectura[] = [];
+  for (const e of eventos) {
+    if (e.tipo !== "perf") continue;
+    const l = (e.datos as PerfActa | null)?.lectura;
+    if (l) resumenes.push(l);
+  }
+  return resumenes.length ? agregarLecturas(resumenes) : undefined;
+}
+
 /** ReporteSesion completo (contrato §4.2). */
 export async function construirReporte(): Promise<ReporteSesion> {
   const politica = leerPolitica();
@@ -184,6 +204,11 @@ export async function construirReporte(): Promise<ReporteSesion> {
   // KIT e14-obs-hang-atribucion-v1 (§B) — distribución por op (D58),
   // ADITIVA AL FINAL (tras hangResumen — D57).
   const hangPorOp = hangsPorOp(eventosHang);
+  // FASE C3 (§6.7) — el reporte lleva el agregado de lectura de las actas
+  // retenidas: ms/acta aceptada por motor, lo que la decisión C4/C5 compara.
+  const lecturaResumen = lecturaResumenDe(
+    await leerEventos((e) => e.tipo === "perf"),
+  );
   return {
     meta: {
       appVersion: appVersion(),
@@ -206,6 +231,7 @@ export async function construirReporte(): Promise<ReporteSesion> {
     uso,
     hangResumen,
     hangPorOp,
+    ...(lecturaResumen ? { lecturaResumen } : {}),
   };
 }
 
