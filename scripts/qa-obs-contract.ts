@@ -82,7 +82,13 @@ async function listarTs(dirRel: string): Promise<string[]> {
 
 // ---------- Objetivos del contrato ----------
 
-const srcTipos = await leerFuente("src/lib/e14/obs/tipos.ts");
+// FASE D (migración v2.3 cerrada): los 11 tipos base se re-exportan del
+// paquete — las anclas del contrato se custodian allá (tipos de producto se
+// quedan en la app).
+const srcTiposApp = await leerFuente("src/lib/e14/obs/tipos.ts");
+const srcTiposBase = await leerFuente("packages/scanner-core/src/obs-base/tipos.ts");
+const srcTipos =
+  srcTiposApp === null && srcTiposBase === null ? null : `${srcTiposApp ?? ""}\n${srcTiposBase ?? ""}`;
 // FASE D (migración v2.3 cerrada): implementación en el paquete.
 const srcBuffer = await leerFuente("packages/scanner-core/src/obs-base/buffer.ts");
 const srcBreadcrumbs = await leerFuente("packages/scanner-core/src/obs-base/breadcrumbs.ts");
