@@ -53,6 +53,12 @@ sale (cuánto se gastó en el motor que perdió el gate).
    > MISMO commit reutiliza la versión atascada y vuelve a fallar: la
    > republicación se dispara con un commit nuevo. La ventana de D cuenta
    > desde el deploy que sale en verde, no desde el merge.
+   >
+   > **Arranque confirmado**: el código a medir entró a producción el
+   > 2026-11-07 — D con el deploy Pages en verde de `main` a las 18:04:44Z
+   > (46 s) y S con `d8d6054` a las 17:20:58Z. Los commits posteriores de
+   > solo documentación republican el mismo código y no alteran la ventana.
+   > Cierre mínimo de ambas: **2026-11-21** (o ≥ 500 actas aceptadas).
 2. **Uso normal**: no se cambia ningún flag ni la config de motores durante
    la ventana — la ventana mide el default vigente.
 3. **Exportar periódicamente** (semanal): el buffer `e14-obs` retiene 500
