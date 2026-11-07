@@ -62,6 +62,8 @@ assets/scanner/    detection-worker.js — asset VERSIONADO (D6): IIFE
 tests/             harness de paridad (3.10): contrato-motor (golden del
                    negocio) + cascada + fixtures versionados
                    (contrato-motor.json · divipol.json · agregados-router)
+                   + regresiones de lectura (backlog continuo de bugs de
+                   producción — ver fixtures/regresiones-lectura/LEEME.md)
 scripts/           build-capa0-worker.mjs (build único)
 .github/           paridad-scanner-core.yml (workflow 3.8 — corre ESTOS
                    tests en el CI de ambas apps)

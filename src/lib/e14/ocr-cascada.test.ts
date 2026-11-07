@@ -355,9 +355,13 @@ describe("ocr-cascada · correrCascadaOcr (cascada con mocks)", () => {
 describe("ocr-cascada · source-scan (contrato del kit en src/)", () => {
   it("bridge: call-site condicional con cascadaActiva + escalonado intacto + GO-B activo", () => {
     const bridge = lee("src/lib/e14/scanner-core-bridge.ts");
-    expect(bridge).toContain("cascadaActiva(leerFlags().ocrCascada");
-    expect(bridge).toContain("reconocerRapidOcrCascada(fotoOcr, onProgresoOcr, cfgOcr)");
-    expect(bridge).toContain("reconocerRapidOcrEscalonado(fotoOcr, onProgresoOcr, cfgOcr)");
+    // FASE F (plan post-v2.3): el CUERPO de §5 vive en pipeline.ts (el bridge
+    // lo ejecuta con pasos INYECTADOS) — el call-site del OCR se coteja ahí,
+    // con el prefijo `pasos.` que prueba que va por la inyección.
+    const pipeline = lee("src/lib/e14/pipeline.ts");
+    expect(pipeline).toContain("cascadaActiva(leerFlags().ocrCascada");
+    expect(pipeline).toContain("pasos.reconocerRapidOcrCascada(fotoOcr, onProgresoOcr, cfgOcr)");
+    expect(pipeline).toContain("pasos.reconocerRapidOcrEscalonado(fotoOcr, onProgresoOcr, cfgOcr)");
     expect(bridge).toContain("OCR_CASCADA_TESSERACT_GO = true");
     expect(bridge).toContain("recortarRoiDataUrl");
     // KIT e14-ocr-tessbest-v1: el intento 1 ES tessReconocer con caída
@@ -367,7 +371,7 @@ describe("ocr-cascada · source-scan (contrato del kit en src/)", () => {
     expect(bridge).toContain("await tessReconocer(foto, restante)");
     expect(bridge).toContain('motor: "rapidocr"');
     // Espera del warm-up del worker OpenCV POR TIER (BAJO 20 s — evidencia v4).
-    expect(bridge).toContain("esperarWorkerCaliente(esperaWorkerEfectiva())");
+    expect(pipeline).toContain("pasos.esperarWorkerCaliente(esperaWorkerEfectiva())");
   });
   it("flags: default ON (GO-B del dueño) + DOBLE whitelist (sanearFlags + leerOverridesFlags)", () => {
     const flags = lee("src/lib/e14/flags.ts");
@@ -403,37 +407,41 @@ describe("ocr-cascada · source-scan (contrato del kit en src/)", () => {
 // a las dos rutas (cascada y escalonado), al rescate de bordes del motor y que
 // la verificación del guard se coseche UNA sola vez (antes del OCR).
 describe("e14-velocidad-5s-v1 · rechazo temprano (source-scan)", () => {
+  // FASE F (plan post-v2.3): el cuerpo de §5 vive en pipeline.ts; los helpers
+  // de la cascada siguen en el bridge. El alambre se coteja sobre AMBOS.
   const bridge = lee("src/lib/e14/scanner-core-bridge.ts");
+  const pipeline = lee("src/lib/e14/pipeline.ts");
+  const fuente = `${bridge}\n${pipeline}`;
   it("el veredicto bloqueado se calcula con la verificación del guard (pre-OCR)", () => {
-    expect(bridge).toContain("const rechazoTemprano =");
-    expect(bridge).toContain("!verificacionResuelta.completa;");
+    expect(fuente).toContain("const rechazoTemprano =");
+    expect(fuente).toContain("!verificacionResuelta.completa;");
     // UNA sola cosecha de la promesa: la declaración vieja (junto al gate) fue
     // BORRADA, no duplicada — si vuelve a aparecer hay dos verificaciones.
     expect(
-      bridge.match(/const verificacionResuelta = verificacion \? await verificacion : null;/g)
+      fuente.match(/const verificacionResuelta = verificacion \? await verificacion : null;/g)
     ).toHaveLength(1);
     // Y esa cosecha vive ANTES de la llamada al OCR (no después del gate).
-    expect(bridge.indexOf("const rechazoTemprano =")).toBeLessThan(
-      bridge.indexOf("reconocerRapidOcrCascada(fotoOcr, onProgresoOcr, cfgOcr)")
+    expect(fuente.indexOf("const rechazoTemprano =")).toBeLessThan(
+      fuente.indexOf("reconocerRapidOcrCascada(fotoOcr, onProgresoOcr, cfgOcr)")
     );
   });
   it("la señal viaja en cfgOcr y cortan las DOS rutas de escalada", () => {
-    expect(bridge).toContain("corteIncompleta: rechazoTemprano,");
+    expect(fuente).toContain("corteIncompleta: rechazoTemprano,");
     // Cascada: presupuesto vencido de entrada + Tess de intento 1 jamás se paga.
-    expect(bridge).toContain("cfg.corteIncompleta === true ||");
-    expect(bridge).toContain("if (rapidaPrimero || cfg.corteIncompleta === true) return rapid1280(foto);");
+    expect(fuente).toContain("cfg.corteIncompleta === true ||");
+    expect(fuente).toContain("if (rapidaPrimero || cfg.corteIncompleta === true) return rapid1280(foto);");
     // Escalonado (flag OFF y recorte): la misma puerta en tocaSegunda.
-    expect(bridge).toContain("escalonado.corteIncompleta !== true &&");
+    expect(fuente).toContain("escalonado.corteIncompleta !== true &&");
   });
   it("el rescate de bordes del motor también se corta (sin rescate = 26/42 líneas leídas)", () => {
-    expect(bridge).toContain("sinRescateBordes: cfg.corteIncompleta === true");
-    expect(bridge).toContain("sinRescateBordes: escalonado.corteIncompleta === true");
+    expect(fuente).toContain("sinRescateBordes: cfg.corteIncompleta === true");
+    expect(fuente).toContain("sinRescateBordes: escalonado.corteIncompleta === true");
     const motor = lee("packages/scanner-core/src/ocr/rapidocr.ts");
     expect(motor).toContain("sinRescateBordes?: boolean");
     expect(motor).toContain("&& !opts?.sinRescateBordes) {");
   });
   it("la banda del sello NO se corta (el panel de corrección del operador la necesita)", () => {
-    expect(bridge).toContain("if (!opciones.simular && tipoDeBanda(texto) === null) {");
+    expect(pipeline).toContain("if (!opciones.simular && tipoDeBanda(texto) === null) {");
   });
   it("flag default ON con DOBLE whitelist y D57 aditivo al final", () => {
     const flags = lee("src/lib/e14/flags.ts");
