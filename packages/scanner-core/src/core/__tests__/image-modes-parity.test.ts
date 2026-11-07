@@ -8,7 +8,7 @@
  * matemática del espejo del worker (detection-worker.js L452-517) — si
  * alguien cambia un umbral o la ventana, este test se rompe.
  */
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from "bun:test";
 import { bradleyRoth, sauvola } from "../image-modes";
 
 function integralImageF64(

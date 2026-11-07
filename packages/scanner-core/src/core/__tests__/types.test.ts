@@ -3,7 +3,7 @@
  * Deterministas: sin red, sin timers reales, sin cámara.
  * `trashDaysLeft` recibe `now` explícito (inyección — sin reloj real).
  */
-import { describe, test, expect } from "vitest";
+import { describe, test, expect } from "bun:test";
 import {
   FILTER_PRESETS,
   PNG_FILTERS,

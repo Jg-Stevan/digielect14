@@ -54,7 +54,7 @@ import {
   rotarPixeles,
   ventanaDePixeles,
   type PixelesQr,
-} from "./qr-pixeles";
+} from "../src/qr/qr-pixeles";
 
 /** Lado largo del RESCATE (e64-qr T-1.4 — el 4096² de main). Literal en el
  *  worker para NO importar identidad-qr (arrastraría zxing/logger al
@@ -101,7 +101,7 @@ export type FasesCapa0 = {
 export type FinCapa0 = "payload" | "agotado" | "vencido" | "sin-decode";
 
 /** Mensaje que el cliente (capa0-qr.client.ts) postea al worker. */
-type PeticionCapa0 = {
+export type PeticionCapa0 = {
   id: number;
   blob: Blob;
   ladoLargo: number;

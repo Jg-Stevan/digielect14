@@ -28,7 +28,7 @@
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, test } from "bun:test";
 
 import {
   clasificarCabecera,
@@ -38,10 +38,10 @@ import {
   nombreExportacion,
   tituloYUbicacionDe,
   tipoPaginaDe,
-} from "./clasificador";
-import type { ClasificacionE14 } from "./clasificador";
-import type { DivipolBase } from "./divipol";
-import { statusDeScore, type ActaStatus } from "./types";
+} from "../src/dominio/clasificador";
+import type { ClasificacionE14 } from "../src/dominio/clasificador";
+import type { DivipolBase } from "../src/dominio/divipol";
+import { statusDeScore, type ActaStatus } from "../src/dominio/types";
 
 interface DescriptorGolden {
   id: string;
@@ -59,11 +59,14 @@ interface Golden {
 }
 
 const GOLDEN = JSON.parse(
-  readFileSync(new URL("./__fixtures__/contrato-motor.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./fixtures/contrato-motor.json", import.meta.url), "utf8"),
 ) as Golden;
 
 const DIVIPOL_CRUDO = readFileSync(
-  new URL("../../../public/e14/divipol.json", import.meta.url),
+  // 3.10b: el DIVIPOL viaja como fixture versionado del paquete (md5 idéntico
+  // al de public/e14/ de AMBAS apps — es dato por deploy, pero el golden lo
+  // necesita hermético para correr en el CI de cada app sin depender de rutas).
+  new URL("./fixtures/divipol.json", import.meta.url),
   "utf8",
 );
 const BASE = JSON.parse(DIVIPOL_CRUDO) as DivipolBase;
@@ -83,11 +86,11 @@ function derivadosDe(d: DescriptorGolden): Record<string, unknown> {
 }
 
 describe("contrato de motor · base DIVIPOL", () => {
-  it("la base del repo es la misma sobre la que se generó el golden", () => {
+  test("la base del repo es la misma sobre la que se generó el golden", () => {
     expect(createHash("md5").update(DIVIPOL_CRUDO, "utf8").digest("hex")).toBe(GOLDEN.divipolMd5);
   });
 
-  it("el golden está en la versión del contrato que este test sabe leer", () => {
+  test("el golden está en la versión del contrato que este test sabe leer", () => {
     expect(GOLDEN.version).toBe(1);
     expect(GOLDEN.descriptores.length).toBeGreaterThanOrEqual(10);
   });
@@ -100,7 +103,7 @@ describe("contrato de motor · clasificación (misma entrada ⇒ mismo resultado
   // hacía TIMED OUT sin que el contrato cambiara: rojo falso. Mismo aire en el
   // hermano (`__tests__/contrato-motor.test.ts` de supervision-e14).
   for (const d of GOLDEN.descriptores) {
-    it(`${d.id} — ${d.nota}`, () => {
+    test(`${d.id} — ${d.nota}`, () => {
       expect(clasificarCabecera(d.ocr, BASE)).toEqual(d.esperado);
       expect(derivadosDe(d)).toEqual(d.derivados);
     }, 30_000);
@@ -108,7 +111,7 @@ describe("contrato de motor · clasificación (misma entrada ⇒ mismo resultado
 });
 
 describe("contrato de motor · escalera score→status", () => {
-  it("los cantos 8 y 6.5 siguen siendo OPTIMA/ADVERTENCIA/RECHAZADA", () => {
+  test("los cantos 8 y 6.5 siguen siendo OPTIMA/ADVERTENCIA/RECHAZADA", () => {
     expect(GOLDEN.estados.map(({ score }) => ({ score, status: statusDeScore(score) }))).toEqual(
       GOLDEN.estados,
     );

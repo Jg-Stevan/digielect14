@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./buffer", () => ({
+vi.mock("@jg-stevan/scanner-core/obs-base/buffer", () => ({
   appendEvento: vi.fn(async () => undefined),
 }));
 
