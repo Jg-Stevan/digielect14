@@ -46,6 +46,13 @@ sale (cuánto se gastó en el motor que perdió el gate).
 1. **Deploys live**: ambos productos con C1/C2 en producción (verificado el
    2026-11-07 — D `Deploy to GitHub Pages` y S `Deploy Cloudflare Pages` en
    verde sobre `main`).
+   > Nota operativa (2026-11-07): el primer deploy de D sobre `main` se
+   > atascó en Pages — `actions/deploy-pages` creaba el deployment pero
+   > GitHub nunca lo procesaba (`Current status:` vacío hasta el timeout de
+   > 10 min). La versión de Pages es el SHA del commit, así que reintentar el
+   > MISMO commit reutiliza la versión atascada y vuelve a fallar: la
+   > republicación se dispara con un commit nuevo. La ventana de D cuenta
+   > desde el deploy que sale en verde, no desde el merge.
 2. **Uso normal**: no se cambia ningún flag ni la config de motores durante
    la ventana — la ventana mide el default vigente.
 3. **Exportar periódicamente** (semanal): el buffer `e14-obs` retiene 500
