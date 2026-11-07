@@ -152,6 +152,13 @@ import {
   type DepsOcrCascada,
   type PasadaCascada,
 } from "./ocr-cascada";
+// FASE C del plan post-v2.3 (medición §6.7): resumen de UNA corrida de
+// lectura (motor aceptante, intentos con gate, ms por motor) — se persiste
+// en `PerfActa.lectura` junto al perf del acta.
+import {
+  colectorLectura,
+  type ResumenLectura,
+} from "@jg-stevan/scanner-core/obs-base/eventos-lectura";
 // KIT e14-gama-baja-20s-v1: knobs OCR por tier (SYNC/barato — adaptacion/plan.ts).
 // KIT e14-ocr-tessbest-v1 (GO-B del dueño): TESSERACT BEST como intento 1
 // de la cascada (vendido + worker propio + budget) y el presupuesto del
@@ -800,6 +807,10 @@ interface OcrEscalonadoSalida {
   /** KIT e14-velocidad-5s-v1 — traza de la CASCADA (qué pasadas se pagaron y
    *  cuánto). Aditiva: el escalonado de siempre y SIM no la llenan (n/d). */
   traza?: TrazaOcr;
+  /** FASE C (medición §6.7) — resumen de la corrida para `PerfActa.lectura`:
+   *  motor aceptante, intentos con gate y ms por motor. Solo la cascada lo
+   *  llena (el escalonado de siempre / SIM quedan sin telemetría nueva). */
+  lectura?: ResumenLectura;
 }
 
 /** Trazas de la cascada — el acta dice desde IndexedDB cuántas pasadas se
@@ -1137,6 +1148,9 @@ async function reconocerRapidOcrCascada(
     nLineas: r.lineas.length,
     msRunRec: r.msRunRec,
   });
+  // FASE C (medición §6.7): el sink REAL de la telemetría ya existe en el
+  // paquete — aquí se colecta por acta y el resumen viaja al perf.
+  const colector = colectorLectura();
   const deps: DepsOcrCascada = {
     intento1: async (foto) => {
       // KIT e14-velocidad-5s-v1 (flag `ocrPrimeraPasadaRapida`, default ON):
@@ -1181,6 +1195,7 @@ async function reconocerRapidOcrCascada(
     presupuestoVencido: () =>
       cfg.corteIncompleta === true ||
       performance.now() - cfg.inicioMs >= cfg.presupuestoMs,
+    onEvento: colector.sink,
   };
   const s = await correrCascadaOcr(fotoOcr, deps);
   // Traza PROPIA (D51 — línea nueva, SOLO con flag ON; parseable).
@@ -1218,6 +1233,7 @@ async function reconocerRapidOcrCascada(
       nLineas: s.nLineas ?? 0,
       msRunRec: Math.round(s.msRunRec ?? 0),
     },
+    lectura: colector.resumen(),
   };
 }
 
@@ -2373,6 +2389,7 @@ export class RealCoreBridge implements E14Bridge {
             scoreFinal: score,
             gate: gate.status,
             ocrValido: diag.ocrValido,
+            lectura: ocrEsc.lectura,
           }),
         )
         .catch(() => {});
