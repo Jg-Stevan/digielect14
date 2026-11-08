@@ -72,10 +72,12 @@ export default function RootLayout({
          * workers servidos desde `self` — su CSP viene de sus propias
          * cabeceras de respuesta. Queda anotado en «endurecer después
          * (hashes)»: la auditoría siguiente no debe contarlo como cubierto.
+         * `'wasm-unsafe-eval'` y `data:` en connect-src: los motores OCR
+         * instancian WASM (Tesseract compila su core desde una URL data:).
          */}
         <meta
           http-equiv="Content-Security-Policy"
-          content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https://e14-puente.julistevan02.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'none'"
+          content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' data: blob: https://e14-puente.julistevan02.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'none'"
         />
         <meta name="referrer" content="strict-origin-when-cross-origin" />
       </head>
