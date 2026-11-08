@@ -143,12 +143,23 @@ function abrirWal(): Promise<IDBDatabase> {
         return;
       }
       const req = indexedDB.open(DB_NOMBRE, DB_VERSION);
-      req.onupgradeneeded = () => {
+      // Ola 6 §6.11 (F18) — ESCALERA de migración con `e.oldVersion`. Regla
+      // de casa: cada cambio de esquema sube DB_VERSION y añade un bloque
+      // `if (vieja < N)` NUEVO; los bloques anteriores JAMÁS se editan.
+      req.onupgradeneeded = (e: IDBVersionChangeEvent) => {
         try {
           const db = req.result;
-          if (!db.objectStoreNames.contains(STORE_MARCAS)) {
-            db.createObjectStore(STORE_MARCAS, { keyPath: "id" });
+          // Defensivo (`e?.oldVersion ?? 0`): los stubs del test llaman
+          // onupgradeneeded() SIN argumento; en navegadores siempre llega el
+          // evento y una base nueva reporta oldVersion = 0 — misma semántica.
+          const vieja = e?.oldVersion ?? 0;
+          if (vieja < 1) {
+            // v1 — creación original (lo que hoy hace contains()).
+            if (!db.objectStoreNames.contains(STORE_MARCAS)) {
+              db.createObjectStore(STORE_MARCAS, { keyPath: "id" });
+            }
           }
+          // if (vieja < 2) { /* futuro: nueva store/índice — nunca tocar v1 aquí */ }
         } catch {
           /* silencioso */
         }

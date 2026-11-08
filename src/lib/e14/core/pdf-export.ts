@@ -14,7 +14,13 @@
  *  · Presupuesto de bytes con piso y techo.
  */
 
-import { jsPDF } from "jspdf";
+// Ola 5 §5.1 (R3+F12): jsPDF salió del bundle inicial. El chunk pesaba
+// ~868 KB en el build real y el PDF solo se genera al exportar, así que el
+// import pasa a DINÁMICO dentro de las dos funciones exportadoras (buildDocPdf
+// y buildLibraryPdf). Arriba queda SOLO el import de TIPOS: las firmas
+// públicas (BuiltPdf, helpers de portada) no cambian — quien consume este
+// módulo no se entera. El chunk de jspdf ahora se descarga en el 1.er export.
+import type { jsPDF } from "jspdf";
 import { loadImage } from "@jg-stevan/scanner-core/core/image-processor";
 import { blobToDataUrl } from "@jg-stevan/scanner-core/core/codec";
 import { PNG_FILTERS, type ScanDocument } from "@jg-stevan/scanner-core/core/types";
@@ -394,6 +400,8 @@ export async function buildDocPdf(
   doc: ScanDocument,
   quality: ExportQuality
 ): Promise<BuiltPdf> {
+  // §5.1 — import dinámico: jsPDF queda en un chunk aparte, fuera del inicial.
+  const { jsPDF } = await import("jspdf");
   const totalPages = doc.pages.length;
   const budgetBytes = Math.min(Math.max(totalPages, 3), 8) * MB;
   const attempts = attemptsFor(quality);
@@ -513,6 +521,9 @@ export async function buildLibraryPdf(
   onProgress?: (info: { docIndex: number; docCount: number; title: string }) => void,
   options?: LibraryPdfOptions
 ): Promise<BuiltPdf & { docCount: number; pageCount: number; coverPages: number }> {
+  // §5.1 — import dinámico: idem buildDocPdf (un solo chunk compartido;
+  // el bundler deduplica la promesa del mismo módulo).
+  const { jsPDF } = await import("jspdf");
   if (docs.length === 0) throw new Error("No hay documentos");
   const pageCount = docs.reduce((acc, d) => acc + d.pages.length, 0);
   if (pageCount === 0) throw new Error("No hay páginas");
