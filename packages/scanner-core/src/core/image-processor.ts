@@ -17,6 +17,7 @@
 import type { PageFilter, PagePrecision, PageQuality, Point, Quad } from "./types";
 import { normalizePageFilter } from "./types";
 import { enhanceToRgba, unsharpRgba, type EnhanceMode as SharedEnhanceMode } from "./image-modes";
+import { publicBaseEfectivo } from "../dominio/entorno";
 // LOTE 3 (F3-A) — blob-first decode del tier fast: dataUrlToBlob es sync y
 // page-store NO importa image-processor (sin ciclo, verificado).
 // DRY-4 (Lote 9): import único desde codec (page-store solo lo re-exporta).
@@ -335,6 +336,37 @@ async function dimensionesDesdeBlob(source: Blob): Promise<DimensionesImagen | n
   }
 }
 
+// ─── KIT e14-heic-deteccion-temprana-v1 (Ola 6 §6.13 — F20) ───────────────────
+// heic2any 0.0.4 está ABANDONADO (sin release desde 2023-03) y su decode es la
+// parte peligrosa del rescate: 6 913 ms en 12 MP, watchdog de 120 s en 50 MP
+// (medido, D82). La defensa más barata es NO DESPACHAR NUNCA a la lib: los
+// magic bytes del contenedor ISOBMFF se leen en microsegundos.
+//   · bytes 4-7  = 'ftyp'
+//   · bytes 8-11 = marca (heic | heix | mif1 | msf1)
+// Gemelo app-side: `src/lib/e14/core/heic-detect.ts` (esHeic/leerPrimerosBytes)
+// — duplicado a propósito (el paquete no importa código de la app; mismo
+// criterio de los helpers gemelos jornada/cola).
+
+/** Primeros 16 bytes del blob (cabecera ftyp del ISOBMFF). null si falla. */
+async function cabeceraBlob(source: Blob): Promise<Uint8Array | null> {
+  try {
+    const buf = await source.slice(0, 16).arrayBuffer();
+    return new Uint8Array(buf);
+  } catch {
+    return null;
+  }
+}
+
+/** ¿Los magic bytes dicen HEIC/HEIF? Firma ftyp + marca en los primeros 12
+ *  bytes. Conservador: marca desconocida → false (que libheif decida como
+ *  siempre — nunca rechazar a ciegas lo que no es claramente HEIC). */
+function esHeicMagicBytes(bytes: Uint8Array | null): boolean {
+  if (!bytes || bytes.length < 12) return false;
+  if (String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]) !== "ftyp") return false;
+  const marca = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+  return marca === "heic" || marca === "heix" || marca === "mif1" || marca === "msf1";
+}
+
 /** Rechaza con `ms` de plazo; el worker de heic2any sigue trabajando en lo
  *  que le compete (no hay API para cancelarlo), pero el acta deja de estar
  *  colgada y el operario recibe un mensaje. */
@@ -361,6 +393,41 @@ async function convertHeicToJpegBlob(source: Blob, opciones: OpcionesRescateHeic
   if (dims && topeMp > 0 && megapixeles(dims) > topeMp) {
     throw new ErrorRescateHeic(
       `La foto HEIC es de ${megapixeles(dims).toFixed(1)} MP (${dims.ancho}×${dims.alto}) y pasa el tope del decodificador (${topeMp} MP): tócala en JPEG o recórtala en la galería antes de escanearla.`,
+    );
+  }
+
+  // §6.13 — RECHAZO TEMPRANO: con el rescate ACTIVADO (topeMp > 0 — el
+  // kill-switch {"heicTopeMp":0} = camino anterior, conversión completa), un
+  // archivo cuyos magic bytes CONFIRMAN HEIC/HEIF no entra a heic2any: la lib
+  // está abandonada y su decode es lo que colgaba el pipeline. Se rechaza
+  // ANTES de descargar el chunk (~1,4 MB) con ErrorRescateHeic — el mismo
+  // camino de error de D82: useDestello pinta «FOTO HEIC MUY GRANDE · PASA LA
+  // ACTA A JPEG» y el bridge registra la línea. iOS no lo sufre (Safari
+  // decodifica HEIC nativo en la ruta 1 y jamás llega aquí). El `limiteMs`
+  // queda como red para lo que pase el olfateo (marca rara, kill-switch ON).
+  if (topeMp > 0 && esHeicMagicBytes(await cabeceraBlob(source))) {
+    void (async () => {
+      try {
+        const { appendEvento } = await import("../obs/buffer");
+        const { idSesion, idDispositivo, appVersion } = await import("../obs/identidad");
+        await appendEvento({
+          tipo: "warn",
+          ts: Date.now(),
+          sesion: idSesion(),
+          dispositivo: idDispositivo(),
+          appVersion: appVersion(),
+          datos: {
+            codigo: "heic:rechazo-temprano",
+            mensaje: "HEIC rechazado por magic bytes sin despachar a heic2any (§6.13).",
+            bytes: source.size,
+          },
+        });
+      } catch {
+        /* silencioso: la traza es observabilidad, nunca rompe el flujo */
+      }
+    })();
+    throw new ErrorRescateHeic(
+      "La foto es HEIC/HEIF (formato de iPhone) y el decodificador de reserva está retirado: pásala a JPEG desde la galería antes de escanearla.",
     );
   }
 
@@ -1523,6 +1590,155 @@ function canvasToDataURL(
   });
 }
 
+// ─── KIT e14-fallback-worker-v1 (Ola 5 §5.4 — R2) ─────────────────────────
+// El fallback canvas (warp bilineal + realce) deja el hilo principal: con el
+// DetectionWorker muerto, getImageData de la foto completa (~48,8 MB a
+// 4032×3024), el bucle bilineal y Bradley/Sauvola congelaban el hilo segundos
+// en gama baja. El worker vive en `workers/fallback-canvas.ts` (mismo paquete,
+// importa SOLO image-modes — sin DOM) y el hilo principal queda como red:
+// ruta local SIEMPRE que no haya window (tests bun/vitest anclan la ruta local
+// byte a byte), no haya OffscreenCanvas (iOS < 16.4 — matriz de la fase 2 §7),
+// el worker haya fallado una vez (roto para la sesión) o cualquier excepción
+// del camino nuevo. Quien llama a processImage NO cambia (misma API).
+
+interface RespuestaFallbackOk {
+  id: number;
+  ok: true;
+  png: Blob;
+  ancho: number;
+  alto: number;
+}
+interface RespuestaFallbackMal {
+  id: number;
+  ok: false;
+  error: string;
+}
+type RespuestaFallbackWorker = RespuestaFallbackOk | RespuestaFallbackMal;
+
+let fallbackCanvasWorker: Worker | null = null;
+let fallbackCanvasWorkerRoto = false;
+let fallbackCanvasSeq = 0;
+const fallbackCanvasPendientes = new Map<
+  number,
+  { resolver: (r: RespuestaFallbackOk) => void; rechazar: (e: Error) => void }
+>();
+
+/** ¿La ruta en worker está disponible en ESTE entorno? (matriz de
+ *  degradación — ver el comentario del kit arriba). */
+function fallbackCanvasHabilitado(): boolean {
+  return (
+    typeof window !== "undefined" && // node/bun (tests) → ruta local anclada
+    typeof Worker === "function" &&
+    typeof OffscreenCanvas === "function" && // iOS < 16.4 → ruta local
+    !fallbackCanvasWorkerRoto
+  );
+}
+
+/** Cualquier fallo del worker (error de arranque, onerror, timeout) deja la
+ *  sesión en modo local: se rechazan los pendientes y NUNCA se reintenta. */
+function romperFallbackCanvasWorker(motivo: string): void {
+  fallbackCanvasWorkerRoto = true;
+  if (fallbackCanvasWorker) {
+    try {
+      fallbackCanvasWorker.terminate();
+    } catch {
+      /* noop */
+    }
+    fallbackCanvasWorker = null;
+  }
+  for (const [id, pendiente] of fallbackCanvasPendientes) {
+    fallbackCanvasPendientes.delete(id);
+    pendiente.rechazar(new Error(`fallback-worker: ${motivo}`));
+  }
+}
+
+function obtenerFallbackCanvasWorker(): Worker {
+  if (!fallbackCanvasWorker) {
+    // Artefacto PRECOMPILADO (misma lección DICTAMEN-e73 §3.1 del capa-0):
+    // `new URL(..., import.meta.url)` sobre el .ts hacía que Turbopack copiara
+    // el fuente CRUDO a static/media y el navegador no pudiera ejecutarlo.
+    // El .worker.js lo emite `scripts/build-fallback-canvas-worker.mjs` en el
+    // `prebuild`; si no existe, el throw lo atrapa el llamador (jamás romper).
+    const w = new Worker(`${publicBaseEfectivo()}/scanner/fallback-canvas.worker.js`);
+    w.onmessage = (e: MessageEvent<RespuestaFallbackWorker>) => {
+      const pendiente = fallbackCanvasPendientes.get(e.data.id);
+      if (!pendiente) return;
+      fallbackCanvasPendientes.delete(e.data.id);
+      if (e.data.ok) pendiente.resolver(e.data);
+      else pendiente.rechazar(new Error(e.data.error));
+    };
+    w.onerror = () => romperFallbackCanvasWorker("onerror del worker");
+    fallbackCanvasWorker = w;
+  }
+  return fallbackCanvasWorker;
+}
+
+/** Fallback canvas EN WORKER: el main decodifica (createImageBitmap decodifica
+ *  async, fuera del hilo) y TRANSFIERE el bitmap (cero copia); el worker hace
+ *  warp + rotación + filtro + PNG con las mismas funciones puras de
+ *  image-modes y devuelve el Blob. Respeta el contrato ProcessResult de la
+ *  ruta local (precision.engine "canvas", decodeMs ausente, processed data
+ *  URL PNG, thumbnail 160 px). */
+async function processImageViaFallbackWorker(
+  src: string,
+  quad: Quad,
+  filter: PageFilter,
+  rotation: number,
+  maxLongSide: number
+): Promise<ProcessResult> {
+  const blobSrc = await (await fetch(src)).blob();
+  const bitmap = await createImageBitmap(blobSrc);
+  try {
+    const worker = obtenerFallbackCanvasWorker();
+    const id = ++fallbackCanvasSeq;
+    const respuesta = new Promise<RespuestaFallbackOk>((resolver, rechazar) => {
+      fallbackCanvasPendientes.set(id, { resolver, rechazar });
+    });
+    // Tope generoso de pared: si el worker no responde (cuelgo improbable),
+    // se rechaza y la ruta local de siempre termina el trabajo.
+    const reloj = setTimeout(() => {
+      if (fallbackCanvasPendientes.delete(id)) {
+        romperFallbackCanvasWorker("sin respuesta en 30 s");
+      }
+    }, 30_000);
+    try {
+      worker.postMessage(
+        {
+          id,
+          bitmap,
+          quad: quad.flatMap((p) => [p.x, p.y]),
+          filter,
+          rotation,
+          maxLongSide,
+        },
+        [bitmap]
+      );
+      const r = await respuesta;
+      const processed = await blobToDataURL(r.png);
+      return {
+        processed,
+        thumbnail: await thumbnailFromDataURL(processed),
+        precision: {
+          engine: "canvas",
+          refined: false,
+          cornersSolid: null,
+          width: r.ancho,
+          height: r.alto,
+        },
+      };
+    } finally {
+      clearTimeout(reloj);
+      fallbackCanvasPendientes.delete(id);
+    }
+  } finally {
+    try {
+      bitmap.close(); // si ya fue transferido queda detached — noop
+    } catch {
+      /* noop */
+    }
+  }
+}
+
 /**
  * Pipeline canvas local (fallback) — F6-WARP/F6-FILTER:
  *  1. Warp de perspectiva real (homografía + bilinear, aspecto medido §7.5,
@@ -1537,6 +1753,23 @@ async function processImageCanvas(
   rotation: number,
   opts?: ProcessOptions
 ): Promise<ProcessResult> {
+  // §5.4 (R2) — ruta EN WORKER cuando el entorno la soporta (matriz arriba).
+  // El toggle unsharpOriginal se queda en local: su unsharp corre sobre canvas
+  // (applyUnsharpToCanvas) y duplicarlo en el worker rompería la paridad.
+  const conUnsharpOriginal = filter === "original" && opts?.unsharpOriginal === true;
+  if (fallbackCanvasHabilitado() && !conUnsharpOriginal) {
+    try {
+      return await processImageViaFallbackWorker(
+        src,
+        quad,
+        filter,
+        rotation,
+        opts?.maxLongSide ?? PROCESSED_MAX_LONG_SIDE
+      );
+    } catch {
+      /* cualquier fallo → la ruta local de SIEMPRE sigue de pie (jamás romper) */
+    }
+  }
   const img = await loadImage(src);
   const maxLongSide = opts?.maxLongSide ?? PROCESSED_MAX_LONG_SIDE;
   const warped = warpQuadToCanvas(img, quad, maxLongSide);
@@ -1561,6 +1794,28 @@ async function processImageCanvas(
       height: filtered.height,
     },
   };
+}
+
+/**
+ * FÓRMULA de calidad del core (0.45/0.25/0.3) — ÚNICA copia desde 7.6
+ * (plan de remediación, C2): antes `scanner-core-bridge.ts` la tenía copiada
+ * a mano para recalcular el level con las señales v2 y derivaba si el core
+ * cambiaba los pesos. PURA, sin DOM — testeable headless con bun.
+ */
+export function puntajeCalidad(
+  sharpness: number,
+  brightness: number,
+  contrast: number,
+): number {
+  return sharpness * 0.45 + brightness * 0.25 + contrast * 0.3;
+}
+
+/** Umbrales del level (80/62/45) — MISMA partición de siempre
+ *  (§4.1 SPEC-e14-score-ocr: ≥8 OPTIMA vive en statusDeScore; estos techos
+ *  son los de CALIDAD FOTOGRÁFICA). Exportada junto a `puntajeCalidad` por
+ *  el mismo motivo. */
+export function nivelPorPuntaje(score: number): PageQuality["level"] {
+  return score >= 80 ? "excellent" : score >= 62 ? "good" : score >= 45 ? "fair" : "poor";
 }
 
 /** Evaluación de calidad de la página (Laplaciano + contraste + brillo). */
@@ -1608,8 +1863,8 @@ export async function evaluateQuality(src: ImageSource): Promise<PageQuality> {
 
     const brightness = Math.min(100, Math.round((mean / 255) * 100));
 
-    const score = sharpness * 0.45 + brightness * 0.25 + contrast * 0.3;
-    const level = score >= 80 ? "excellent" : score >= 62 ? "good" : score >= 45 ? "fair" : "poor";
+    const score = puntajeCalidad(sharpness, brightness, contrast);
+    const level = nivelPorPuntaje(score);
     const label =
       level === "excellent" ? "Excelente" : level === "good" ? "Buena" : level === "fair" ? "Aceptable" : "Baja";
     return { level, sharpness, brightness, contrast, label };

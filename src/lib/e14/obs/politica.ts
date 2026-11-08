@@ -117,8 +117,26 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
       limpio.ocrThreadsTope = Math.max(1, Math.min(8, Math.round(o.ocrThreadsTope)));
     }
     if (typeof o.telemetriaSalud === "boolean") limpio.telemetriaSalud = o.telemetriaSalud;
-    if (o.endpointReportes === null || typeof o.endpointReportes === "string") {
-      limpio.endpointReportes = o.endpointReportes;
+    // 0.5/S3 (plan de remediación) — `endpointReportes` ya no pasa como cualquier
+    // string: SOLO null (apagado), un https absoluto válido, o un http de ORIGEN
+    // LOCAL (localhost / IP privada / `.local` mDNS — doctrina del hub-local; es
+    // lo que usan los harnesses QA y lo que el CSP ya permite). `http://` ajeno
+    // o basura ⇒ la clave NO se aplica (default null).
+    if (o.endpointReportes === null) {
+      limpio.endpointReportes = null;
+    } else if (typeof o.endpointReportes === "string" && o.endpointReportes.trim()) {
+      try {
+        const u = new URL(o.endpointReportes);
+        const local =
+          u.hostname === "localhost" ||
+          u.hostname.endsWith(".local") || // mDNS RFC 6762 — no enrutable
+          /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname);
+        if (u.protocol === "https:" || (u.protocol === "http:" && local)) {
+          limpio.endpointReportes = o.endpointReportes;
+        }
+      } catch {
+        /* basura → la clave no se aplica (default null) */
+      }
     }
     // KIT e14-obs-hang-atribucion-v1 (§D) — el kill-switch `hangEnCurso` del
     // dueño pasa por ESTE whitelist: sin esta línea el override localStorage
