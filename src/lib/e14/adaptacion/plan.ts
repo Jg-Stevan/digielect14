@@ -57,6 +57,10 @@ const HILOS_POR_TIER: Record<Tier, number> = {
  *      1.ª pasada + pre-OCR ya consumen ~15-23 s con 2 hilos ⇒ el rescate
  *      entra SOLO cuando hay margen real; nunca se abandona una pasada
  *      a mitad (solo se decide NO ABRIR una nueva).
+ *      KIT e14-remediacion-movil-v1 (A1): MEDIO/ALTO 45000 con modo
+ *      roi-cabecera — la 2.ª pasada nunca más se abre «sin margen real»:
+ *      el bridge la abre SOLO si k·ms1 cabe en el presupuesto restante
+ *      (fórmula k·ms1 — P0 #1/#2).
  *
  *  NOTA del merge con e14-ocr-tessbest-v1 (PR #118): el 3.er knob del kit
  *  original (probeBudgetMs BAJO 6000 fail-fast) quedó SUBSUMIDO por
@@ -67,12 +71,26 @@ const HILOS_POR_TIER: Record<Tier, number> = {
  *  de main (probeOrientacionMs: BAJO 150 s · MEDIO 60 s · ALTO 12 s).
  *
  *  Prioridad D6 intacta: override MANUAL del dueño (ocrThreadsTope) manda
- *  sobre ocrHilos; los knobs nuevos NO tienen override (el kill-switch
- *  `adaptacionDispositivo: false` los revierte TODOS al histórico). */
+ *  sobre ocrHilos; los knobs por tier se revierten con el kill-switch
+ *  `adaptacionDispositivo: false`. EXCEPCIÓN (A1): `ocrSegundaPresupuestoMs`
+ *  ahora también existe como FLAG (override MANUAL, doble whitelist) — manda
+ *  sobre el knob del tier cuando el dueño lo fija. */
 const KNOBS_OCR_HISTORICO = {
   ocrReOcrModo: "completo",
   ocrSegundaPresupuestoMs: null,
 } as const;
+
+// KIT e14-remediacion-movil-v1 (A1 — P0 #1/#2): ventana de ARRANQUE de la
+// 2.ª pasada por tier (tope PARED para PERMITIR el intento extra). La
+// decisión explícita del plan v2 (§A1, postura 2 — conservar el rescate ROI
+// en ALTO): MEDIO/ALTO pasan a "roi-cabecera" (coste ≈ 1× la 1.ª pasada,
+// no 2,5×) con ventana 45 s y la GARANTÍA recae en la fórmula k·ms1 del
+// bridge (k≈1.2 ROI · 2.5 completo, margen 8 s): en el A13, 35 s de 1.ª +
+// ~35 s de ROI + 8 s ≈ 78 s < 120 s — el caso del informe §5 (acta legible
+// a 120,9 s RECHAZADA 0.0) NO puede reproducirse por la 2.ª pasada. BAJO
+// queda byte-idéntico (15 s — mismo modo). El knob `ocrSegundaPresupuestoMs`
+// pasó a la DOBLE WHITELIST de flags (flags.ts + obs/politica.ts) para el
+// A/B del dueño sin rebuild — el override MANUAL manda sobre el plan (D6).
 
 const KNOBS_OCR_POR_TIER: Record<
   Tier,
@@ -82,8 +100,13 @@ const KNOBS_OCR_POR_TIER: Record<
   }
 > = {
   BAJO: { ocrReOcrModo: "roi-cabecera", ocrSegundaPresupuestoMs: 15_000 },
-  MEDIO: { ocrReOcrModo: "completo", ocrSegundaPresupuestoMs: null },
-  ALTO: { ocrReOcrModo: "completo", ocrSegundaPresupuestoMs: null },
+  // KIT e14-remediacion-movil-v1 (A1): ventana 45 s + rescate ROI (postura 2
+  // del plan — ver comentario de arriba). El re-OCR completo de MEDIO/ALTO
+  // sin tope de duración era la causa raíz del P0 #1 (acta legible
+  // RECHAZADA 0.0 por el watchdog a los 120 s). override MANUAL del dueño:
+  // flag `ocrSegundaPresupuestoMs` (doble whitelist) manda sobre estos knobs.
+  MEDIO: { ocrReOcrModo: "roi-cabecera", ocrSegundaPresupuestoMs: 45_000 },
+  ALTO: { ocrReOcrModo: "roi-cabecera", ocrSegundaPresupuestoMs: 45_000 },
 };
 
 

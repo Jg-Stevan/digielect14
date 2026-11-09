@@ -92,9 +92,11 @@ type FabricaWorkerHeartbeat = () => WorkerHeartbeat | null;
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 function fabricaProduccion(): WorkerHeartbeat | null {
-  return new Worker(
-    `${PUBLIC_BASE}/scanner/heartbeat.worker.js`,
-  ) as unknown as WorkerHeartbeat;
+  // KIT e14-remediacion-movil-v1 (C4): `name` explícito — el sensor de hang
+  // queda identificable en devtools/ps (targets mudos → nombrados).
+  return new Worker(`${PUBLIC_BASE}/scanner/heartbeat.worker.js`, {
+    name: "heartbeat-obs-v1",
+  }) as unknown as WorkerHeartbeat;
 }
 
 let fabrica: FabricaWorkerHeartbeat = fabricaProduccion;

@@ -39,25 +39,45 @@ export * from "@jg-stevan/scanner-core/ocr/rapidocr";
 //   · navigator.hardwareConcurrency — núcleos declarados.
 //   · topeThreadsPlan          — techo configurado por el plan adaptativo
 //                                (numThreadsOcrEfectivos, ya inyectado arriba).
-//   · ortWasmNumThreads        — `ort.env.wasm.numThreads` si se pudo leer del
-//                                módulo onnxruntime-web (best-effort: el env
-//                                del hilo principal puede no reflejar el del
-//                                worker proxy; null = no accesible).
+//   · ortConfig                — KIT e14-remediacion-movil-v1 (D5 — #18): la
+//                                config REAL que el paquete publica en
+//                                window.__E14_ORT_CONFIG__ (initReal de
+//                                scanner-core: { numThreads, proxy, simd }).
+//                                Antes se leía ort.env.wasm.numThreads del
+//                                módulo, que reportaba el DEFAULT de ORT (o
+//                                nada) porque aquí el motor aún no se había
+//                                inicializado — la verdad está en la variable
+//                                publicada post-init. Este módulo se evalúa al
+//                                ARRANQUE, así que la espera es ACOTADA
+//                                (sondeo 250 ms × 120 = 30 s): se publica el
+//                                evento en cuanto aparece la config (prewarm/
+//                                init) o con null honesto si nunca llegó.
 // Scrub: no hay PII — números y booleanos del entorno (contrato obs §3).
 let instrumentadoMultihilo = false;
+
+/** Lee la config ORT publicada por el paquete (initReal) — best-effort y
+ *  silencioso: null si aún no existe o el entorno no la expone. */
+function leerConfigOrtPublicada(): Record<string, unknown> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const cfg = (window as unknown as { __E14_ORT_CONFIG__?: unknown }).__E14_ORT_CONFIG__;
+    return cfg !== null && typeof cfg === "object" ? (cfg as Record<string, unknown>) : null;
+  } catch {
+    return null; // jamás rompe el arranque (§2.4)
+  }
+}
 
 void (async () => {
   if (instrumentadoMultihilo) return;
   instrumentadoMultihilo = true;
   try {
     if (typeof window === "undefined") return; // SSR/tests node → nada que medir
-    let ortWasmNumThreads: number | null = null;
-    try {
-      const ort = await import("onnxruntime-web");
-      const leido = (ort.env?.wasm as { numThreads?: number } | undefined)?.numThreads;
-      if (typeof leido === "number" && Number.isFinite(leido)) ortWasmNumThreads = leido;
-    } catch {
-      /* ort no cargó aún (o falló): null honesto — el log no depende de él */
+    // D5 (#18): espera ACOTADA a la config real publicada post-init — el
+    // evento sigue siendo UNO por sesión; sin init ⇒ null honesto.
+    let ortConfig: Record<string, unknown> | null = null;
+    for (let i = 0; i < 120 && ortConfig === null; i++) {
+      await new Promise<void>((resolver) => setTimeout(resolver, 250));
+      ortConfig = leerConfigOrtPublicada();
     }
     await appendEvento({
       tipo: "perf",
@@ -70,7 +90,7 @@ void (async () => {
         crossOriginIsolated: window.crossOriginIsolated ?? false,
         hardwareConcurrency: navigator.hardwareConcurrency ?? null,
         topeThreadsPlan: numThreadsOcrEfectivos(),
-        ortWasmNumThreads,
+        ortConfig,
       },
     });
   } catch {

@@ -833,13 +833,22 @@ interface OcrEscalonadoSalida {
   conf: number | null;
   detMs: number;
   recMs: number;
-  /** KIT e14-velocidad-5s-v1 — traza de la CASCADA (qué pasadas se pagaron y
+  /** KIT e14-remediacion-movil-v1 — traza de la CASCADA (qué pasadas se pagaron y
    *  cuánto). Aditiva: el escalonado de siempre y SIM no la llenan (n/d). */
   traza?: TrazaOcr;
   /** FASE C (medición §6.7) — resumen de la corrida para `PerfActa.lectura`:
    *  motor aceptante, intentos con gate y ms por motor. Solo la cascada lo
    *  llena (el escalonado de siempre / SIM quedan sin telemetría nueva). */
   lectura?: ResumenLectura;
+  /** KIT e14-remediacion-movil-v1 (B3 — P1 #9): tramos del OCR sin atribuir
+   *  que la 2.ª pasada del escalonado pagaba FUERA de la cascada (el hueco
+   *  medido de 9,5-11,5 s). msCrops = recortes (pasada 1 + 2.ª); msSegundaPasada
+   *  = la 2.ª completa (ms2 del re-OCR 1920 o msRoi del rescate ROI). SIM no
+   *  lo llena (0 trazas — §3). */
+  tramos?: {
+    msCrops?: number | null;
+    msSegundaPasada?: number | null;
+  };
 }
 
 /** Trazas de la cascada — el acta dice desde IndexedDB cuántas pasadas se
@@ -941,15 +950,41 @@ async function reconocerRapidOcrEscalonado(
       ? "roi-cabecera"
       : "completo";
   const presupuestoSegunda =
-    fEscalada.ocrSegundaTopeMs > 0
-      ? Math.min(escalonado.presupuestoMs, fEscalada.ocrSegundaTopeMs)
-      : planOcr.adaptado && planOcr.ocrSegundaPresupuestoMs != null
-        ? Math.min(escalonado.presupuestoMs, planOcr.ocrSegundaPresupuestoMs)
-        : escalonado.presupuestoMs;
+    fEscalada.ocrSegundaPresupuestoMs != null && fEscalada.ocrSegundaPresupuestoMs > 0
+      ? Math.min(escalonado.presupuestoMs, fEscalada.ocrSegundaPresupuestoMs)
+      : fEscalada.ocrSegundaTopeMs > 0
+        ? Math.min(escalonado.presupuestoMs, fEscalada.ocrSegundaTopeMs)
+        : planOcr.adaptado && planOcr.ocrSegundaPresupuestoMs != null
+          ? Math.min(escalonado.presupuestoMs, planOcr.ocrSegundaPresupuestoMs)
+          : escalonado.presupuestoMs;
+  // KIT e14-remediacion-movil-v1 (A1 — P0 #1/#2): CONDICIÓN DE ARRANQUE CON
+  // MARGEN REAL. La condición vieja solo preguntaba cuánto llevaba el
+  // pipeline (`transcurrido < ventana`) — NADA limitaba cuánto iba a DURAR
+  // la pasada en vuelo: en el A13 una 2.ª completa arrancaba «con margen» a
+  // los 35 s y terminaba DESPUÉS del watchdog de 120 s → RECHAZADA 0.0 de un
+  // acta legible (informe §5). Ahora la pasada SOLO se abre si su coste
+  // ESTIMADO cabe en el presupuesto restante:
+  //   arrancar si (k · ms1) < (presupuesto − transcurrido − margen)
+  // · k según MODO (medido en el A13): 2.5 re-OCR completo · 1.2 ROI-cabecera
+  //   (su coste ≈ ms1 — NO se reusa el 2.5 del modo completo).
+  // · margen 8 s: lo que queda por pagar tras el OCR (gate + clasificación +
+  //   banda + emisión) antes del watchdog.
+  // Respeta la decisión de proyecto «nunca se abandona una pasada a mitad»
+  // (docs/REPORTE-e14-gama-baja-20s-v1): aquí no se aborta nada — se decide
+  // NO ABRIR la pasada que no cabe. Toda apertura tardía que aun así venciera
+  // queda MEDIDA (B1 emite la muestra `vencido: true` desde el watchdog).
+  const K_SEGUNDA_COMPLETO = 2.5; // A13: re-OCR 1920 ≈ 2,5× la 1.ª pasada
+  const K_SEGUNDA_ROI = 1.2; // A13: ROI cabecera ≈ 1,0-1,2× la 1.ª pasada
+  const MARGEN_SEGUNDA_MS = 8_000;
+  const transcurridoAlDecidir = performance.now() - escalonado.inicioMs;
+  const kSegunda = modoReOcr === "roi-cabecera" ? K_SEGUNDA_ROI : K_SEGUNDA_COMPLETO;
+  const costeEstimadoSegunda = Math.round(ms1 * kSegunda);
   const tocaSegunda =
     necesitaSegunda(r1.texto) &&
     escalonado.corteIncompleta !== true &&
-    performance.now() - escalonado.inicioMs < presupuestoSegunda;
+    transcurridoAlDecidir < presupuestoSegunda &&
+    costeEstimadoSegunda <
+      escalonado.presupuestoMs - transcurridoAlDecidir - MARGEN_SEGUNDA_MS;
   let elegido: PasadaEscalonada = {
     texto: r1.texto,
     conf: r1.confMedia,
@@ -959,6 +994,9 @@ async function reconocerRapidOcrEscalonado(
   };
   let ms2: number | null = null;
   let anclas2: number | null = null;
+  // B3 — acumulador de tramos mudos (crops de la 1.ª + los de la 2.ª si abre).
+  let msCropsTotal = r1.msCrops;
+  let msSegundaPasada: number | null = null;
   if (tocaSegunda) {
     if (modoReOcr === "roi-cabecera") {
       // KIT e14-gama-baja-20s-v1 — rescate ROI CABECERA: franja top 0-25%
@@ -983,6 +1021,7 @@ async function reconocerRapidOcrEscalonado(
         try {
           const rRoi = await rapidOcrReconocer(rt, roiUrl, onProgress);
           msRoi = Math.round(performance.now() - tR);
+          msCropsTotal += rRoi.msCrops; // B3 — crops de la 2.ª (ROI)
           const texto2 =
             rRoi.texto.trim().length > 0
               ? rRoi.texto.trim() + "\n" + r1.texto.trim()
@@ -1004,6 +1043,7 @@ async function reconocerRapidOcrEscalonado(
       }
       // Traza PROPIA (línea NUEVA — los parsers de ocr-escalonado intactos;
       // la línea de abajo sigue imprimiendo reocr=0 elegido=1280 en este modo).
+      msSegundaPasada = msRoi; // B3 — la 2.ª de este modo ES el rescate ROI
       logger.info(
         `[e14] ocr-rescate-cabecera y0=${ROI_FRACCIONES.top[0]} y1=${ROI_FRACCIONES.top[1]} ` +
           `ms=${msRoi} anclas1=${anclasDe(r1.texto)} anclas2=${anclas2 ?? "-"} adoptado=${adoptado}`,
@@ -1017,6 +1057,8 @@ async function reconocerRapidOcrEscalonado(
         omitirCls,
       });
       ms2 = Math.round(performance.now() - t2);
+      msCropsTotal += r2.msCrops; // B3 — crops de la 2.ª (completa)
+      msSegundaPasada = ms2; // B3
       anclas2 = anclasDe(r2.texto);
       const ganadora = elegirMejor(
         { texto: r1.texto, conf: r1.confMedia, detMs: r1.msDet, recMs: r1.msRec, cap: DET_CAP_RAPIDO },
@@ -1026,15 +1068,19 @@ async function reconocerRapidOcrEscalonado(
     }
   }
   // Traza propia (§2.5 — línea PROPIA, append-only; SIN línea en SIM).
+  // KIT e14-remediacion-movil-v1 (A1): tokens ADITIVOS AL FINAL de la
+  // decisión de arranque (los parsers conocidos solo leen hasta anclas2/ms2):
+  // ventana (tope pared del intento extra) · est (k·ms1 estimado) · abre.
   logger.info(
     `[e14] ocr-escalonado pasada1=${DET_CAP_RAPIDO} lectura=${senal1.nivel} ` +
       `reocr=${ms2 != null ? 1 : 0} elegido=${elegido.cap} anclas1=${anclasDe(r1.texto)}` +
       (ms2 != null
         ? ` anclas2=${anclas2} ms1=${ms1} ms2=${ms2}`
         : ` ms1=${ms1}`) +
-      (escalonado.corteIncompleta === true ? " corte=1" : ""),
+      (escalonado.corteIncompleta === true ? " corte=1" : "") +
+      ` ventana=${presupuestoSegunda} k=${kSegunda} est=${costeEstimadoSegunda} abre=${tocaSegunda ? 1 : 0}`,
   );
-  return { texto: elegido.texto, conf: elegido.conf, detMs: elegido.detMs, recMs: elegido.recMs };
+  return { texto: elegido.texto, conf: elegido.conf, detMs: elegido.detMs, recMs: elegido.recMs, tramos: { msCrops: msCropsTotal, msSegundaPasada: msSegundaPasada } };
 }
 
 /**
@@ -1217,6 +1263,24 @@ async function reconocerRapidOcrCascada(
     rescateMotor: rapidaPrimero
       ? (foto) => tessPasadaParaGate(foto, cfg)
       : undefined,
+    // KIT e14-remediacion-movil-v1 (D6 — P2 #12): deps del rescate QUE APORTA.
+    // anclasFaltantes: campos del GATE aún sin leer (dep/mun/zon/puesto/mesa
+    // contados con el MISMO clasificador de producción — si ya están todos,
+    // ningún texto cambia el desenlace y el rescate no se paga).
+    anclasFaltantes: (texto) => {
+      const c = clasificarCabecera(texto, base);
+      let faltan = 0;
+      if (!c.departamento) faltan++;
+      if (!c.municipio) faltan++;
+      if (!c.zona) faltan++;
+      if (!c.puesto) faltan++;
+      if (c.mesa === null) faltan++;
+      return faltan;
+    },
+    // presupuestoRestanteMs: la MISMA señal del presupuestoVencido (cfg),
+    // pero en ms — el rescate midió 11-13 s (RESCATE_COSTE_ESPERADO_MS).
+    presupuestoRestanteMs: () =>
+      cfg.presupuestoMs - (performance.now() - cfg.inicioMs),
     // Presupuesto EXISTENTE del pipeline (§3 del kit escalonado — sin
     // presupuestos nuevos). RECHAZO TEMPRANO: se declara vencido de entrada,
     // que es exactamente lo que significa «quedan 0 s de OCR por cobrar» — las
@@ -1417,6 +1481,13 @@ function conRampa<T>(
 export interface ParcialPipeline {
   fotoOriginal?: string;
   qrCam?: { payload: string } | null;
+  /** KIT e14-remediacion-movil-v1 (B1 — P0 #3): parciales de TIEMPO ya
+   *  medidos al vencer el watchdog — el acta de timeout deja de emitir una
+   *  muestra sin cuerpo. El pipeline (pipeline.ts) sincroniza este objeto en
+   *  cada frontera de fase (decode/detect/proceso/calidad/orient/ocr);
+   *  el watchdog lo lee tal cual (nada re-evaluado — §9.10). Ausente =
+   *  venció antes de la primera frontera (decode). */
+  msParciales?: Record<string, number>;
 }
 
 /** Campos reales §3.1 que recibe `construirActa` (FASE F: tipo extraído de la
@@ -1563,14 +1634,38 @@ export class RealCoreBridge implements E14Bridge {
         vencido = true;
         // §5: el timeout NO rechaza la Promise — resuelve un acta RECHAZADA
         // controlada (el toast crit sale del flujo normal del store).
-        resolve(
-          this.construirActa(opciones, parcial, {
-            score: 0,
-            scoreVisual: 0,
-            status: "RECHAZADA",
-            rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_TIMEOUT },
-          }),
-        );
+        const actaVencida = this.construirActa(opciones, parcial, {
+          score: 0,
+          scoreVisual: 0,
+          status: "RECHAZADA",
+          rechazo: { tipo: "ILEGIBLE", detalle: DETALLE_TIMEOUT },
+        });
+        // KIT e14-remediacion-movil-v1 (B1 — P0 #3): el WATCHDOG EMITE SU
+        // PerfActa con `vencido: true` y los parciales ya medidos (proceso/
+        // calidad hasta donde existan — parcial.msParciales). Antes, si el
+        // pipeline no llegaba a su emisor final, la muestra del peor caso se
+        // perdía (0/1 timeout con datos en la medición del informe).
+        try {
+          void import("./obs/captura")
+            .then((m) =>
+              m.emitirPerfDeActa({
+                actaId: actaVencida.id,
+                status: actaVencida.status,
+                intento: opciones.intento,
+                tiempos: parcial.msParciales ?? {},
+                scoreVisual: 0,
+                scoreFinal: 0,
+                gate: "TIMEOUT",
+                ocrValido: false,
+                vencido: true,
+                camino: "pipeline",
+              }),
+            )
+            .catch(() => {});
+        } catch {
+          /* la emisión del watchdog jamás rompe el desenlace */
+        }
+        resolve(actaVencida);
         // Presupuesto OPCIONAL por llamada (OpcionesEscaneoConTimeout);
         // el default manda en el flujo individual (120_000 desde e67).
       }, opciones.timeoutMs ?? presupuestoEscaneoEfectivo());
@@ -2275,6 +2370,43 @@ export class RealCoreBridge implements E14Bridge {
     // «TU RECORTE SE APLICÓ — …». El swap de display permanece (§D4) y el
     // umbral de tinta NO se toca (image-utils intacto — prohibido §2-T3.3).
     if (manual && procesadaVacia) actaActualizada.recorteManualSinTinta = true;
+    // KIT e14-remediacion-movil-v1 (B1 — P1 #22): la ruta de RECORTE/IMPORT
+    // también emite su PerfActa con `camino: "recorte"` — era el call-site
+    // único del emisor (pipeline.ts) lo que dejaba las importaciones 0/2 sin
+    // muestra. Guard §9.2: un recorte de un acta SIMULACION tampoco emite.
+    // lazy import + catch total (el rastreo jamás rompe el recorte, §2.4).
+    if (acta.fuente !== "SIMULACION") {
+      try {
+        void import("./obs/captura")
+          .then((m) =>
+            m.emitirPerfDeActa({
+              actaId: actaActualizada.id,
+              status: actaActualizada.status,
+              intento: acta.intento,
+              tiempos: {
+                procesoMs: Math.round(ms.proceso),
+                calidadMs: Math.round(ms.calidad),
+                ocrMs: Math.round(ms.ocr),
+                totalMs: Math.round(ms.total),
+              },
+              scoreVisual,
+              scoreFinal: score,
+              gate: gate.status,
+              ocrValido: ocrTextIsValid(texto),
+              camino: "recorte",
+              tramos: {
+                msCrops: ocrEsc.tramos?.msCrops ?? null,
+                msSegundaPasada: ocrEsc.tramos?.msSegundaPasada ?? null,
+                msProbe: probeMsOrientacion ?? null,
+                msBanda: null,
+              },
+            }),
+          )
+          .catch(() => {});
+      } catch {
+        /* la emisión jamás rompe el recorte */
+      }
+    }
     return actaActualizada;
   }
 

@@ -297,6 +297,12 @@ function crearFakeIndexedDB(): IDBFactory {
                 if (txInt.pendientes === 0) txInt.oncomplete?.();
               });
             };
+
+            // (B2.3) una tx SIN requests se AUTO-CONFIRMA (semántica IDB
+            // real — commit vacío). El fake solo completaba cuando un reqDe
+            // llegaba a cero; mantener() ahora abre txs donde el trabajo va
+            // por el CURSOR (no reqDe) → sin esto, esperarTx colgaba.
+            queueMicrotask(quizasCompletar);
             return {
               objectStore: (n: string) => {
                 const datos = stores.get(n)!;
@@ -319,6 +325,65 @@ function crearFakeIndexedDB(): IDBFactory {
                   clear: () => reqDe(undefined, () => datos.clear()),
                   count: () => reqDe(datos.size),
                   getAll: () => reqDe([...datos.values()]),
+                  // KIT e14-remediacion-movil-v1 (B2.3): el fake aprende ÍNDICES
+                  // — mantener() ya NO hace getAll()+sort por append (leía
+                  // 701 KB en mitad del escaneo); usa count() + cursor por el
+                  // índice `ts` (solo vencidos, luego solo el exceso más
+                  // viejo). El fake replica: orden por la clave del índice +
+                  // rango (upperBound/lowerBound con open/closed) + cursor con
+                  // delete/continue (semántica IDB: onsuccess con null al
+                  // agotarse).
+                  index: (nombreIdx: string) => {
+                    const claveDe = (v: Record<string, unknown>) => Number(v[nombreIdx] ?? 0);
+                    const dentro = (v: Record<string, unknown>, r?: IDBKeyRange) => {
+                      if (!r) return true;
+                      const val = claveDe(v);
+                      if (
+                        r.lower !== undefined &&
+                        (r.lowerOpen ? val <= (r.lower as number) : val < (r.lower as number))
+                      )
+                        return false;
+                      if (
+                        r.upper !== undefined &&
+                        (r.upperOpen ? val >= (r.upper as number) : val > (r.upper as number))
+                      )
+                        return false;
+                      return true;
+                    };
+                    const ordenados = (r?: IDBKeyRange) =>
+                      ([...datos.values()] as Record<string, unknown>[])
+                        .sort((a, b) => claveDe(a) - claveDe(b))
+                        .filter((v) => dentro(v, r));
+                    return {
+                      count: (r?: IDBKeyRange) => reqDe(ordenados(r).length),
+                      openCursor: (r?: IDBKeyRange) => {
+                        const lista = ordenados(r);
+                        let i = 0;
+                        const reqInt = new FakeRequest<unknown>(null);
+                        const req = reqInt as unknown as IDBRequest<unknown>;
+                        const entregar = () => {
+                          if (i < lista.length) {
+                            const actual = lista[i];
+                            reqInt.result = {
+                              value: actual,
+                              delete: () => {
+                                datos.delete((actual as { id: string }).id);
+                              },
+                              continue: () => {
+                                i++;
+                                entregar();
+                              },
+                            };
+                          } else {
+                            reqInt.result = null;
+                          }
+                          queueMicrotask(() => reqInt.onsuccess?.());
+                        };
+                        entregar();
+                        return req;
+                      },
+                    } as unknown as IDBIndex;
+                  },
                 } as unknown as IDBObjectStore;
               },
             };
@@ -353,6 +418,20 @@ function evtBase(tipo: EventoObs["tipo"], ts: number, datos: Record<string, unkn
 describe("buffer · IDB (fake mínimo — roundtrip, tope, TTL, digest)", () => {
   beforeAll(() => {
     vi.stubGlobal("indexedDB", crearFakeIndexedDB());
+    // KIT e14-remediacion-movil-v1 (B2.3): el fake emula también IDBKeyRange
+    // — mantener() construye rangos sobre el índice `ts` (upperBound con
+    // open/closed). jsdom NO trae el global; el shape mínimo es el que lee
+    // el `dentro()` del fake (lower/upper + *Open).
+    vi.stubGlobal("IDBKeyRange", {
+      upperBound: (u: number, exclusivo?: boolean) => ({ upper: u, upperOpen: exclusivo === true }),
+      lowerBound: (l: number, exclusivo?: boolean) => ({ lower: l, lowerOpen: exclusivo === true }),
+      bound: (l: number, u: number, lex?: boolean, uex?: boolean) => ({
+        lower: l,
+        lowerOpen: lex === true,
+        upper: u,
+        upperOpen: uex === true,
+      }),
+    });
   });
 
   /** Aislamiento: cada test arranca con el buffer VACÍO (los tests previos

@@ -95,6 +95,23 @@ export async function correrPipelineL2(
     esq: 0,
   };
   const inicio = performance.now();
+  // KIT e14-remediacion-movil-v1 (B1 — P0 #3): sincronizador de parciales —
+  // copia los ms de fases YA completadas al acumulador `parcial` que lee el
+  // watchdog al vencer. Barato (un literal por frontera), nada re-evaluado.
+  const syncParcial = (): void => {
+    try {
+      parcial.msParciales = {
+        decodeMs: Math.round(ms.decode),
+        detectMs: Math.round(ms.detect),
+        procesoMs: Math.round(ms.proceso),
+        calidadMs: Math.round(ms.calidad),
+        orientMs: Math.round(ms.orient),
+        ...(ms.ocr > 0 ? { ocrMs: Math.round(ms.ocr) } : {}),
+      };
+    } catch {
+      /* la sincronización jamás rompe el pipeline */
+    }
+  };
 
   // 1) Entrada → data URL crudo (F-IMPORT del core: HEIC/EXIF/12MP seguros;
   //    en CAMARA sin archivo el dataUrl ya vino del grab del <video>).
@@ -111,6 +128,7 @@ export async function correrPipelineL2(
       : entrada.dataUrl;
   ms.decode = performance.now() - inicio;
   parcial.fotoOriginal = fotoOriginal;
+  syncParcial(); // B1 — frontera decode
 
   // e64-qr T-2.1 — CAPA 0 QR también en cámara (kit FASE 2 / hermano C-1):
   // el MISMO decodificador de la capa QR (src/lib/e14/qr — reubicada tras
@@ -236,6 +254,7 @@ export async function correrPipelineL2(
   }
   ms.detect = performance.now() - tDetect;
   emitir({ etapa: "DETECTANDO", progreso: 1 });
+  syncParcial(); // B1 — frontera detect
 
   // KIT e14-velocidad-5s-v1 — la CALIDAD se mide sobre la ORIGINAL + quad
   // (NO necesita el warp): se LANZA aquí, así su muestreo no suma ~180 ms en
@@ -339,6 +358,7 @@ export async function correrPipelineL2(
       emitir,
     );
     ms.proceso = performance.now() - tProceso;
+    syncParcial(); // B1 — frontera proceso (warp+realce)
     emitir({ etapa: "REALZANDO", progreso: 1 });
     fotoProcesada = resultado.processed;
     filtroActa = "bw";
@@ -457,6 +477,7 @@ export async function correrPipelineL2(
   const procesadaVacia = await procesadaVaciaDataUrl(fotoProcesada);
   ms.esq = performance.now() - tEsq;
   ms.orient = performance.now() - tOri;
+  syncParcial(); // B1 — frontera orientación+esquinas
 
   // 4) Calidad de la página (Laplaciano + contraste + brillo).
   //    KIT visor-accion-score-v1 (FASE S): se evalúa el RECORTE del acta
@@ -469,6 +490,7 @@ export async function correrPipelineL2(
   const calidad = await calidadPromise;
   ms.calidad = performance.now() - tCalidad;
   emitir({ etapa: "CALIDAD", progreso: 1 });
+  syncParcial(); // B1 — frontera calidad
 
   // KIT e14-velocidad-5s-v1 — RECHAZO TEMPRANO (flag `ocrCorteIncompleta`).
   // La verificación de completitud se COSECHA acá (antes se esperaba junto al
@@ -532,12 +554,16 @@ export async function correrPipelineL2(
     : await pasos.reconocerRapidOcrEscalonado(fotoOcr, onProgresoOcr, cfgOcr);
   let texto = ocrEsc.texto;
   ms.ocr = performance.now() - tOcr;
+  syncParcial(); // B1 — frontera OCR (el watchdog ya venció si llegó tarde — el dato queda para el rescate)
   // PROD-2 (§4.2): conf/det/rec de la pasada ELEGIDA (SPRINT-A A4: la
   // captura vive aquí — la dead store ultimoOcr* fue eliminada).
   const confOcr = ocrEsc.conf;
   const detOcr = ocrEsc.detMs;
   const recOcr = ocrEsc.recMs;
   emitir({ etapa: "OCR", progreso: 1 });
+  // KIT e14-remediacion-movil-v1 (B3 — P1 #9): la banda del sello deja de ser
+  // suma ciega a ms.ocr — su tiempo se publica como tramo propio.
+  let msBandaOcr: number | null = null;
   // KIT consenso-frankfurt-v1 (FASE 4, §5): banda dirigida — si el OCR
   // completo no leyó la banda (sello blanco-sobre-negro, §0-F4), SEGUNDA
   // pasada OCR del crop invertido ×2. UNA sola vez, ANTES de
@@ -546,7 +572,8 @@ export async function correrPipelineL2(
   if (!opciones.simular && tipoDeBanda(texto) === null) {
     const tBanda = performance.now();
     texto += "\n" + (await pasos.ocrBanda(fotoProcesada));
-    ms.ocr += performance.now() - tBanda;
+    msBandaOcr = performance.now() - tBanda;
+    ms.ocr += msBandaOcr;
   }
   ms.total = performance.now() - inicio;
 
@@ -947,6 +974,18 @@ export async function correrPipelineL2(
           gate: gate.status,
           ocrValido: diag.ocrValido,
           lectura: ocrEsc.lectura,
+          // KIT e14-remediacion-movil-v1 (B1): la ruta queda DISTINGUIBLE en
+          // el buffer ("pipeline" — el recorte emite "recorte").
+          camino: "pipeline",
+          // KIT e14-remediacion-movil-v1 (B3): tramos del OCR sin atribuir —
+          // crops/segunda del motor + banda + probe consolidado. Ausente =
+          // no medido (SIM o cascada sin despiece).
+          tramos: {
+            msCrops: ocrEsc.tramos?.msCrops ?? null,
+            msSegundaPasada: ocrEsc.tramos?.msSegundaPasada ?? null,
+            msProbe: probeMsOrientacion ?? null,
+            msBanda: msBandaOcr,
+          },
         }),
       )
       .catch(() => {});

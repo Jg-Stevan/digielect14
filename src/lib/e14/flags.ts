@@ -148,6 +148,12 @@ export const FLAGS_DEFAULT: FlagsApp = {
   qrBrujulaWarpPases: 0,
   ocrReOcrRoi: false,
   ocrSegundaTopeMs: 0,
+  // KIT e14-remediacion-movil-v1 (A1): ventana de ARRANQUE de la 2.ª pasada
+  // como flag del dueño (override MANUAL — doble whitelist). null = el plan
+  // por tier (BAJO 15 s · MEDIO/ALTO 45 s — postura 2 de A1). Número =
+  // override MANUAL clampado. El modo por tier sigue en adaptacion/plan.ts
+  // (roi-cabecera) y la fórmula k·ms1 del bridge es la garantía dura.
+  ocrSegundaPresupuestoMs: null,
   // KIT e14-velocidad-5s-v1 — RECHAZO TEMPRANO. El guard de completitud condena
   // sin leer una letra (geometría del quad + fiduciales medidos sobre la
   // procesada), y `completa` se copia de esa verificación: si ya dijo
@@ -268,6 +274,11 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.ocrReOcrRoi === "boolean") limpio.ocrReOcrRoi = p.ocrReOcrRoi;
   if (typeof p.ocrSegundaTopeMs === "number" && Number.isFinite(p.ocrSegundaTopeMs)) {
     limpio.ocrSegundaTopeMs = Math.max(0, Math.min(120_000, Math.round(p.ocrSegundaTopeMs)));
+  }
+  // KIT e14-remediacion-movil-v1 (A1) — whitelist aditiva (null o ms clampados).
+  if (p.ocrSegundaPresupuestoMs === null) limpio.ocrSegundaPresupuestoMs = null;
+  if (typeof p.ocrSegundaPresupuestoMs === "number" && Number.isFinite(p.ocrSegundaPresupuestoMs)) {
+    limpio.ocrSegundaPresupuestoMs = Math.max(5_000, Math.min(120_000, Math.round(p.ocrSegundaPresupuestoMs)));
   }
   if (typeof p.ocrCorteIncompleta === "boolean") limpio.ocrCorteIncompleta = p.ocrCorteIncompleta;
   return limpio;

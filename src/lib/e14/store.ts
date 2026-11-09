@@ -34,6 +34,7 @@ import {
 // pipeline → motivo de operador + forma del aviso del visor.
 import {
   clasificarErrorPipeline,
+  esFalloMemoriaMotor,
   type AvisoOperador,
   type MotivoOperador,
 } from "./errores";
@@ -125,6 +126,13 @@ interface E14Store {
   fuente: FuenteCaptura;
   /** Archivo elegido para la fuente ARCHIVO (L2 lo consume). */
   archivoPendiente: File | null;
+  /** KIT e14-remediacion-movil-v1 (D4 — P2 #24): bandera SÍNCRONA del
+   *  IMPORTAR — nace en el `onChange` del input file (el procesamiento del
+   *  archivo es async ~1-2 s antes de setArchivoPendiente) y BLOQUEA el
+   *  disparo automático de la cámara mientras vuela. Si el disparo automático
+   *  ya ocurrió, el operador ve el aviso explícito (cero descartes
+   *  silenciosos — el archivo importado se perdía sin avisar). */
+  importPendiente: boolean;
   /** Video vivo de la fuente CÁMARA (L3: grab del frame si el disparo no trae foto). */
   framePendiente: HTMLVideoElement | null;
   /** Último evento de progreso del pipeline (alimenta ANALIZANDO, §7.2). */
@@ -182,6 +190,9 @@ interface E14Store {
   avanzarSimulacion: () => void;
   setFuente: (fuente: FuenteCaptura) => void;
   setArchivoPendiente: (archivo: File | null) => void;
+  /** KIT e14-remediacion-movil-v1 (D4): setea/limpia la bandera síncrona del
+   *  IMPORTAR (llamar SIEMPRE en el onChange, antes de cualquier await). */
+  setImportPendiente: (v: boolean) => void;
   /** Registra el <video> vivo de la cámara (null al detener el stream). */
   setFramePendiente: (frame: HTMLVideoElement | null) => void;
   alternarConexion: () => void;
@@ -271,6 +282,11 @@ interface E14Store {
   }) => void;
   /** Descarta el aviso del visor (botón × de la franja). */
   descartarAvisoVisor: () => void;
+  /** KIT e14-remediacion-movil-v1 (A4): TOKEN de desarme de la auto-captura
+   *  tras un fallo de sesión OCR (fin del bucle condenado de ~6 s). ScanView
+   *  lo observa y apaga autoArmado hasta interacción del operador (la
+   *  próxima apertura de cámara re-arma como siempre — AC15 intacto). */
+  tokenDesarmarAuto: number;
   /** Ola 3.2 (U4 — plan 3.2): salida del ANALIZANDO estancado. Marca el
    *  desenlace como RECHAZADA/CANCELADA (fila de historial RESCANEO_REQUERIDO
    *  con la nota «— CANCELADA POR EL OPERADOR» + contador de motivos), limpia
@@ -278,6 +294,13 @@ interface E14Store {
    *  jornada. El desenlace tardío del pipeline en vuelo se descarta (bandera
    *  escaneoCancelado) — sin acta fantasma ni rescate del watchdog. */
   cancelarAnalisis: () => void;
+  /** KIT e14-remediacion-movil-v1 (A3 — P0 #4): el análisis fue INTERRUMPIDO
+   *  por el ocultamiento de la app (visibilitychange → hidden con
+   *  vista === "analizando" — lo llama AnalyzingView). Desenlace EXPLÍCITO:
+   *  fila de historial «— INTERRUMPIDA» + aviso del visor + bandera de
+   *  cancelación con motivo "interrumpida" (un desenlace tardío VÁLIDO se
+   *  adopta — el rescate e67 manda). Jamás RECHAZADA 0.0 silenciosa. */
+  interrumpirAnalisis: () => void;
   /**
    * KIT camara-visor-v1 (G3 — upgrade silencioso del lab L1789-1842):
    * re-procesa el acta con la foto FULL-RES del sensor que aterrizó en
@@ -486,8 +509,44 @@ let rotandoFotoEnVuelo = false;
  *  archivo intocable) — esta bandera hace que el desenlace TARDÍO se
  *  descarte al resolver: sin acta fantasma, sin actasSesion+1, sin rescate
  *  del watchdog (actaVencida queda null). Un solo disparo en vuelo existe
- *  (guard de vista "analizando"), así que una bandera de módulo basta. */
+ *  (guard de vista "analizando"), así que una bandera de módulo basta.
+ *
+ *  KIT e14-remediacion-movil-v1 (A3): ¿QUIÉN canceló? El botón del operador
+ *  ("operador") o el ocultamiento de la app ("interrumpida" —
+ *  interrumpirAnalisis desde AnalyzingView). Con "interrumpida", un desenlace
+ *  tardío VÁLIDO se ADOPTA (el rescate manda — A3.3); con "operador" se
+ *  descarta como siempre. */
 let escaneoCancelado = false;
+let motivoCancelacionEscaneo: "operador" | "interrumpida" = "operador";
+
+/** KIT e14-remediacion-movil-v1 (A4 — P0 #21): evento de obs
+ *  `ocr:sesion-fallida` — la sesión del motor OCR murió (familia bad_alloc
+ *  de ONNX Runtime). Cuenta como evidencia de presión de memoria (#16) y
+ *  deja el fallo observable por evento (AC de A4). Jamás lanza (§2.4). */
+async function emitirSesionFallida(err: unknown, reiniciado: boolean): Promise<void> {
+  try {
+    const { appendEvento } = await import("@jg-stevan/scanner-core/obs-base/buffer");
+    const { idSesion, idDispositivo, appVersion } = await import("@jg-stevan/scanner-core/obs-base/identidad");
+    const mensaje = err instanceof Error ? `${err.name}: ${err.message}` : String(err ?? "desconocido");
+    await appendEvento({
+      tipo: "warn",
+      ts: Date.now(),
+      sesion: idSesion(),
+      dispositivo: idDispositivo(),
+      appVersion: appVersion(),
+      datos: {
+        mensaje: `ocr:sesion-fallida reinicio=${reiniciado ? 1 : 0} — ${mensaje.slice(0, 300)}`,
+        stack: (err instanceof Error ? err.stack ?? "" : "").slice(0, 2000),
+        tipo: "OcrSesionFallida",
+        archivo: null,
+        digest: mensaje.slice(0, 80),
+        breadcrumbs: [],
+      },
+    });
+  } catch {
+    /* la observabilidad jamás rompe la recuperación */
+  }
+}
 
 // ---------- KIT L6: estado del PERSISTER (módulo — declarado ANTES del
 // create para excluir cualquier TDZ con HMR re-evaluando el módulo) ----------
@@ -799,6 +858,10 @@ export const useE14Store = create<E14Store>((set, get) => {
     motivosNoEnvio: {},
     // KIT errores-operador-v1 (plan 3.1): sin aviso al arrancar.
     avisoVisor: null,
+    // KIT e14-remediacion-movil-v1: bandera del IMPORTAR (D4) apagada y
+    // token de desarme de auto-captura (A4) sin eventos.
+    importPendiente: false,
+    tokenDesarmarAuto: 0,
 
     navegar: (vista) =>
       set({ vista }),
@@ -890,6 +953,10 @@ export const useE14Store = create<E14Store>((set, get) => {
 
     setArchivoPendiente: (archivo) => set({ archivoPendiente: archivo }),
 
+    // KIT e14-remediacion-movil-v1 (D4): bandera SÍNCRONA — set() de Zustand
+    // es síncrono, así que nace en el onChange ANTES de cualquier await.
+    setImportPendiente: (v) => set({ importPendiente: v }),
+
     setFramePendiente: (frame) => set({ framePendiente: frame }),
 
     // ─── KIT errores-operador-v1 (plan 3.1): aviso del visor ───
@@ -935,6 +1002,49 @@ export const useE14Store = create<E14Store>((set, get) => {
       });
     },
 
+    // ─── KIT e14-remediacion-movil-v1 (A3 — P0 #4): interrupción honesta ───
+    // Espejo de cancelarAnalisis con motivo EXPLÍCITO: la app pasó a segundo
+    // plano en mitad del análisis (los setTimeout quedan congelados y
+    // performance.now() sigue avanzando — al volver, el watchdog dispararía
+    // una RECHAZADA 0.0 sin haber analizado nada, informe §7). Aquí el
+    // desenlace es «INTERRUMPIDA — repetir la foto», jamás un rechazo mudo.
+    interrumpirAnalisis: () => {
+      if (get().vista !== "analizando") return;
+      // El desenlace tardío del pipeline se descarta/adopta al resolver (ver
+      // motivoCancelacionEscaneo — sin abort real en el bridge).
+      escaneoCancelado = true;
+      motivoCancelacionEscaneo = "interrumpida";
+      const fila: HistorialRow = {
+        id: idHistorial(),
+        titulo: `${tituloPaginaActual()} — INTERRUMPIDA`,
+        estado: "RESCANEO_REQUERIDO",
+        hora: bridge.horaHistorial(),
+      };
+      logger.info(
+        "[e14] análisis interrumpido por ocultamiento — desenlace explícito: interrumpida",
+      );
+      const motivos = get().motivosNoEnvio;
+      set({
+        vista: "escanear",
+        actaActual: null,
+        progresoAnalisis: null,
+        analisisResuelto: false,
+        solicitudesRescaneo: get().solicitudesRescaneo + 1,
+        historial: [fila, ...get().historial],
+        motivosNoEnvio: {
+          ...motivos,
+          "rechazo:interrumpida-en-vuelo":
+            (motivos["rechazo:interrumpida-en-vuelo"] ?? 0) + 1,
+        },
+        avisoVisor: {
+          tipo: "info",
+          motivo: "ANALISIS_INTERRUMPIDO",
+          accion: null,
+          ts: Date.now(),
+        } satisfies AvisoOperador,
+      });
+    },
+
     alternarConexion: () => {
       const { online, colaOffline, actaActual } = get();
       if (online) {
@@ -960,7 +1070,21 @@ export const useE14Store = create<E14Store>((set, get) => {
       // tarde) lanzaba un 2º pipeline concurrente: doble OCR compitiendo
       // por el wasm, actasSesion +2. La vista "analizando" se setea
       // SÍNCRONAMENTE al entrar → el guard cierra la carrera.
-      if (get().vista === "analizando") return;
+      // KIT e14-remediacion-movil-v1 (D4 — P2 #24): el guard dejo de ser
+      // mudo — si quien chocó con él es un ARCHIVO importado (la auto-captura
+      // ganó la carrera), el operador ve el aviso explícito «Se analizó la
+      // cámara, no tu archivo» (cero descartes silenciosos).
+      if (get().vista === "analizando") {
+        if (get().importPendiente) {
+          set({ importPendiente: false });
+          get().mostrarAvisoVisor({
+            tipo: "info",
+            motivo: "CAPTURA_AUTO_GANO_CARRERA",
+            accion: null,
+          });
+        }
+        return;
+      }
       const { mesas, fuente, archivoPendiente, framePendiente, actaActual: previa } = get();
       // §D3 (SPEC-e14-simulacion-scores): un chip SIEMPRE corre la fuente
       // SIMULACION con el asset fijo de su banda + score inyectado (el bridge
@@ -1006,6 +1130,9 @@ export const useE14Store = create<E14Store>((set, get) => {
         // KIT errores-operador-v1 (plan 3.1): el operador ACTUÓ (re-disparó)
         // → el aviso de error previo sale de la franja.
         avisoVisor: null,
+        // KIT e14-remediacion-movil-v1 (D4): el disparo ARRANCÓ de verdad →
+        // la bandera síncrona del IMPORTAR cumple su ciclo y se apaga.
+        importPendiente: false,
       });
       try {
         // e67-watchdog-rescate-v1 (cambio B): variable tipada — MISMO patrón
@@ -1042,14 +1169,77 @@ export const useE14Store = create<E14Store>((set, get) => {
                 },
               }),
         };
-        const acta = await bridge.escanearActa(opcionesEscaneo);
+        // KIT e14-remediacion-movil-v1 (A4 — P0 #21): el fallo de sesión del
+        // motor OCR (familia bad_alloc de ONNX Runtime) deja de condenar la
+        // app: se clasifica, se reinicia el runtime REAL (release de sesiones
+        // + singleton fuera — antes SIN llamadores) y se reintenta UNA vez.
+        // Si el reintento vuelve a fallar, el catch externo monta el estado
+        // explícito MEMORIA_AGOTADA con botón Recargar (nunca una cadena de
+        // reintentos automáticos condenados).
+        const acta = await (async (): Promise<Acta> => {
+          try {
+            return await bridge.escanearActa(opcionesEscaneo);
+          } catch (errPrimero) {
+            if (!esFalloMemoriaMotor(errPrimero)) throw errPrimero;
+            logger.error(
+              "[e14] sesión OCR caída (familia bad_alloc) — reinicio real del motor + 1 reintento",
+              errPrimero,
+            );
+            void emitirSesionFallida(errPrimero, true);
+            try {
+              const { rapidOcrReiniciar } = await import("./ocr/rapidocr");
+              await rapidOcrReiniciar();
+            } catch {
+              /* el reinicio es best-effort — el reintento decide */
+            }
+            // Desarmar la AUTO-CAPTURA hasta interacción del operador — fin
+            // del bucle condenado de ~6 s (la auto se re-arma en la próxima
+            // apertura de cámara, AC15 intacto).
+            set({ tokenDesarmarAuto: get().tokenDesarmarAuto + 1 });
+            try {
+              return await bridge.escanearActa(opcionesEscaneo);
+            } catch (errSegundo) {
+              void emitirSesionFallida(errSegundo, false);
+              throw errSegundo;
+            }
+          }
+        })();
         // Ola 3.2 (U4): el operador canceló durante el análisis → el desenlace
         // TARDÍO se descarta completo: no adopta el acta, no cuenta
         // actasSesion, no deja analisisResuelto encendido y deja actaVencida
         // en null (un rescate tardío del watchdog no tiene a quién rescatar).
+        // KIT e14-remediacion-movil-v1 (A3): si quien canceló fue el
+        // OCULTAMIENTO (interrumpida) y el pipeline terminó VÁLIDO pese a
+        // todo, el rescate MANDA — el desenlace real se adopta y el acta
+        // legible jamás se pierde por ocultar la app.
         if (escaneoCancelado) {
           escaneoCancelado = false;
-          logger.info("[e14] escaneo cancelado por el operador — desenlace tardío descartado");
+          const interrumpida = motivoCancelacionEscaneo === "interrumpida";
+          motivoCancelacionEscaneo = "operador";
+          if (
+            interrumpida &&
+            (acta.status === "OPTIMA" || acta.status === "ADVERTENCIA")
+          ) {
+            logger.info(
+              "[e14] pipeline terminó válido pese a la interrupción — el rescate manda (A3.3)",
+              { actaId: acta.id, score: acta.score },
+            );
+            set({
+              actaActual: { ...acta, scoreRescatadoPor: "post-interrupcion" },
+              paginaObjetivo: objetivo,
+              actasSesion: get().actasSesion + 1,
+              analisisResuelto: true,
+              archivoPendiente: null,
+              avisoVisor: null,
+            });
+            get().analisisCompletado();
+            return;
+          }
+          logger.info(
+            interrumpida
+              ? "[e14] escaneo interrumpido por ocultamiento — desenlace tardío descartado"
+              : "[e14] escaneo cancelado por el operador — desenlace tardío descartado",
+          );
           return;
         }
         actaVencida = acta;
@@ -1090,20 +1280,32 @@ export const useE14Store = create<E14Store>((set, get) => {
         // que el operador deba ver — vuelve al visor en silencio.
         const cancelada = escaneoCancelado;
         escaneoCancelado = false;
+        motivoCancelacionEscaneo = "operador";
         set({
           vista: "escanear",
           progresoAnalisis: null,
           analisisResuelto: false,
           ...(cancelada
             ? {}
-            : {
-                avisoVisor: {
-                  tipo: "error",
-                  motivo: clasificarErrorPipeline(err),
-                  accion: "reintentar",
-                  ts: Date.now(),
-                } satisfies AvisoOperador,
-              }),
+            : esFalloMemoriaMotor(err)
+              ? {
+                  // KIT e14-remediacion-movil-v1 (A4): el estado explícito con
+                  // botón RECARGAR — única salida honesta tras reinicio+reintento.
+                  avisoVisor: {
+                    tipo: "error",
+                    motivo: "MEMORIA_AGOTADA",
+                    accion: "recargar",
+                    ts: Date.now(),
+                  } satisfies AvisoOperador,
+                }
+              : {
+                  avisoVisor: {
+                    tipo: "error",
+                    motivo: clasificarErrorPipeline(err),
+                    accion: "reintentar",
+                    ts: Date.now(),
+                  } satisfies AvisoOperador,
+                }),
         });
       }
     },

@@ -160,6 +160,15 @@ export interface FlagsApp {
   // escaneo). En el A56 la 1.ª pasada con rescate ya tarda ~4,8 s: con 3 000 el
   // re-OCR y el ROI simplemente no abren.
   ocrSegundaTopeMs: number; // default 0 · clamp [0, 120000]
+  // KIT e14-remediacion-movil-v1 (A1) — campo ADITIVO AL FINAL (D57): ventana
+  // de ARRANQUE de la 2.ª pasada como override MANUAL del dueño (doble
+  // whitelist flags.ts + obs/politica.ts). null = plan por tier (BAJO 15 s ·
+  // MEDIO/ALTO 45 s — postura 2 de A1, rescate ROI conservado); número =
+  // override clampado. La garantía de duración vive en la fórmula k·ms1 del
+  // bridge (k 2.5 completo / 1.2 ROI, margen 8 s) — este flag solo mueve la
+  // ventana. Prioridad: este override > plan por tier > presupuesto del
+  // escaneo.
+  ocrSegundaPresupuestoMs: number | null; // default null · clamp [5000, 120000]
   // RECHAZO TEMPRANO: con el veredicto bloqueado ANTES del OCR (el guard de
   // completitud ya dijo `completa:false` y el veto solo puede empeorarlo), ¿se
   // cobra UNA sola pasada y se corta? true = sí · false = la escalada corre

@@ -225,6 +225,14 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     if (typeof o.ocrSegundaTopeMs === "number" && Number.isFinite(o.ocrSegundaTopeMs)) {
       limpio.ocrSegundaTopeMs = Math.max(0, Math.min(120_000, Math.round(o.ocrSegundaTopeMs)));
     }
+    // KIT e14-remediacion-movil-v1 (A1) — mismo criterio (DOBLE whitelist):
+    // ventana de ARRANQUE de la 2.ª pasada como override MANUAL del dueño
+    // (A/B del knob por tier sin rebuild — el punto 3 del ítem A1). Sin esta
+    // línea el override localStorage sería inalcanzable (prioridad máxima, D6).
+    if (o.ocrSegundaPresupuestoMs === null) limpio.ocrSegundaPresupuestoMs = null;
+    if (typeof o.ocrSegundaPresupuestoMs === "number" && Number.isFinite(o.ocrSegundaPresupuestoMs)) {
+      limpio.ocrSegundaPresupuestoMs = Math.max(5_000, Math.min(120_000, Math.round(o.ocrSegundaPresupuestoMs)));
+    }
     // KIT e14-velocidad-5s-v1 — mismo criterio (DOBLE whitelist): el kill-switch
     // {"ocrCorteIncompleta": false} del rechazo temprano.
     if (typeof o.ocrCorteIncompleta === "boolean") limpio.ocrCorteIncompleta = o.ocrCorteIncompleta;

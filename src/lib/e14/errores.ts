@@ -12,8 +12,9 @@
  */
 
 /** Motivos de operador (unión cerrada — el UI nunca muestra strings libres).
- *  Los 5 primeros son del plan 3.1; OTRA_PESTANA_ACTIVA (bloque 6.12) y
- *  HEIC_NO_SOPORTADO (F-IMPORT/HEIC) completan la unión para cubrir los
+ *  Los 5 primeros son del plan 3.1; OTRA_PESTANA_ACTIVA (bloque 6.12),
+ *  HEIC_NO_SOPORTADO (F-IMPORT/HEIC), MEMORIA_AGOTADA y ANALISIS_INTERRUMPIDO
+ *  (KIT e14-remediacion-movil-v1 — A4 y A3) completan la unión para cubrir los
  *  avisos accionables de las demás olas. */
 export type MotivoOperador =
   | "CAMARA_NO_DISPONIBLE"
@@ -22,6 +23,9 @@ export type MotivoOperador =
   | "ALMACENAMIENTO_LLENO"
   | "OTRA_PESTANA_ACTIVA"
   | "HEIC_NO_SOPORTADO"
+  | "MEMORIA_AGOTADA"
+  | "ANALISIS_INTERRUMPIDO"
+  | "CAPTURA_AUTO_GANO_CARRERA"
   | "ERROR_DESCONOCIDO";
 
 /** Aviso del visor montado en el ESTADO del store (plan 3.1.2): el catch del
@@ -32,9 +36,12 @@ export interface AvisoOperador {
   tipo: "error" | "info";
   motivo: MotivoOperador;
   /** "reintentar" → ScanView pinta el botón Reintentar (re-dispara el
-   *  escaneo; para CAMARA_NO_DISPONIBLE re-abre la cámara). null → solo
-   *  descartable (p. ej. ALMACENAMIENTO_LLENO: la acción es del dueño). */
-  accion: "reintentar" | null;
+   *  escaneo; para CAMARA_NO_DISPONIBLE re-abre la cámara).
+   *  "recargar" → KIT e14-remediacion-movil-v1 (A4): el botón Recarga la
+   *  página (única salida honesta cuando la memoria del motor OCR está
+   *  agotada tras el reintento). null → solo descartable (p. ej.
+   *  ALMACENAMIENTO_LLENO: la acción es del dueño). */
+  accion: "reintentar" | "recargar" | null;
   /** Marca de tiempo (desempate/orden — no se persiste). */
   ts: number;
 }
@@ -58,6 +65,31 @@ function nombreYMensaje(err: unknown): { nombre: string; mensaje: string } {
   } catch {
     return { nombre: "", mensaje: "" };
   }
+}
+
+/**
+ * KIT e14-remediacion-movil-v1 (A4 — P0 #21): ¿el fallo ES de memoria del
+ * motor OCR (std::bad_alloc de ONNX Runtime)? Familia medida en el A13
+ * (7 escaneos seguidos inservibles): `std::bad_alloc`, ERROR_CODE 6,
+ * `Can't create a session`, `RangeError: Array buffer allocation failed`.
+ * El catch de dispararEscaneo la usa para clasificar + reiniciar el motor.
+ * Jamás lanza (entrada hostil — mismo criterio de clasificarErrorPipeline).
+ */
+export function esFalloMemoriaMotor(err: unknown): boolean {
+  const { nombre, mensaje } = nombreYMensaje(err);
+  const todo = `${nombre} ${mensaje}`.toLowerCase();
+  return (
+    /bad_alloc/.test(todo) ||
+    /error_code:?\s*6\b/.test(todo) ||
+    /can't create a session|cannot create a session/.test(todo) ||
+    /array buffer allocation/.test(todo) ||
+    (nombreL2(nombre) === "rangeerror" && /allocation|memory|buffer/.test(mensaje.toLowerCase()))
+  );
+}
+
+/** nombre normalizado (helper local — evita duplicar el lower() del caller). */
+function nombreL2(nombre: string): string {
+  return nombre.toLowerCase();
 }
 
 /**
@@ -129,5 +161,17 @@ export const TEXTO_MOTIVO: Record<MotivoOperador, string> = {
     "La jornada está abierta en otra pestaña. Usa esa pestaña para seguir trabajando.",
   HEIC_NO_SOPORTADO:
     "El formato HEIC no se pudo convertir. Reintenta o sube la foto en JPG.",
+  // KIT e14-remediacion-movil-v1 (A4): memoria del motor agotada — estado
+  // EXPLÍCITO con Recargar (el store decide reintento/aviso; aquí el texto).
+  MEMORIA_AGOTADA:
+    "La memoria del motor se agotó. Toca RECARGAR para continuar.",
+  // KIT e14-remediacion-movil-v1 (A3): interrupción honesta del análisis —
+  // cero RECHAZADAS 0.0 silenciosas por ocultamiento (P0 #4).
+  ANALISIS_INTERRUMPIDO:
+    "Análisis interrumpido — la app pasó a segundo plano. Repetir la foto.",
+  // KIT e14-remediacion-movil-v1 (D4): la auto-captura ganó la carrera a la
+  // importación — el archivo llegó tarde y NO se perdió en silencio (P2 #24).
+  CAPTURA_AUTO_GANO_CARRERA:
+    "Se analizó la cámara, no tu archivo. Toma la foto de nuevo o importa otra vez.",
   ERROR_DESCONOCIDO: "Algo falló en el análisis. Reintenta.",
 };

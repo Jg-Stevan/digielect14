@@ -74,6 +74,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { AnimatePresence, animate, motion, useMotionValue } from "framer-motion";
+// KIT e14-remediacion-movil-v1 (D5 — #19): única desviación del contrato de
+// pureza de la copia vendorizada — la vibración de comparación la dispara un
+// setTimeout (sin gesto) y navigator.vibrate directo ensuciaba la consola.
+import { vibrarSeguro } from "@/lib/e14/core/vibrar";
 
 /** F-ZOOM — límites del zoom del visor. */
 const ZOOM_MIN = 1;
@@ -211,7 +215,9 @@ export function ZoomableVisor({
     compareTimer.current = window.setTimeout(() => {
       compareTimer.current = null;
       setComparing(true);
-      navigator.vibrate?.(18);
+      // D5 (#19): el timer no tiene gesto → vibrarSeguro hace no-op silencioso
+      // cuando Chrome bloquearía la llamada (antes: error en consola).
+      vibrarSeguro(18);
     }, COMPARE_HOLD_MS);
   }, []);
   const endCompare = useCallback(() => {

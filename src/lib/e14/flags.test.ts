@@ -110,6 +110,9 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       ocrReOcrRoi: false,
       ocrSegundaTopeMs: 0,
       ocrCorteIncompleta: true,
+      // KIT e14-remediacion-movil-v1 (A1) — aditivo AL FINAL (contrato D57):
+      // ventana de ARRANQUE de la 2.ª pasada como override MANUAL del dueño.
+      ocrSegundaPresupuestoMs: null,
     });
   });
 
