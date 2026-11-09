@@ -21,7 +21,7 @@
     "test:paquete": "bun test packages/scanner-core"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "^1.20.13",
+    "@opennextjs/cloudflare": "^1.20.16",
     "fflate": "^0.8.3",
     "framer-motion": "^12.23.2",
     "heic2any": "^0.0.4",
