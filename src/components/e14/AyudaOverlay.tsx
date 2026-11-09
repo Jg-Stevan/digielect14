@@ -8,8 +8,11 @@
  * zustand LOCAL a este módulo (cero cambios al store de negocio —
  * `useE14Store` queda intacto).
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { create } from "zustand";
+// KIT a11y-diálogos-v1 (plan 4.2.2 — U5): focus-trap del diálogo (Tab cíclico,
+// Escape cierra, foco inicial a [data-autofocus], retorno del foco al cerrar).
+import { useDialogFocus } from "./hooks/useDialogFocus";
 import {
   StitchCameraIcon,
   StitchSpinIcon,
@@ -65,6 +68,29 @@ const PASOS = [
   },
 ];
 
+/** 0.6.1 (plan de remediación, §9.2 fase 2) — mínimo legal: qué se envía,
+ *  a dónde y cuánto se retiene. Lenguaje de operador, no jurídico. El
+ *  documento fuente es SECURITY.md (rol de responsable, política de
+ *  retención de 30 días, esquema de auth del receptor). */
+const PRIVACIDAD: [string, string][] = [
+  [
+    "QUÉ SE ENVÍA",
+    "La FOTO del acta ya procesada (enderezada y legible) y los datos de la cabecera: departamento, municipio, puesto, mesa y tipo de formulario.",
+  ],
+  [
+    "A DÓNDE VA",
+    "Al hub del proyecto (e14-puente) para que el equipo de supervisión la reciba. Nada va a servicios de terceros; el envío va firmado con la clave de tu jornada.",
+  ],
+  [
+    "CUÁNTO SE RETIENE",
+    "30 días, o antes si la Registraduría confirma la recepción. Después se borra automáticamente.",
+  ],
+  [
+    "QUÉ NO SALE DE TU CELULAR",
+    "Nombres, cédulas, contenido de votos ni texto del OCR del área de votación: la app no lee ni transmite los números.",
+  ],
+];
+
 const NIVELES = [
   {
     chip: "ÓPTIMA",
@@ -115,6 +141,9 @@ const TIPS = [
 export function AyudaOverlay() {
   const abierta = useAyudaStore((s) => s.abierta);
   const cerrar = useAyudaStore((s) => s.cerrar);
+  // KIT a11y-diálogos-v1: nodo del diálogo role="dialog" para el trap.
+  const dialogoRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogoRef, abierta, cerrar);
 
   // Primera visita: abre solo una vez (el flag se sella al cerrar).
   useEffect(() => {
@@ -127,7 +156,9 @@ export function AyudaOverlay() {
     }
   }, []);
 
-  // Escape cierra.
+  // Escape cierra. (El hook useDialogFocus también maneja Escape dentro del
+  // diálogo; este listener window cubre el foco suelto en body tras un click
+  // — cerrar() es idempotente, doble llamada inofensiva.)
   useEffect(() => {
     if (!abierta) return;
     const onKey = (e: KeyboardEvent) => {
@@ -150,6 +181,7 @@ export function AyudaOverlay() {
 
   return (
     <div
+      ref={dialogoRef}
       className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
@@ -222,6 +254,25 @@ export function AyudaOverlay() {
             </div>
           </section>
 
+          {/* 0.6.1 — privacidad y retención (mínimo legal, §9.2 fase 2) */}
+          <section aria-label="Privacidad y retención" className="rounded-2xl border border-sky-500/20 bg-sky-500/5 px-4 py-3.5">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-sky-300 mb-2.5">
+              Privacidad y retención
+            </p>
+            <dl className="flex flex-col gap-2.5">
+              {PRIVACIDAD.map(([term, def]) => (
+                <div key={term} className="flex flex-col gap-0.5">
+                  <dt className="font-mono text-[11px] font-bold text-slate-200">
+                    {term}
+                  </dt>
+                  <dd className="text-[12.5px] text-slate-400 leading-relaxed">
+                    {def}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
           {/* Glossario */}
           <section aria-label="Glosario">
             <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
@@ -264,7 +315,7 @@ export function AyudaOverlay() {
           <button
             type="button"
             onClick={cerrarYRecordar}
-            autoFocus
+            data-autofocus
             className="w-full min-h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-black font-mono font-extrabold text-sm uppercase tracking-widest transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
           >
             Entendido — empezar

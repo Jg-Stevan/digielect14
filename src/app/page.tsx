@@ -19,15 +19,41 @@
  *    abierto (editores, visor de foto, ayuda) o el foco esté en un input.
  */
 import { useEffect } from "react";
+// Ola 5 §5.1 (R3+F12) — code-splitting de vistas: las 4 vistas PESADAS (las
+// que arrastran OCR/pipeline/PDF) salen del bundle inicial con next/dynamic.
+// S-5 verificado: este archivo ES "use client" (línea 1), así que
+// `dynamic(..., { ssr: false })` es válido aquí (en un Server Component sería
+// error). ScanView queda EAGER a propósito: es la vista inicial del flujo
+// (cargarla con un import diferido retrasaría el primer paint útil).
+// Los props/firmas de cada vista NO cambian: dynamic los transmite tal cual.
+import dynamic from "next/dynamic";
 import { useE14Store } from "@/lib/e14/store";
 import { TopBar } from "@/components/e14/TopBar";
 import { BottomNav } from "@/components/e14/BottomNav";
 import { SideNav } from "@/components/e14/SideNav";
-import { ScanView } from "@/components/e14/screens/ScanView";
-import { AnalyzingView } from "@/components/e14/screens/AnalyzingView";
-import { ReviewView, ReviewCtas } from "@/components/e14/screens/ReviewView";
-import { ActasView } from "@/components/e14/screens/ActasView";
-import { ResumenView } from "@/components/e14/screens/ResumenView";
+import { ScanView } from "@/components/e14/screens/ScanView"; // vista inicial — EAGER
+const AnalyzingView = dynamic(
+  () => import("@/components/e14/screens/AnalyzingView").then((m) => m.AnalyzingView),
+  { ssr: false }
+);
+// ReviewCtas viaja en el MISMO módulo que ReviewView: ambos dynamic apuntan al
+// mismo chunk (el módulo se evalúa una sola vez y el bundler lo deduplica).
+const ReviewView = dynamic(
+  () => import("@/components/e14/screens/ReviewView").then((m) => m.ReviewView),
+  { ssr: false }
+);
+const ReviewCtas = dynamic(
+  () => import("@/components/e14/screens/ReviewView").then((m) => m.ReviewCtas),
+  { ssr: false }
+);
+const ActasView = dynamic(
+  () => import("@/components/e14/screens/ActasView").then((m) => m.ActasView),
+  { ssr: false }
+);
+const ResumenView = dynamic(
+  () => import("@/components/e14/screens/ResumenView").then((m) => m.ResumenView),
+  { ssr: false }
+);
 // F-PWA (kit H6): registro del Service Worker + listeners de instalación +
 // banner E-04 «Nueva versión lista» — montaje único, no renderiza nada.
 import { PwaRegister } from "@/components/e14/PwaRegister";

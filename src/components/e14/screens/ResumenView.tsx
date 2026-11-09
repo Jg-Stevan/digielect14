@@ -18,8 +18,8 @@
  */
 import { useEffect, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
-import type { HistorialRow } from "@jg-stevan/scanner-core/dominio/types";
-import { PUESTO_SIMULADO } from "@jg-stevan/scanner-core/dominio/seed";
+import type { HistorialRow } from "@/lib/e14/fachada";
+import { PUESTO_SIMULADO } from "@/lib/e14/fachada";
 // KIT e14-puente-supervision-v1 (§7): tarjeta del puente al panel de
 // supervisión — estado del singleton + sincronización manual inline.
 import type { EstadoPuente } from "@/lib/e14/puente/tipos";

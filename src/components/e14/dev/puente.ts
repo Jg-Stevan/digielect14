@@ -47,7 +47,7 @@ import {
   contarEventos as nucleoContarEventos,
   eventosPorDigest as nucleoEventosPorDigest,
   purgarBuffer as nucleoPurgarBuffer,
-} from "@jg-stevan/scanner-core/obs-base/buffer";
+} from "@/lib/e14/fachada";
 import {
   detenerMuestreoSalud as nucleoDetenerMuestreoSalud,
   iniciarMuestreoSalud as nucleoIniciarMuestreoSalud,

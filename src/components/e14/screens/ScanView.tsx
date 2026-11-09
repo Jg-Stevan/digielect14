@@ -70,13 +70,16 @@
  * captura). En SIMULACIÓN/IMPORTAR la vista queda EXACTAMENTE como en L2.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { warmUpScannerWorker } from "@jg-stevan/scanner-core/core/detector-client";
+import { warmUpScannerWorker } from "@/lib/e14/fachada";
 import { SHUTTER_SCORE } from "@/lib/e14/core/quality";
 // F-SENSOR-PROFILER (PASO 2): tipo del perfil del sensor — el ref es
 // propietario de ScanView (lo llena useSesionCamara vía profileActiveSensor;
 // lo lee useDestello vía archivoDentroDeTope).
 import type { SensorProfile } from "@/lib/e14/core/sensor-profiler";
 import { useE14Store, type BandaSim } from "@/lib/e14/store";
+// KIT errores-operador-v1 (plan 3.1): TEXTO_MOTIVO pinta el aviso del store
+// en la franja del visor (bloque de error persistente, 4.3.1).
+import { TEXTO_MOTIVO } from "@/lib/e14/errores";
 import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
 // KIT e14-ocr-tessbest-v1 (GO-B): pre-warm de TESSERACT BEST junto al del
 // motor RapidOCR — la descarga vendida (~19 MB, 1.ª vez) arranca al abrir
@@ -180,6 +183,12 @@ export function ScanView() {
   const setFramePendiente = useE14Store((s) => s.setFramePendiente);
   // G3 (upgrade silencioso): re-proceso full-res del acta en revisión.
   const mejorarFotoActa = useE14Store((s) => s.mejorarFotoActa);
+  // KIT errores-operador-v1 (plan 3.1/4.3.1): aviso PERSISTENTE del store —
+  // el catch de dispararEscaneo y la reanudación de cámara fallida lo montan.
+  // NOTA de nombres: el estado LOCAL `avisoVisor` (abajo) es la franja
+  // informativa con timer; el del store es el de ERROR persistente.
+  const avisoOperador = useE14Store((s) => s.avisoVisor);
+  const descartarAvisoVisor = useE14Store((s) => s.descartarAvisoVisor);
   const inputRef = useRef<HTMLInputElement>(null);
   /** HQ-iOS: cámara NATIVA del sistema (el click del shutter es el gesto). */
   const inputCamaraRef = useRef<HTMLInputElement>(null);
@@ -361,6 +370,25 @@ export function ScanView() {
   const buscando = camaraViva && live.corners === null;
   const scoreAlto = (live.score ?? 0) > SHUTTER_SCORE;
   const scorePct = live.score !== null ? Math.round(live.score * 100) : null;
+
+  /** KIT errores-operador-v1 (plan 3.1.3): botón «Reintentar» de la franja de
+   *  error. El reintento depende del motivo: cámara → re-abre la sesión
+   *  (mismo camino del §E); lo demás → re-dispara dispararEscaneo. En ambos
+   *  casos el aviso se descarta (una nueva acción limpia la franja; el
+   *  propio dispararEscaneo también la limpia al arrancar). */
+  const reintentarDesdeAviso = useCallback(() => {
+    const aviso = useE14Store.getState().avisoVisor;
+    descartarAvisoVisor();
+    if (!aviso) return;
+    if (aviso.motivo === "CAMARA_NO_DISPONIBLE") {
+      // Mismo camino del botón «Reintentar cámara» del overlay §E.
+      setAvisoCamara(null);
+      setCamEstado("iniciando");
+      setReintentoCamara((n) => n + 1);
+      return;
+    }
+    void dispararEscaneo();
+  }, [descartarAvisoVisor, setAvisoCamara, setReintentoCamara, dispararEscaneo]);
 
   /** Captura inteligente (lab captureSmart L785-885, adaptada a e14: el
    *  resultado entra al pipeline del bridge como File):
@@ -647,7 +675,7 @@ export function ScanView() {
                   aria-label="Alternar cuadrícula"
                   aria-pressed={gridOn}
                   onClick={() => setGridOn((v) => !v)}
-                  className={`p-1 lg:p-1.5 rounded-full transition flex items-center justify-center gap-1.5 ${
+                  className={`min-h-11 min-w-11 p-1 lg:p-1.5 rounded-full transition flex items-center justify-center gap-1.5 ${
                     gridOn ? "text-[#10b981] bg-[#10b981]/15" : "text-slate-400 hover:text-white"
                   }`}
                 >
@@ -687,7 +715,7 @@ export function ScanView() {
                   onClick={abrirAyuda}
                   aria-label="Cómo funciona — abrir la guía de uso"
                   title="Cómo funciona (tecla ?)"
-                  className="ml-0.5 p-1 lg:p-1.5 rounded-full text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition flex items-center justify-center gap-1.5"
+                  className="ml-0.5 min-h-11 min-w-11 p-1 lg:p-1.5 rounded-full text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition flex items-center justify-center gap-1.5"
                 >
                   <span
                     aria-hidden
@@ -1047,6 +1075,53 @@ export function ScanView() {
               {avisoVisor.texto}
             </div>
           )}
+
+          {/* KIT errores-operador-v1 (plan 3.1.3 + 4.3.1): FRANJA DE ERROR del
+              store — persiste hasta que el operador reintenta o descarta (los
+              avisos de error NO se autodestruyen; solo los informativos de
+              arriba mueren con su timer). Va al FONDO del visor para no pisar
+              ni el overlay §E ni la píldora informativa ni el HUD. */}
+          {avisoOperador && (
+            <div
+              className={`absolute inset-x-4 bottom-16 z-40 rounded-xl bg-[#10161f]/95 border px-3.5 py-2.5 font-mono text-xs shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md lg:inset-x-6 ${
+                avisoOperador.tipo === "error"
+                  ? "border-red-500/40 text-red-400"
+                  : "border-amber-500/40 text-amber-400"
+              }`}
+              role={avisoOperador.tipo === "error" ? "alert" : "status"}
+              aria-live="polite"
+            >
+              <div className="flex items-center gap-3">
+                <p className="flex-1 leading-relaxed font-sans">
+                  {TEXTO_MOTIVO[avisoOperador.motivo]}
+                </p>
+                <div className="flex items-center gap-2 shrink-0">
+                  {avisoOperador.accion === "reintentar" && (
+                    <button
+                      type="button"
+                      onClick={reintentarDesdeAviso}
+                      className={`min-h-11 rounded-lg px-3 text-[11px] font-bold uppercase tracking-wider border transition ${
+                        avisoOperador.tipo === "error"
+                          ? "bg-red-500/15 border-red-500/40 text-red-300 hover:bg-red-500/25"
+                          : "bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25"
+                      }`}
+                    >
+                      Reintentar
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={descartarAvisoVisor}
+                    aria-label="Descartar el aviso"
+                    title="Descartar"
+                    className="min-h-11 min-w-11 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition flex items-center justify-center text-lg leading-none"
+                  >
+                    <span aria-hidden>✕</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1091,98 +1166,76 @@ export function ScanView() {
         )}
 
         {/* §6/Rev.4 Fila de disparo: [Importar | obturador | Flash] —
-            EXACTAMENTE la fila de Rev. 4 (Auto fuera; la linterna real, el
-            disparo por plataforma y la vía IMPORTAR intactos). */}
-        {modoCamara ? (
-          <div className="w-full flex items-center justify-between max-w-sm lg:max-w-md px-2 mb-1" data-purpose="shutter-action-dock">
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              aria-label="Importar imagen"
-              className="group flex flex-col items-center justify-center gap-1 text-center w-16 active:opacity-70 transition-all focus:outline-none"
-            >
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-white/90 group-hover:text-brand-green transition-colors">
-                <StitchImportIcon className="w-6 h-6" />
-              </div>
-              <span className="text-[11px] font-medium text-white/80 tracking-tight">
-                Importar
-              </span>
-            </button>
+            EXACTAMENTE la fila de Rev. 4. Ola 4.3.2 (U6) — DOCK UNIFICADO:
+            antes había UN dock por modo (copia idéntica fuera de CÁMARA) con
+            un Flash que no actuaba. Ahora UN solo dock: fuera de cámara el
+            Flash queda aria-disabled="true" (focusable, con title/aria-label
+            que explican el motivo) y SIN acción — cero docks duplicados.
+            F-FLASH v3 en CÁMARA: SIEMPRE activo (la verdad se descubre al
+            pulsar); sin stream → franja con el motivo. */}
+        <div className="w-full flex items-center justify-between max-w-sm lg:max-w-md px-2 mb-1" data-purpose="shutter-action-dock">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            aria-label="Importar imagen"
+            className="group flex flex-col items-center justify-center gap-1 text-center w-16 active:opacity-70 transition-all focus:outline-none"
+          >
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-white/90 group-hover:text-brand-green transition-colors">
+              <StitchImportIcon className="w-6 h-6" />
+            </div>
+            <span className="text-[11px] font-medium text-white/80 tracking-tight">
+              Importar
+            </span>
+          </button>
 
-            {obturador}
+          {obturador}
 
-            {/* FLASH — F-FLASH v3: SIEMPRE activo con cámara (la verdad se
-                descubre al pulsar); sin stream → franja con el motivo. */}
-            <button
-              type="button"
-              aria-pressed={torchOn}
-              aria-label={
-                torchOn
+          {/* FLASH — con cámara: linterna real (F-FLASH v3). Fuera de cámara:
+              aria-disabled + explicación accesible, SIN acción (el tap no se
+              queda mudo: el title/aria-label dice por qué no aplica). */}
+          <button
+            type="button"
+            aria-pressed={modoCamara ? torchOn : undefined}
+            aria-disabled={modoCamara ? undefined : true}
+            aria-label={
+              modoCamara
+                ? torchOn
                   ? "Apagar la linterna"
                   : torchDisponible
                     ? "Encender la linterna"
                     : "Linterna — toca para ver el motivo"
-              }
-              onClick={() => void alternarLinterna()}
-              className="group flex flex-col items-center justify-center gap-1 text-center w-16 active:opacity-70 transition-all focus:outline-none"
+                : "Linterna (flash): solo disponible con la cámara viva — cambia a modo CÁMARA"
+            }
+            title={
+              modoCamara
+                ? undefined
+                : "La linterna se controla con la cámara viva. Cambia de modo con el botón amarillo."
+            }
+            onClick={modoCamara ? () => void alternarLinterna() : undefined}
+            className={`group flex flex-col items-center justify-center gap-1 text-center w-16 transition-all focus:outline-none ${
+              modoCamara ? "active:opacity-70" : "opacity-50 cursor-default"
+            }`}
+          >
+            <div
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                torchOn
+                  ? "text-yellow-400"
+                  : modoCamara
+                    ? "text-white/90 group-hover:text-brand-green"
+                    : "text-white/50"
+              }`}
             >
-              <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                  torchOn ? "text-yellow-400" : "text-white/90 group-hover:text-brand-green"
-                }`}
-              >
-                <StitchBoltIcon className="w-6 h-6" />
-              </div>
-              <span
-                className={`text-[11px] font-medium tracking-tight ${
-                  torchOn ? "text-yellow-400" : "text-white/80"
-                }`}
-              >
-                Flash
-              </span>
-            </button>
-          </div>
-        ) : (
-          <div className="w-full flex items-center justify-between max-w-sm lg:max-w-md px-2 mb-1" data-purpose="shutter-action-dock">
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              aria-label="Importar imagen"
-              className="group flex flex-col items-center justify-center gap-1 text-center w-16 active:opacity-70 transition-all focus:outline-none"
+              <StitchBoltIcon className="w-6 h-6" />
+            </div>
+            <span
+              className={`text-[11px] font-medium tracking-tight ${
+                torchOn ? "text-yellow-400" : modoCamara ? "text-white/80" : "text-white/50"
+              }`}
             >
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-white/90 group-hover:text-brand-green transition-colors">
-                <StitchImportIcon className="w-6 h-6" />
-              </div>
-              <span className="text-[11px] font-medium text-white/80 tracking-tight">
-                Importar
-              </span>
-            </button>
-
-            {obturador}
-
-            {/* §D: Flash con feedback honesto — la linterna REAL vive en el
-                modo CÁMARA; aquí el tap muestra la franja del visor. */}
-            <button
-              type="button"
-              aria-label="Flash (disponible en modo cámara)"
-              onClick={() =>
-                mostrarAviso(
-                  "LINTERNA EN CÁMARA — la linterna se controla con la cámara viva. Cambia de modo con el botón amarillo.",
-                  "warn",
-                  4500,
-                )
-              }
-              className="group flex flex-col items-center justify-center gap-1 text-center w-16 active:opacity-70 transition-all focus:outline-none"
-            >
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-white/90 group-hover:text-brand-green transition-colors">
-                <StitchBoltIcon className="w-6 h-6" />
-              </div>
-              <span className="text-[11px] font-medium text-white/80 tracking-tight">
-                Flash
-              </span>
-            </button>
-          </div>
-        )}
+              Flash
+            </span>
+          </button>
+        </div>
       </footer>
     </div>
   );

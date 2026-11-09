@@ -6,6 +6,10 @@ name: Worker parity
 # detection-worker del laboratorio.
 on: [workflow_dispatch]
 
+# 6.8 (S8) — mínimo privilegio (workflow manual de referencia).
+permissions:
+  contents: read
+
 jobs:
   parity:
     runs-on: ubuntu-latest

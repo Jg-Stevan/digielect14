@@ -31,9 +31,9 @@ Todo el detalle, por módulo, en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 | pieza | qué usa |
 |---|---|
 | Framework | Next.js 16 · React 19 · TypeScript · Tailwind 4 · zustand |
-| Motor de escaneo | `src/lib/e14/core/` — **código vendorizado** del motor [web-scanner](https://github.com/Jg-Stevan/web-scanner) (detección de bordes, warp, realce, export). Ya no es dependencia de npm; su paridad con `supervision-e14` la fija `core/CONTRATO.json` |
+| Motor de escaneo | **`packages/scanner-core`** (`@jg-stevan/scanner-core`, consumido como `workspace:*`) — un solo motor para este app y el supervisor: detección de bordes, warp, realce, OCR escalonado, clasificador, completitud, marcadores. Edítalo AQUÍ, en el paquete; su origen histórico es el repo `web-scanner` (v0.4.1) y su changelog vive en `packages/scanner-core/CHANGELOG.md` |
 | OCR | Tesseract.js 5.1.1 (español `spa` best, PSM 4) como intento 1 y RapidOCR **PP-OCRv4** sobre `onnxruntime-web` 1.30 (EP wasm) como intento 2 |
-| QR/1D | `zxing-wasm` 3.1.6 + jsQR 1.4.0 vendorizado, con capa 0 en worker |
+| QR/1D | `zxing-wasm` 3.1.6 + jsQR 1.4.0 vendido dentro del paquete (`packages/scanner-core/src/qr/vendor/`), con capa 0 en worker |
 | Estado/flags | cadena `DEFAULTS ← public/flags.json ← overrides de localStorage` (kill-switch del dueño) |
 | Gestor | **bun** (`bun.lock`) — no usar npm ni pnpm |
 
@@ -96,7 +96,8 @@ Convención de lectura: los comentarios del código citan **kits** (`e14-*`),
 `docs/DECISIONS.md`; los kits y las specs son artefactos de sesiones de
 desarrollo y no viajan en el repo, así que una mención sin archivo no es un
 enlace roto. Cuando un comentario dice `apps/scanner-lab/…` se refiere al app de
-laboratorio del repo del motor
-([Jg-Stevan/web-scanner](https://github.com/Jg-Stevan/web-scanner)), de donde
-vienen las copias iniciales de la UI y del worker de detección
+laboratorio del repo de ORIGEN del motor
+([Jg-Stevan/web-scanner](https://github.com/Jg-Stevan/web-scanner)) — hoy el
+motor vivo es `packages/scanner-core` (workspace), de donde vienen también las
+copias iniciales de la UI y del worker de detección
 (lo verifica `.github/workflows/worker-parity.yml`).

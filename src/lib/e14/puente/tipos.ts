@@ -1,10 +1,17 @@
 /**
- * KIT e14-puente-supervision-v1 (§1) — CONTRATO del puente hacia el hub
- * `supervision-e14` (desplegado en Workers — el panel de supervisión en vivo
- * del dueño). DOMINIO del sobre EXACTO que ya consume el receptor:
+ * KIT e14-puente-supervision-v2 (§1) — CONTRATO del puente hacia el hub
+ * `e14-puente` (Workers — panel de supervisión en vivo del dueño).
  *
- *   POST /actas  ← { dispositivo, actas: EntradaPuente[] } (tope 10/lote)
- *   GET  /actas?desde=<epoch ms>  → { ok, ahora, total, actas }
+ * ═══ CONTRATO v1 (Ola 0, bloque 0.7) ═══  El sobre es el mismo; cambian las
+ * rutas y la autenticación:
+ *
+ *   POST {hub}/v1/actas  ← { dispositivo, actas: EntradaPuente[] } (tope 10/lote)
+ *        headers x-e14-ts + x-e14-firma (HMAC del body crudo — firma.ts)
+ *   GET  {hub}/v1/actas?desde=<epoch ms>  → { ok, ahora, total, actas }
+ *        Authorization: Bearer (SOLO el panel — el cliente móvil nunca lee)
+ *   POST {hub}/actas  (LEGADO) → 410 {error:"CONTRATO_OBSOLETO"} — el cliente
+ *        lo trata como «actualiza la PWA»: pausa la cola + banner, NUNCA como
+ *        fallo permanente que marque actas como fallidas (H-4b).
  *
  * · idEnlace — DIVIPOL plano `dept_mun_zona(3dig)_puesto(2dig)` (la llave de
  *   join del receptor; la app la deriva de clasificacion + DIVIPOL).
@@ -16,6 +23,11 @@
  * envuelve en try/catch y degrada a no-op silencioso (mismo criterio §2.4
  * de observabilidad).
  */
+
+/** Versión del contrato hablado (fija la ruta `/v1/actas` — bloque 0.7). */
+export const VERSION_CONTRATO = "v1" as const;
+/** Ruta de escritura autenticada (el legado `/actas` responde 410). */
+export const RUTA_ACTAS = "/v1/actas" as const;
 
 /** Tipo de copia que entiende el receptor (literal de la banda SIN tilde —
  *  igual que TipoCopia de clasificador.ts; d9=3 TRANSMISIÓN · d9=2 CÓNSUL/
@@ -57,4 +69,10 @@ export interface EstadoPuente {
   fallosSeguidos: number; // consecutivos (kill local a los 5)
   ultimoError: string | null;
   ultimaSyncTs: number | null; // epoch ms del último ciclo de envío
+  /** H-4b — el hub respondió 410 (contrato obsoleto): la cola queda en pausa
+   *  y la UI debe mostrar el banner «actualiza la PWA». No es fallo del acta. */
+  contratoObsoleto: boolean;
+  /** 0.1 — falta provisionar la clave de jornada en este dispositivo: el
+   *  puente NO envía a producción sin firma (falla cerrado, cola intacta). */
+  sinClaveJornada: boolean;
 }

@@ -34,6 +34,14 @@
  * Al activar una versión nueva (cuando el usuario la acepta), limpia TODAS
  * las cachés antiguas y llama a clients.claim().
  */
+// Ola 6 §6.6 (R6) — VERSION derivada del BUILD en CI: los workflows que
+// construyen (quality.yml, deploy-pages.yml, deploy-cf.yml) la reescriben con
+// sed a `e14-<shorthash>` ANTES del build (paso «Derivar versión del SW del
+// build»). El valor de abajo es el fallback para dev/ builds locales: NO
+// subirlo a mano en cada release (eso era la deriva R6 — release sin bump
+// seguía sirviendo el motor viejo). El `?v=` del detection-worker vive en el
+// FUENTE del consumidor (packages/scanner-core/src/core/detector-client.ts)
+// y se deriva en el MISMO paso de CI.
 const VERSION = "e14-v1";
 const CORE_CACHE = `${VERSION}-core`;
 const STATIC_CACHE = `${VERSION}-static`;

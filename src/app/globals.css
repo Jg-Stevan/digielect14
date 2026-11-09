@@ -258,3 +258,27 @@ body {
 @utility animate-pulse-sync {
   animation: pulse-subtle 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* ============================================================
+   Ola 4.2.3 (U5 — plan 4.2.3): RESPETO por prefers-reduced-motion.
+   Detiene TODAS las animaciones infinitas de la app (nombres reales
+   de las utilities de este archivo + las infinitas de Tailwind que
+   los componentes usan: spin de cargas, pulse de dots, ping del AUTO):
+   con «reduce motion» activo en el SO, nada queda latiendo en bucle.
+   Los elementos siguen visibles (solo se detiene el movimiento).
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  /* Infinitas custom del archivo: láser del núcleo ANALIZANDO,
+     glow del obturador, pulso de asas del QuadEditor, latido de dots. */
+  .animate-scan,
+  .shutter-glow,
+  .animate-handle-pulse,
+  .animate-pulse-sync,
+  /* Infinitas de Tailwind en uso: spinners de carga, dots pulsantes,
+     ping del punto AUTO del HUD. */
+  .animate-spin,
+  .animate-pulse,
+  .animate-ping {
+    animation: none !important;
+  }
+}

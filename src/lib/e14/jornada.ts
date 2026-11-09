@@ -74,14 +74,25 @@ function abrirJornada(): Promise<IDBDatabase> {
       return;
     }
     const req = indexedDB.open(DB_NOMBRE, DB_VERSION);
-    req.onupgradeneeded = () => {
+    // Ola 6 §6.11 (F18) — ESCALERA de migración con `e.oldVersion`. Regla de
+    // casa: cada cambio de esquema sube DB_VERSION y añade un bloque
+    // `if (vieja < N)` NUEVO; los bloques anteriores JAMÁS se editan (una base
+    // recién creada corre TODOS los bloques < N en orden — igual que hoy).
+    req.onupgradeneeded = (e: IDBVersionChangeEvent) => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE_ESTADO)) {
-        db.createObjectStore(STORE_ESTADO);
+      // Defensivo (`e?.oldVersion ?? 0`): stubs sin argumento → trata como
+      // base nueva; en navegadores siempre llega el evento con oldVersion.
+      const vieja = e?.oldVersion ?? 0;
+      if (vieja < 1) {
+        // v1 — creación original (lo que hoy hace contains()).
+        if (!db.objectStoreNames.contains(STORE_ESTADO)) {
+          db.createObjectStore(STORE_ESTADO);
+        }
+        if (!db.objectStoreNames.contains(STORE_ACTA)) {
+          db.createObjectStore(STORE_ACTA);
+        }
       }
-      if (!db.objectStoreNames.contains(STORE_ACTA)) {
-        db.createObjectStore(STORE_ACTA);
-      }
+      // if (vieja < 2) { /* futuro: nueva store/índice — nunca tocar v1 aquí */ }
     };
     req.onsuccess = () => {
       dbSingleton = req.result;
@@ -100,6 +111,48 @@ function pedir<T>(req: IDBRequest<T>, contexto: string): Promise<T> {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error(contexto));
   });
+}
+
+// ─── Ola 6 §6.10 (F13) — fallos de escritura EXPUESTOS, no tragados ────────
+// Hoy las escrituras de la jornada eran fire-and-forget silencioso: un
+// QuotaExceededError (almacenamiento lleno / modo incógnito) perdía el turno
+// SIN señal. El bloque 6.10 lo pide: el error debe llegar CLASIFICABLE al
+// store. Como los llamadores actuales esperan no-lanzar (las llamadas son
+// `void guardarJornada(...)`), no se relanza: se expone por CALLBACK opcional
+// con el error ORIGINAL — el store se conecta con
+// `enFalloEscrituraJornada(...)` y clasifica (motivo ALMACENAMIENTO_LLENO del
+// clasificador 3.1). Si nadie se conectó, el comportamiento es el de siempre.
+export type FalloEscrituraJornada = {
+  /** Qué escritura falló. */
+  contexto: "jornada" | "acta";
+  /** true = QuotaExceededError (almacenamiento lleno). */
+  quota: boolean;
+  /** El error ORIGINAL (DOMException de IDB) para clasificar arriba. */
+  error: unknown;
+};
+
+let alFallarEscritura: ((fallo: FalloEscrituraJornada) => void) | null = null;
+
+/** Conecta el receptor de fallos de escritura (idempotente: la última gana;
+ *  `null` = desactivar). El receptor JAMÁS lanza por contrato del llamador. */
+export function enFalloEscrituraJornada(
+  receptor: ((fallo: FalloEscrituraJornada) => void) | null
+): void {
+  alFallarEscritura = receptor;
+}
+
+/** Expone el fallo (best-effort: el receptor no puede tumbar el flujo). */
+function notificarFallo(contexto: FalloEscrituraJornada["contexto"], err: unknown): void {
+  if (!alFallarEscritura) return;
+  try {
+    alFallarEscritura({
+      contexto,
+      quota: err instanceof DOMException && err.name === "QuotaExceededError",
+      error: err,
+    });
+  } catch {
+    /* el receptor roto jamás rompe la persistencia */
+  }
 }
 
 /** Carga la jornada persistida. null si no hay registro o la versión del
@@ -132,8 +185,11 @@ export async function guardarJornada(estado: EstadoJornada): Promise<void> {
       tx.onerror = () => reject(tx.error ?? new Error("IDB_JORNADA_GUARDAR"));
       tx.onabort = () => reject(tx.error ?? new Error("IDB_JORNADA_GUARDAR_ABORTADA"));
     });
-  } catch {
-    /* la jornada vive en RAM — nunca tumba el flujo */
+  } catch (err) {
+    // §6.10 — la jornada vive en RAM y nunca tumba el flujo, pero el fallo
+    // (en particular QuotaExceededError) sale por el callback con el error
+    // original para que el store lo clasifique y avise al operador.
+    notificarFallo("jornada", err);
   }
 }
 
@@ -297,8 +353,10 @@ export async function guardarActaEnRevision(acta: Acta | null): Promise<void> {
       tx.onerror = () => reject(tx.error ?? new Error("IDB_ACTA_GUARDAR"));
       tx.onabort = () => reject(tx.error ?? new Error("IDB_ACTA_GUARDAR_ABORTADA"));
     });
-  } catch {
-    /* idem — sin slot persistido la REVISIÓN simplemente no se restaura */
+  } catch (err) {
+    // §6.10 — idem guardarJornada: sin slot persistido la REVISIÓN no se
+    // restaura, y un QuotaExceededError (las fotos son MB) sale por callback.
+    notificarFallo("acta", err);
   }
 }
 

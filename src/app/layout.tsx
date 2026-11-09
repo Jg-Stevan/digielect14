@@ -47,8 +47,10 @@ export const viewport: Viewport = {
   themeColor: "#070A0D",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Ola 4.1 (U2 — WCAG 1.4.4): maximumScale/userScalable ELIMINADOS — el
+  // pinch-zoom del sistema vuelve a toda la app. El visor y el QuadEditor
+  // gestionan sus gestos con `touch-none` local; el bloqueo global no
+  // protegía nada que no estuviera ya protegido.
   // Sin viewport-fit=cover iOS no expone env(safe-area-*) (mismo patrón que scanner-lab).
   viewportFit: "cover",
 };
@@ -60,6 +62,25 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
+      <head>
+        {/*
+         * 6.7 (S4+F10) — META CSP para el deploy gemelo de GitHub Pages:
+         * GH Pages no controla cabeceras HTTP, así que la CSP de ese deploy
+         * vive AQUÍ (la de Cloudflare Pages va en public/_headers). Igual a
+         * la de _headers MENOS `frame-ancestors` (los meta no lo soportan).
+         * NOTA S-7 (revisión del plan): un meta-CSP no gobierna a los
+         * workers servidos desde `self` — su CSP viene de sus propias
+         * cabeceras de respuesta. Queda anotado en «endurecer después
+         * (hashes)»: la auditoría siguiente no debe contarlo como cubierto.
+         * `'wasm-unsafe-eval'` y `data:` en connect-src: los motores OCR
+         * instancian WASM (Tesseract compila su core desde una URL data:).
+         */}
+        <meta
+          http-equiv="Content-Security-Policy"
+          content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' data: blob: https://e14-puente.julistevan02.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'none'"
+        />
+        <meta name="referrer" content="strict-origin-when-cross-origin" />
+      </head>
       <body
         className={`${inter.variable} ${jbmono.variable} antialiased bg-brand-black text-gray-100 font-sans`}
         suppressHydrationWarning

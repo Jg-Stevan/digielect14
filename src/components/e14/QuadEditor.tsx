@@ -38,10 +38,14 @@
  * en el div rotado → rotan solidariamente (el quad NO se remapea).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
-import { detectDocumentEdges, loadImage } from "@jg-stevan/scanner-core/core/image-processor";
-import { defaultQuad } from "@jg-stevan/scanner-core/core/types";
-import type { Point, Quad } from "@jg-stevan/scanner-core/core/types";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import { detectDocumentEdges, loadImage } from "@/lib/e14/fachada";
+import { defaultQuad } from "@/lib/e14/fachada";
+import type { Point, Quad } from "@/lib/e14/fachada";
+// KIT a11y-diálogos-v1 (plan 4.2.2 — U5): focus-trap + retorno del foco para
+// este diálogo role="dialog" (Tab cíclico, Escape cierra, foco inicial a
+// [data-autofocus] — el botón APLICAR).
+import { useDialogFocus } from "./hooks/useDialogFocus";
 import { RotateIcon, SparklesIcon } from "./icons";
 
 /** Tween de aterrizaje del quad (lab TWEEN_MS — 280 ms). */
@@ -137,10 +141,21 @@ export function QuadEditor({
   // ── Refs ─────────────────────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
+  // KIT a11y-diálogos-v1: el nodo del diálogo (role="dialog") para el trap.
+  const dialogoRef = useRef<HTMLDivElement>(null);
   const displayRef = useRef<Quad>(displayQuad);
   const rafRef = useRef(0);
   const draggingRef = useRef(false);
   const dragRef = useRef<{ kind: "corner" | "mid"; index: number } | null>(null);
+
+  // KIT a11y-diálogos-v1 (plan 4.2.2): trap de foco. El Escape del hook es
+  // REDUNDANTE con el listener window-capture de abajo (que corre primero y
+  // hace stopImmediatePropagation) — queda como red si el foco quedó en body.
+  const cerrarDialogo = useCallback(() => {
+    if (aplicando) return; // durante el pipeline el editor NO se cierra
+    onCancelar();
+  }, [aplicando, onCancelar]);
+  useDialogFocus(dialogoRef, true, cerrarDialogo);
 
   // F4/D37: la rotación del editor es LOCAL (rotLocal) — se hornea al APLICAR.
   const rotation = ((rotLocal % 360) + 360) % 360;
@@ -384,6 +399,49 @@ export function QuadEditor({
     // entrega al APLICAR y el acta solo cambia por store.aplicarRecorte).
   }, []);
 
+  // ── KIT a11y-quad-editor-v1 (plan 4.2.1 — U5): mover la asa por TECLADO ──
+  /** Misma mutación que el pointer path (onContainerPointerMove): mueve el
+   *  vértice (corner) o TRASLADA la arista completa (mid), clampeado 0–1. */
+  const moverAsa = useCallback(
+    (kind: "corner" | "mid", index: number, dx: number, dy: number) => {
+      const q = displayRef.current.map((p) => ({ x: p.x, y: p.y })) as Quad;
+      if (kind === "corner") {
+        q[index] = { x: clampN(q[index].x + dx), y: clampN(q[index].y + dy) };
+      } else {
+        // Punto medio: traslada la arista completa (ambos vértices).
+        const i = index;
+        const j = (i + 1) % 4;
+        q[i] = { x: clampN(q[i].x + dx), y: clampN(q[i].y + dy) };
+        q[j] = { x: clampN(q[j].x + dx), y: clampN(q[j].y + dy) };
+      }
+      displayRef.current = q;
+      setDisplayQuad(q);
+    },
+    [],
+  );
+
+  /** Flechas = paso 1 (% de la imagen), Shift = paso 10 — MISMA función
+   *  moverAsa del pointer handler. En coordenadas normalizadas 1 paso = 0.01
+   *  de la imagen (plan 4.2.1 adaptado al quad en fracciones 0–1). */
+  const alTeclaAsa = (
+    e: ReactKeyboardEvent<HTMLElement>,
+    kind: "corner" | "mid",
+    index: number,
+  ) => {
+    const paso = e.shiftKey ? 10 : 1;
+    const movimientos: Record<string, [number, number]> = {
+      ArrowUp: [0, -paso],
+      ArrowDown: [0, paso],
+      ArrowLeft: [-paso, 0],
+      ArrowRight: [paso, 0],
+    };
+    const delta = movimientos[e.key];
+    if (!delta) return;
+    e.preventDefault();
+    e.stopPropagation();
+    moverAsa(kind, index, delta[0] / 100, delta[1] / 100);
+  };
+
   // ── Escape: cancela (lab L1185–1196) — bloqueado mientras aplica ──────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -408,6 +466,7 @@ export function QuadEditor({
 
   return (
     <div
+      ref={dialogoRef}
       role="dialog"
       aria-label="Ajuste de bordes del acta"
       className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col animate-editor-enter"
@@ -518,21 +577,32 @@ export function QuadEditor({
                   />
                 </svg>
 
-                {/* Handles de punto medio (aristas) — arrastrables.
-                    Pad táctil 44×44 (EDITOR_TOUCH_PX=44 del lab) con punto
-                    visual pequeño — el dedo agarra bien sin tapar. */}
+                {/* Handles de punto medio (aristas) — arrastrables Y
+                    ENFOCABLES (plan 4.2.1: role="slider" + flechas; el quad
+                    es 2-D → aria-valuenow = X % y aria-valuetext con ambos
+                    ejes). Pad táctil 44×44 (EDITOR_TOUCH_PX=44 del lab) con
+                    punto visual pequeño — el dedo agarra bien sin tapar. */}
                 {displayQuad.map((p, i) => {
                   const q = displayQuad[(i + 1) % 4];
+                  const cx = ((p.x + q.x) / 2) * 100;
+                  const cy = ((p.y + q.y) / 2) * 100;
                   return (
                     <button
                       key={`mid-${i}`}
                       type="button"
+                      role="slider"
+                      tabIndex={0}
                       aria-label={`Punto medio de la arista ${i + 1}`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(cx)}
+                      aria-valuetext={`X ${Math.round(cx)} % · Y ${Math.round(cy)} %`}
                       onPointerDown={(e) => onHandleDown(e, "mid", i)}
-                      className="absolute z-10 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-full outline-none active:cursor-grabbing"
+                      onKeyDown={(e) => alTeclaAsa(e, "mid", i)}
+                      className="absolute z-10 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white active:cursor-grabbing"
                       style={{
-                        left: `${((p.x + q.x) / 2) * 100}%`,
-                        top: `${((p.y + q.y) / 2) * 100}%`,
+                        left: `${cx}%`,
+                        top: `${cy}%`,
                       }}
                     >
                       <span className="pointer-events-none block h-3 w-3 rounded-full border-[1.5px] border-brand-green bg-white shadow-[0_1px_4px_rgba(0,0,0,0.4)]" />
@@ -540,15 +610,24 @@ export function QuadEditor({
                   );
                 })}
 
-                {/* Handles de esquina — arrastrables. Pad táctil 44×44 con el
-                    punto visual pulsante dentro (pulso framer → CSS keyframe). */}
+                {/* Handles de esquina — arrastrables Y ENFOCABLES (plan
+                    4.2.1: flechas con paso 1/Shift 10 vía moverAsa). Pad
+                    táctil 44×44 con el punto visual pulsante dentro (pulso
+                    framer → CSS keyframe). */}
                 {displayQuad.map((p, i) => (
                   <button
                     key={`corner-${i}`}
                     type="button"
+                    role="slider"
+                    tabIndex={0}
                     aria-label={`Vértice ${i + 1} del marco`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(p.x * 100)}
+                    aria-valuetext={`X ${Math.round(p.x * 100)} % · Y ${Math.round(p.y * 100)} %`}
                     onPointerDown={(e) => onHandleDown(e, "corner", i)}
-                    className="absolute z-10 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-full outline-none active:cursor-grabbing"
+                    onKeyDown={(e) => alTeclaAsa(e, "corner", i)}
+                    className="absolute z-10 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white active:cursor-grabbing"
                     style={{
                       left: `${p.x * 100}%`,
                       top: `${p.y * 100}%`,
@@ -650,6 +729,7 @@ export function QuadEditor({
         <button
           type="button"
           aria-label="Aplicar el recorte"
+          data-autofocus
           onClick={aplicando ? undefined : () => onAplicar(displayRef.current, rotLocal)}
           disabled={aplicando}
           className="w-full h-12 lg:h-14 py-3 px-5 bg-brand-green hover:bg-emerald-400 text-black font-extrabold text-sm uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2.5 shadow-[0_4px_20px_rgba(0,230,118,0.35)] transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"

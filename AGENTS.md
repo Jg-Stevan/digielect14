@@ -44,7 +44,10 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
 ## Privacidad e integridad
 
 - Son datos electorales reales: **no commitees actas, capturas ni credenciales**,
-  y no envíes actas a endpoints distintos del hub (`POST {hub}/actas`).
+  y no envíes actas a endpoints distintos del hub (`POST {hub}/v1/actas`,
+  autenticado — los fixtures SIM son sintéticas tras la decisión **D86**
+  (2026-11-08, cierre de D35): la excepción de la foto real quedó anulada y
+  su retirada de la historia está ejecutada con los scripts de `scripts/`).
 - No añadas dependencias, telemetría ni servicios externos sin preguntarlo antes.
 - Nunca `git push --force` ni reescritura de historial. **Excepción única y
   autorizada por el dueño**: purgas puntuales de binarios del historial
@@ -71,43 +74,48 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
    package vía peer: quitarlo rompe la pantalla de revisión, y como bun
    auto-instala peers el build local lo sigue tapando (con npm o pnpm fallaría
    al resolver).
-5. El motor ya **no** es un paquete: vive en `src/lib/e14/core/` (ver su
-   `LEEME.md`). `@jg-stevan/scanner-core@0.1.0` sigue apareciendo en
-   `node_modules` solo porque `@jg-stevan/scanner-ui` lo declara como
-   dependencia — y ese `dist` no importa nada del core, así que **no** entra al
-   bundle. No te confundas viéndolo ahí ni lo borres a mano.
+5. **El motor vive en `packages/scanner-core`, consumido como `workspace:*`**
+   (ver su `LEEME.md` y `CHANGELOG.md`). No es un paquete de npm: es un
+   workspace de este monorepo — lo que ves en `node_modules` es el enlace
+   del workspace, no una copia. No lo borres a mano ni lo reinstales con
+   npm.
 
-## Paridad con `supervision-e14` (el mismo motor, dos frontends)
+## El motor (`packages/scanner-core`) y la paridad con `supervision-e14`
 
-Este repo y `supervision-e14` (supervisor masivo) comparten el negocio que
-decide el resultado de un acta: `clasificador.ts`, `completitud.ts`,
-`divipol.ts` y `kits.ts` son la MISMA lógica, y el motor de OCR es el MISMO
-código: `src/lib/e14/core/` está vendorizado aquí y allá, y los módulos que
-existen en los dos repos son byte a byte idénticos (lo exige
-`scripts/qa-core-vendorizado.ts` + `src/lib/e14/core/__tests__/contrato-core.test.ts`,
-con el md5 de cada módulo en `core/CONTRATO.json`). Igual de compartidos: el
-mismo `tesseract.js` con el mismo `spa.traineddata`, las mismas ONNX PP-OCRv4,
-el mismo `divipol.json`. Lo que NO se comparte ni se porta: la cola/bandeja/
-runner del lote (aquí es un puesto individual) y el PP-OCRv5.
+**Frase autoridad: el motor vive en `packages/scanner-core`, consumido como
+`workspace:*`** (una sola fuente, sin vendorizado ni npm). Este repo y
+`supervision-e14` (supervisor masivo) comparten el negocio que decide el
+resultado de un acta — `clasificador.ts`, `completitud.ts`, `divipol.ts`,
+`kits.ts`, `integridad.ts`, `marcadores.ts`, `senal-lectura.ts` — y el motor
+de OCR: el MISMO paquete workspace copiado idéntico en los dos repos
+(byte a byte; lo coteja `scripts/qa-paridad-motor.ts` con el hermano en
+disco). Igual de compartidos: el mismo `tesseract.js` con el mismo
+`spa.traineddata`, las mismas ONNX PP-OCRv4, el mismo `divipol.json`. Lo que
+NO se comparte ni se porta: la cola/bandeja/runner del lote (aquí es un
+puesto individual) y el PP-OCRv5.
 
-Editar el motor: cambia el archivo en `core/` y **córrelo en los dos repos en
-el mismo commit**, después `bun scripts/qa-core-vendorizado.ts --generar` en
-cada uno. Si solo lo arreglas aquí, el `contrato-core.test.ts` del hermano se
-pone rojo con la misma edición pendiente.
+Editar el motor: cambia el archivo en `packages/scanner-core/src/**` y
+**aplícalo igual en el hermano en el mismo commit** (el paquete es un
+workspace local, no se publica por cada ajuste — el dueño decide si/toque
+cuándo publicar a npm; `0.5.0` aún no está publicada). Si solo lo arreglas
+aquí, el golden del hermano se pone rojo con la misma edición pendiente.
 
-El contrato vive en `src/lib/e14/__fixtures__/contrato-motor.json` (21 cabeceras
-SINTÉTICAS + su salida exacta). Cada repo lo valida contra SU copia del motor:
+El contrato vive en `packages/scanner-core/tests/fixtures/contrato-motor.json`
+(21 cabeceras SINTÉTICAS + su salida exacta; enlazado desde
+`src/lib/e14/contrato-motor.test.ts`). Cada repo lo valida contra SU copia
+del motor:
 
 - `src/lib/e14/contrato-motor.test.ts` (vitest) · `scripts/gen-contrato-motor.ts`
-  (regenera) · `scripts/qa-paridad-motor.ts` (coteja los dos checkouts en disco).
+  (regenera) · `scripts/qa-paridad-motor.ts` (coteja los dos checkouts en
+  disco; «omitido» en CI sin hermano).
 - **Se toca el negocio clasificador y el test pone rojo** → es un cambio de
-  comportamiento REAL: regenera (`bun scripts/gen-contrato-motor.ts`), revisa el
-  diff del golden descriptor por descriptor y cópialo a
-  `supervision-e14/src/modules/digitalizador/lib/e14/__tests__/__fixtures__/`.
-  Allí el mismo golden pone rojo hasta que el hermano sincronice el código.
+  comportamiento REAL: regenera (`bun scripts/gen-contrato-motor.ts`), revisa
+  el diff del golden descriptor por descriptor y cópialo a la misma ruta del
+  hermano. Allí el mismo golden pone rojo hasta que el hermano sincronice el
+  código.
 - **NO se escribe un generador en el hermano**: una sola fuente de verdad, si
-  no cada repo "arregla" su esperado hacia su propio comportamiento y la paridad
-  se vuelve decorativa.
+  no cada repo "arregla" su esperado hacia su propio comportamiento y la
+  paridad se vuelve decorativa.
 - Salida de OCR sobre píxeles, `quad` y `score` NO están en el contrato
   (necesitan navegador/wasm). El `puente/` de envío es exclusivo de este repo.
 
@@ -117,28 +125,46 @@ SINTÉTICAS + su salida exacta). Cada repo lo valida contra SU copia del motor:
   en español (Conventional Commits: `feat(e14): …`, `fix(e14): …`).
 - Muerto = fuera. Sin `_vars`, sin re-exports de compatibilidad, sin comentarios
   describiendo código removido.
-- El motor **sí** se puede editar (es código de este repo: `src/lib/e14/core/`),
-  pero con tres condiciones: (1) la misma edición en `supervision-e14` en el
-  mismo commit, (2) regenerar `core/CONTRATO.json` en los dos
-  (`bun scripts/qa-core-vendorizado.ts --generar`), (3) si el cambio altera la
-  lectura de un acta —umbral, recorte, normalización de texto—, pasar además el
-  golden `contrato-motor.json`. Todo comportamiento *nuevo* de producción sigue
-  detrás de un flag de `src/lib/e14/flags.ts`.
 - Un commit pequeño y frecuente vale más que un commit gigante.
+- **El motor sí se puede editar** (es código de este repo:
+  `packages/scanner-core/src/**`, workspace `workspace:*`), con tres
+  condiciones: (1) la misma edición en `supervision-e14` en el mismo commit,
+  (2) regenerar y propagar el golden `contrato-motor.json` si el cambio toca
+  el clasificador, (3) si el cambio altera la lectura de un acta —umbral,
+  recorte, normalización de texto—, pasar además los tests de frontera del
+  paquete (`bun test packages/scanner-core`). Todo comportamiento *nuevo* de
+  producción sigue detrás de un flag de `src/lib/e14/flags.ts`.
 
-## Dónde está qué
+## Dependencias (política de pinning, 6.1.3)
 
-`src/lib/e14/` lógica de dominio (pipeline, OCR, QR, clasificación, puente de
-envío, observabilidad) · `src/components/e14/` pantallas y hooks de cámara ·
-`src/app/` rutas de Next · `scripts/` QA y utilidades de build · `docs/`
-decisiones, arquitectura y reportes de medición. El detalle por módulo está en
-`docs/ARQUITECTURA.md`.
+- **Caret por defecto** (`^`) en `dependencies`/`devDependencies`; el lock
+  (`bun.lock`) fija el exacto que corre en CI. Excepción: los motores cuyo
+  comportamiento es decisión de producto se fijan EXACTOS
+  (`onnxruntime-web 1.30.0`, `tesseract.js 5.1.1`, `zxing-wasm 3.1.6`) —
+  subirlos sin re-medir rompe las decisiones D53/D60/D76.
+- **`bun audit` en CI, semanal** (job programado): dependencias con
+  vulnerabilidad CONOCIDA en paths de BUILD se suben en la misma semana
+  (no es opcional); las de runtime pasan por la regla de arriba (decisión
+  registrada antes de subir un motor).
+- Antes de añadir una dependencia: `AGENTS.md §Privacidad` manda (preguntar
+  primero).
 
 ## Cómo se lee este repo
 
-Los comentarios citan **kits** (`e14-*`), **decisiones** (`D<n>`) y secciones de
-spec. Las decisiones están en `docs/DECISIONS.md`; los kits y las specs son
+Los comentarios citan **kits** (`e14-*`), **decisiones** (`D<n>`) y secciones
+de spec. Las decisiones están en `docs/DECISIONS.md`; los kits y las specs son
 artefactos de sesiones de desarrollo previas que no viajan en el repo, así que
 una mención sin archivo no es un enlace roto. `apps/scanner-lab/…` es el
-laboratorio del repo del motor (`Jg-Stevan/web-scanner`), origen de las copias
-de la UI y del worker de detección.
+laboratorio del repo de ORIGEN del motor (`Jg-Stevan/web-scanner`) — el motor
+VIVO es `packages/scanner-core`.
+
+## Dónde está qué
+
+`packages/scanner-core/` EL MOTOR (workspace `workspace:*`: pipeline,
+OCR, clasificador, completitud, marcadores, workers) · `src/lib/e14/` la
+capa de dominio de ESTA app (pipeline L2, puente de envío, observabilidad,
+política del gate en `politica/`) · `src/components/e14/` pantallas y hooks
+de cámara (consumen el motor vía `src/lib/e14/fachada.ts` — regla 7.5) ·
+`src/app/` rutas de Next · `scripts/` QA y utilidades de build · `docs/`
+decisiones, arquitectura y reportes de medición. El detalle por módulo está
+en `docs/ARQUITECTURA.md`.

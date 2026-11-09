@@ -36,7 +36,12 @@ import {
   evaluateQuality,
   ErrorRescateHeic,
   fileToCaptureDataUrl,
+  // 7.6 (plan de remediación, cierra C2-partial): la FÓRMULA de calidad y
+  // sus umbrales de level viven UNA sola vez — en el paquete (antes estaban
+  // copiadas aquí a mano y derivaban si el core las cambiaba).
+  nivelPorPuntaje,
   processImage,
+  puntajeCalidad,
 } from "@jg-stevan/scanner-core/core/image-processor";
 import type { OrigenQuad } from "@jg-stevan/scanner-core/core/image-processor";
 // KIT e14-masiva-ux-v1 (T1): mecanismo de warm-up del worker OpenCV que ya
@@ -91,31 +96,50 @@ import { verificarCompletitud } from "@jg-stevan/scanner-core/dominio/completitu
 // compartido con el guard de completitud (motorTinta, cero duplicación).
 import { medirZonaVotos } from "@jg-stevan/scanner-core/dominio/marcadores";
 // KIT e14-score-lectura-v1: señal de LECTURA del score v2 (módulo puro — §4-A).
+// (PISO_LECTURA_FUERTE/TECHO_LECTURA_DEBIL ya no se importan aquí: desde 7.2
+// el bloque C3 vive en politica/gate.ts — consumido por AMBOS pipelines.)
 import {
-  PISO_LECTURA_FUERTE,
-  TECHO_LECTURA_DEBIL,
   lazoPerdonadoPorLectura,
   senalDeLectura,
 } from "@jg-stevan/scanner-core/dominio/senal-lectura";
-// §1 (SPEC-ux-real-bn-editor): acta E-14 real del dueño (Galaxy A56 5G) —
-// import estático: Next resuelve el basePath /web-scanner del deploy estático.
-// REFRESCO 2026-10-21 (lote JPG.rar del dueño): el contenido del asset es
-// AHORA la mejor foto del lote nuevo (1152×2048, nítida/flat — elegida por
-// VLM + métricas Laplaciano: lap-var 3203, la más alta del lote).
-import actaSimUrl from "@/assets/acta-e14-real.jpg";
-// §G-1 (SPEC-camara-funcional): las 3 actas del dueño para la SIMULACIÓN de
-// scores — [0] óptima (pipeline COMPLETO con detect+warp+bw) · [1] intermedia
-// (as-is, §D6 Rev. 3) · [2] baja (as-is, §D7 Rev. 3). Los flags viajan en la
-// tabla ACTAS_SIM de abajo (§D8).
-// REFRESCO 2026-10-21 (lote JPG.rar): contenidos nuevos del dueño — [0] la
-// nítida/plana del lote (lap-var 3203, WhatsApp 1152×2048) · [1] la media
-// (1800×2400, lap-var 632, leve perspectiva) · [2] la borrosa (1800×2400,
-// lap-var 281, arrugas + firmas cargadas). Extras [3]/[4] para el ciclo
-// rotativo (§G): la de arrugas pronunciadas y la de sombra lateral.
-import actaSimIntermediaUrl from "@/assets/acta-sim-intermedia.jpg";
-import actaSimBajaUrl from "@/assets/acta-sim-baja.jpg";
-import actaSimExtra1Url from "@/assets/acta-sim-extra-1.jpg";
-import actaSimExtra2Url from "@/assets/acta-sim-extra-2.jpg";
+// 7.1 (plan de remediación, cierra C3) — umbrales con nombre, ÚNICA fuente
+// de verdad de los números del producto (./politica/umbrales.ts).
+import {
+  TECHO_ADVERTENCIA,
+  TECHO_ESCUDO_FONDO,
+  TECHO_SIN_SENAL,
+  UMBRAL_RECHAZO_SCORE,
+  UMBRAL_SCORE_INCOMPLETA,
+  BANDA_IZQ_FRACCION,
+  BANDA_ARRIBA_FRACCION,
+  BANDA_DER_FRACCION,
+  BANDA_ABAJO_FRACCION,
+  CALIDAD_JPEG_ENVIO,
+  CALIDAD_JPEG_REVISION,
+} from "./politica/umbrales";
+// 7.2 (plan de remediación, cierra A1) — LA política del gate (bloque ÚNICO
+// que antes vivía duplicado a mano aquí en pipelineRecorte y en pipeline.ts).
+import { aplicarPoliticaGate } from "./politica/gate";
+// 7.1 (C3): piso de lectura FUERTE — única fuente (re-export del paquete).
+import { PISO_LECTURA_FUERTE } from "./politica/umbrales";
+// 7.9 (C4): ÚNICO constructor del log-contrato D51 (+ su orden canónico).
+import { construirLogD51, ORDEN_LOG_D51, type EntradaD51 } from "./log-contrato";
+// §G-1 (SPEC-camara-funcional): los assets de la SIMULACIÓN de scores —
+// S-6 (plan de remediación, correcciones §3): CARGADORES DINÁMICOS en mapa
+// explícito (a prueba de refactors de nombres, resoluble estáticamente por
+// el bundler). El import estático engordaba el bundle crítico del escaneo
+// con los fixtures del modo demo.
+// Ola 1/D35: foto real retirada del repo — `acta-e14-real.jpg` ya NO se
+// usa NI se referencia: el modo SIM corre SOLO con los 4 sintéticos
+// `acta-sim-*.jpg` (el archivo sobrante en src/assets/ se elimina en el
+// PR de custodia del binario — ver docs/PENDIENTES-INTEGRACION.md).
+// Orden del arreglo (§D3/§D8.1 — el índice lo decide indiceActaPorScore):
+//   [0] ÓPTIMA  = acta-sim-extra-1.jpg (pipeline COMPLETO con detect+warp+bw;
+//       sustituta de la foto real del dueño — el dueño recalibra el orden si
+//       el chip 8.2 deja de caer en ÓPTIMA con este asset)
+//   [1] MEDIO   = acta-sim-intermedia.jpg (as-is, §D6 Rev. 3)
+//   [2] BAJA    = acta-sim-baja.jpg (as-is, §D7 Rev. 3)
+//   [3] EXTRA   = acta-sim-extra-2.jpg (solo ciclo rotativo §G)
 import type { Acta, ActaFirma, ActaStatus, DiagnosticoActa, ProgresoAnalisis } from "@jg-stevan/scanner-core/dominio/types";
 import type { E14Bridge, OpcionesEscaneo } from "@jg-stevan/scanner-core/dominio/bridge";
 // KIT e14-motor-rapidocr-v1 (PROD-2 §3): adaptador del motor de producción.
@@ -256,17 +280,10 @@ const DETALLE_INCOMPLETA = "EL ACTA ESTÁ CORTADA EN EL ENCUADRE — ALÉJATE UN
 // dueño: SIN guía de cámara). El rechazo directo regresa el flujo a
 // captura (comportamiento existente de RECHAZADA).
 const DETALLE_SIN_VOTOS = "ACTA SIN VOTOS VISIBLES";
-// §D1 (SPEC-e14-score-ocr): modelo del score por RECONOCIMIENTO — techo de
-// una foto SIN SEÑAL de contenido del acta (bolsa de papas, pared, borrosa
-// total): por debajo de RECHAZADA (6.5) → «score bajo» garantizado. El
-// detalle es el rechazo determinista §D3 (repetir, NUNCA RH en 1ª ronda).
-const TECHO_SIN_SENAL = 4.9;
+// §D1/KIT: los NÚMEROS de la política (TECHO_SIN_SENAL, TECHO_ESCUDO_FONDO,
+// techos del score, umbral de rechazo) viven en politica/umbrales.ts desde
+// 7.1 (C3 — única fuente de verdad); el copy BAJO queda aquí.
 const DETALLE_BAJO = "NO SE RECONOCE INFORMACIÓN DEL ACTA — REPITA LA FOTO";
-// D10 (SPEC-e14-guard-borde): techo del ESCUDO anti-fondo — el recorte trae
-// fondo/sombra al filo (franjas ≥85% oscuras, NO tinta cortada): el acta pasa
-// al gate pero NUNCA ÓPTIMA (statusDeScore: ≥8 sería ÓPTIMA — el operador
-// puede preferir repetir porque el recorte trae fondo). Sin copy nuevo.
-const TECHO_ESCUDO_FONDO = 7.9;
 
 /**
  * §D1 (SPEC-e14-score-ocr): SEÑAL DE CONTENIDO del acta — se calcula DESPUÉS
@@ -318,7 +335,8 @@ function capturarFrame(video: HTMLVideoElement): string | null {
     const ctx = canvas.getContext("2d");
     if (!ctx || !canvas.width || !canvas.height) return null;
     ctx.drawImage(video, 0, 0);
-    return canvas.toDataURL("image/jpeg", 0.92);
+    // 7.1: CALIDAD_JPEG_REVISION (0.92) desde politica/umbrales.ts.
+    return canvas.toDataURL("image/jpeg", CALIDAD_JPEG_REVISION);
   } catch {
     return null;
   }
@@ -331,28 +349,48 @@ function capturarFrame(video: HTMLVideoElement): string | null {
 export type EntradaPipeline = { archivo: File; sinRecorte?: boolean } | { dataUrl: string };
 
 /**
- * SIMULACIÓN = pipeline real sobre el acta E-14 incluida (D35).
- * §G-2 (SPEC-camara-funcional): ciclo determinista de las 3 actas del dueño
- * (óptima → intermedia → baja → óptima…) — cada disparo consume el índice
- * actual y avanza el contador de módulo. Mismo camino que IMPORTAR: File →
+ * SIMULACIÓN = pipeline real sobre los assets SIM (D35, Ola 1: foto real
+ * retirada — solo sintéticos). §G-2 (SPEC-camara-funcional): ciclo
+ * determinista de las actas del arreglo (óptima → intermedia → baja →
+ * extra → óptima…) — cada disparo consume el índice actual y avanza el
+ * contador de módulo. Mismo camino que IMPORTAR: File →
  * fileToCaptureDataUrl (F-IMPORT: EXIF/12MP). Caché POR ÍNDICE a nivel de
  * módulo para no re-descargar un acta ya servida en el ciclo.
  * §D8.1 (SPEC-e14-score-ocr Rev. 3): flag «sin recorte» por ENTRADA — el
  * flag viaja con el ASSET, no con el chip (el ciclo rotativo §G lo hereda
- * automáticamente): [0] óptima = pipeline completo (hoy) · [1] b/n as-is ·
- * [2] borrosa as-is.
+ * automáticamente): [0] óptima = pipeline completo · [1] b/n as-is ·
+ * [2] borrosa as-is · [3] extra as-is.
+ * S-6: los src se cargan con `import()` DINÁMICO vía mapa explícito de
+ * cargadores — el módulo del asset (StaticImageData) llega asíncrono y el
+ * `.src` ya resuelve el basePath /web-scanner del deploy estático.
  */
 interface ActaSim {
-  src: typeof actaSimUrl;
+  /** S-6 — cargador dinámico del asset (resoluble estáticamente). */
+  cargar: () => Promise<{ default: { src: string } }>;
   nombre: string;
   sinRecorte: boolean;
 }
 const ACTAS_SIM: readonly ActaSim[] = [
-  { src: actaSimUrl, nombre: "acta-e14-real.jpg", sinRecorte: false },
-  { src: actaSimIntermediaUrl, nombre: "acta-sim-intermedia.jpg", sinRecorte: true },
-  { src: actaSimBajaUrl, nombre: "acta-sim-baja.jpg", sinRecorte: true },
-  { src: actaSimExtra1Url, nombre: "acta-sim-extra-1.jpg", sinRecorte: true },
-  { src: actaSimExtra2Url, nombre: "acta-sim-extra-2.jpg", sinRecorte: true },
+  {
+    cargar: () => import("@/assets/acta-sim-extra-1.jpg"),
+    nombre: "acta-sim-extra-1.jpg",
+    sinRecorte: false,
+  }, // Ola 1/D35: sustituta de la foto real retirada (pipeline completo)
+  {
+    cargar: () => import("@/assets/acta-sim-intermedia.jpg"),
+    nombre: "acta-sim-intermedia.jpg",
+    sinRecorte: true,
+  },
+  {
+    cargar: () => import("@/assets/acta-sim-baja.jpg"),
+    nombre: "acta-sim-baja.jpg",
+    sinRecorte: true,
+  },
+  {
+    cargar: () => import("@/assets/acta-sim-extra-2.jpg"),
+    nombre: "acta-sim-extra-2.jpg",
+    sinRecorte: true,
+  },
 ];
 let actaSimIdx = 0;
 interface EntradaSim {
@@ -360,14 +398,14 @@ interface EntradaSim {
   sinRecorte: boolean;
 }
 const actasSimCache: EntradaSim[] = [];
-async function fetchActaSimulada(): Promise<EntradaSim> {
-  const idx = actaSimIdx;
-  actaSimIdx = (actaSimIdx + 1) % ACTAS_SIM.length;
+/** Resuelve el asset del índice (cargador S-6 → fetch → File) con la caché
+ *  por índice. ÚNICO camino de carga — antes el fetch+cache estaba duplicado
+ *  en fetchActaSimulada y fetchActaSimPorScore. */
+async function entradaSimDeActa(idx: number): Promise<EntradaSim> {
   const cache = actasSimCache[idx];
   if (cache) return cache;
-  // ACTAS_SIM[idx].src es StaticImageData — .src.src ya resuelve el basePath
-  // /web-scanner del deploy estático (en dev: /_next/static/media/...).
-  const res = await fetch(ACTAS_SIM[idx].src.src);
+  const { default: imagen } = await ACTAS_SIM[idx].cargar();
+  const res = await fetch(imagen.src);
   if (!res.ok) throw new Error("SIMULACIÓN: no se pudo cargar la imagen incluida");
   // File con nombre real del asset (.jpg — evita el camino HEIC).
   const entrada: EntradaSim = {
@@ -379,35 +417,29 @@ async function fetchActaSimulada(): Promise<EntradaSim> {
   actasSimCache[idx] = entrada;
   return entrada;
 }
+async function fetchActaSimulada(): Promise<EntradaSim> {
+  const idx = actaSimIdx;
+  actaSimIdx = (actaSimIdx + 1) % ACTAS_SIM.length;
+  return entradaSimDeActa(idx);
+}
 
 /**
  * §D3 (SPEC-e14-simulacion-scores): asset FIJO por score de chip — mapeo
- * determinista dueño (la completa = óptima · la cortada = intermedio · la
- * borrosa = bajo): 8.2 → acta-e14-real.jpg · 7.0 → acta-sim-intermedia.jpg ·
- * 4.3 → acta-sim-baja.jpg. Reutiliza la MISMA caché por índice del ciclo
- * rotativo (§G del PR #33, que queda INTACTO — esta vía solo cambia QUÉ
- * índice se sirve: el del chip, nunca el contador rotativo). El flag
- * sinRecorte del asset viaja con la entrada (§D8.1).
+ * determinista (la óptima = pipeline completo · la cortada = intermedio ·
+ * la borrosa = bajo): 8.2 → acta-sim-extra-1.jpg · 7.0 →
+ * acta-sim-intermedia.jpg · 4.3 → acta-sim-baja.jpg. Reutiliza la MISMA
+ * caché por índice del ciclo rotativo (§G del PR #33, que queda INTACTO —
+ * esta vía solo cambia QUÉ índice se sirve: el del chip, nunca el contador
+ * rotativo). El flag sinRecorte del asset viaja con la entrada (§D8.1).
+ * (Ola 1/D35: la óptima era la foto real — retirada del repo.)
  */
 function indiceActaPorScore(score: number): number {
-  if (score >= 8) return 0; // ÓPTIMA [8.2] → la acta completa, nítida
-  if (score >= 6.5) return 1; // MEDIO [7.0] → la b/n del dueño, as-is (Rev. 3)
-  return 2; // BAJA [4.3] → la borrosa del dueño, as-is (Rev. 3)
+  if (score >= 8) return 0; // ÓPTIMA [8.2] → la sustituta de la real, pipeline completo
+  if (score >= UMBRAL_RECHAZO_SCORE) return 1; // MEDIO [7.0] → la b/n as-is (Rev. 3)
+  return 2; // BAJA [4.3] → la borrosa as-is (Rev. 3)
 }
 async function fetchActaSimPorScore(score: number): Promise<EntradaSim> {
-  const idx = indiceActaPorScore(score);
-  const cache = actasSimCache[idx];
-  if (cache) return cache;
-  const res = await fetch(ACTAS_SIM[idx].src.src);
-  if (!res.ok) throw new Error("SIMULACIÓN: no se pudo cargar la imagen incluida");
-  const entrada: EntradaSim = {
-    archivo: new File([await res.blob()], ACTAS_SIM[idx].nombre, {
-      type: "image/jpeg",
-    }),
-    sinRecorte: ACTAS_SIM[idx].sinRecorte,
-  };
-  actasSimCache[idx] = entrada;
-  return entrada;
+  return entradaSimDeActa(indiceActaPorScore(score));
 }
 
 function dosDigitos(n: number): string {
@@ -471,17 +503,15 @@ function scoreDeCalidad(
   if (senales?.pisoPerfecto) score10 = 10;
   let level = q.level;
   if (sharpnessV2 !== q.sharpness || contrasteEf !== q.contrast) {
-    // Fuente: packages/scanner-core/src/image-processor.ts evaluateQuality —
-    // fórmula y umbrales del level DUPLICADAS aquí (packages/ es intocable,
-    // regla de oro) SOLO para recalcular el techo con las señales v2 (§3
-    // paso 2 del kit: misma fórmula/umbrales 80/62/45, solo cambia la
-    // entrada — sharpnessV2 + contrasteEfectivo).
-    const scoreCore = sharpnessV2 * 0.45 + q.brightness * 0.25 + contrasteEf * 0.3;
-    level =
-      scoreCore >= 80 ? "excellent" : scoreCore >= 62 ? "good" : scoreCore >= 45 ? "fair" : "poor";
+    // 7.6 (C2-partial): la fórmula (0.45/0.25/0.3) y los umbrales del level
+    // (80/62/45) viven ÚNICAMENTE en el paquete (image-processor.ts — la
+    // copia manual que había aquí derivaba si el core cambiaba). Mismo
+    // recálculo de siempre: solo cambia la ENTRADA (sharpnessV2 +
+    // contrasteEfectivo — §3 paso 2 del kit score-lectura).
+    level = nivelPorPuntaje(puntajeCalidad(sharpnessV2, q.brightness, contrasteEf));
   }
-  if (level === "fair") score10 = Math.min(score10, 7.9); // techo ADVERTENCIA
-  if (level === "poor") score10 = Math.min(score10, 6.4); // techo RECHAZADA
+  if (level === "fair") score10 = Math.min(score10, TECHO_ADVERTENCIA); // techo ADVERTENCIA
+  if (level === "poor") score10 = Math.min(score10, UMBRAL_SCORE_INCOMPLETA); // techo RECHAZADA
   // §D1 (SPEC-e14-score-ocr): techo SIN SEÑAL de contenido (AUTO exige tipo
   // leído → implica señal — no colisionan). Fórmulas/techos existentes BYTE
   // A BYTE intactos (§7 prohibido).
@@ -1038,7 +1068,8 @@ async function recortarRoiDataUrl(
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     ctx.drawImage(img, 0, y0, W, hSrc, 0, 0, wDst, hDst);
-    return canvas.toDataURL("image/jpeg", 0.92);
+    // 7.1: CALIDAD_JPEG_REVISION (0.92) desde politica/umbrales.ts.
+    return canvas.toDataURL("image/jpeg", CALIDAD_JPEG_REVISION);
   } catch {
     return null; // jamás tumba — el rescate se descarta
   }
@@ -1242,10 +1273,12 @@ async function ocrBanda(fotoProcesada: string): Promise<string> {
     const W = img.naturalWidth;
     const H = img.naturalHeight;
     if (!W || !H) return "";
-    const x0 = Math.round(W * 0.22);
-    const y0 = Math.round(H * 0.03);
-    const w = Math.max(1, Math.round(W * 0.88) - x0);
-    const h = Math.max(1, Math.round(H * 0.13) - y0);
+    // 7.1: fracciones de la banda (0.22/0.03/0.88/0.13) desde
+    // politica/umbrales.ts — la franja del sello KIT.
+    const x0 = Math.round(W * BANDA_IZQ_FRACCION);
+    const y0 = Math.round(H * BANDA_ARRIBA_FRACCION);
+    const w = Math.max(1, Math.round(W * BANDA_DER_FRACCION) - x0);
+    const h = Math.max(1, Math.round(H * BANDA_ABAJO_FRACCION) - y0);
     const canvas = canvasCon(w * 2, h * 2); // escala ×2 (§5) — SPRINT-A A3 factory
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return "";
@@ -1262,7 +1295,8 @@ async function ocrBanda(fotoProcesada: string): Promise<string> {
     // de producción — el canvas invertido ×2 ya es polaridad normal y
     // RapidOCR lo lee (campos 6/6 en Frankfurt incluyen lo que aporta la
     // banda). Escape hatch documentado (§5): revert puntual de C3.
-    return await reconocerRapidOcr(canvas.toDataURL("image/jpeg", 0.9));
+    // 7.1: CALIDAD_JPEG_ENVIO (0.9) desde politica/umbrales.ts.
+    return await reconocerRapidOcr(canvas.toDataURL("image/jpeg", CALIDAD_JPEG_ENVIO));
   } catch {
     return ""; // fallo de decode/canvas/OCR → sin banda nueva (nunca condena)
   }
@@ -1415,23 +1449,43 @@ type CamposActa = {
   clasificacion?: ClasificacionE14 | null;
 };
 
-/** FASE F (plan post-v2.3) — PASOS INYECTABLES de §5: el cuerpo del pipeline
- *  vive en `pipeline.ts` (move-only) y este repo le entrega los helpers que
- *  §5 comparte con el pipeline de RECORTE (§7.5) + los DOS métodos de la
- *  clase que el cuerpo usa. Sin cambios de decisión. */
-export type PasosPipelineL2 = {
+/**
+ * FASE F (plan post-v2.3) — PASOS INYECTABLES de §5: el cuerpo del pipeline
+ * vive en `pipeline.ts` (move-only) y este repo le entrega los helpers que
+ * §5 comparte con el pipeline de RECORTE (§7.5) + los DOS métodos de la
+ * clase que el cuerpo usa. Sin cambios de decisión.
+ *
+ * 7.8 (plan de remediación, A5) — la god-interface de 21 miembros se agrupa
+ * en SUB-INTERFACES por etapa (ISP — el contrato de cada extracción del
+ * troceado 7.3 es UNA sub-interfaz, no las 21 piezas). `PasosPipelineL2`
+ * sigue siendo la INTERSECCIÓN exacta de las cuatro: los consumidores actuales
+ * no se rompen; los pasos nuevos del plan (docs/PLAN-TROCEADO-PIPELINE.md)
+ * ya declaran la porción mínima que necesitan.
+ */
+/** Etapa CAPTURA: entrada → dataUrl + quad (decode, detección, warm-up). */
+export type PasosCaptura = {
   conRampa: typeof conRampa;
   decodeArchivoMemo: typeof decodeArchivoMemo;
   quadIdentidad: Quad;
   esperarWorkerCaliente: typeof esperarWorkerCaliente;
+};
+/** Etapa CALIDAD: warp/crop → métricas → score bruto (§4.1). */
+export type PasosCalidad = {
   calidadDeActa: typeof calidadDeActa;
   scoreDeCalidad: typeof scoreDeCalidad;
   contrasteEfectivoDe: typeof contrasteEfectivoDe;
-  senalDeContenido: typeof senalDeContenido;
-  esquinasDeActa: typeof esquinasDeActa;
+};
+/** Etapa OCR: escalonado + cascada + banda del sello (§4, PROD-1/PROD-2). */
+export type PasosOcr = {
   reconocerRapidOcrEscalonado: typeof reconocerRapidOcrEscalonado;
   reconocerRapidOcrCascada: typeof reconocerRapidOcrCascada;
   ocrBanda: typeof ocrBanda;
+};
+/** Etapa GATE: señales, clasificación y desenlace (§4.2 — la política vive
+ *  además en politica/gate.ts desde 7.2; estas piezas llegan inyectadas). */
+export type PasosGate = {
+  senalDeContenido: typeof senalDeContenido;
+  esquinasDeActa: typeof esquinasDeActa;
   fmtClasif: typeof fmtClasif;
   construirActa: (
     opciones: OpcionesEscaneo,
@@ -1452,6 +1506,8 @@ export type PasosPipelineL2 = {
   TECHO_SIN_SENAL: typeof TECHO_SIN_SENAL;
   TECHO_ESCUDO_FONDO: typeof TECHO_ESCUDO_FONDO;
 };
+
+export type PasosPipelineL2 = PasosCaptura & PasosCalidad & PasosOcr & PasosGate;
 
 export class RealCoreBridge implements E14Bridge {
   private contador = 0;
@@ -1934,8 +1990,7 @@ export class RealCoreBridge implements E14Bridge {
     // papel; a lo sumo su crop cortó un poco de impresión y lo decide mirando.
     // SIN_VOTOS y BAJO siguen mandando (contenido, no esquinas). Solo recorte:
     // el escaneo conserva el veto completo (conservador en campo — Q1 lo relaja).
-    const vetoIncompleta = !completa && !manual;
-    const escudoManual = !completa && manual;
+    // (vetoIncompleta/escudoManual se derivan en `aplicarPoliticaGate` — 7.2.)
     // GATE-MARCADORES (KIT e14-gate-v2, FASE G2) en el recorte — mismo
     // marcador obligatorio y MISMO criterio que el escaneo (helper ÚNICO,
     // §4.4): el recorte re-evalúa TODO el gate, los votos incluidos. Sin
@@ -1955,19 +2010,14 @@ export class RealCoreBridge implements E14Bridge {
     // (constancias) NO tiene zona de votos. Página desconocida → se mide
     // (conservador). Log: votos=skip-pag2 cuando aplique.
     const votosSkipPag2 = clasificacion.pagina?.index === 2;
-    // KIT e14-esquinas-suaves-v1 (Q2): con escudo-manual el gate de votos
-    // SIGUE corriendo (un rescate sin votos no pasa) — solo el veto del guard
-    // se degrada a techo; el veto por marcador obligatorio queda INTACTO.
-    const marcadoresOk = vetoIncompleta ? true : (votosSkipPag2 ? true : marcadores.hayVotos);
     const ocrLegible = ocrTextIsValid(texto);
     // §D1 (SPEC-e14-score-ocr): señal de contenido — mismo criterio §4.4
     // (helper único, AMBOS pipelines con el MISMO criterio).
     const senalActa = senalDeContenido(texto, clasificacion);
     // KIT e14-luz-sim-puntos-v1 (T-D) + e14-velocidad-5s-v1: `senal` y
     // `pisoPerfecto` ya se calcularon ARRIBA (el perdón 4/4 los necesita antes
-    // del veto) — son PURAS (misma entrada → misma salida) y el bloque C3 de
-    // abajo queda idéntico leyendo esas mismas consts.
-    let score = scoreDeCalidad(calidad, {
+    // del veto) — son PURAS (misma entrada → misma salida).
+    const scoreBruto = scoreDeCalidad(calidad, {
       ocrLegible,
       identificada: clasificacion.nivel === "AUTO",
       conSenal: senalActa,
@@ -1976,109 +2026,56 @@ export class RealCoreBridge implements E14Bridge {
     // KIT e14-diagnostico-autoenvio-v1 (§3-A): score visual ANTES de los caps
     // del sitio (misma convención que el escaneo). ORDEN del merge (kit
     // e14-diag-campos-aditivos-v1 §4-A.3): scoreDeCalidad → scoreVisual → C3.
-    const scoreVisual = score;
-    // KIT e14-score-lectura-v1 (C3): MISMO ajuste por LECTURA del escaneo
-    // (§4-B3 — mismo criterio en re-análisis, pitfall §9.9). El texto es el
-    // POST-banda (consenso-frankfurt FASE 4); SIN llamada OCR nueva. Va
-    // ANTES de los caps posteriores: escudo fondo/recortada/gate siguen
-    // MANDANDO (pitfall §9.4 — una recortada con lectura FUERTE se queda ≤7.9).
-    // KIT e14-luz-sim-puntos-v1 (T-D): misma subida de `senal` del escaneo
-    // (§4.4 del kit — EXACTAMENTE el mismo patrón en pipelineRecorte).
-    if (senal.nivel === "FUERTE" && calidad.level !== "poor") {
-      score = Math.max(score, PISO_LECTURA_FUERTE);
-    } else if (senal.nivel === "DEBIL") {
-      score = Math.min(score, TECHO_LECTURA_DEBIL);
-    }
-    // D10 — escudo anti-fondo (mismo criterio del escaneo): el rescate trae
-    // fondo/sombra al filo → gate con TECHO 7.9 (nunca ÓPTIMA), sin copy.
-    if (completa && verificacion.fondo) {
-      score = Math.min(score, TECHO_ESCUDO_FONDO);
-    }
-    // KIT e14-esquinas-suaves-v1 (Q2): escudo-MANUAL — el acta pasa al gate
-    // con TECHO 7.9 (ADVERTENCIA como máximo; el operador decide si repetir).
-    // Colocado JUNTO al escudo-fondo (antes del cap de `recortada`; los caps
-    // del sitio mandan sobre el piso-10 — §G3; orden de caps pitfall G3:
-    // techo fair/poor → sin-señal → piso-10 → escudo-fondo → escudo-manual
-    // → recortada → incompleta → sin-votos).
-    if (escudoManual) {
-      score = Math.min(score, TECHO_ESCUDO_FONDO);
-    }
-    // KIT actas-vivas-paginas-v1 (FASE C): acta RECORTADA → techo 7.9 —
-    // ADVERTENCIA, NO rechazo (mismo criterio del escaneo, helper ÚNICO §4.4).
-    if (recortada) {
-      score = Math.min(score, TECHO_ESCUDO_FONDO);
-    }
-    const gate: ResultadoGate = vetoIncompleta
-      ? {
-          status:
-            acta.intento >= acta.maxIntentos
-              ? ("EN_REVISION_HUMANA" as ActaStatus)
-              : ("RECHAZADA" as ActaStatus),
-          rechazo: { tipo: "INCOMPLETA", detalle: DETALLE_INCOMPLETA },
-          clasificacion: null,
-        }
-      : !marcadoresOk
-        ? {
-            // KIT e14-gate-v2 (G2): rechazo directo SIN_VOTOS — mismo
-            // desenlace por intentos que INCOMPLETA (contingencia C4 al
-            // AGOTAR, con el MISMO rechazo). Copy CORTO, sin guía.
-            status:
-              acta.intento >= acta.maxIntentos
-                ? ("EN_REVISION_HUMANA" as ActaStatus)
-                : ("RECHAZADA" as ActaStatus),
-            rechazo: { tipo: "SIN_VOTOS", detalle: DETALLE_SIN_VOTOS },
-            clasificacion: null,
-          }
-        : this.evaluarGate(score, texto, clasificacion, acta.intento, acta.maxIntentos);
-    // KIT e14-esquinas-suaves-v1 (Q2): cap del veto SOLO cuando el veto es
-    // REAL (vetoIncompleta) — con escudo-manual el cap 7.9 ya aplicó arriba.
-    if (vetoIncompleta) score = Math.min(score, 6.4);
-    if (completa && !marcadoresOk) score = Math.min(score, 6.4);
-    // §D3 (SPEC-e14-score-ocr): sustitución BAJO sin señal — igual que el
-    // escaneo (el recorte de una foto sin acta no fabrica señal).
-    const rechazoFinal: Acta["rechazo"] = senalActa
-      ? gate.rechazo
-      : { tipo: "BAJO", detalle: DETALLE_BAJO };
+    const scoreVisual = scoreBruto;
+    // 7.2 (A1) — LA política del gate, bloque ÚNICO con el escaneo (golden:
+    // gate.paridad.test.ts): C3 (piso/techo lectura) → escudo-fondo D10 →
+    // escudo-manual Q2 → cap recortada FASE C → gate INCOMPLETA/SIN_VOTOS
+    // con contingencia C4 → caps 6.4 → rechazoFinal §D3 → techosDiag. El
+    // recorte NO tiene SIM (scoreSimulado null — siempre real) y aquí sí
+    // viaja la bandera `manual` del editor (escudo Q2 en vez de veto).
+    const {
+      score,
+      gate,
+      rechazoFinal,
+      marcadoresOk,
+      techosDiag,
+      // (vetoIncompleta no se consume en el log/diag del recorte — solo el
+      // escudoManual viaja como token `manual=1`/`escudo-manual=1`.)
+      escudoManual,
+    } = aplicarPoliticaGate(
+      {
+        score: scoreBruto,
+        scoreSimulado: null, // el recorte jamás simula (guard fuente SIM §9.2)
+        senal,
+        calidad,
+        senalActa,
+        texto,
+        clasificacion,
+        completa,
+        manual,
+        hayVotos: marcadores.hayVotos,
+        votosSkipPag2,
+        fondo: verificacion.fondo,
+        recortada,
+        intento: acta.intento,
+        maxIntentos: acta.maxIntentos,
+      },
+      {
+        evaluarGate: (s, t, c, i, m) => this.evaluarGate(s, t, c, i, m),
+        DETALLE_INCOMPLETA,
+        DETALLE_SIN_VOTOS,
+        DETALLE_BAJO,
+      },
+    );
 
-    // §3c (GUARD-BORDE): log de auditoría del guard — SOLO con sospecha
-    // geométrica (AC8). Mismos campos que el pipeline de escaneo.
-    // KIT e14-esquinas-suaves-v1 (Q1): token `perdon=` añadido AL FINAL del
-    // segmento (tokens NUEVOS solo al final — líneas `senal=`/`level:`
-    // intocables byte a byte).
-    const evidenciaBordeRecorte =
-      verificacion.sospecha
-        ? ` borde=${verificacion.sospecha}` +
-          ` tintaFilo=${verificacion.tintaFilo}` +
-          ` franja=[${verificacion.densidades.map((d) => d.toFixed(1)).join(",")}]` +
-          ` fondo=${verificacion.fondo}` +
-          (verificacion.perdonLado ? ` perdon=${verificacion.perdonLado}` : "")
-        : "";
     // FASE S (§S.1.5): crop= bbox real usado por calidadDeActa (px) — WxH;
     // `full` si el fallback al frame completo se activó (diagnóstico en campo).
     const cropLog = infoCrop.fallback ? "full" : `${infoCrop.w}x${infoCrop.h}`;
-    // KIT e14-diagnostico-autoenvio-v1 (C1/§6-B): techos con las MISMAS
-    // condiciones que aplicaron los caps (orden real) — sitio recorte.
-    const techosDiag: string[] = [];
-    if (calidad.level === "fair") techosDiag.push("techo-fair:7.9");
-    if (calidad.level === "poor") techosDiag.push("techo-poor:6.4");
-    if (!senalActa) techosDiag.push(`sin-senal:${TECHO_SIN_SENAL}`);
-    // KIT e14-diag-campos-aditivos-v1 (§8 score-lectura): ajustes de LECTURA
-    // del score v2 — NO son caps: observabilidad del ajuste (piso sube,
-    // techo baja). Condición espejo exacta del C3 del recorte (L1503-1508) —
-    // mismo criterio en AMBOS pipelines (pitfall §9.9 score-lectura).
-    if (senal.nivel === "FUERTE" && calidad.level !== "poor")
-      techosDiag.push("piso-lectura-FUERTE:8.5");
-    if (senal.nivel === "DEBIL") techosDiag.push("lectura-DEBIL:5.9");
-    if (completa && verificacion.fondo)
-      techosDiag.push(`escudo-fondo:${TECHO_ESCUDO_FONDO}`);
-    // KIT e14-esquinas-suaves-v1 (Q2): techo del escudo-manual (7.9) — junto
-    // al escudo-fondo, MISMO orden de aplicación de los caps.
-    if (escudoManual) techosDiag.push("escudo-manual:7.9");
-    if (recortada) techosDiag.push(`recortada:${TECHO_ESCUDO_FONDO}`);
-    // KIT e14-esquinas-suaves-v1 (Q2): el token `incompleta:6.4` SOLO con el
-    // veto real (un recorte manual incompleto NO es INCOMPLETA — es escudo).
-    if (vetoIncompleta) techosDiag.push("incompleta:6.4");
-    if (completa && !marcadoresOk) techosDiag.push("sin-votos:6.4");
+    // KIT e14-diagnostico-autoenvio-v1 (C1/§6-B): techosDiag nace dentro de
+    // `aplicarPoliticaGate` (7.2) con las MISMAS condiciones que aplicaron
+    // los caps — orden real de aplicación; el token `escudo-manual` (Q2) y
+    // el veto `incompleta` SOLO cuando el veto es REAL (un recorte manual
+    // incompleto NO es INCOMPLETA — es escudo).
     // C1: registro del desenlace junto al log (§9.6). Guard extra §9.2: un
     // recorte de un acta SIMULACION tampoco adjunta (doble guard con el store).
     let diag: DiagnosticoActa | null = null;
@@ -2160,28 +2157,75 @@ export class RealCoreBridge implements E14Bridge {
     if (diag != null && probeMiniOrientacion != null) {
       diag.orientacionProbeMini = probeMiniOrientacion;
     }
+    // §3c (GUARD-BORDE): la evidencia del guard va al log-contrato D51 vía
+    // el constructor único (7.9) — condicionales empujados solo cuando
+    // aplican; `perdon=` al FINAL del segmento (Q1).
+    const entradasD51: EntradaD51[] = [
+      ["proceso", Math.round(ms.proceso)],
+      ["calidad", Math.round(ms.calidad)],
+      ["ocr", Math.round(ms.ocr)],
+      ["motor", motor],
+      ["ocrValido", String(ocrTextIsValid(texto))],
+      ["cabeceraE14", String(PATRON_CABECERA.test(texto))],
+      ["completa", String(completa)],
+      ["senal", String(senalActa)],
+      ["vacia", String(procesadaVacia)],
+      ["votos", votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`],
+    ];
+    if (!marcadoresOk) entradasD51.push(["SIN_VOTOS", true]);
+    if (recortada) entradasD51.push(["recortada", 1]);
+    if (ladoEsquina) entradasD51.push(["lado", ladoEsquina]);
+    if (lazoPerdonado) entradasD51.push(["lazo", "perdonado"]);
+    entradasD51.push(["esquinas", trazaEsq]);
+    if (verificacion.sospecha) {
+      entradasD51.push(["borde", verificacion.sospecha]);
+      entradasD51.push(["tintaFilo", String(verificacion.tintaFilo)]);
+      entradasD51.push(
+        ["franja", `[${verificacion.densidades.map((d) => d.toFixed(1)).join(",")}]`],
+      );
+      entradasD51.push(["fondo", String(verificacion.fondo)]);
+      if (verificacion.perdonLado) entradasD51.push(["perdon", verificacion.perdonLado]);
+    }
+    if (manual) entradasD51.push(["manual", 1]);
+    if (escudoManual) entradasD51.push(["escudo-manual", 1]);
+    entradasD51.push(["quad", `[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}]`]);
+    // KIT e14-luz-sim-puntos-v1 (T-D): piso-10 aplicado (grep-able).
+    entradasD51.push(["piso10", pisoPerfecto ? 1 : 0]);
+    if (quadOrigen) entradasD51.push(["origen", quadOrigen]);
+    entradasD51.push(["score", score]);
+    entradasD51.push(["filtro", filtro]);
+    entradasD51.push(["ocrIn", ocrIn]);
+    // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor
+    // (2º `ocr=` del contrato — duplicados consumidos en orden).
+    entradasD51.push(["ocr", "rapidocr"]);
+    entradasD51.push(["conf", confOcr != null ? confOcr.toFixed(2) : "?"]);
+    entradasD51.push(["det", `${Math.round(detOcr)}ms`]);
+    entradasD51.push(["rec", `${Math.round(recOcr)}ms`]);
+    // KIT e14-score-lectura-v1 (REBASE): señal de lectura v2 en la traza.
+    entradasD51.push(["lectura", senal.nivel]);
+    entradasD51.push(["anclas", senal.anclas]);
+    entradasD51.push(["piso", String(score >= PISO_LECTURA_FUERTE && senal.nivel === "FUERTE")]);
+    entradasD51.push(["clasif", `{${fmtClasif(gate.clasificacion)}}`]);
+    entradasD51.push(["crop", cropLog]);
+    entradasD51.push([
+      "metricas",
+      `{sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
+        `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
+        `level:${calidad.level}}`,
+    ]);
+    const cuerpoD51 = construirLogD51(entradasD51, ORDEN_LOG_D51);
+    // Sufijo EXTERNO al paréntesis: TODOS aditivos (D51) — orden de inserción.
+    const sufijosD51: EntradaD51[] = [];
+    if (diag) sufijosD51.push(["diag", 1]);
+    // KIT e63f-autoenvio-v1 (F0): balde fino del no-AUTO — token ADITIVO AL
+    // FINAL. Ausente si AUTO o sin motivo de los listados.
+    if (gate.clasificacion?.clasifDebil) {
+      sufijosD51.push(["ClasifDebil", gate.clasificacion.clasifDebil]);
+    }
+    const sufijoD51 = construirLogD51(sufijosD51, []);
     logger.info(
       `[e14] recorte ${acta.fuente} total=${Math.round(ms.total)}ms ` +
-        `(proceso=${Math.round(ms.proceso)} calidad=${Math.round(ms.calidad)} ` +
-        `ocr=${Math.round(ms.ocr)} motor=${motor} ocrValido=${ocrTextIsValid(texto)} ` +
-        `cabeceraE14=${PATRON_CABECERA.test(texto)} completa=${completa} ` +
-        `senal=${senalActa} vacia=${procesadaVacia} votos=${votosSkipPag2 ? "skip-pag2" : `${marcadores.densidadVotosPct.toFixed(1)}%`}${marcadoresOk ? "" : " SIN_VOTOS"}${recortada ? " recortada=1" : ""}${ladoEsquina ? ` lado=${ladoEsquina}` : ""}${lazoPerdonado ? " lazo=perdonado" : ""} esquinas=${trazaEsq}${evidenciaBordeRecorte}${manual ? " manual=1" : ""}${escudoManual ? " escudo-manual=1" : ""} ` +
-        // KIT e14-luz-sim-puntos-v1 (T-D): piso-10 aplicado (grep-able).
-        `quad=[${quad.map((p) => `${p.x.toFixed(3)},${p.y.toFixed(3)}`).join(" ")}] piso10=${pisoPerfecto ? 1 : 0}${quadOrigen ? ` origen=${quadOrigen}` : ""} ` +
-        `score=${score} filtro=${filtro} ocrIn=${ocrIn} ` +
-        // KIT e14-motor-rapidocr-v1 (PROD-2 §4.2): token grep-able del motor.
-        `ocr=rapidocr conf=${confOcr != null ? confOcr.toFixed(2) : "?"} det=${Math.round(detOcr)}ms rec=${Math.round(recOcr)}ms ` +
-        // KIT e14-score-lectura-v1 (REBASE): señal de lectura v2 en la traza.
-        `lectura=${senal.nivel} anclas=${senal.anclas} piso=${score >= 8.5 && senal.nivel === "FUERTE"} ` +
-        `clasif={${fmtClasif(gate.clasificacion)}} ` +
-        `crop=${cropLog} ` +
-        `metricas={sharpness:${calidad.sharpness} brightness:${calidad.brightness} ` +
-        `contrast:${calidad.contrast} contEff:${contrasteEfectivoDe(calidad, ocrLegible)} ` +
-        `level:${calidad.level}})${diag ? " diag=1" : ""}` +
-        // KIT e63f-autoenvio-v1 (F0): balde fino del no-AUTO — token ADITIVO
-        // AL FINAL (contrato D51). Ausente si AUTO o sin motivo de los
-        // listados (puesto-lugar/tipo/mesa-registro/ruta).
-        `${gate.clasificacion?.clasifDebil ? ` ClasifDebil=${gate.clasificacion.clasifDebil}` : ""}`,
+        `(${cuerpoD51})${sufijoD51 ? " " + sufijoD51 : ""}`,
     );
 
     // Acta ACTUALIZADA: identidad intacta (spread), campos reales nuevos y
@@ -2237,7 +2281,8 @@ export class RealCoreBridge implements E14Bridge {
   /**
    * Gate §4.2 REVISADO (SPEC-cabecera-clasificacion §4 + §7.2 SPEC-rediseno-
    * revision) — helper ÚNICO para AMBOS pipelines (escaneo y recorte, §4.4):
-   *  1. RECHAZADA SOLO por CALIDAD (score < 6.5 vía statusDeScore, §4.1) —
+   *  1. RECHAZADA SOLO por CALIDAD (score < UMBRAL_RECHAZO_SCORE=6.5 vía
+   *     statusDeScore, §4.1) —
    *     la tarjeta «ACTA NO RECONOCIDA» queda reservada a este caso. Al
    *     AGOTAR intentos la contingencia es AUTOMÁTICA (C4, sin botón manual).
    *  2. Calidad suficiente + clasificación AUTO → status por score (OPTIMA/
@@ -2256,7 +2301,7 @@ export class RealCoreBridge implements E14Bridge {
     intento: number,
     maxIntentos: number,
   ): ResultadoGate {
-    if (score >= 6.5) {
+    if (score >= UMBRAL_RECHAZO_SCORE) {
       if (clasificacion.nivel === "AUTO") {
         return { status: statusDeScore(score), rechazo: null, clasificacion };
       }
