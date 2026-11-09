@@ -40,6 +40,57 @@
  * · Memoria: `bitmap.close()` INMEDIATO tras el draw (pico ~64 MB en el
  *   rescate 4096, liberado al instante); el OffscreenCanvas muere con el
  *   mensaje.
+ *
+ * KIT e14-remediacion-movil-v1 (C4 — workers que no mueren; P2 #15 — análisis
+ * del colgado del QR en medición 3/3 con hard-kill ya activo):
+ *
+ * SÍNTOMA medido: consola `RuntimeError: Aborted()` desde `e.onmessage`
+ * (familia emscripten) + worker colgado más allá de presupuesto+1500 ms.
+ *
+ * POR QUÉ sale un `Aborted()` de un `onmessage` (mecánica emscripten):
+ * emscripten compila los módulos WASM con un estado GLOBAL y MUTABLE (heap
+ * tipado, stack, tabla de excepciones). `abort()` — por OOM al crecer la
+ * memoria, por re-entrancia (se entra al módulo mientras OTRA llamada sigue
+ * viva y el estado interno se pisa) o por llamada tras un `abort()` previo —
+ * deja el módulo en estado roto y TODA entrada posterior lanza
+ * `RuntimeError: Aborted()`; si la entrada ocurre desde el handler de
+ * mensajes, el frame del stack es literalmente `onmessage`. ES UN ESTADO
+ * CONTAGIOSO: una vez abortado, el módulo no se recupera sin re-instanciar.
+ *
+ * DÓNDE NO ESTÁ: en ESTE bundle. El worker es jsQR vendido (puro JS —
+ * red line §I) y NO importa zxing-wasm ni OpenCV: el artefacto
+ * public/scanner/capa0-qr.worker.js NO contiene WebAssembly/emscripten
+ * (verificado por el smoke de bundling, que prohíbe `import(` y por grep
+ * del artefacto). Por eso el `Aborted()` medido NO puede nacer aquí —
+ * candidatos reales, por probabilidad:
+ *   1. OOM de heap en el RESCATE de main: tras el hard-kill el caller paga
+ *      el rescate zxing (identidad-qr.ts, zxing-wasm en el hilo principal)
+ *      sobre una foto de 12 MP en un dispositivo de 2 GB — el crecimiento
+ *      fallido del heap de zxing-wasm/emscripten aborta el módulo y el
+ *      error sube por el stack del llamador (lección INVALID SESSION móvil).
+ *   2. Re-entrancia de zxing-wasm en MAIN: dos decodes QR solapados (brújula
+ *      de orientación + rescate) entran al MISMO módulo emscripten vivo.
+ *   3. OpenCV.js dentro de detection-worker.js (warp hasta 4032) — su
+ *      `self.onmessage` es el frame `onmessage` del stack si su heap aborta.
+ * Este comentario documenta la hipótesis; la réplica en dispositivo debe
+ * confirmar con la traza (ver docs/NOTA-c4-workers.md). NO se inventa un
+ * fix arriesgado contra wasm ajeno a este bundle.
+ *
+ * MITIGACIÓN barata y segura AQUÍ (no cambia resultados ni protocolo):
+ * guard de re-entrancia en el `onmessage` — si hay UNA tarea en vuelo, NO se
+ * vuelve a entrar a la cadena (jsQR/decodes), se responde inmediatamente un
+ * «ocupado» con una RespuestaCapa0 LEGAL del protocolo existente
+ * (corrio:true + payload null + presupuestoVencido:true + fin "vencido" —
+ * «el null NO es un hecho, NO cacheable», mismo tratamiento del hard-kill
+ * en el cliente). El flujo de cámara actual es SECUENCIAL (1 petición a la
+ * vez) ⇒ el guard es un NO-OP en el camino feliz; su valor es blindar el
+ * escenario pool≥2 (runner masivo del repo hermano) donde dos cadenas
+ * concurrentes pisarían el guard de barrido de módulo (activarGuardBarrido
+ * es estado GLOBAL de qr-pixeles) y multiplicarían los picos de memoria
+ * (2×2048² + 2×4096²) — exactamente la combustible del OOM/re-entrancia.
+ * La llamada a la cadena ya vive en try/catch (capa0EnWorker JAMÁS throw,
+ * §I) y el cableado completo se envuelve en try/catch con respuesta de
+ * fallo controlada (cinturón contra un structured-clone imposible).
  */
 import {
   activarGuardBarrido, // R1.1 — guard del barrido por cuadrante/fracción
@@ -360,11 +411,70 @@ async function capa0EnWorker(
 }
 
 /** Cableado del mensaje — SOLO en un entorno de worker real (el worker se
- *  importa desde tests como módulo puro). */
+ *  importa desde tests como módulo puro).
+ *
+ *  C4 — guard de re-entrancia (MITIGACIÓN del colgado; ver el bloque del kit
+ *  en la cabecera): MÁXIMO UNA cadena viva en el worker. Con tarea en vuelo
+ *  el mensaje se responde «ocupado» por el MISMO protocolo (RespuestaCapa0
+ *  legal, sin fin nuevo ni campo nuevo) y se descarta — sin cola: el cliente
+ *  ya tiene presupuesto + hard-kill y el flujo de cámara re-pide si hace
+ *  falta. La tarea en vuelo es INMUNE a este guard: su respuesta sale
+ *  normal y el `finally` re-abre el paso. */
 if (typeof window === "undefined" && typeof self !== "undefined") {
+  /** C4 — ¿hay una cadena viva? (estado de MÓDULO — el worker es mono-hilo). */
+  let tareaEnVuelo = false;
+  /** C4 — id de la petición en vuelo (para el fallo controlado del catch). */
+  let idEnVuelo: number | null = null;
+
+  /** C4 — respuesta «ocupado» / de fallo controlado: LEGAL según el protocolo
+   *  (los fines válidos del cliente son payload|agotado|vencido|sin-decode).
+   *  Se usa "vencido" + presupuestoVencido:true — la MISMA semántica del
+   *  hard-kill del cliente: corrió-NO-vio (null NO cacheable, el caller solo
+   *  paga el rescate zxing de main si su flujo lo define así). ms=0 HONESTO:
+   *  la cadena no corrió ni un ms. */
+  const respuestaOcupado = (id: number): RespuestaCapa0 => ({
+    id,
+    corrio: true,
+    payload: null,
+    tier: null,
+    ms: 0,
+    presupuestoVencido: true,
+    fin: "vencido",
+  });
+
   self.onmessage = (ev: MessageEvent<PeticionCapa0>) => {
-    void capa0EnWorker(ev.data).then((respuesta: RespuestaCapa0) => {
-      self.postMessage(respuesta);
-    });
+    const peticion = ev.data;
+    // C4 — RE-ENTRANCIA BLOQUEADA: con cadena viva NO se entra al núcleo
+    // (jsQR ni decodes de imagen) — respuesta inmediata y fuera.
+    if (tareaEnVuelo) {
+      try {
+        self.postMessage(
+          respuestaOcupado(typeof peticion?.id === "number" ? peticion.id : -1),
+        );
+      } catch {
+        /* el postMessage jamás tumba al worker */
+      }
+      return;
+    }
+    tareaEnVuelo = true;
+    idEnVuelo = typeof peticion?.id === "number" ? peticion.id : null;
+    void capa0EnWorker(peticion)
+      .then((respuesta: RespuestaCapa0) => {
+        self.postMessage(respuesta);
+      })
+      .catch(() => {
+        // C4 — cinturón: capa0EnWorker JAMÁS throw (§I); si algo se escapara
+        // (p. ej. structured-clone de la respuesta), el pendiente del cliente
+        // no se queda colgado: fallo controlado por el mismo protocolo.
+        try {
+          self.postMessage(respuestaOcupado(idEnVuelo ?? -1));
+        } catch {
+          /* silencioso */
+        }
+      })
+      .finally(() => {
+        tareaEnVuelo = false;
+        idEnVuelo = null;
+      });
   };
 }

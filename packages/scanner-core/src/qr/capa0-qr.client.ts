@@ -16,6 +16,23 @@
  *    el kill-switch del dueño y el tier adaptativo los inyecta CADA app
  *    (D: flags.capa0QrWorker + planAdaptativo().tier · S: flags + gama).
  *  · JAMÁS throw: cualquier fallo → null (el caller decide el fallback).
+ *
+ * KIT e14-remediacion-movil-v1 (C4 — workers que no mueren; P1 #10 + P2 #15):
+ *  · IDENTIDAD: el worker se crea con `name` explícito ("capa0-qr-v1") —
+ *    el DedicatedWorker anónimo que giró 28 min al 105 % CPU sobreviviendo
+ *    a los kills ya es NOMBRABLE en devtools/ps (targets mudos → identificados).
+ *  · CICLO DE VIDA: `worker=capa0-qr accion=crear|respawn` (logger.info — dev
+ *    según política del logger) y `accion=hard-kill kills=N` en el warn que
+ *    YA existía (visible SIEMPRE + transportado al buffer obs).
+ *  · CONTADOR de cuelgues por sesión de página: `hardKillsQrWorker()` exporta
+ *    el contador de módulo; la app lo expone defensivamente en
+ *    `window.__e14Telemetria.qrWorkerHardKills` (useSesionCamara.ts).
+ *  · HIGIENE post-kill SIN CAMBIOS de contrato: terminarWorker ya limpiaba
+ *    pendientes/timers/arranques y resolvía TODAS las promesas (kill →
+ *    {corrio:true, fin:"vencido"} · error → null); worker=null deja sin
+ *    referencias al muerto y el respawn sigue siendo PEREZOSO (la siguiente
+ *    llamada re-activa workerListo=false). No se cambió nada del protocolo
+ *    ni del presupuesto.
  */
 import { logger } from "../dominio/logger";
 import { publicBaseEfectivo } from "../dominio/entorno";
@@ -55,8 +72,11 @@ export function configurarCapa0(o: OpcionesCapa0): void {
 }
 
 /** Cache-busting del worker precompilado. v4: artefacto UNIFICADO del
- *  paquete (mismo bundle en ambas apps — build único 3.7). */
-const WORKER_URL = (): string => `${publicBaseEfectivo()}/scanner/capa0-qr.worker.js?v=4`;
+ *  paquete (mismo bundle en ambas apps — build único 3.7).
+ *  KIT e14-remediacion-movil-v1 (C4): v5 — la FUENTE del worker cambió
+ *  (guard de re-entrancia); el prebuild regenera el artefacto y el SW lo
+ *  cachea stale-while-revalidate → bump obligatorio (auditoría A-15). */
+const WORKER_URL = (): string => `${publicBaseEfectivo()}/scanner/capa0-qr.worker.js?v=5`;
 
 /** Gracia del hard-kill SOBRE el presupuesto del worker. */
 const GRACIA_KILL_MS = 1500;
@@ -64,16 +84,47 @@ const GRACIA_KILL_MS = 1500;
 let worker: Worker | null = null;
 let workerListo = false;
 
+/** C4 — hard-kills del worker QR acumulados en ESTA sesión de página
+ *  (contador de MÓDULO: sobrevive a los respawn perezosos, muere con la
+ *  página — igual horizonte que la telemetría de consola). */
+let hardKillsQrSesion = 0;
+
+/** C4 — QA/telemetría: nº de hard-kills del worker QR en la sesión.
+ *  Lectura PURA (jamás muta) — la app lo cuelga de window.__e14Telemetria
+ *  y los informes de rastreo lo leen sin tocar el pipeline. */
+export function hardKillsQrWorker(): number {
+  return hardKillsQrSesion;
+}
+
+/** Nombre explícito del worker (C4 — P1 #10: targets mudos). Aparece en
+ *  devtools → Application/Threads y en el título del thread del SO, lo que
+ *  permite atribuir un worker que gira al 105 % CPU SIN adivinar. */
+const WORKER_NAME = "capa0-qr-v1";
+
 function obtenerWorker(): Worker | null {
   if (workerListo) return worker;
+  const respawn = hardKillsQrSesion > 0; // C4 — hay vida previa muerta por kill
   workerListo = true; // una sola tentativa por vida del módulo — el respawn
   // del hard-kill RE-ACTIVA (workerListo=false en terminarWorker).
   try {
-    worker = new Worker(WORKER_URL());
+    // C4 — name explícito (2.º arg estándar WorkerOptions.name; el tipo de
+    // worker NO cambia: el artefacto sigue siendo IIFE clásico — sin type:
+    // "module", que rompería este bundle).
+    worker = new Worker(WORKER_URL(), { name: WORKER_NAME });
   } catch {
     worker = null;
   }
   if (worker) {
+    // C4 — ciclo de vida nominal (logger.info = SOLO dev, política del
+    // logger; en producción el marcador visible del ciclo es el warn del
+    // hard-kill, que SÍ transporta al buffer obs).
+    try {
+      logger.info(
+        `[e14] worker=capa0-qr accion=${respawn ? "respawn" : "crear"} name=${WORKER_NAME} kills=${hardKillsQrSesion}`,
+      );
+    } catch {
+      /* la traza jamás tumba el pipeline */
+    }
     worker.onmessage = enMensaje;
     worker.onerror = enError;
   }
@@ -204,8 +255,11 @@ export function decodificarQrCapa0Worker(
       const presupuesto = opcionesCadena.presupuestoMs;
       const kill = setTimeout(
         () => {
+          // C4 — conteo por sesión ANTES del warn (el N que viaja en la línea
+          // incluye ESTE cuelgue) y luego el cleanup perezoso (respawn).
+          hardKillsQrSesion++;
           logger.warn(
-            `[e14] capa0-qr worker hard-kill presupuesto=${presupuesto ?? "∞"}+${GRACIA_KILL_MS} — worker colgado (respawn); el caller SOLO paga el rescate zxing (los tiers jsQR ya mordieron)`,
+            `[e14] worker=capa0-qr accion=hard-kill kills=${hardKillsQrSesion} name=${WORKER_NAME} presupuesto=${presupuesto ?? "∞"}+${GRACIA_KILL_MS} — worker colgado (respawn perezoso); el caller SOLO paga el rescate zxing (los tiers jsQR ya mordieron)`,
           );
           terminarWorker("kill");
         },

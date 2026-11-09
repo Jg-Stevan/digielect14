@@ -16,7 +16,8 @@
  * puras exportadas internamente y testéalas»).
  */
 import { nuevoUuid, idDispositivo, idSesion, appVersion } from "./identidad";
-import { agregarErrores } from "./digest";
+import { agregarErrores, digestDe } from "./digest";
+import { obtenerBreadcrumbs } from "./breadcrumbs";
 import type { ErroresAgrupados, EventoObs } from "./tipos";
 
 const DB_NOMBRE = "e14-obs";
@@ -24,6 +25,11 @@ const DB_VERSION = 1;
 const STORE = "eventos";
 export const TOPE_EVENTOS = 500; // contrato §4.1 (constante expuesta para tests)
 export const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
+// KIT e14-remediacion-movil-v1 (B2.4) — cuota PROPIA del tipo "hang": un
+// longtask > 50 ms emite un evento y en mitad del escaneo hay decenas —
+// inundaban el FIFO de 500 (88-96 % medido) y EXPULSABAN las muestras
+// PerfActa de los escaneos. Máximo 1 hang cada 5 s entra al buffer.
+export const CUOTA_HANG_MS = 5_000;
 
 let dbSingleton: IDBDatabase | null = null;
 
@@ -118,8 +124,65 @@ function completarEvento(e: Omit<EventoObs, "id">): EventoObs {
 /** Flag anti-recursión (kit A1-C3): mientras el rastreo está EMITIENDO un
  *  evento, cualquier appendEvento anidado (p. ej. un logger.error interno de
  *  obs disparado durante la emisión, o un evento que nace del propio
- *  handler de captura) se descarta — el rastreo jamás se auto-rastrea. */
-let capturando = false;
+ *  handler de captura) se descarta — el rastreo jamás se auto-rastrea.
+ *
+ *  KIT e14-remediacion-movil-v1 (B2.2) — el flag pasa de GLOBAL a POR TIPO:
+ *  antes, un `hang` en vuelo tumbaría un `PerfActa` que llegara en mitad de
+ *  su emisión (el descarte era silencioso y global). Con la clave por tipo,
+ *  la recursión QUE SE QUIERE CORTAR es la de un evento re-entrante DEL
+ *  MISMO tipo (un warn nacido dentro de la emisión de ese warn); un perf
+ *  que llega mientras un hang se emite pasa normal — la evidencia de
+ *  rendimiento ya no se come su propia casa. */
+let tipoEnVuelo: string | null = null;
+
+// KIT e14-remediacion-movil-v1 (B2.1) — contador de descartes POR MOTIVO.
+// Ningún descarte queda mudo: appendEvento cuenta cada evento descartado
+// (anti-recursion:<tipo> · cuota-hang · idb-error) y `registrarDescarteBuffer`
+// queda disponible para los emisores que descartan ANTES de llegar aquí
+// (p. ej. la política de metadatos de emitirPerfDeActa). Cada 25 descartes
+// se emite UN warn agregado al buffer (fire-and-forget — el rastreo jamás
+// se bloquea por su propia contabilidad).
+const descartes: Record<string, number> = {};
+const AVISO_DESCARTES_CADA = 25;
+let avisosDescartesEmitidos = 0;
+
+/** Contar un descarte (motivo libre) y avisar agregado cada N. Jamás lanza. */
+export function registrarDescarteBuffer(motivo: string): void {
+  try {
+    descartes[motivo] = (descartes[motivo] ?? 0) + 1;
+    const total = Object.values(descartes).reduce((s, n) => s + n, 0);
+    const lote = Math.floor(total / AVISO_DESCARTES_CADA);
+    if (lote > avisosDescartesEmitidos) {
+      avisosDescartesEmitidos = lote;
+      void appendEvento({
+        tipo: "warn",
+        ts: Date.now(),
+        sesion: "",
+        dispositivo: "",
+        appVersion: "",
+        datos: {
+          mensaje: `obs: descartes agregados (${total} hasta ahora)`,
+          stack: "",
+          tipo: "BufferDescartes",
+          archivo: null,
+          digest: digestDe("BufferDescartes", String(lote), JSON.stringify(descartes)),
+          breadcrumbs: obtenerBreadcrumbs(),
+          ...descartes,
+        },
+      });
+    }
+  } catch {
+    /* la contabilidad jamás rompe el buffer */
+  }
+}
+
+/** Copia de lectura del contador de descartes (export del reporte). */
+export function descartesDeBuffer(): Record<string, number> {
+  return { ...descartes };
+}
+
+// KIT e14-remediacion-movil-v1 (B2.4) — ventana de la cuota hang.
+let ultimoHangAceptado = 0;
 
 /** Abrir el buffer ANTES de usarlo (idempotente — el bootstrap C7 la llama
  *  una vez; las demás funciones abren por sí solas si no). */
@@ -127,39 +190,109 @@ export async function abrirBuffer(): Promise<void> {
   await abrir();
 }
 
-/** Añadir un evento (aplica tope 500 + TTL 30d + purge vencidos). SILENCIOSO
- *  SIEMPRE: cualquier fallo de IDB resuelve sin lanzar (regla de oro §2.4).
- *  Anti-recursión: si ya estamos dentro de una emisión (capturando), el
- *  evento anidado se descarta en silencio. */
+/** Añadir un evento (aplica cuota hang + tope 500 + TTL 30d + purge vencidos).
+ *  SILENCIOSO SIEMPRE: cualquier fallo de IDB resuelve sin lanzar (regla de
+ *  oro §2.4). Anti-recursión POR TIPO (B2.2): si ya estamos dentro de una
+ *  emisión DEL MISMO tipo, el evento anidado se descarta contado. */
 export async function appendEvento(e: Omit<EventoObs, "id">): Promise<void> {
-  if (capturando) return;
-  capturando = true;
+  // B2.4 — cuota propia del tipo "hang" (máx 1 cada CUOTA_HANG_MS): los
+  // longtasks en mitad del escaneo no expulsan más PerfActa del FIFO.
+  if (e.tipo === "hang" && Date.now() - ultimoHangAceptado < CUOTA_HANG_MS) {
+    registrarDescarteBuffer("cuota-hang");
+    return;
+  }
+  // B2.2 — anti-recursión POR TIPO (antes global: un hang en vuelo tumbaba
+  // PerfActa). Recursión del mismo tipo ⇒ descarte contado.
+  if (tipoEnVuelo === e.tipo) {
+    registrarDescarteBuffer(`anti-recursion:${e.tipo}`);
+    return;
+  }
+  tipoEnVuelo = e.tipo;
   try {
     const db = await abrir();
     const completo = completarEvento(e);
     const store = transaccion(db, "readwrite");
     store.put(completo);
     await esperarTx(store, "IDB_APPEND");
+    if (e.tipo === "hang") ultimoHangAceptado = Date.now();
     await mantener();
   } catch {
-    /* el rastreo jamás lanza — el buffer es best-effort por diseño */
+    // el rastreo jamás lanza — el buffer es best-effort por diseño. B2.1:
+    // el fallo deja RASTRO contado (antes era un descarte mudo).
+    registrarDescarteBuffer("idb-error");
   } finally {
-    capturando = false;
+    tipoEnVuelo = null;
   }
 }
 
-/** TTL + tope sobre el contenido real del store (post-append). */
+/** TTL + tope sobre el contenido real del store (post-append).
+ *
+ *  KIT e14-remediacion-movil-v1 (B2.3) — la versión anterior hacía
+ *  `getAll()` de TODO el store + sort POR CADA append (60-87 ms y 701 KB
+ *  leídos EN MAIN en mitad del escaneo). Ahora:
+ *   · `count()` (barato) decide si hay trabajo.
+ *   · TTL por el índice `ts` con cursor + upperBound — solo vencidos.
+ *   · Tope por cursor ASCENDENTE por ts — solo el exceso más viejo.
+ *  `mantenimientoBuffer` (pura) sigue exportada y testeada: es la MISMA
+ *  política de retención, ahora ejecutada con lecturas indexadas.
+ *  Best-effort: cualquier fallo deja el descarte contado (B2.1). */
 async function mantener(): Promise<void> {
   const db = await abrir();
-  const todos = await pedir<EventoObs[]>(
-    transaccion(db, "readonly").getAll() as IDBRequest<EventoObs[]>,
-    "IDB_LEER_TODOS",
-  );
-  const { borrar } = mantenimientoBuffer(todos, Date.now());
-  if (borrar.length === 0) return;
-  const store = transaccion(db, "readwrite");
-  for (const e of borrar) store.delete(e.id);
-  await esperarTx(store, "IDB_MANTENER");
+  const ahora = Date.now();
+  const limite = ahora - TTL_MS;
+  try {
+    const total = await pedir<number>(
+      transaccion(db, "readonly").count() as IDBRequest<number>,
+      "IDB_CONTAR",
+    );
+    if (total === 0) return;
+    const store = transaccion(db, "readwrite");
+    const indice = store.index("ts");
+    // (B2.3) la tx se SUSCRIBE ANTES de los cursores: una tx cuyo trabajo va
+    // SOLO por cursor (sin reqDe) se confirma en cuanto el motor la ve vacía
+    // (y el fake de tests lo hace en microtarea) — suscribir oncomplete
+    // DESPUÉS de await el cursor colgaría esperarTx para siempre.
+    const txTerminada = esperarTx(store, "IDB_MANTENER");
+    txTerminada.catch(() => {}); // anti unhandled-rejection si llega antes del await
+    let borrados = 0;
+    // 1) TTL — cursor por ts < limite (misma política que mantenimimentoBuffer).
+    const borradosTtl = await new Promise<number>((resolve) => {
+      const req = indice.openCursor(IDBKeyRange.upperBound(limite, true));
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor) {
+          resolve(borrados);
+          return;
+        }
+        cursor.delete();
+        borrados++;
+        cursor.continue();
+      };
+      req.onerror = () => resolve(borrados);
+    });
+    // 2) Tope — el exceso más VIEJO por ts (FIFO), fuera lo que sobre.
+    const exceso = Math.max(0, total - borradosTtl - TOPE_EVENTOS);
+    if (exceso > 0) {
+      await new Promise<void>((resolve) => {
+        let queda = exceso;
+        const req = indice.openCursor(); // ascendente por ts
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor || queda <= 0) {
+            resolve();
+            return;
+          }
+          cursor.delete();
+          queda--;
+          cursor.continue();
+        };
+        req.onerror = () => resolve();
+      });
+    }
+    await txTerminada;
+  } catch {
+    registrarDescarteBuffer("mantenimiento-error");
+  }
 }
 
 /** Leer eventos ordenados por ts ASC (filtrados opcionalmente). Fallo IDB →

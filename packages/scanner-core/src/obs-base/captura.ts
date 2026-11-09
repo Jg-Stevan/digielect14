@@ -21,7 +21,8 @@ import { idDispositivo, idSesion, appVersion, fnv1a8 } from "./identidad";
 // en cada app — es la ÚNICA pieza React de todo obs/ y el paquete no
 // conoce React (regla §0). La app lo define sobre emitirError (exportada).
 import { configObsBase } from "./config";
-import type { ErrorEvento, PerfActa } from "./tipos";
+import { registrarDescarteBuffer } from "./buffer";
+import type { ErrorEvento, PerfActa, TramosOcr } from "./tipos";
 import type { ResumenLectura } from "./eventos-lectura";
 
 const TRUNCA_MENSAJE = 500; // contrato ErrorEvento
@@ -109,6 +110,14 @@ export interface DatosPerfActa {
   ocrValido: boolean;
   /** FASE C2 — resumen de la corrida de lectura (opcional: perf legacy). */
   lectura?: ResumenLectura;
+  // KIT e14-remediacion-movil-v1 (B1) — la muestra del peor caso deja de
+  // perderse: `vencido` marca la emisión del WATCHDOG (parciales hasta donde
+  // existan) y `camino` distingue pipeline vs recorte/importación. Ausente =
+  // perf legacy (comportamiento de siempre).
+  vencido?: boolean;
+  camino?: "pipeline" | "recorte";
+  /** B3 — tramos del OCR sin atribuir (msCrops/segunda/probe/banda). */
+  tramos?: TramosOcr;
 }
 
 /** §G.3 — ORDEN-WAVE3-add-envio-individual-v1 (obs-envio-individual-v1):
@@ -124,12 +133,19 @@ export function hashDeActaIdDe(diag: { actaId: string }): string {
 /** Emisión perf del puente (C7): hashea el actaId (FNV-1a 8 hex — el id
  *  plano JAMÁS sale, §2.5), respeta politica.metadatos (kill switch de
  *  datos), try/catch total, lazy import del buffer — el pipeline no espera
- *  ni puede romperse por esto. */
+ *  ni puede romperse por esto. KIT e14-remediacion-movil-v1 (B1): los
+ *  descartes dejan de ser mudos — el bloqueo por política y el fallo de
+ *  emisión quedan CONTADOS en el buffer (B2.1, `.catch(() => {})` jamás
+ *  otra vez sin rastro). */
 export function emitirPerfDeActa(a: DatosPerfActa): void {
   void import("./buffer")
     .then(async (buffer) => {
       try {
-        if (!configObsBase.politicaMetadatos()) return; // kill switch de datos (D4)
+        if (!configObsBase.politicaMetadatos()) {
+          // kill switch de datos (D4) — descarte CONTADO (B1 punto 4)
+          buffer.registrarDescarteBuffer("politica-metadatos");
+          return;
+        }
         await buffer.appendEvento({
           tipo: "perf",
           ts: Date.now(),
@@ -146,13 +162,18 @@ export function emitirPerfDeActa(a: DatosPerfActa): void {
             gate: a.gate,
             ocrValido: a.ocrValido,
             ...(a.lectura ? { lectura: a.lectura } : {}),
+            ...(a.vencido != null ? { vencido: a.vencido } : {}),
+            ...(a.camino ? { camino: a.camino } : {}),
+            ...(a.tramos ? { tramos: a.tramos } : {}),
           } satisfies PerfActa,
         });
       } catch {
-        /* silencioso */
+        /* silencioso — pero contado (B2.1) */
+        buffer.registrarDescarteBuffer("emision-perf-error");
       }
     })
     .catch(() => {
-      /* silencioso */
+      // fallo del lazy import — jamás mudo otra vez (B1 punto 4)
+      registrarDescarteBuffer("emision-perf-error");
     });
 }

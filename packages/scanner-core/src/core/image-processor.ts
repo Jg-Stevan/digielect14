@@ -554,6 +554,26 @@ export async function fileToCaptureDataUrl(
   const direct = await nativeDecodeToCappedDataUrl(file);
   if (direct) return direct;
 
+  // KIT e14-remediacion-movil-v1 (D1 — P2 #26): GATE FFD8 ANTES del
+  // decodificador HEIC. El check de magic HEIC (§6.13, abajo) existe, pero
+  // NADA impedía que un JPEG que falla el decode nativo entrara igual a
+  // heic2any y esperara su timeout completo: libheif NO rechaza rápido —
+  // 15,6 s sin atribuir medidos en el escaneo de 35,7 s del informe (el
+  // comentario de abajo lo asumía). Si la cabecera dice JPEG (FFD8), el
+  // rescate HEIC no puede aportar NADA → error inmediato (< 100 ms) hacia
+  // el mensaje genérico de abajo. NINGÚN escaneo de cámara (JPEG por
+  // definición) vuelve a pagar el timeout de 15 s.
+  // NOTA: un «.jpg» con contenido HEIC real NO arranca con FFD8 (arranca con
+  // el box ftyp del ISOBMFF) → el gate NO lo bloquea. El gemelo app-side
+  // `src/lib/e14/core/heic-detect.ts` se RETIRÓ con este ítem (código muerto
+  // sin imports — el gate vive aquí, única fuente de verdad).
+  const cabeceraJpeg = await cabeceraBlob(file);
+  if (cabeceraJpeg && cabeceraJpeg[0] === 0xff && cabeceraJpeg[1] === 0xd8) {
+    throw new Error(
+      "No se pudo decodificar la imagen (formato no soportado o archivo corrupto)",
+    );
+  }
+
   // 2) Rescate F-HEIC: decodificar con libheif y reintentar sobre el JPEG.
   let heicConversionAttempted = false;
   try {
@@ -1659,7 +1679,11 @@ function obtenerFallbackCanvasWorker(): Worker {
     // el fuente CRUDO a static/media y el navegador no pudiera ejecutarlo.
     // El .worker.js lo emite `scripts/build-fallback-canvas-worker.mjs` en el
     // `prebuild`; si no existe, el throw lo atrapa el llamador (jamás romper).
-    const w = new Worker(`${publicBaseEfectivo()}/scanner/fallback-canvas.worker.js`);
+    // KIT e14-remediacion-movil-v1 (C4): `name` explícito para el inventario
+    // de workers (targets mudos → nombrables). IIFE clásico intacto.
+    const w = new Worker(`${publicBaseEfectivo()}/scanner/fallback-canvas.worker.js`, {
+      name: "fallback-canvas-v1",
+    });
     w.onmessage = (e: MessageEvent<RespuestaFallbackWorker>) => {
       const pendiente = fallbackCanvasPendientes.get(e.data.id);
       if (!pendiente) return;

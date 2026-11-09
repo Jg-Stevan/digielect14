@@ -15,9 +15,9 @@
   ],
   "modulos": {
     "codec.ts": "da9e19e1b887dd254580a5daa27f3d47",
-    "detector-client.ts": "6317350199bcbab65affe8c64820b441",
+    "detector-client.ts": "1d3a1ba5a1fe6689c81d9ee961e0c5ba",
     "image-modes.ts": "0b8881cb025bd5adbde1a7421f5c1954",
-    "image-processor.ts": "9dae13c63ba5908d1f0751cfd612242e",
+    "image-processor.ts": "5fdcb603f2fab371e34d7b4dcf5c58ee",
     "ocr.ts": "57eb3786b8705a287dd40cc18801bacb",
     "types.ts": "54943986fffac5e0b58dc586ebf89a9d"
   }

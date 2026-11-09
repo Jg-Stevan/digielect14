@@ -271,6 +271,9 @@ export async function tesseractReconocer(
       msCls: 0,
       msRec: msTotal,
       msRunRec: msTotal,
+      // B3 — Tesseract no separa det/crops (el worker lee la foto entera):
+      // 0 honesto, jamás inventar (misma convención de msDet=0 aquí).
+      msCrops: 0,
       nBoxes: lineas.length,
     };
   } catch (e) {

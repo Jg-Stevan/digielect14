@@ -234,7 +234,10 @@ export class ScannerWorkerClient {
 
   private spawn(): void {
     try {
-      this.worker = new Worker(WORKER_URL);
+      // KIT e14-remediacion-movil-v1 (C4): `name` explícito — los targets
+      // mudos (worker girando al 105 % CPU) pasan a ser nombrables en
+      // devtools/ps. El tipo de worker NO cambia (IIFE clásico).
+      this.worker = new Worker(WORKER_URL, { name: "detection-precision-v1" });
     } catch {
       this.dead = true;
       this.readyResolve?.(false);

@@ -45,6 +45,29 @@ export interface PerfActa {
    *  lectura (motor aceptante, intentos con gate, ms por motor). Ausente en
    *  perf legacy — jamás inventar (D57: campo opcional al final). */
   lectura?: ResumenLectura;
+  // KIT e14-remediacion-movil-v1 (B1 — P0 #3 + P1 #22) — ADITIVOS AL FINAL
+  // (D57): la muestra del caso PEOR ya no se pierde. `vencido: true` marca la
+  // emisión del WATCHDOG (el pipeline no terminó — los parciales son los que
+  // existían al vencer; B3 deja el exceso medido, no invisible). `camino`
+  // distingue la RUTA: "pipeline" (escaneo) vs "recorte" (import/recorte —
+  // antes 0/2 muestras). Ausente = perf legacy.
+  vencido?: boolean;
+  camino?: "pipeline" | "recorte";
+  /** B3 — atribución del OCR: tramos que antes quedaban mudos (msCrops,
+   *  2.ª pasada, probe consolidado, banda del sello). null = no corrió. */
+  tramos?: TramosOcr;
+}
+
+/** KIT e14-remediacion-movil-v1 (B3 — P1 #9): tramos del OCR SIN atribuir.
+ *  `msCrops` (recortes por caja) · `msSegundaPasada` (re-OCR/ROI del
+ *  escalonado — antes fuera de intentos/msPorMotor) · `msProbe` (sondeo de
+ *  orientación consolidado) · `msBanda` (2.ª pasada del sello — antes suma
+ *  ciega a ocrMs). Todos opcionales: absent = no medido en esa corrida. */
+export interface TramosOcr {
+  msCrops?: number | null;
+  msSegundaPasada?: number | null;
+  msProbe?: number | null;
+  msBanda?: number | null;
 }
 
 export interface SaludSnapshot {

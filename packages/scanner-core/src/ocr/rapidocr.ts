@@ -81,6 +81,11 @@ export interface RapidOcrResultado {
    *  (getImageData + normalizar tensores + CTC decode). Sin este despiece el
    *  acta no dice si conviene más de un hilo wasm, menos W o menos líneas. */
   msRunRec: number;
+  /** KIT e14-remediacion-movil-v1 (B3 — P1 #9): ms del RECORTE por caja
+   *  (drawImage de la fuente). Antes era un tramo mudo entre det y cls —
+   *  con C2 solo paga lo que se lee, y con este campo la atribución cierra
+   *  (det + cls + rec + crops explica ≥ 97 % de ocrMs). */
+  msCrops: number;
   nBoxes: number;
 }
 
@@ -1096,56 +1101,136 @@ async function rapidOcrReconocerInterno(
     : await inferDet(rt, src, detCap, dataUrl);
 
   if (boxesFuente.length === 0) {
-    return { lineas: [], texto: "", confMedia: 0, msDet, msCls: 0, msRec: 0, msRunRec: 0, nBoxes: 0 };
+    return { lineas: [], texto: "", confMedia: 0, msDet, msCls: 0, msRec: 0, msRunRec: 0, msCrops: 0, nBoxes: 0 };
   }
 
-  // 5) crops por línea (desde la FUENTE, resolución nativa)
-  const crops = boxesFuente.map((b) => cropLinea(src, b));
+  // 5) crops por línea (desde la FUENTE, resolución nativa).
+  //    KIT e14-remediacion-movil-v1 (C2 — P2 #17): crops PEREZOSOS. Antes se
+  //    recortaban TODAS las cajas (~40 drawImage) aunque el rec solo lee
+  //    cabecera+pie (filtro `leibles`): coste puro tirado salvo rescate.
+  //    Ahora el ratio y el centro-Y salen de la GEOMETRÍA de la caja (EL MISMO
+  //    cálculo de cropLinea — sin canvas) y el recorte ocurre SOLO para las
+  //    líneas que se leen; el rescate por bordes recorta on-demand. Con knobs
+  //    0/0, leibles = todas ⇒ byte-idéntico al flujo de hoy.
+  const ratioDeCaja = (b: { x: number; y: number }[]): number => {
+    const d = (a: { x: number; y: number }, c: { x: number; y: number }) =>
+      Math.hypot(c.x - a.x, c.y - a.y);
+    const w = Math.max(d(b[0], b[1]), d(b[2], b[3]));
+    const h = Math.max(d(b[0], b[3]), d(b[1], b[2]));
+    return w / Math.max(1, h);
+  };
+  // geometría (ver arriba) — el filtro `leibles` se decidió ANTES de recortar
+  // (C2). `knobs` del tensor del rec (flags — default HOY byte a byte).
+  const knobs = recKnobs();
+  const porY = boxesFuente.map((b, i) => ({
+    i,
+    ratio: ratioDeCaja(b),
+    y: b.reduce((s, p) => s + p.y, 0) / b.length,
+  }));
+  const porAltura = [...porY].sort((a, b) => a.y - b.y);
+  const mantenerSet = new Set<number>();
+  if (knobs.cabecera > 0 || knobs.pie > 0) {
+    for (const o of porAltura.slice(0, knobs.cabecera)) mantenerSet.add(o.i);
+    for (const o of porAltura.slice(-knobs.pie)) mantenerSet.add(o.i);
+  }
+  const bordes = mantenerSet.size > 0;
+  const leibles = bordes ? porY.filter((o) => mantenerSet.has(o.i)) : porY;
+  const omitidas = bordes ? porY.filter((o) => !mantenerSet.has(o.i)) : [];
+
+  // KIT e14-remediacion-movil-v1 (C1 fase 1 — P1 #6): el anillo deja de
+  // congelarse en el 65 % — progreso emitido también en det (~40 %) y crops
+  // (~55 %), y yields entre fases (det → crops → cls/rec) para que el hilo
+  // principal pinte entre bloques. El rec escala SOLO su tramo desde el 55 %
+  // (MONÓTONO — antes el 1.er lote reportaba ~0.15 y cualquier emisión previa
+  // hacía RETROCEDER el anillo). LÍMITE CONOCIDO (plan v2 §C1): la fase 1 NO
+  // fragmenta el postproceso DB (un único bloque síncrono dentro de det —
+  // hasta 7,25 s medidos); eso es la fase 2 (worker DB).
+  const ceder = async (): Promise<void> => {
+    await new Promise<void>((r) => setTimeout(r, 0));
+  };
+  const emitirProgresoRec = (fraccionCajas: number): void => {
+    onProgress?.(Math.min(1, 0.55 + 0.45 * Math.max(0, fraccionCajas)));
+  };
+  await ceder();
+  onProgress?.(0.4); // det completo (~40 % del tramo OCR)
+
+  const totalCajas = porY.length;
+  let cajasLeidas = 0;
+  const lineas: RapidOcrLinea[] = new Array(boxesFuente.length);
+  let msRunRec = 0; // acumulado de `await run()` — ver RapidOcrResultado.msRunRec
+  let msCls = 0; // C2: acumulado por subconjunto (leibles + rescate on-demand)
+  let msCrops = 0; // B3 — el recorte REAL (solo lo que se lee + rescate)
+
+  // C2 — recorte perezoso con memo por índice: cls y rec rescatan el lienzo
+  // bruto (1 drawImage por caja, JAMÁS dos) y la rotación se aplica perezosa.
+  const lienzoBruto = new Map<number, HTMLCanvasElement>();
+  const lienzoDe = (i: number): HTMLCanvasElement => {
+    let c = lienzoBruto.get(i);
+    if (!c) {
+      const t0 = performance.now();
+      c = cropLinea(src, boxesFuente[i]).canvas;
+      msCrops += performance.now() - t0;
+      lienzoBruto.set(i, c);
+    }
+    return c;
+  };
+  const rotacion = new Array<boolean>(boxesFuente.length).fill(false);
+  const lienzoFinal = new Map<number, HTMLCanvasElement>();
+  const finalDe = (i: number): HTMLCanvasElement => {
+    let c = lienzoFinal.get(i);
+    if (!c) {
+      const bruto = lienzoDe(i);
+      if (!rotacion[i]) {
+        c = bruto;
+      } else {
+        // aplicar rotación (re-crop volteado 180°) — MISMO código de siempre
+        const tmp = canvasCon(bruto.width, bruto.height); // SPRINT-A A3 — factory
+        const ctx = ctxDe(tmp);
+        ctx.translate(bruto.width, bruto.height);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(bruto, 0, 0);
+        c = tmp;
+      }
+      lienzoFinal.set(i, c);
+    }
+    return c;
+  };
 
   // 6) cls por lote de 6 (rotación 180 si score > 0.9) — OMITIDO cuando la
   //    brújula QR ya decidió (KIT e14-velocidad-5s-v1: el sondeo responde a la
   //    MISMA pregunta que el cuadrante del QR y con MENOS evidencia; su costo
-  //    queda ahora visible en la traza como msCls).
-  const t1 = performance.now();
-  const rotar: boolean[] = new Array(crops.length).fill(false);
-  if (!opts?.omitirCls) {
-    for (let i = 0; i < crops.length; i += 6) {
-      const lote = crops.slice(i, i + 6).map((c) => c.canvas);
-      const tensors = lote.map((cv) => {
+  //    queda ahora visible en la traza como msCls). C2: corre sobre el
+  //    SUBCONJUNTO pedido (antes: TODAS las cajas) — el cls es por-línea
+  //    independiente (softmax por ítem del lote), así que la rotación de cada
+  //    línea es IDÉNTICA aunque cambie el agrupado en lotes.
+  const correrClsSubconjunto = async (lista: typeof porY): Promise<void> => {
+    if (opts?.omitirCls) return;
+    for (let i = 0; i < lista.length; i += 6) {
+      const lote = lista.slice(i, i + 6);
+      const tensors = lote.map((o) => {
         // cls: h=48, w=min(192, ceil(48·ratio)) con pad a 192
+        const cv = lienzoDe(o.i);
         const ratio = cv.width / cv.height;
         const wObj = Math.min(192, Math.max(1, Math.ceil(48 * ratio)));
         const tmp = canvasCon(wObj, 48); // SPRINT-A A3 — factory
         ctxDe(tmp).drawImage(cv, 0, 0, wObj, 48);
         return tmp;
       });
+      const tLote = performance.now();
       const tensor = tensorDeCanvases(rt.ort, tensors, 192, 48);
       const res = await rt.cls.run({ [rt.cls.inputNames[0]]: tensor });
       const out = res[rt.cls.outputNames[0]];
       const data = out.data as Float32Array;
       for (let k = 0; k < lote.length; k++) {
         const [p0, p180] = out.dims[1] === 2 ? softmax2(data[k * 2], data[k * 2 + 1]) : [1, 0];
-        if (p180 > 0.9 && p180 > p0) rotar[i + k] = true;
+        if (p180 > 0.9 && p180 > p0) rotacion[lote[k].i] = true;
       }
+      msCls += performance.now() - tLote;
     }
-  }
-  const msCls = Math.round(performance.now() - t1);
-
-  // aplicar rotaciones (re-crop volteado 180°)
-  const cropsFinales = crops.map((c, i) => {
-    if (!rotar[i]) return c.canvas;
-    const cv = c.canvas;
-    const tmp = canvasCon(cv.width, cv.height); // SPRINT-A A3 — factory
-    const ctx = ctxDe(tmp);
-    ctx.translate(cv.width, cv.height);
-    ctx.rotate(Math.PI);
-    ctx.drawImage(cv, 0, 0);
-    return tmp;
-  });
+  };
 
   // 7) rec por lotes (líneas ordenadas por ratio w/h — acelera). Los tres
   // knobs del tensor salen de las flags (default = HOY byte a byte).
-  const knobs = recKnobs();
   const t2 = performance.now();
   // KIT e14-velocidad-5s-v1 (`ocrRecCabecera` / `ocrRecPie`) — leer solo las N
   // líneas de ARRIBA y las M de ABAJO (por posición VERTICAL de la caja, no por
@@ -1157,28 +1242,6 @@ async function rapidOcrReconocerInterno(
   // el MEDIO de la hoja es la tabla de candidatos y votos y NINGÚN consumidor del
   // texto decide con ella (`clasificarCabecera`, `tipoDeBanda`,
   // `faltaSeccionInferior`, `senalDeContenido`, `ocrTextIsValid`, anclas).
-  // 0/0 = leer TODO = HOY byte a byte.
-  const porY = cropsFinales.map((c, i) => ({
-    i,
-    ratio: c.width / c.height,
-    y: boxesFuente[i].reduce((s, p) => s + p.y, 0) / boxesFuente[i].length,
-  }));
-  const porAltura = [...porY].sort((a, b) => a.y - b.y);
-  const mantener = new Set<number>();
-  if (knobs.cabecera > 0 || knobs.pie > 0) {
-    for (const o of porAltura.slice(0, knobs.cabecera)) mantener.add(o.i);
-    for (const o of porAltura.slice(-knobs.pie)) mantener.add(o.i);
-  }
-  const bordes = mantener.size > 0;
-  const leibles = bordes ? porY.filter((o) => mantener.has(o.i)) : porY;
-  const omitidas = bordes ? porY.filter((o) => !mantener.has(o.i)) : [];
-  const lineas: RapidOcrLinea[] = new Array(cropsFinales.length);
-  let msRunRec = 0; // acumulado de `await run()` — ver RapidOcrResultado.msRunRec
-  // PROD-2 (§4.3-C4): progreso real POR LOTE. El denominador son TODAS las
-  // cajas (no solo las que se van a leer): con el recorte por bordes la 1.ª
-  // pasada llega a ~0,5 y el rescate la completa sin retroceder (monótono).
-  const totalCajas = porY.length;
-  let cajasLeidas = 0;
   // ─── LAZO SECUENCIAL (el canalizado y las sesiones hermanas, DESCARTADOS) ─
   // Se probó despachar 2 lotes en vuelo y partir los lotes entre DOS sesiones
   // del mismo rec (con `proxy: true` cada sesión vive en SU worker): en el A56
@@ -1207,7 +1270,7 @@ async function rapidOcrReconocerInterno(
         : Math.min(knobs.anchoMax, Math.floor(knobs.alto * maxRatio));
       const tensor = tensorDeCanvases(
         rt.ort,
-        lote.map((o) => cropsFinales[o.i]),
+        lote.map((o) => finalDe(o.i)),
         W,
         knobs.alto,
         knobs.suave,
@@ -1232,17 +1295,22 @@ async function rapidOcrReconocerInterno(
         }
       }
       cajasLeidas += lote.length;
-      onProgress?.(Math.min(1, cajasLeidas / totalCajas));
+      // C1: el rec reporta SOLO su tramo (55 % → 100 %) — monótono.
+      emitirProgresoRec(cajasLeidas / totalCajas);
     }
   };
+  await correrClsSubconjunto(leibles);
+  await ceder();
+  onProgress?.(0.55); // crops+cls del subconjunto leíble (~55 % del tramo OCR)
   await correrLotes(leibles);
   // RED DE SEGURIDAD del recorte por bordes: si leyendo solo cabecera y pie no
   // salen las anclas que definen un acta útil, se leen AHÍ MISMO las líneas que
-  // se dejaron sin leer (los recortes ya existen y el det no se repite — cuesta
-  // solo los `run()` del resto). Sin este rescate el recorte por bordes sería
-  // una APUESTA: una hoja con la cabecera cortada, torcida o con el código de
-  // barras en otro lado perdería identificación y autoenvío por ahorrar 1,4 s.
-  // Medido: 14+8 bordes da rec 2,07 s (vs 3,49 TODO) y 8 anclas en la foto fácil.
+  // se dejaron sin leer (C2: los recortes se crean ON-DEMAND aquí — el det no
+  // se repite; cuesta solo los drawImage + `run()` del resto). Sin este rescate
+  // el recorte por bordes sería una APUESTA: una hoja con la cabecera cortada,
+  // torcida o con el código de barras en otro lado perdería identificación y
+  // autoenvío por ahorrar 1,4 s. Medido: 14+8 bordes da rec 2,07 s (vs 3,49
+  // TODO) y 8 anclas en la foto fácil.
   let rescateBordes = 0;
   let anclasBordes = -1; // -1 = no aplica (bordes off)
   let pieBordes = -1; // -1 = no aplica · 0 = el pie NO se ve en los bordes
@@ -1261,6 +1329,7 @@ async function rapidOcrReconocerInterno(
     pieBordes = /SUMA\s*TOTAL|FIRMA/i.test(textoBordes) ? 1 : 0;
     if (anclasBordes < knobs.bordesRescate || pieBordes === 0) {
       rescateBordes = omitidas.length;
+      await correrClsSubconjunto(omitidas); // C2: recorte+cls on-demand del rescate
       await correrLotes(omitidas);
     }
   }
@@ -1274,7 +1343,7 @@ async function rapidOcrReconocerInterno(
   const confMedia =
     aceptadas.length === 0 ? 0 : aceptadas.reduce((s, l) => s + l.conf, 0) / aceptadas.length;
   logger.info(
-    `[e14-rapidocr] celda: det=${msDet}ms cls=${msCls}ms rec=${msRec}ms (run=${msRunRec} js=${msRec - msRunRec}) · ${boxesFuente.length} cajas · ${aceptadas.length} líneas · conf ${(confMedia * 100).toFixed(1)}% · ${Math.round(performance.now() - tTotal)}ms detMemo=${memoMsAhorrado != null ? `hit msAhorrado=${memoMsAhorrado}` : "miss"} · leidas=${leibles.length}/${totalCajas} anclasBordes=${anclasBordes} pieBordes=${pieBordes} rescate=${rescateBordes}`,
+    `[e14-rapidocr] celda: det=${msDet}ms cls=${msCls}ms rec=${msRec}ms (run=${msRunRec} js=${msRec - msRunRec}) · ${boxesFuente.length} cajas · ${aceptadas.length} líneas · conf ${(confMedia * 100).toFixed(1)}% · ${Math.round(performance.now() - tTotal)}ms detMemo=${memoMsAhorrado != null ? `hit msAhorrado=${memoMsAhorrado}` : "miss"} · leidas=${leibles.length}/${totalCajas} anclasBordes=${anclasBordes} pieBordes=${pieBordes} rescate=${rescateBordes} crops=${Math.round(msCrops)}ms`,
   );
   return {
     lineas: aceptadas,
@@ -1284,6 +1353,7 @@ async function rapidOcrReconocerInterno(
     msCls,
     msRec,
     msRunRec,
+    msCrops: Math.round(msCrops),
     nBoxes: boxesFuente.length,
   };
 }

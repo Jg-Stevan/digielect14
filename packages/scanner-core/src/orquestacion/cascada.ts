@@ -99,6 +99,12 @@ export const ROI_FRACCIONES = {
   bottom: [0.75, 1],
 } as const;
 
+/** KIT e14-remediacion-movil-v1 (D6 — P2 #12): coste ESPERADO del rescate
+ *  final de otro motor — 11-13 s medidos en el informe (2 rescates, §4). Si
+ *  el presupuesto restante no lo cubre, el rescate no puede terminar antes
+ *  del watchdog → no se abre (condición (b) del ítem). */
+export const RESCATE_COSTE_ESPERADO_MS = 13_000;
+
 /** ¿La cascada corre en ESTA pasada? Guard del call-site del bridge:
  *  flag del dueño ON y NUNCA en SIM (chips 8.2/7.0/4.3 intactos — §3 del
  *  kit escalonado). Con false el bridge llama al escalonado de siempre. */
@@ -176,6 +182,22 @@ export interface DepsOcrCascada {
    * GATE — jamás entra a `elegirMejor` (misma regla §1 entre motores).
    */
   rescateMotor?: (foto: string) => Promise<PasadaCascada | null>;
+  /**
+   * KIT e14-remediacion-movil-v1 (D6 — P2 #12): ANCLAS DEL GATE AÚN POR
+   * CUBRIR (dep/mun/zon/puesto/mesa faltantes — el bridge las cuenta con el
+   * clasificador REAL). Si el gate ya tiene todo lo necesario para su
+   * desenlace, el rescate NO puede cambiarlo → no se paga (recomendación 9
+   * del informe: «lanzarlo solo si quedan anclas por cubrir»). Ausente ⇒
+   * condición neutralizada (la cascada de siempre — retro-compat).
+   */
+  anclasFaltantes?: (texto: string) => number;
+  /**
+   * KIT e14-remediacion-movil-v1 (D6): presupuesto RESTANTE del pipeline en
+   * ms. El rescate midió 11-13 s por acta (informe §4) — si el restante no
+   * alcanza el coste esperado, el rescate no cabe → no se abre. Ausente ⇒
+   * condición neutralizada (retro-compat).
+   */
+  presupuestoRestanteMs?: () => number;
 }
 
 /** Salida de la cascada — el caller (bridge) consume texto/conf y arma su
@@ -362,11 +384,23 @@ export async function correrCascadaOcr(
   //    Solo se abre si el core RapidOCR cerró SIN AUTO: con el intento 1 rápido
   //    el caso fácil (una pasada y puerta AUTO) jamás lo paga. Manda la regla
   //    §1 — entre motores decide el GATE, jamás `elegirMejor`.
+  //    KIT e14-remediacion-movil-v1 (D6 — P2 #12): el rescate SOLO se paga si
+  //    APORTA: (a) quedan ANCLAS DEL GATE POR CUBRIR (dep/mun/zon/puesto/mesa
+  //    faltantes > 0 — si el gate ya tiene todo, ningún texto cambia el
+  //    desenlace) y (b) el presupuesto RESTANTE ≥ coste esperado (11-13 s
+  //    medidos; RESCATE_COSTE_ESPERADO_MS). En la medición del informe, los 2
+  //    rescates (11-13 s, gate ≠ AUTO) terminaron en REVISIÓN HUMANA IGUAL —
+  //    coste evitado ~11-13 s por acta que escala. El rescate sigue JAMÁS
+  //    cambiando un AUTO (regla §1).
   let msMotor: number | null = null;
+  const restanteMs = deps.presupuestoRestanteMs?.() ?? Number.POSITIVE_INFINITY;
+  const anclasPorCubrir = deps.anclasFaltantes?.(acumulado.texto) ?? 1;
   if (
     deps.rescateMotor &&
     gateSeguro(deps, acumulado.texto) !== "AUTO" &&
-    !deps.presupuestoVencido()
+    !deps.presupuestoVencido() &&
+    anclasPorCubrir > 0 &&
+    restanteMs >= RESCATE_COSTE_ESPERADO_MS
   ) {
     const t = performance.now();
     const rm = await deps.rescateMotor(foto).catch(() => null);
