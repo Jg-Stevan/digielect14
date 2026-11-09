@@ -9,6 +9,13 @@
 # "Unsupported package manager": cambiar `package-ecosystem: "bun"` a "npm"
 # (bun.lock también es leído por el ecosistema npm en versiones recientes) y
 # re-habilitar. El error queda visible en el primer run — no en silencio.
+#
+# LÍMITES (auditoría 2026-11-09): el primer barrido abrió 13 PRs de golpe.
+# Se acota el número abierto por ecosistema y se ignoran los majors que
+# rompen el CI medido:
+#   · typescript 7    → Lint falla: typescript-eslint no soporta TS 7.
+#   · framer-motion 14 → build estático falla en Turbopack.
+#   · tesseract.js 7  → sin validar contra el pipeline OCR.
 version: 2
 updates:
   # App (raíz del workspace) — semanal; las dev-dependencies de tooling van
@@ -17,16 +24,31 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 5
     groups:
       tooling:
         dependency-type: "development"
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "framer-motion"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tesseract.js"
+        update-types: ["version-update:semver-major"]
   # Paquete del motor (@jg-stevan/scanner-core).
   - package-ecosystem: "bun" # idem nota de arriba
     directory: "/packages/scanner-core"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tesseract.js"
+        update-types: ["version-update:semver-major"]
   # Las propias actions (checkout, setup-bun, wrangler-action…) — mensual.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 3
