@@ -81,6 +81,8 @@ import { useE14Store, type BandaSim } from "@/lib/e14/store";
 // en la franja del visor (bloque de error persistente, 4.3.1).
 import { TEXTO_MOTIVO } from "@/lib/e14/errores";
 import { rapidOcrPrecalentar } from "@/lib/e14/ocr/rapidocr";
+// KIT e14-remediacion-movil-v1 (A2 — P0 #5): Wake Lock del escaneo.
+import { useWakeLock } from "@/lib/e14/core/wake-lock";
 // KIT e14-ocr-tessbest-v1 (GO-B): pre-warm de TESSERACT BEST junto al del
 // motor RapidOCR — la descarga vendida (~19 MB, 1.ª vez) arranca al abrir
 // el visor y el SW la cachea ⇒ la 1.ª captura ya compite con assets
@@ -189,6 +191,9 @@ export function ScanView() {
   // informativa con timer; el del store es el de ERROR persistente.
   const avisoOperador = useE14Store((s) => s.avisoVisor);
   const descartarAvisoVisor = useE14Store((s) => s.descartarAvisoVisor);
+  // KIT e14-remediacion-movil-v1 (A4): token de desarme de la auto-captura
+  // tras un fallo de sesión OCR (fin del bucle condenado de ~6 s).
+  const tokenDesarmarAuto = useE14Store((s) => s.tokenDesarmarAuto);
   const inputRef = useRef<HTMLInputElement>(null);
   /** HQ-iOS: cámara NATIVA del sistema (el click del shutter es el gesto). */
   const inputCamaraRef = useRef<HTMLInputElement>(null);
@@ -260,6 +265,26 @@ export function ScanView() {
   // L456-458). Los espejos de linterna (flashRef/torchOnRef) viven en
   // useLinterna — propietario de ese estado.
   autoRef.current = autoArmado;
+
+  // KIT e14-remediacion-movil-v1 (A4 — P0 #21): el store desarma la
+  // auto-captura cuando la sesión del motor OCR cayó (familia bad_alloc) —
+  // el bucle condenado de ~6 s muere aquí, sin re-arme hasta la próxima
+  // apertura de cámara (AC15 intacto) o interacción del operador.
+  useEffect(() => {
+    if (tokenDesarmarAuto === 0) return;
+    setAutoArmado(false);
+    mostrarAviso(
+      "MEMORIA DEL MOTOR AGOTADA — CAPTURA AUTOMÁTICA APAGADA. REINTENTA CUANDO RECARGUES.",
+      "warn",
+      6000,
+    );
+  }, [tokenDesarmarAuto, mostrarAviso]);
+
+  // KIT e14-remediacion-movil-v1 (A2 — P0 #5): Wake Lock durante SCANEAR —
+  // un escaneo de 120 s no debe apagarse la pantalla sola (reproduce el
+  // P0 #4 sin que nadie toque una llamada). Re-adquisición al volver de
+  // segundo plano vive dentro del hook; sin API → no-op silencioso.
+  useWakeLock(true);
 
   // §9: precarga OpenCV.js del worker sin bloquear la UI.
   useEffect(() => {
@@ -1107,6 +1132,18 @@ export function ScanView() {
                       }`}
                     >
                       Reintentar
+                    </button>
+                  )}
+                  {/* KIT e14-remediacion-movil-v1 (A4): estado explícito
+                      MEMORIA AGOTADA — única salida honesta tras el reinicio
+                      + 1 reintento del motor (A4.2). */}
+                  {avisoOperador.accion === "recargar" && (
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="min-h-11 rounded-lg px-3 text-[11px] font-bold uppercase tracking-wider border bg-red-500/15 border-red-500/40 text-red-300 hover:bg-red-500/25 transition"
+                    >
+                      Recargar
                     </button>
                   )}
                   <button

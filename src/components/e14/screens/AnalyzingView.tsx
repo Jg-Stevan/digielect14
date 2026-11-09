@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
 import { leerFlags } from "@/lib/e14/flags";
+import { useWakeLock } from "@/lib/e14/core/wake-lock";
 import type { EtapaAnalisis, ProgresoAnalisis } from "@/lib/e14/fachada";
 import { DocScannerIcon, ShieldCheckIcon } from "../icons";
 
@@ -68,6 +69,27 @@ export function AnalyzingView() {
   // Ola 3.2 (U4 — plan 3.2): salida del ANALIZANDO estancado (hasta 120 s de
   // watchdog encerrados sin botón). El store limpia y vuelve a ESCANEAR.
   const cancelarAnalisis = useE14Store((s) => s.cancelarAnalisis);
+  // KIT e14-remediacion-movil-v1 (A3 — P0 #4): interrupción honesta — ocultar
+  // la app en mitad del análisis NO deja RECHAZADA 0.0 silenciosa: desenlace
+  // explícito «INTERRUMPIDA» + rescate si el pipeline terminó válido.
+  useEffect(() => {
+    const alCambio = () => {
+      if (document.visibilityState !== "hidden") return;
+      const s = useE14Store.getState();
+      if (s.vista !== "analizando") return;
+      // El tween local (analisisResuelto) y el estado del store van juntos;
+      // se consulta el store fresco para no interrumpir un análisis ya
+      // resuelto pero aún en su piso escénico.
+      if (s.analisisResuelto) return;
+      s.interrumpirAnalisis();
+    };
+    document.addEventListener("visibilitychange", alCambio);
+    return () => document.removeEventListener("visibilitychange", alCambio);
+  }, []);
+  // KIT e14-remediacion-movil-v1 (A2 — P0 #5): el análisis ocurre FUERA de la
+  // cámara — el Wake Lock se MANTIENE aquí (el escaneo de 120 s no debe
+  // apagar la pantalla sin que nadie toque nada).
+  useWakeLock(true);
   const [progreso, setProgreso] = useState(0);
   const [latencia, setLatencia] = useState(0);
   // Ola 4.2.5: anuncio throttled del % para lectores de pantalla — el span

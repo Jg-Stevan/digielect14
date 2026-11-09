@@ -81,14 +81,21 @@ export function useSelectorFuente({
     const archivo = e.target.files?.[0];
     e.target.value = ""; // permite re-elegir el MISMO archivo (REPETIR FOTO)
     if (!archivo) return;
+    // KIT e14-remediacion-movil-v1 (D4 — P2 #24): bandera SÍNCRONA en el
+    // onChange — el procesamiento del archivo es async (~1-2 s hasta
+    // setArchivoPendiente) y mientras vuela la auto-captura NO puede ganarle
+    // la carrera (el guard del store ahora también avisa si ya fue tarde).
+    useE14Store.getState().setImportPendiente(true);
     // FIX M4 (auditoría 2-b): guard temprano — con una captura en vuelo el
     // archivo se procesaría (tope/HEIC) para nada y el disparo se ignora.
     if (procesandoRef.current || useE14Store.getState().vista === "analizando") {
       mostrarAviso("ESPERA — YA HAY UNA CAPTURA EN CURSO", "warn", 2500);
+      useE14Store.getState().setImportPendiente(false);
       return;
     }
     if (!pareceImagen(archivo)) {
       mostrarAviso("ARCHIVO NO VÁLIDO — el archivo seleccionado no es una imagen.", "crit");
+      useE14Store.getState().setImportPendiente(false);
       return;
     }
     // HEIC explícito → aviso de conversión (puede tardar unos segundos; la
@@ -97,22 +104,30 @@ export function useSelectorFuente({
       mostrarAviso("CONVIRTIENDO HEIC… la conversión puede tardar unos segundos.", "warn", 3000);
     }
     void (async () => {
-      const final = await archivoDentroDeTope(archivo, true);
-      if (!final) {
-        // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx
-        // L954-L961 (error path de F-IMPORT) — franja del visor (§3.1.4).
-        mostrarAviso(
-          esHeic(archivo)
-            ? "NO SE PUDO PROCESAR LA IMAGEN — no se pudo convertir el HEIC. El archivo parece dañado o protegido. Prueba con otro."
-            : "NO SE PUDO PROCESAR LA IMAGEN — el archivo puede estar corrupto o ser un formato no soportado. Prueba con otro.",
-          "crit",
-          6000,
-        );
-        return;
+      try {
+        const final = await archivoDentroDeTope(archivo, true);
+        if (!final) {
+          // Fuente: apps/scanner-lab/src/components/scanner/CameraView.tsx
+          // L954-L961 (error path de F-IMPORT) — franja del visor (§3.1.4).
+          mostrarAviso(
+            esHeic(archivo)
+              ? "NO SE PUDO PROCESAR LA IMAGEN — no se pudo convertir el HEIC. El archivo parece dañado o protegido. Prueba con otro."
+              : "NO SE PUDO PROCESAR LA IMAGEN — el archivo puede estar corrupto o ser un formato no soportado. Prueba con otro.",
+            "crit",
+            6000,
+          );
+          useE14Store.getState().setImportPendiente(false);
+          return;
+        }
+        setArchivoPendiente(final);
+        setFuente("ARCHIVO");
+        void dispararEscaneo(); // el store apaga importPendiente al arrancar (D4)
+      } catch {
+        // el procesamiento del archivo jamás deja la bandera colgada (D4) —
+        // sin re-throw: el caller es void y el aviso visible es el camino
+        // del error de arriba (archivoDentroDeTope ya traga lo suyo).
+        useE14Store.getState().setImportPendiente(false);
       }
-      setArchivoPendiente(final);
-      setFuente("ARCHIVO");
-      void dispararEscaneo();
     })();
   };
 
@@ -126,19 +141,28 @@ export function useSelectorFuente({
     const archivo = e.target.files?.[0];
     e.target.value = "";
     if (!archivo) return;
+    // KIT e14-remediacion-movil-v1 (D4 — P2 #24): MISMA bandera síncrona del
+    // IMPORTAR (ruta iOS nativa — el mismo riesgo de carrera).
+    useE14Store.getState().setImportPendiente(true);
     // FIX M4 (auditoría 2-b): mismo guard del IMPORTAR (ruta iOS nativa).
     if (procesandoRef.current || useE14Store.getState().vista === "analizando") {
       mostrarAviso("ESPERA — YA HAY UNA CAPTURA EN CURSO", "warn", 2500);
+      useE14Store.getState().setImportPendiente(false);
       return;
     }
     if (!pareceImagen(archivo)) {
       mostrarAviso("ARCHIVO NO VÁLIDO — el archivo seleccionado no es una imagen.", "crit");
+      useE14Store.getState().setImportPendiente(false);
       return;
     }
     if (esHeic(archivo)) {
       mostrarAviso("CONVIRTIENDO HEIC… la conversión puede tardar unos segundos.", "warn", 3000);
     }
-    void despacharArchivo(archivo, true);
+    // despacharArchivo termina llamando dispararEscaneo (el store apaga la
+    // bandera al arrancar); si el flujo se cae, la bandera se limpia acá.
+    void despacharArchivo(archivo, true).catch(() => {
+      useE14Store.getState().setImportPendiente(false);
+    });
   };
 
   return { reintentoCamara, setReintentoCamara, alElegirArchivo, alElegirFotoCamara };

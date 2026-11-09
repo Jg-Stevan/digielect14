@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+// KIT e14-remediacion-movil-v1 (D3 — #13 · P2): script inline del observer
+// LCP/CLS — IIFE JS plano (sin imports) que corre en <head> ANTES de
+// hidratar (requisito del plan: instalación temprana).
+import { SCRIPT_LCP_CLS } from "@/lib/e14/obs/lcp-cls";
 
 /** Estructura (SPEC-e14-redesign-stitch §1): Inter (TODO el texto,
  *  400–800) + JetBrains Mono (scores, chips, códigos, horas, banner).
@@ -63,6 +67,17 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        {/*
+         * KIT e14-remediacion-movil-v1 (D3 — #13 · P2): LCP/CLS OBSERVABLES —
+         * observer instalado ANTES de la carga. El LCP 14,7 s de campo llegó
+         * SIN elemento por observer retrospectivo (element: null); esta IIFE
+         * registra largest-contentful-paint + layout-shift con buffered:true
+         * (recupera entradas previas), expone window.__e14LcpCls y despacha
+         * "e14-lcp-cls". El lado TS (instalarObserverLcpCls en el bootstrap
+         * del shell) publica el evento obs perf "obs:lcp-cls" al buffer.
+         * try/catch total — silencioso si no hay PerformanceObserver.
+         */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_LCP_CLS }} />
         {/*
          * 6.7 (S4+F10) — META CSP para el deploy gemelo de GitHub Pages:
          * GH Pages no controla cabeceras HTTP, así que la CSP de ese deploy

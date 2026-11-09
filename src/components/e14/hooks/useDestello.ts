@@ -30,6 +30,9 @@ import {
 import { leerFlags, opcionesRescateHeic } from "@/lib/e14/flags";
 import { getSensorSafeCap, dentroDelTope, type SensorProfile } from "@/lib/e14/core/sensor-profiler";
 import type { Acta } from "@/lib/e14/fachada";
+// KIT e14-remediacion-movil-v1 (D5 — #19): vibración con guard de gesto — sin
+// ella, la llamada sin gesto activo ensuciaba la consola del campo.
+import { vibrarSeguro } from "@/lib/e14/core/vibrar";
 import { useE14Store } from "@/lib/e14/store";
 import { logger } from "@/lib/logger";
 
@@ -202,9 +205,9 @@ export function useDestello({
     (archivo: File) => {
       setArchivoPendiente(archivo);
       destellar();
-      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-        navigator.vibrate(30);
-      }
+      // D5 (#19): vibrarSeguro hace el guard de gesto/API y es no-op silencioso
+      // si la llamada sería bloqueada (antes ensuciaba la consola del campo).
+      vibrarSeguro(30);
       procesandoRef.current = false;
       setProcesando(false);
       void dispararEscaneo().then(() => {

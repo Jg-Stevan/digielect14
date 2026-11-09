@@ -126,12 +126,47 @@ const TAKEPHOTO_TIMEOUT_MS = 8000;
 const TELEMETRIA_UI_MS = 100;
 
 /** QA/diagnóstico: telemetría viva del loop + lente elegida (F-LENS v4)
- *  desde la consola. */
+ *  desde la consola.
+ *  KIT e14-remediacion-movil-v1 (C4 — P1 #10/P2 #15): `qrWorkerHardKills`
+ *  es un campo DEFENSIVO aditivo — nº de hard-kills del worker QR de la
+ *  capa 0 en esta sesión de página (contador de módulo del cliente QR,
+ *  expuesto aquí para verlo desde consola sin tocar el pipeline). Puede
+ *  ser `undefined` mientras el cliente QR no cargó (carga perezosa). */
 declare global {
   interface Window {
-    __e14Telemetria?: FrameLoopTelemetry;
+    __e14Telemetria?: FrameLoopTelemetry & { qrWorkerHardKills?: number };
     __cameraChoice?: unknown;
   }
+}
+
+/* ── C4 — expositor DEFENSIVO del contador de hard-kills del worker QR ──
+ *  El contador vive en el cliente QR del paquete (hardKillsQrWorker(),
+ *  módulo @/lib/e14/qr/capa0-qr.client — el MISMO que pipeline.ts importa
+ *  perezosamente tras la 1.ª captura). Este hook NO lo importa estático
+ *  (no cambiar el grafo de carga de la cámara): la import se dispara UNA
+ *  vez, en diferido, y si falla la telemetría sigue sin el campo — jamás
+ *  tumba el frame loop. */
+let leerQrHardKills: (() => number) | null = null;
+let qrKillsImportDisparada = false;
+function qrHardKillsDefensivo(): number | undefined {
+  if (leerQrHardKills) {
+    try {
+      return leerQrHardKills();
+    } catch {
+      return undefined;
+    }
+  }
+  if (!qrKillsImportDisparada) {
+    qrKillsImportDisparada = true;
+    void import("@/lib/e14/qr/capa0-qr.client")
+      .then((m) => {
+        leerQrHardKills = m.hardKillsQrWorker;
+      })
+      .catch(() => {
+        /* sin cliente QR (SSR/test) → el campo queda undefined y listo */
+      });
+  }
+  return undefined;
 }
 
 /* ── F-LENS v4/v5 — selección de la cámara PRINCIPAL (puerto EXACTO del lab) ──
@@ -1128,7 +1163,17 @@ export function useSesionCamara({
         // puede seguir sirviendo el fotograma congelado de antes de pausar
         // mientras re-decodifica (ring ZSL/telemetría sin frames viejos).
         if (performance.now() < descartarFramesHastaRef.current) return;
-        if (typeof window !== "undefined") window.__e14Telemetria = t;
+        if (typeof window !== "undefined") {
+          // KIT e14-remediacion-movil-v1 (C4): el objeto `t` es FRESH por frame
+          // (frame-loop emit() construye un literal nuevo) → estampar el campo
+          // defensivo AQUÍ es seguro y no contamina FrameLoopTelemetry.
+          const kills = qrHardKillsDefensivo();
+          if (kills !== undefined) {
+            (t as FrameLoopTelemetry & { qrWorkerHardKills?: number }).qrWorkerHardKills =
+              kills;
+          }
+          window.__e14Telemetria = t;
+        }
         // F-ZSL: alimenta el ring (~5 Hz) — cubre la ventana pre-tap.
         alimentarAnillo();
         const ahora = performance.now();
@@ -1142,6 +1187,12 @@ export function useSesionCamara({
         if (!autoRef.current) return;
         if (procesandoRef.current) return;
         if (cooldownRef.current > Date.now()) return;
+        // KIT e14-remediacion-movil-v1 (D4 — P2 #24): mientras el IMPORTAR
+        // tiene su bandera síncrona viva (onChange → archivo procesándose),
+        // la auto-captura NO dispara — el archivo del operador tiene
+        // prioridad. Si el disparo automático ya se fue, el guard del store
+        // avisa «Se analizó la cámara, no tu archivo» (cero silencio).
+        if (useE14Store.getState().importPendiente) return;
         void capturarRef.current();
       },
       onNoDetectTimeout: () => {

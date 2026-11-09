@@ -70,6 +70,11 @@ import { iniciarMuestreoSalud } from "@/lib/e14/obs/dispositivo";
 import { iniciarDetectorHang } from "@/lib/e14/obs/hang"; // ANEXO Agente C (Pieza 2) — sensor de congelones
 import { iniciarSensorHangEnCurso } from "@/lib/e14/obs/heartbeat.client"; // KIT e14-obs-hang-atribucion-v1 (§C.7) — heartbeat + WAL (idempotente, silencioso, kill-switch hangEnCurso)
 import { iniciarTransporte } from "@/lib/e14/obs/transporte";
+// KIT e14-remediacion-movil-v1 (D3 — #13 · P2): LCP/CLS observables —
+// consume la publicación del script de <head> (o instala observers propios
+// con buffered:true si el script no corrió) y publica el evento obs perf
+// "obs:lcp-cls" al buffer + window.__e14LcpCls. Idempotente y silencioso.
+import { instalarObserverLcpCls } from "@/lib/e14/obs/lcp-cls";
 // KIT e14-puente-supervision-v1 (§7): auto-push de actas ENVIADAS hacia el
 // panel de supervisión (hub Workers) — idempotente, silencioso, con cola
 // propia; jamás rompe el bootstrap (misma regla §2.4 del rastreo).
@@ -108,6 +113,7 @@ export default function Page() {
       iniciarDetectorHang(); // ANEXO Agente C — longtask + drift (idempotente, silencioso)
       iniciarSensorHangEnCurso(); // KIT e14-obs-hang-atribucion-v1 (§C.7) — drena el WAL + heartbeat del hang-en-curso (idempotente, silencioso, kill-switch hangEnCurso)
       iniciarTransporte();
+      instalarObserverLcpCls(); // KIT e14-remediacion-movil-v1 (D3 — #13): LCP/CLS — publicar la medición al buffer (idempotente, silencioso)
       iniciarPuenteSupervision(); // KIT e14-puente-supervision-v1 (§7) — auto-push al panel de supervisión (idempotente, silencioso)
       void refrescarFlags();
       iniciarRastreo(); // KIT e14-rastreo-tiempos-v1 — idempotente y silencioso
