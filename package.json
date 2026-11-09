@@ -31,7 +31,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tesseract.js": "5.1.1",
-    "zustand": "^5.0.6",
+    "zustand": "^5.1.0",
     "zxing-wasm": "3.1.6",
     "@jg-stevan/scanner-core": "workspace:*"
   },
