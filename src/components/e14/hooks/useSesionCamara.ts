@@ -1053,7 +1053,9 @@ export function useSesionCamara({
       // de fuente («repetir captura» remonta el componente → useState(true)).
       // El desarme EN VIVO del operador se respeta hasta la próxima apertura
       // (AC15: re-armado en cada apertura; AC16: desarme respetado en vivo).
-      setAutoArmado(true);
+      // H3 (auditoría A4): el desarme por MEMORIA AGOTADA es PERSISTENTE —
+      // el re-arme de la apertura no puede reconstruir el bucle condenado.
+      setAutoArmado(!useE14Store.getState().autoCapturaDesarmada);
       // F-SENSOR-PROFILER (PASO 2) — Fuente: apps/scanner-lab/... L1032-1034:
       // mide la nativa de FOTO del sensor y fija el tope seguro (4032/3200
       // px) para tomarFoto, una vez por apertura (remediación H2).
@@ -1193,6 +1195,10 @@ export function useSesionCamara({
         // prioridad. Si el disparo automático ya se fue, el guard del store
         // avisa «Se analizó la cámara, no tu archivo» (cero silencio).
         if (useE14Store.getState().importPendiente) return;
+        // H2 (auditoría A3): tras una interrupción la vista ya volvió a
+        // "escanear" con el pipeline ANTERIOR todavía en vuelo — la auto no
+        // puede lanzar un segundo pipeline a competir por el wasm.
+        if (useE14Store.getState().analisisEnVuelo) return;
         void capturarRef.current();
       },
       onNoDetectTimeout: () => {

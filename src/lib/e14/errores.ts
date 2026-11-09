@@ -26,6 +26,7 @@ export type MotivoOperador =
   | "MEMORIA_AGOTADA"
   | "ANALISIS_INTERRUMPIDO"
   | "CAPTURA_AUTO_GANO_CARRERA"
+  | "ANALISIS_ANTERIOR_EN_CIERRE"
   | "ERROR_DESCONOCIDO";
 
 /** Aviso del visor montado en el ESTADO del store (plan 3.1.2): el catch del
@@ -173,5 +174,9 @@ export const TEXTO_MOTIVO: Record<MotivoOperador, string> = {
   // importación — el archivo llegó tarde y NO se perdió en silencio (P2 #24).
   CAPTURA_AUTO_GANO_CARRERA:
     "Se analizó la cámara, no tu archivo. Toma la foto de nuevo o importa otra vez.",
+  // H2 (auditoría de A3): el pipeline anterior sigue cerrando — un segundo
+  // pipeline concurrente sobre las MISMAS sesiones ORT puede no regresar.
+  ANALISIS_ANTERIOR_EN_CIERRE:
+    "El análisis anterior aún se está cerrando. Espera unos segundos y reintenta.",
   ERROR_DESCONOCIDO: "Algo falló en el análisis. Reintenta.",
 };

@@ -1488,6 +1488,11 @@ export interface ParcialPipeline {
    *  el watchdog lo lee tal cual (nada re-evaluado — §9.10). Ausente =
    *  venció antes de la primera frontera (decode). */
   msParciales?: Record<string, number>;
+  /** H4 (auditoría de B1): clave del ESCANEO — watchdog y desenlace tardío
+   *  construyen actas con id propio (el contador de `construirActa` avanza),
+   *  así que el id de acta NO sirve para deduplicar la muestra de perf. Esta
+   *  clave nace una vez por `escanearActa` y viaja por los dos caminos. */
+  escaneoId?: string;
 }
 
 /** Campos reales §3.1 que recibe `construirActa` (FASE F: tipo extraído de la
@@ -1629,6 +1634,10 @@ export class RealCoreBridge implements E14Bridge {
     // e67 (cambio B): reloj del rescate — ms REALES del pipeline completo
     // (el callback de rescate viaja con este dato, jamás inventado).
     const tInicioEscaneo = performance.now();
+    // H4: identidad del ESCANEO (performance.now es monótono — único por
+    // disparo). El watchdog y el pipeline tardío la comparten para que la
+    // muestra de perf se emita una sola vez.
+    parcial.escaneoId = `esc-${tInicioEscaneo}`;
     return new Promise<Acta>((resolve, reject) => {
       const timer = setTimeout(() => {
         vencido = true;
@@ -1650,6 +1659,7 @@ export class RealCoreBridge implements E14Bridge {
             .then((m) =>
               m.emitirPerfDeActa({
                 actaId: actaVencida.id,
+                escaneoId: parcial.escaneoId,
                 status: actaVencida.status,
                 intento: opciones.intento,
                 tiempos: parcial.msParciales ?? {},

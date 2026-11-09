@@ -961,6 +961,9 @@ export async function correrPipelineL2(
       .then((m) =>
         m.emitirPerfDeActa({
           actaId: acta.id,
+          // H4: misma clave que el watchdog del bridge — si esta muestra ya
+          // salió (timeout), el emisor la descarta en vez de duplicarla.
+          escaneoId: parcial.escaneoId,
           status: acta.status,
           intento: acta.intento,
           tiempos: {

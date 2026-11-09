@@ -191,9 +191,12 @@ export function ScanView() {
   // informativa con timer; el del store es el de ERROR persistente.
   const avisoOperador = useE14Store((s) => s.avisoVisor);
   const descartarAvisoVisor = useE14Store((s) => s.descartarAvisoVisor);
-  // KIT e14-remediacion-movil-v1 (A4): token de desarme de la auto-captura
-  // tras un fallo de sesión OCR (fin del bucle condenado de ~6 s).
-  const tokenDesarmarAuto = useE14Store((s) => s.tokenDesarmarAuto);
+  // KIT e14-remediacion-movil-v1 (A4 — P0 #21): el store desarma la
+  // auto-captura cuando la sesión del motor OCR cayó (familia bad_alloc) —
+  // el bucle condenado de ~6 s muere aquí. La bandera es PERSISTENTE (H3):
+  // sobrevive al remontaje y el re-arme D9 de la cámara la respeta; solo el
+  // toggle del operador o una recarga la reactivan.
+  const autoCapturaDesarmada = useE14Store((s) => s.autoCapturaDesarmada);
   const inputRef = useRef<HTMLInputElement>(null);
   /** HQ-iOS: cámara NATIVA del sistema (el click del shutter es el gesto). */
   const inputCamaraRef = useRef<HTMLInputElement>(null);
@@ -214,7 +217,9 @@ export function ScanView() {
   // arranque exitoso del stream — el estado persiste entre aperturas, hay
   // que forzarlo). El operador conserva el toggle: desarmar EN VIVO se
   // respeta dentro de la MISMA apertura (no se re-arma solo — AC14-AC16).
-  const [autoArmado, setAutoArmado] = useState(true);
+  const [autoArmado, setAutoArmado] = useState(
+    () => !useE14Store.getState().autoCapturaDesarmada,
+  );
   const autoRef = useRef(false);
   // Estado de la cámara — propietario: ScanView (lo escribe el arranque de
   // useSesionCamara; lo leen useLinterna, la captura, el disparo y el JSX).
@@ -268,17 +273,18 @@ export function ScanView() {
 
   // KIT e14-remediacion-movil-v1 (A4 — P0 #21): el store desarma la
   // auto-captura cuando la sesión del motor OCR cayó (familia bad_alloc) —
-  // el bucle condenado de ~6 s muere aquí, sin re-arme hasta la próxima
-  // apertura de cámara (AC15 intacto) o interacción del operador.
+  // el bucle condenado de ~6 s muere aquí, sin re-arme hasta que el
+  // operador la reactive o recargue (H3: el re-arme D9 ya respeta la
+  // bandera persistente; ya no basta con apagarla en este render).
   useEffect(() => {
-    if (tokenDesarmarAuto === 0) return;
+    if (!autoCapturaDesarmada) return;
     setAutoArmado(false);
     mostrarAviso(
       "MEMORIA DEL MOTOR AGOTADA — CAPTURA AUTOMÁTICA APAGADA. REINTENTA CUANDO RECARGUES.",
       "warn",
       6000,
     );
-  }, [tokenDesarmarAuto, mostrarAviso]);
+  }, [autoCapturaDesarmada, mostrarAviso]);
 
   // KIT e14-remediacion-movil-v1 (A2 — P0 #5): Wake Lock durante SCANEAR —
   // un escaneo de 120 s no debe apagarse la pantalla sola (reproduce el
@@ -548,6 +554,10 @@ export function ScanView() {
       );
       return;
     }
+    // H3: el toggle es la interacción del operador que reactiva el
+    // armado automático tras un desarme A4 (si no, quedaría apagado hasta
+    // recargar pese a que él lo enciende en pantalla).
+    useE14Store.getState().setAutoCapturaDesarmada(false);
     setAutoArmado((v) => !v);
   }, [modoCamara, mostrarAviso]);
 

@@ -116,6 +116,10 @@ export interface DatosPerfActa {
   // perf legacy (comportamiento de siempre).
   vencido?: boolean;
   camino?: "pipeline" | "recorte";
+  /** H4 — clave del escaneo (watchdog y desenlace tardío comparten escaneo
+   *  pero NO id de acta: cada `construirActa` genera el suyo). Solo se usa
+   *  para deduplicar; no viaja al evento. */
+  escaneoId?: string;
   /** B3 — tramos del OCR sin atribuir (msCrops/segunda/probe/banda). */
   tramos?: TramosOcr;
 }
@@ -136,8 +140,27 @@ export function hashDeActaIdDe(diag: { actaId: string }): string {
  *  ni puede romperse por esto. KIT e14-remediacion-movil-v1 (B1): los
  *  descartes dejan de ser mudos — el bloqueo por política y el fallo de
  *  emisión quedan CONTADOS en el buffer (B2.1, `.catch(() => {})` jamás
- *  otra vez sin rastro). */
+ *  otra vez sin rastro). H4: además se deduplica por acta el camino
+ *  "pipeline" (watchdog + desenlace tardío = una sola muestra). */
+const perfPipelineEmitidas = new Set<string>();
+
 export function emitirPerfDeActa(a: DatosPerfActa): void {
+  // H4 (auditoría de B1): una acta emite UNA sola muestra del camino
+  // "pipeline". El watchdog emite la suya (`vencido: true`) al vencer y el
+  // pipeline tardío volvía a emitir el MISMO escaneo — dos filas que
+  // inflaban justo las estadísticas que B1 debía limpiar. La clave es la del
+  // ESCANEO (los dos caminos construyen actas con id propio); sin ella,
+  // cae al hash del acta. El camino "recorte" queda fuera: es otra operación
+  // sobre el mismo acta.
+  const camino = a.camino ?? "pipeline";
+  if (camino === "pipeline") {
+    const clave = a.escaneoId ?? fnv1a8(a.actaId);
+    if (perfPipelineEmitidas.has(clave)) {
+      registrarDescarteBuffer("perf-duplicado");
+      return;
+    }
+    perfPipelineEmitidas.add(clave);
+  }
   void import("./buffer")
     .then(async (buffer) => {
       try {

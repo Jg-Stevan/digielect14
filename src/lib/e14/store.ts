@@ -282,17 +282,27 @@ interface E14Store {
   }) => void;
   /** Descarta el aviso del visor (botón × de la franja). */
   descartarAvisoVisor: () => void;
-  /** KIT e14-remediacion-movil-v1 (A4): TOKEN de desarme de la auto-captura
-   *  tras un fallo de sesión OCR (fin del bucle condenado de ~6 s). ScanView
-   *  lo observa y apaga autoArmado hasta interacción del operador (la
-   *  próxima apertura de cámara re-arma como siempre — AC15 intacto). */
-  tokenDesarmarAuto: number;
+  /** KIT e14-remediacion-movil-v1 (A4 + H3): la auto-captura quedó
+   *  DESARMADA tras un fallo de sesión OCR (fin del bucle condenado de
+   *  ~6 s). Persiste al remontar ScanView y NO la deshace el re-arme D9 al
+   *  reabrir la cámara — era justo lo que reconstruía el bucle condenado
+   *  tras un bad_alloc. Muere con la página o cuando el operador la
+   *  reactiva a mano. */
+  autoCapturaDesarmada: boolean;
+  /** Reactiva/desarma la auto-captura (toggle del operador o desarme A4). */
+  setAutoCapturaDesarmada: (v: boolean) => void;
+  /** true mientras el pipeline del bridge sigue vivo, aunque la vista ya
+   *  haya vuelto a "escanear" (interrupción). La auto-captura no dispara
+   *  mientras esté vivo: el disparo NUEVO quedaría compitiendo por el wasm
+   *  con el viejo (H2 de la auditoría de A3). */
+  analisisEnVuelo: boolean;
   /** Ola 3.2 (U4 — plan 3.2): salida del ANALIZANDO estancado. Marca el
    *  desenlace como RECHAZADA/CANCELADA (fila de historial RESCANEO_REQUERIDO
    *  con la nota «— CANCELADA POR EL OPERADOR» + contador de motivos), limpia
    *  el slot de análisis y vuelve a "escanear" SIN recargar ni perder la
-   *  jornada. El desenlace tardío del pipeline en vuelo se descarta (bandera
-   *  escaneoCancelado) — sin acta fantasma ni rescate del watchdog. */
+   *  jornada. El desenlace tardío del pipeline en vuelo se descarta (la
+   *  cancelación dirigida a su generación) — sin acta fantasma ni rescate
+   *  del watchdog. */
   cancelarAnalisis: () => void;
   /** KIT e14-remediacion-movil-v1 (A3 — P0 #4): el análisis fue INTERRUMPIDO
    *  por el ocultamiento de la app (visibilitychange → hidden con
@@ -504,20 +514,27 @@ function hashMock(): string {
  *  rotación rápida es async y un doble tap giraría 180°). */
 let rotandoFotoEnVuelo = false;
 
-/** Ola 3.2 (U4 — plan 3.2): el operador CANCELÓ un análisis en vuelo. El
- *  pipeline del bridge no tiene abort (el watchdog vive en bridge:1505-1520,
- *  archivo intocable) — esta bandera hace que el desenlace TARDÍO se
- *  descarte al resolver: sin acta fantasma, sin actasSesion+1, sin rescate
- *  del watchdog (actaVencida queda null). Un solo disparo en vuelo existe
- *  (guard de vista "analizando"), así que una bandera de módulo basta.
- *
- *  KIT e14-remediacion-movil-v1 (A3): ¿QUIÉN canceló? El botón del operador
- *  ("operador") o el ocultamiento de la app ("interrumpida" —
- *  interrumpirAnalisis desde AnalyzingView). Con "interrumpida", un desenlace
- *  tardío VÁLIDO se ADOPTA (el rescate manda — A3.3); con "operador" se
- *  descarta como siempre. */
-let escaneoCancelado = false;
-let motivoCancelacionEscaneo: "operador" | "interrumpida" = "operador";
+/** Token de GENERACIÓN del disparo (H1/H2 de la auditoría de A3). La bandera
+ *  única anterior dejaba de valer en cuanto la interrupción devolvía la vista
+ *  a "escanear" con el pipeline todavía en vuelo: un disparo nuevo podía
+ *  consumir la cancelación del viejo — o el viejo adoptar su acta en mitad
+ *  del escaneo nuevo. Cada dispararEscaneo se queda con su generación y solo
+ *  toca el estado si sigue siendo la VIGENTE. */
+let generacionEscaneo = 0;
+/** Pipelines del bridge vivos AHORA (incluye los huérfanos de una
+ *  interrupción). La bandera del store solo se apaga cuando llega a 0: si el
+ *  disparo nuevo termina antes que el viejo, el viejo no puede reabrir la
+ *  auto-captura con el wasm todavía ocupado (H2). */
+let pipelinesEnVuelo = 0;
+/** Cancelación dirigida a UNA generación (el pipeline del bridge no tiene
+ *  abort — el desenlace TARDÍO se descarta al resolver: sin acta fantasma,
+ *  sin actasSesion+1, sin rescate del watchdog). Se limpia cuando la consume
+ *  la generación a la que apunta; jamás una posterior. ¿QUIÉN canceló? El
+ *  botón del operador ("operador") o el ocultamiento de la app
+ *  ("interrumpida" — interrumpirAnalisis desde AnalyzingView). Con
+ *  "interrumpida", un desenlace tardío VÁLIDO se ADOPTA (A3.3). */
+let cancelacionEnVuelo: { generacion: number; motivo: "operador" | "interrumpida" } | null =
+  null;
 
 /** KIT e14-remediacion-movil-v1 (A4 — P0 #21): evento de obs
  *  `ocr:sesion-fallida` — la sesión del motor OCR murió (familia bad_alloc
@@ -858,10 +875,12 @@ export const useE14Store = create<E14Store>((set, get) => {
     motivosNoEnvio: {},
     // KIT errores-operador-v1 (plan 3.1): sin aviso al arrancar.
     avisoVisor: null,
-    // KIT e14-remediacion-movil-v1: bandera del IMPORTAR (D4) apagada y
-    // token de desarme de auto-captura (A4) sin eventos.
+    // KIT e14-remediacion-movil-v1: bandera del IMPORTAR (D4) apagada, la
+    // auto-captura armada (A4 solo la desarma si el motor cae) y sin
+    // pipeline en vuelo.
     importPendiente: false,
-    tokenDesarmarAuto: 0,
+    autoCapturaDesarmada: false,
+    analisisEnVuelo: false,
 
     navegar: (vista) =>
       set({ vista }),
@@ -957,6 +976,8 @@ export const useE14Store = create<E14Store>((set, get) => {
     // es síncrono, así que nace en el onChange ANTES de cualquier await.
     setImportPendiente: (v) => set({ importPendiente: v }),
 
+    setAutoCapturaDesarmada: (v) => set({ autoCapturaDesarmada: v }),
+
     setFramePendiente: (frame) => set({ framePendiente: frame }),
 
     // ─── KIT errores-operador-v1 (plan 3.1): aviso del visor ───
@@ -968,9 +989,9 @@ export const useE14Store = create<E14Store>((set, get) => {
     // ─── Ola 3.2 (U4): cancelar el análisis estancado ───
     cancelarAnalisis: () => {
       if (get().vista !== "analizando") return;
-      // El desenlace tardío del pipeline se descarta al resolver (ver
-      // comentario de escaneoCancelado — sin abort real en el bridge).
-      escaneoCancelado = true;
+      // El desenlace tardío del pipeline se descarta al resolver (sin abort
+      // real en el bridge) — dirigido a LA generación en vuelo.
+      cancelacionEnVuelo = { generacion: generacionEscaneo, motivo: "operador" };
       // "Acta RECHAZADA con nota de diagnóstico": durante ANALIZANDO aún no
       // existe objeto Acta (el bridge no resolvió) — el registro HONESTO del
       // desenlace es la fila de historial RESCANEO_REQUERIDO (la MISMA que
@@ -1010,10 +1031,10 @@ export const useE14Store = create<E14Store>((set, get) => {
     // desenlace es «INTERRUMPIDA — repetir la foto», jamás un rechazo mudo.
     interrumpirAnalisis: () => {
       if (get().vista !== "analizando") return;
-      // El desenlace tardío del pipeline se descarta/adopta al resolver (ver
-      // motivoCancelacionEscaneo — sin abort real en el bridge).
-      escaneoCancelado = true;
-      motivoCancelacionEscaneo = "interrumpida";
+      // El desenlace tardío del pipeline se descarta/adopta al resolver (sin
+      // abort real en el bridge) — solo para ESTA generación: si el operador
+      // ya lanzó otro escaneo, el viejo no puede pisarlo (H1).
+      cancelacionEnVuelo = { generacion: generacionEscaneo, motivo: "interrumpida" };
       const fila: HistorialRow = {
         id: idHistorial(),
         titulo: `${tituloPaginaActual()} — INTERRUMPIDA`,
@@ -1085,6 +1106,22 @@ export const useE14Store = create<E14Store>((set, get) => {
         }
         return;
       }
+      // H2 (auditoría de A3): jamás dos pipelines sobre las MISMAS sesiones
+      // ORT. Sin la cola global activa, la segunda inferencia concurrente
+      // puede no regresar jamás (ver conTurnoOcr). Este guard cubre el
+      // pipeline HUÉRFANO tras cancelar/interrumpir: la vista ya volvió a
+      // "escanear" pero el bridge sigue trabajando.
+      if (get().analisisEnVuelo) {
+        // El IMPORTAR que chocó aquí NO quedó pendiente: se suelta la
+        // bandera (si no, la auto-captura quedaría bloqueada para siempre).
+        set({ importPendiente: false });
+        get().mostrarAvisoVisor({
+          tipo: "info",
+          motivo: "ANALISIS_ANTERIOR_EN_CIERRE",
+          accion: null,
+        });
+        return;
+      }
       const { mesas, fuente, archivoPendiente, framePendiente, actaActual: previa } = get();
       // §D3 (SPEC-e14-simulacion-scores): un chip SIEMPRE corre la fuente
       // SIMULACION con el asset fijo de su banda + score inyectado (el bridge
@@ -1122,6 +1159,10 @@ export const useE14Store = create<E14Store>((set, get) => {
         return;
       }
       const objetivo = proximaPagina(mesas);
+      // H1/H2: cada disparo es una GENERACIÓN nueva. El estado que este
+      // pipeline escriba al resolver solo vale si sigue siendo la vigente.
+      const miGeneracion = ++generacionEscaneo;
+      pipelinesEnVuelo += 1;
       set({
         vista: "analizando",
         actaActual: null,
@@ -1133,6 +1174,7 @@ export const useE14Store = create<E14Store>((set, get) => {
         // KIT e14-remediacion-movil-v1 (D4): el disparo ARRANCÓ de verdad →
         // la bandera síncrona del IMPORTAR cumple su ciclo y se apaga.
         importPendiente: false,
+        analisisEnVuelo: true,
       });
       try {
         // e67-watchdog-rescate-v1 (cambio B): variable tipada — MISMO patrón
@@ -1155,7 +1197,11 @@ export const useE14Store = create<E14Store>((set, get) => {
           // §D3: campos de simulación SOLO cuando el disparo viene de un chip.
           simular: simActiva ? true : undefined,
           scoreSimulado: simActiva ? sim!.scoreSimulado : undefined,
-          onProgreso: (p) => set({ progresoAnalisis: p }),
+          onProgreso: (p) => {
+            // Un disparo nuevo ya tomó la posta: el progreso del viejo no
+            // puede mover el anillo del nuevo (H1).
+            if (miGeneracion === generacionEscaneo) set({ progresoAnalisis: p });
+          },
           // e67 (cambio B): rescate post-timeout — SOLO flujos reales. Si el
           // pipeline terminó VÁLIDO después del rechazo por tiempo, el
           // desenlace real (score/gate del pipeline) revierte el rechazo.
@@ -1163,6 +1209,9 @@ export const useE14Store = create<E14Store>((set, get) => {
             ? {}
             : {
                 onRescateTardio: (real: Acta, tiempoRealMs: number) => {
+                  // Pipeline viejo tras un disparo nuevo: jamás rescata sobre
+                  // el estado del escaneo vigente (H1).
+                  if (miGeneracion !== generacionEscaneo) return;
                   if (actaVencida) {
                     get().rescatarActaPostTimeout(actaVencida, real, tiempoRealMs);
                   }
@@ -1193,9 +1242,9 @@ export const useE14Store = create<E14Store>((set, get) => {
               /* el reinicio es best-effort — el reintento decide */
             }
             // Desarmar la AUTO-CAPTURA hasta interacción del operador — fin
-            // del bucle condenado de ~6 s (la auto se re-arma en la próxima
-            // apertura de cámara, AC15 intacto).
-            set({ tokenDesarmarAuto: get().tokenDesarmarAuto + 1 });
+            // del bucle condenado de ~6 s. La bandera es PERSISTENTE (H3):
+            // el re-arme D9 al reabrir la cámara la respeta.
+            set({ autoCapturaDesarmada: true });
             try {
               return await bridge.escanearActa(opcionesEscaneo);
             } catch (errSegundo) {
@@ -1212,10 +1261,14 @@ export const useE14Store = create<E14Store>((set, get) => {
         // OCULTAMIENTO (interrumpida) y el pipeline terminó VÁLIDO pese a
         // todo, el rescate MANDA — el desenlace real se adopta y el acta
         // legible jamás se pierde por ocultar la app.
-        if (escaneoCancelado) {
-          escaneoCancelado = false;
-          const interrumpida = motivoCancelacionEscaneo === "interrumpida";
-          motivoCancelacionEscaneo = "operador";
+        const cancelacion = cancelacionEnVuelo;
+        const cancelada = cancelacion?.generacion === miGeneracion;
+        if (cancelada) cancelacionEnVuelo = null;
+        // Disparo NUEVO en marcha: este pipeline quedó huérfano — su
+        // desenlace no escribe NADA del escaneo vigente (H1).
+        if (miGeneracion !== generacionEscaneo) return;
+        if (cancelada) {
+          const interrumpida = cancelacion?.motivo === "interrumpida";
           if (
             interrumpida &&
             (acta.status === "OPTIMA" || acta.status === "ADVERTENCIA")
@@ -1278,9 +1331,12 @@ export const useE14Store = create<E14Store>((set, get) => {
         // stack al operador (el log conserva el detalle para ti).
         // Cancelación en vuelo + rechazo tardío del pipeline: NO es un fallo
         // que el operador deba ver — vuelve al visor en silencio.
-        const cancelada = escaneoCancelado;
-        escaneoCancelado = false;
-        motivoCancelacionEscaneo = "operador";
+        const cancelacionError = cancelacionEnVuelo;
+        const cancelada = cancelacionError?.generacion === miGeneracion;
+        if (cancelada) cancelacionEnVuelo = null;
+        // Mismo guard que la resolución: un fallo del pipeline viejo no
+        // devuelve la vista ni avisa sobre el escaneo vigente (H1).
+        if (miGeneracion !== generacionEscaneo) return;
         set({
           vista: "escanear",
           progresoAnalisis: null,
@@ -1307,6 +1363,11 @@ export const useE14Store = create<E14Store>((set, get) => {
                   } satisfies AvisoOperador,
                 }),
         });
+      } finally {
+        // Solo cuando no queda NINGÚN pipeline vivo se apaga la bandera: el
+        // viejo puede seguir cerrando mientras el nuevo ya terminó (H2).
+        pipelinesEnVuelo = Math.max(0, pipelinesEnVuelo - 1);
+        if (pipelinesEnVuelo === 0) set({ analisisEnVuelo: false });
       }
     },
 

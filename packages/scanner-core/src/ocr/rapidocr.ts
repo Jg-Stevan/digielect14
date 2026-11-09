@@ -34,6 +34,7 @@
 
 // FASE 3 (§3.3): publicBase por entorno inyectado (mismo default que el core).
 import { publicBaseEfectivo } from "../dominio/entorno";
+import { medidasDeCaja } from "./crop-geometria";
 
 // ─── Tipos ORT mínimos (el módulo se importa dinámicamente) ─────────────────
 
@@ -709,10 +710,12 @@ function cropLinea(
   src: HTMLImageElement,
   box: { x: number; y: number }[],
 ): { canvas: HTMLCanvasElement; ratio: number } {
-  const d = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(b.x - a.x, b.y - a.y);
-  const [p0, p1, p2, p3] = box;
-  const cropW = Math.max(1, Math.round(Math.max(d(p0, p1), d(p2, p3))));
-  const cropH = Math.max(1, Math.round(Math.max(d(p0, p3), d(p1, p2))));
+  const [p0, p1] = box;
+  // Las medidas salen del helper COMPARTIDO con el ratio del filtro `leibles`
+  // (H5): una sola fórmula de geometría. El canvas redondea a píxel.
+  const { w, h } = medidasDeCaja(box);
+  const cropW = Math.max(1, Math.round(w));
+  const cropH = Math.max(1, Math.round(h));
   const theta = Math.atan2(p1.y - p0.y, p1.x - p0.x);
   const cos = Math.cos(theta);
   const sin = Math.sin(theta);
@@ -1113,10 +1116,8 @@ async function rapidOcrReconocerInterno(
   //    líneas que se leen; el rescate por bordes recorta on-demand. Con knobs
   //    0/0, leibles = todas ⇒ byte-idéntico al flujo de hoy.
   const ratioDeCaja = (b: { x: number; y: number }[]): number => {
-    const d = (a: { x: number; y: number }, c: { x: number; y: number }) =>
-      Math.hypot(c.x - a.x, c.y - a.y);
-    const w = Math.max(d(b[0], b[1]), d(b[2], b[3]));
-    const h = Math.max(d(b[0], b[3]), d(b[1], b[2]));
+    const { w, h } = medidasDeCaja(b);
+    // Misma guarda de siempre: una caja degenerada no puede dividir por cero.
     return w / Math.max(1, h);
   };
   // geometría (ver arriba) — el filtro `leibles` se decidió ANTES de recortar
