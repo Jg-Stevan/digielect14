@@ -27,7 +27,7 @@
 }
 ```
 
-⚠️ JSON **válido, SIN comentarios** (`public/flags-ejemplo.json` es la versión documentada con `//` — quítalos si lo usas de base). Cadena de resolución de `leerFlags()`: defaults ← `public/flags.json` (si existe) ← overrides de localStorage.
+⚠️ JSON **válido, SIN comentarios** (`docs/flags-ejemplo.json` es la versión documentada con `//` — quítalos si lo usas de base; este ejemplo NO se publica con el sitio). Cadena de resolución de `leerFlags()`: defaults ← `public/flags.json` (si existe) ← overrides de localStorage.
 
 **Vía B — override manual en caliente** (kill switch del panel dev, o consola):
 
