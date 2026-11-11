@@ -381,12 +381,13 @@ describe("ocr-cascada · source-scan (contrato del kit en src/)", () => {
     expect(politica).toContain('limpio.ocrCascada = o.ocrCascada;');
     expect(politica).toContain("limpio.presupuestoEscaneoMs");
   });
-  it("tess vendido: assets en public/ (worker + core simd-lstm + spa BEST)", () => {
+  it("tess vendido: assets en public/ (worker + core simd-lstm + spa fast)", () => {
     const pub = lee("public/vendor/tesseract/tesseract-core-simd-lstm.wasm.js").length;
     expect(pub).toBeGreaterThan(1_000_000); // glue del core presente
     expect(lee("public/vendor/tesseract/worker.min.js").length).toBeGreaterThan(50_000);
-    const gz = lee("public/models/tess/spa.traineddata.gz").length;
-    expect(gz).toBeGreaterThan(5_000_000); // spa traineddata best (~12 MB)
+    // D88: la ruta lleva versión y el sabor servido es fast (~1,1 MB gz).
+    const gz = lee("public/models/tess/4.0.0_fast/spa.traineddata.gz").length;
+    expect(gz).toBeGreaterThan(1_000_000);
   });
   it("obs/tipos.ts: FlagsApp + ocrCascada (D57 — al final, tras qrBrujulaOrientacion)", () => {
     const tipos = lee("src/lib/e14/obs/tipos.ts");
