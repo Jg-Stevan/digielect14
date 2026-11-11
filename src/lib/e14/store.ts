@@ -409,7 +409,7 @@ export interface ActaArchivada {
 export interface PuestoActual {
   /** Prefijo de clave «dep-mun-zon-std» (claveDePuesto). */
   clave: string;
-  /** «ROMA - CONSULADO» (puesto.nombre en MAYÚSCULAS — convención de tituloYUbicacionDe). */
+  /** Título del puesto en MAYÚSCULAS — convención de tituloYUbicacionDe. */
   titulo: string;
   /** Línea de ruta: país/municipio por NOMBRE, zona y puesto por CÓDIGO. */
   departamento: string;

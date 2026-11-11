@@ -62,7 +62,6 @@ import type {
   PageQuality,
   Quad,
 } from "@jg-stevan/scanner-core/core/types";
-import { ACTA_MOCK } from "@jg-stevan/scanner-core/dominio/seed";
 import { statusDeScore } from "@jg-stevan/scanner-core/dominio/types";
 import { cargarDivipol } from "@jg-stevan/scanner-core/dominio/divipol";
 import {
@@ -2564,12 +2563,18 @@ export class RealCoreBridge implements E14Bridge {
       campos.status === "ADVERTENCIA" ? "TENUE" : campos.status === "RECHAZADA" ? "NO_DETECTADO" : "OK";
 
     // §1.2 (SPEC-titulo-ubicacion): clasificación AUTO → el acta nace con
-    // título/ubicación REALES. KIT e14-sin-relleno-v1: SIN clasificación el
-    // fallback es HONESTO («ACTA SIN IDENTIFICAR») — antes heredaba el
-    // «ROMA - CONSULADO» del mock y una acta real sin leer mostraba un
-    // puesto de mentira. Los datos de PANTALLA del editor (candidatos,
-    // firmas, código de barras — fase lógica L1) se conservan tal cual.
+    // título/ubicación REALES. KIT e14-sin-relleno-v1 + auditoría 2026-11-11
+    // (hallazgos #2 y #3): NINGÚN campo de pantalla viene ya del acta de
+    // demostración — sin clasificación el acta no muestra candidaturas con
+    // votos, nombres de jurados ni un barcode inventado; el tipo se deriva de
+    // la clasificación.
     const titUbi = tituloYUbicacionDe(campos.clasificacion ?? null);
+    const tipoHonesto =
+      campos.clasificacion?.tipo === "TRANSMISION"
+        ? "SENADO DE LA REPÚBLICA"
+        : campos.clasificacion?.tipo === "DELEGADOS"
+          ? "CÓNSUL/EMBAJADOR"
+          : "SIN CLASIFICAR";
     return {
       id: `acta-${Date.now()}-${this.contador}`,
       titulo: titUbi?.titulo ?? "ACTA SIN IDENTIFICAR",
@@ -2580,7 +2585,7 @@ export class RealCoreBridge implements E14Bridge {
         puesto: "—",
         mesa: numeroMesa,
       },
-      tipo: ACTA_MOCK.tipo,
+      tipo: tipoHonesto,
       // §6: página REAL del «Ver/Pag/de» cuando la clasificación la leyó.
       // KIT actas-vivas-paginas-v1 (FASE B): la página viaja COMO VENGA de
       // la clasificación (null incluido — DESCONOCIDA: el chip muestra
@@ -2593,13 +2598,12 @@ export class RealCoreBridge implements E14Bridge {
             index: opciones.objetivo?.pagina ?? 1,
             total: 2,
           },
-      candidatos: ACTA_MOCK.candidatos.map((c) => ({ ...c })),
+      candidatos: [],
       firmas: [
-        { nombre: ACTA_MOCK.firmas[0].nombre, jurado: ACTA_MOCK.firmas[0].jurado, estado: "OK" },
-        { nombre: ACTA_MOCK.firmas[1].nombre, jurado: ACTA_MOCK.firmas[1].jurado, estado: estadoFirma2 },
-        { nombre: ACTA_MOCK.firmas[2].nombre, jurado: ACTA_MOCK.firmas[2].jurado, estado: "OK" },
+        { nombre: "—", jurado: "JURADO 1", estado: "OK" },
+        { nombre: "—", jurado: "JURADO 2", estado: estadoFirma2 },
+        { nombre: "—", jurado: "JURADO 3", estado: "OK" },
       ],
-      codigoBarras: ACTA_MOCK.codigoBarras,
       score: campos.score,
       scoreVisual: campos.scoreVisual,
       status: campos.status,
