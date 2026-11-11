@@ -3,6 +3,9 @@
 # para eliminar `src/assets/acta-e14-real.jpg` de TODOS los commits.
 #
 # ⚠️  LO EJECUTA EL DUEÑO, no un agente: fuerza push y reescribe SHAs.
+# Endurecido en la remediación de la auditoría 2026-11-11: bundle de respaldo
+# obligatorio, --force-with-lease (nunca --force a secas) y registro del SHA
+# previo de main.
 # Prerrequisitos:
 #   pip install git-filter-repo     (exige repo limpio y sin remotes viejos)
 #   AVISAR a cualquier clon vivo antes (la reescritura invalida clones y
@@ -22,17 +25,34 @@ command -v git-filter-repo >/dev/null || { echo "FALTA: pip install git-filter-r
 git clone "$REPO_URL" "$DIR"
 cd "$DIR"
 
+# Re-verifica las rutas alcanzables antes de filtrar. Si aparece una ruta
+# nueva, añádela al --path de abajo.
+echo "▶ Rutas alcanzables con 'acta-e14-real' (objetivo: solo $RUTA_FOTO):"
+git rev-list --all --objects | grep -i "acta-e14-real" || echo "0 (limpio)"
+
+SHA_PREVIO="$(git rev-parse origin/main 2>/dev/null || git rev-parse main)"
+echo "▶ SHA previo de main: $SHA_PREVIO"
+echo "  Anótalo en docs/DECISIONS.md al cerrar la purga (plantilla Anexo C)."
+
+BUNDLE="../digielect14-backup-$(date +%Y%m%d).bundle"
+git bundle create "$BUNDLE" --all
+echo "▶ Respaldo creado: $BUNDLE (guárdalo fuera de la máquina de trabajo)"
+
 git filter-repo --invert-paths --path "$RUTA_FOTO" --force
 
-# Re-añadir el remote (filter-repo lo suelta a propósito) y forzar el push:
+# Re-añadir el remote (filter-repo lo suelta a propósito) y refrescar los
+# refs: --force-with-lease necesita conocer el estado real del remoto.
 git remote add origin "$REPO_URL"
+git fetch origin
+
 echo "▶ Verificación ANTES del push (objetivo: 0):"
-git rev-list --all --objects | grep -c "acta-e14-real" || echo "0 (limpio)"
+git rev-list --all --objects | grep -ic "acta-e14-real" || echo "0 (limpio)"
 echo "▶ gitleaks sobre la historia completa (objetivo: 0 hallazgos):"
 gitleaks git --log-opts="--all" || true
 
 echo ""
-echo "REVISIÓN LISTA en $DIR. Para aplicarla:"
-echo "  cd $DIR && git push origin --force --all && git push origin --force --tags"
+echo "REVISIÓN LISTA en $DIR. SHA previo de main: $SHA_PREVIO"
+echo "Para aplicarla (nunca --force a secas — regla del AGENTS.md):"
+echo "  cd $DIR && git push origin --force-with-lease --all && git push origin --force-with-lease --tags"
 echo "Después: contactar GitHub Support para purgar vistas cacheadas del blob"
 echo "(SHA directo) si la sensibilidad lo justifica, y re-corre CI."
