@@ -63,8 +63,11 @@ const PASOS = [
   {
     Icon: StitchCloudCheckIcon,
     titulo: "4 · TRANSMITE",
+    // C-12 (Vía B — copys honestos): ADVERTENCIA no tiene CTA de envío
+    // manual (el botón se retiró con el gate-v2): lo real es repetir la foto
+    // (o revisión humana tras varios intentos).
     detalle:
-      "Las actas óptimas se envían solas; las demás te pedimos confirmación o un rescaneo. Sin conexión, se acumulan en cola.",
+      "Las actas óptimas se envían solas; en las demás te pedimos repetir la foto (o revisión humana tras varios intentos). Sin conexión, se acumulan en cola.",
   },
 ];
 
@@ -102,7 +105,8 @@ const NIVELES = [
     chip: "ADVERTENCIA",
     rango: "6.5 – 7.9",
     color: "text-amber-300 border-amber-500/40 bg-amber-500/10",
-    accion: "Se pide confirmación o un rescaneo.",
+    // C-12 (Vía B): lo que HACE la app hoy — sin promesa de CTA retirado.
+    accion: "No se envía sola: toca REPETIR FOTO; tras varios intentos, revisión humana.",
   },
   {
     chip: "RECHAZADA",
@@ -126,8 +130,12 @@ const GLOSARIO: [string, string][] = [
     "Calidad de la digitalización: nitidez, contraste y legibilidad del OCR. Define el desenlace del acta.",
   ],
   [
+    // C-12 (Vía B — copys honestos): el producto NO marca duplicadas en el
+    // flujo normal. Lo real: repetir un hueco reemplaza la captura anterior
+    // (RESCANEO ⚠ en RESUMEN) y la cola de envío no manda dos veces la misma
+    // acta (huella SHA-256 del sobre en el outbox del puente).
     "Dedup",
-    "Detección de duplicados: si subes la misma acta dos veces, la copia se marca y no contamina el registro.",
+    "No hay marca de «duplicada» en el flujo normal: repetir un hueco reemplaza la captura anterior (⚠ en RESUMEN) y la cola de envío no manda dos veces la misma acta (huella por hash).",
   ],
 ];
 

@@ -58,6 +58,14 @@ export interface EntradaPuente {
   nombreArchivo: string; // E14_88_335_005_02_001_TRANSMISION-1.png
   score: number; // 0..10
   statusActa: string; // ActaStatus del desenlace
+  /** C-08 — SHA-256 REAL (hex 64) de los BYTES de `srcFoto` (la evidencia
+   *  que viaja). Opcional: sobres viejos y contextos sin crypto.subtle viajan
+   *  sin él — jamás un hash de relleno (doctrina e14-sin-relleno). */
+  hashSha256?: string;
+  /** C-07 — epoch ms del momento del gate en el móvil (`Date.now()` al armar
+   *  el sobre). Nombre NO reservado del hub (el hub reserva seq/ts/
+   *  dispositivo/hashHub); opcional para compatibilidad con sobre viejos. */
+  tsEscaneo?: number;
 }
 
 /** Estado visible del puente (módulo singleton de envio.ts — la tarjeta de

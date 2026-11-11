@@ -60,6 +60,32 @@ function badgeEstado(estado: HistorialRow["estado"]) {
   }
 }
 
+/** C-25 — una fila del historial: las SINTÉTICAS (guion del SIM) llevan
+ *  barra ámbar + badge «SIM» además del texto en la hora ("SIM") — a simple
+ *  vista no puede confundirse una fila SIM con una real. */
+function FilaHistorial({ fila, sim }: { fila: HistorialRow; sim: boolean }) {
+  const badge = badgeEstado(fila.estado);
+  return (
+    <div className="min-h-12 flex items-center justify-between gap-3 px-3.5 lg:px-5 py-2.5 lg:py-3 relative overflow-hidden hover:bg-slate-800/30 transition-colors">
+      <span
+        className={`absolute left-0 top-0 bottom-0 w-1 ${sim ? "bg-amber-400" : badge.barra}`}
+        aria-hidden
+      />
+      <span className="font-mono text-xs text-white pl-1.5 min-w-0 truncate font-semibold">
+        {sim && (
+          <span className="mr-2 inline-block px-1.5 py-px rounded bg-amber-500/15 border border-amber-500/50 text-amber-400 font-mono font-black text-[9px] tracking-widest align-middle">
+            SIM
+          </span>
+        )}
+        {fila.titulo}
+      </span>
+      <span className={`${badge.clases} whitespace-nowrap shrink-0 rounded-full shadow-xs`}>
+        {badge.label}
+      </span>
+    </div>
+  );
+}
+
 export function ResumenView() {
   const mesas = useE14Store((s) => s.mesas);
   const historial = useE14Store((s) => s.historial);
@@ -144,20 +170,11 @@ export function ResumenView() {
   const origenEquipo = typeof window === "undefined" ? "" : window.location.origin;
   const hubEsLocal = hubUsado === origenEquipo;
 
-  const totalPaginas = mesas.reduce((n, m) => n + m.paginas.length, 0);
-  const paginasOk = mesas.reduce(
-    (n, m) => n + m.paginas.filter((p) => p.estado === "OK").length,
-    0,
-  );
-  const paginasRescaneo = mesas.reduce(
-    (n, m) => n + m.paginas.filter((p) => p.estado === "RESCANEO").length,
-    0,
-  );
-  const pendientes = totalPaginas - paginasOk;
-  const pct = totalPaginas > 0 ? Math.round((paginasOk / totalPaginas) * 100) : 0;
-  const ultimaActividad = historial[0]?.hora ?? "—";
-
-  const filas: HistorialRow[] = modoSimulacion
+  // C-25 — filas SIM distinguibles: toggle LOCAL «ocultar filas SIM» +
+  // separador visual entre el historial REAL y el guion sintético (cada fila
+  // SIM lleva badge ámbar — a simple vista no se confunden).
+  const [ocultarSim, setOcultarSim] = useState(false);
+  const filasSim: HistorialRow[] = modoSimulacion
     ? mesas
         .flatMap((m) =>
           m.paginas
@@ -170,7 +187,21 @@ export function ResumenView() {
             })),
         )
         .reverse()
-    : historial;
+    : [];
+  const mostrarSim = modoSimulacion && !ocultarSim && filasSim.length > 0;
+
+  const totalPaginas = mesas.reduce((n, m) => n + m.paginas.length, 0);
+  const paginasOk = mesas.reduce(
+    (n, m) => n + m.paginas.filter((p) => p.estado === "OK").length,
+    0,
+  );
+  const paginasRescaneo = mesas.reduce(
+    (n, m) => n + m.paginas.filter((p) => p.estado === "RESCANEO").length,
+    0,
+  );
+  const pendientes = totalPaginas - paginasOk;
+  const pct = totalPaginas > 0 ? Math.round((paginasOk / totalPaginas) * 100) : 0;
+  const ultimaActividad = historial[0]?.hora ?? "—";
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto thin-scroll bg-[#090d12] flex flex-col">
@@ -367,7 +398,7 @@ export function ResumenView() {
 
         {/* Historial de envíos */}
         <div className="flex flex-col gap-2.5 pt-2">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center gap-2">
             <div className="flex flex-col">
               <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 HISTORIAL DE TRANSMISIONES
@@ -376,34 +407,52 @@ export function ResumenView() {
                 <span className="text-[10px] text-slate-400 font-mono">(DATOS EN MODO SIMULACIÓN)</span>
               )}
             </div>
-            <span className="font-mono text-[11px] text-slate-400">
-              {modoSimulacion ? `SIM ${paginasOk}/${totalPaginas}` : `ÚLT. ACT.: ${ultimaActividad}`}
-            </span>
+            {/* C-25 — filtro local del guion sintético (solo con filas SIM). */}
+            {modoSimulacion && filasSim.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setOcultarSim((v) => !v)}
+                aria-pressed={ocultarSim}
+                className="font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors whitespace-nowrap shrink-0"
+              >
+                {ocultarSim ? "MOSTRAR FILAS SIM" : "OCULTAR FILAS SIM"}
+              </button>
+            ) : (
+              <span className="font-mono text-[11px] text-slate-400">
+                {modoSimulacion ? `SIM ${paginasOk}/${totalPaginas}` : `ÚLT. ACT.: ${ultimaActividad}`}
+              </span>
+            )}
           </div>
 
           <div className="flex flex-col max-h-96 lg:max-h-[28rem] overflow-y-auto thin-scroll rounded-2xl border border-slate-800 bg-[#10161f] divide-y divide-slate-800/80 shadow-sm">
-            {filas.length === 0 ? (
+            {historial.length === 0 && !mostrarSim ? (
               <div className="p-4 text-center text-xs font-mono text-slate-400">
                 NO HAY ENVÍOS REGISTRADOS EN ESTA SESIÓN
               </div>
             ) : (
-              filas.map((fila) => {
-                const badge = badgeEstado(fila.estado);
-                return (
+              <>
+                {/* Historial REAL (siempre encima — nunca se mezcla con el
+                    guion del SIM sin su separador). */}
+                {historial.map((fila) => (
+                  <FilaHistorial key={fila.id} fila={fila} sim={false} />
+                ))}
+                {/* C-25 — separador visual + filas sintéticas con badge. */}
+                {mostrarSim && (
                   <div
-                    key={fila.id}
-                    className="min-h-12 flex items-center justify-between gap-3 px-3.5 lg:px-5 py-2.5 lg:py-3 relative overflow-hidden hover:bg-slate-800/30 transition-colors"
+                    role="separator"
+                    aria-label="Inicio de filas de simulación"
+                    className="flex items-center gap-2 px-3.5 lg:px-5 py-1.5 bg-amber-950/30 border-y border-amber-500/30"
                   >
-                    <span className={`absolute left-0 top-0 bottom-0 w-1 ${badge.barra}`} aria-hidden />
-                    <span className="font-mono text-xs text-white pl-1.5 min-w-0 truncate font-semibold">
-                      {fila.titulo}
-                    </span>
-                    <span className={`${badge.clases} whitespace-nowrap shrink-0 rounded-full shadow-xs`}>
-                      {badge.label}
+                    <span className="font-mono text-[9px] font-black tracking-[0.2em] text-amber-400 uppercase">
+                      simulación · datos de prueba
                     </span>
                   </div>
-                );
-              })
+                )}
+                {mostrarSim &&
+                  filasSim.map((fila) => (
+                    <FilaHistorial key={fila.id} fila={fila} sim />
+                  ))}
+              </>
             )}
           </div>
         </div>

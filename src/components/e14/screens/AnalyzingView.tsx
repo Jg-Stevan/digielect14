@@ -15,7 +15,7 @@ import { useE14Store } from "@/lib/e14/store";
 import { leerFlags } from "@/lib/e14/flags";
 import { useWakeLock } from "@/lib/e14/core/wake-lock";
 import type { EtapaAnalisis, ProgresoAnalisis } from "@/lib/e14/fachada";
-import { DocScannerIcon, ShieldCheckIcon } from "../icons";
+import { DocScannerIcon, ShieldCheckIcon, WarnTriangleIcon } from "../icons";
 
 const ETAPAS = [
   "DETECTANDO BORDES",
@@ -90,6 +90,19 @@ export function AnalyzingView() {
   // cámara — el Wake Lock se MANTIENE aquí (el escaneo de 120 s no debe
   // apagar la pantalla sin que nadie toque nada).
   useWakeLock(true);
+  // C-31 — aviso de pestaña oculta durante el análisis (mitigación, sin
+  // promesa de fix: Chrome congela rAF/timers en segundo plano POR DISEÑO).
+  // Si el ocultamiento INTERROMPIÓ el análisis (kit A3), esta vista se
+  // desmonta y el aviso no aplica; si el análisis sobrevive (p. ej. la
+  // ventana del cierre escénico), el aviso queda montado al volver.
+  const [pestanaOculta, setPestanaOculta] = useState(false);
+  useEffect(() => {
+    const alCambio = () => {
+      if (document.visibilityState === "hidden") setPestanaOculta(true);
+    };
+    document.addEventListener("visibilitychange", alCambio);
+    return () => document.removeEventListener("visibilitychange", alCambio);
+  }, []);
   const [progreso, setProgreso] = useState(0);
   const [latencia, setLatencia] = useState(0);
   // Ola 4.2.5: anuncio throttled del % para lectores de pantalla — el span
@@ -212,6 +225,24 @@ export function AnalyzingView() {
             {latencia}ms
           </span>
         </div>
+
+        {/* C-31 — aviso si la pestaña estuvo oculta durante el análisis
+            (aparece al volver; sin promesa de fix — el navegador congela el
+            trabajo en segundo plano por diseño). */}
+        {pestanaOculta && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="w-full flex justify-center pt-3"
+          >
+            <div className="flex items-center gap-2 bg-amber-950/60 border border-amber-500 px-3.5 py-1.5 rounded-full shadow-sm">
+              <WarnTriangleIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-amber-300">
+                Mantén la pestaña visible durante el análisis
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Área focal: anillo concéntrico */}
         <div className="flex flex-col items-center justify-center my-auto w-full max-w-xs">

@@ -17,6 +17,8 @@
  */
 import type { Acta } from "@jg-stevan/scanner-core/dominio/types";
 import type { ClasificacionE14, TipoCopia } from "@jg-stevan/scanner-core/dominio/clasificador";
+// C-08 — SHA-256 REAL de la evidencia (helper puro compartido con el store).
+import { sha256HexDeDataUrl } from "../hash";
 import type { EntradaPuente, FormularioPuente, ImpresionPuente } from "./tipos";
 
 /** Acta mapeable: igual al contrato Acta pero tolerante a la foto como Blob
@@ -55,6 +57,14 @@ function formularioDe(tipo: TipoCopia | null | undefined): FormularioPuente | nu
   if (tipo === "TRANSMISION") return "TRANSMISION";
   if (tipo === "DELEGADOS") return "DELEGADOS";
   return null;
+}
+
+/** C-29 — extensión HONESTA del mime REAL del dataURL (`image/png` → .png,
+ *  cualquier otra cosa —jpeg incluido— → .jpg). Jamás un .png forzado para
+ *  contenido JPEG. */
+function extensionDeDataUrl(dataUrl: string): string {
+  const mime = /^data:([^;,]+)/.exec(dataUrl)?.[1] ?? "";
+  return mime === "image/png" ? "png" : "jpg";
 }
 
 /**
@@ -105,6 +115,19 @@ export async function mapearActaAPuente(
         formulario === "TRANSMISION" ? "TRANSMISIÓN" : "CÓNSUL/EMBAJADOR",
     };
 
+    // C-08 — hash REAL (SHA-256, hex 64) de los BYTES de la evidencia que
+    // viaja. Si el acta ya trae un hash válido (estampado por registrarEnvio
+    // SOBRE LA MISMA fotoProcesada) se respeta; sobres viejos con «EN COLA»
+    // o hash ausente se recalculan aquí sobre srcFoto. Sin crypto.subtle →
+    // campo AUSENTE (jamás un relleno).
+    const hashActa =
+      acta.hashSha256 && /^[0-9a-f]{64}$/.test(acta.hashSha256)
+        ? acta.hashSha256
+        : await sha256HexDeDataUrl(srcFoto);
+    // C-07 — ts del gate: epoch ms del móvil EN el momento en que se arma el
+    // sobre (nombre NO reservado del hub — ver tipos.ts).
+    const tsEscaneo = Date.now();
+
     return {
       idEnlace,
       mesa,
@@ -113,9 +136,11 @@ export async function mapearActaAPuente(
       paginaTotal: c.pagina.total,
       srcFoto,
       impresion,
-      nombreArchivo: `E14_${[dept, mun, zonaPad, puestoPad].join("_")}_${mesa}_${formulario === "DELEGADOS" ? "CONSUL_EMBAJADOR" : "TRANSMISION"}-${c.pagina.index}.png`,
+      nombreArchivo: `E14_${[dept, mun, zonaPad, puestoPad].join("_")}_${mesa}_${formulario === "DELEGADOS" ? "CONSUL_EMBAJADOR" : "TRANSMISION"}-${c.pagina.index}.${extensionDeDataUrl(srcFoto)}`,
       score: acta.score,
       statusActa: acta.status,
+      ...(hashActa ? { hashSha256: hashActa } : {}),
+      tsEscaneo,
     };
   } catch {
     return null; // jamás romper por un mapeo (regla de oro del kit)

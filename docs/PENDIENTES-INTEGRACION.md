@@ -36,17 +36,25 @@ Nada de esto es bug: es integración pendiente entre olas.
 * `store.ts` ya importa la constante de `politica/umbrales` y el literal
   `maxIntentos: 4` fue sustituido (integración final).
 
-## 5. Foto real del acta: borrar el binario (Ola 1 · D35)
+## 5. Foto real del acta: borrar el binario (Ola 1 · D35) — **CERRADO por D86 (2026-11-08)**
+
+> C-36 (re-verificación 2026-11-11): este pendiente YA ESTÁ EJECUTADO — queda
+> cerrado con evidencia y se conserva solo como registro. No re-ejecutar.
 
 * El CÓDIGO ya no referencia `src/assets/acta-e14-real.jpg` (el modo SIM
   usa solo los 4 sintéticos `acta-sim-*.jpg` con cargadores dinámicos S-6).
-* **Pendiente de custodia del repo**: `git rm src/assets/acta-e14-real.jpg`
-  (348 KB, foto real de un acta — la decisión D35/Ola 1 la retira). El
-  archivo sigue en disco porque `src/assets/**` no era zona de esta ola.
-* **Validación de demo pendiente del dueño**: con la foto real retirada, el
+* ~~**Pendiente de custodia del repo**: `git rm src/assets/acta-e14-real.jpg`
+  (348 KB, foto real de un acta — la decisión D35/Ola 1 la retira).~~
+  **EJECUTADO (D86, 2026-11-08):** el binario salió del HEAD; `ls src/assets/`
+  hoy solo contiene las 4 fixtures `acta-sim-*.jpg` (blob `18fb854` alcanzable
+  SOLO en la historia git — su purga es la Fase 3 del dueño, C-38/D91).
+* ~~**Validación de demo pendiente del dueño**: con la foto real retirada, el
   asset [0] del modo SIM es `acta-sim-extra-1.jpg` (pipeline completo) —
   confirmar que el chip 8.2 sigue cayendo en ÓPTIMA; si no, recalibrar el
-  orden de `ACTAS_SIM` (un cambio de UNA línea en el bridge).
+  orden de `ACTAS_SIM` (un cambio de UNA línea en el bridge).~~
+  **CERRADO:** el lote SIM vigente es `acta-sim-*.jpg` (4 fixtures); la
+  validación de la demo quedó cubierta por las corridas del SIM posteriores a
+  D86 y por el guardarraíl anti-relleno (T5.1/D94).
 
 ## 6. Test de componente `review-view.copy.test.ts` (7.10) — activarlo
 

@@ -26,8 +26,8 @@
  * · KILL LOCAL (FALLOS_KILL_LOCAL = 5): tras 5 fallos seguidos estado.activo
  *   = false — la cola queda INTACTA y solo `sincronizarAhora()` la reactiva.
  * · Override de URL: localStorage["e14-puente-url"] leído en CADA envío,
- *   normalizado con `normalizarHubUrl` (SOLO https — 0.5/S3; el intento
- *   rechazado queda en el log).
+ *   normalizado con `normalizarHubUrl` (https, o http solo en orígenes
+ *   locales — 0.5/S3; el intento rechazado queda en el log).
  * · fetch INYECTABLE (parámetro opcional) para pruebas sin red — la suite
  *   `envio.test.ts` (Ola 2) encodea este contrato completo.
  *
@@ -100,8 +100,9 @@ export function __resetEstadoParaTests(): void {
 }
 
 /** URL del hub: override de localStorage leído en cada envío, normalizado
- *  con `normalizarHubUrl` (SOLO https — 0.5/S3: `http://` o basura → null →
- *  default, y el intento queda registrado). */
+ *  con `normalizarHubUrl` (https, o http solo en orígenes locales — 0.5/S3:
+ *  un `http://` ajeno o basura → null → default, y el intento queda
+ *  registrado). */
 function urlDelHub(): string {
   try {
     if (typeof window !== "undefined") {

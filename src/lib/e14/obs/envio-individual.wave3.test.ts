@@ -88,11 +88,12 @@ afterEach(() => {
 });
 
 describe("WAVE3 §G.1 — registrarEnvio individual mide su envío", () => {
-  it("individual online → envioMs estampado en actaActual.diagnostico.tiempos + red del momento (G.2)", () => {
+  it("individual online → envioMs estampado en actaActual.diagnostico.tiempos + red del momento (G.2)", async () => {
     vi.stubGlobal("navigator", { connection: { effectiveType: "4g", downlink: 1.5 } });
     useE14Store.setState({ online: true, actaActual: actaIndividual() } as never);
 
-    useE14Store.getState().enviarActa();
+    // C-08 — registrarEnvio es async (hash SHA-256 REAL de la evidencia).
+    await useE14Store.getState().enviarActa();
 
     const acta = useE14Store.getState().actaActual!;
     expect(acta.status).toBe("ENVIADA");
@@ -104,11 +105,12 @@ describe("WAVE3 §G.1 — registrarEnvio individual mide su envío", () => {
     expect(acta.hashSha256).not.toBe("EN COLA");
   });
 
-  it("offline → SIN envioMs (null honesto, regla del contrato) y SIN red", () => {
+  it("offline → SIN envioMs (null honesto, regla del contrato) y SIN red", async () => {
     vi.stubGlobal("navigator", { connection: { effectiveType: "4g", downlink: 1.5 } });
     useE14Store.setState({ online: false, actaActual: actaIndividual() } as never);
 
-    useE14Store.getState().enviarActa();
+    // C-08 — registrarEnvio es async (hash SHA-256 REAL de la evidencia).
+    await useE14Store.getState().enviarActa();
 
     const acta = useE14Store.getState().actaActual!;
     expect(acta.status).toBe("ENVIADA");

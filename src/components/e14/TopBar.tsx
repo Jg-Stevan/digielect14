@@ -20,7 +20,11 @@ import { StitchArrowLeftIcon, StitchCloudCheckIcon } from "./icons";
 // evento DOM intra-pestaña + storage cross-pestaña (CERO timers — dev/puente).
 import { useModoDev } from "./dev/puente";
 
-/** D1: estilo por estado — palabra + colores del mock vinculante. */
+/** D1: estilo por estado — palabra + colores del mock vinculante.
+ *  C-26 — dead code fuera: el case «DUPLICADA» se retiró (SOLO lo estampaba
+ *  el runner MASIVA retirado — en el flujo del móvil el status es
+ *  inalcanzable); sin caso la función devuelve undefined y PillEstado no
+ *  pinta píldora. */
 function estiloTopBar(status: ActaStatus, score: number) {
   switch (status) {
     case "ENVIADA":
@@ -61,17 +65,10 @@ function estiloTopBar(status: ActaStatus, score: number) {
         ping: false,
         score: "text-amber-400",
       };
-    case "DUPLICADA":
-      // e66 — gemela reutilizada: desenlace COPIADO (cero pipeline propio,
-      // cero envío propio). Píldora gris — no es veredicto del gate ni del
-      // score; el envío real vive en la original.
-      return {
-        palabra: "DUPLICADA",
-        pill: "bg-brand-surface border border-gray-500/40 shadow-sm",
-        dot: "bg-gray-500",
-        ping: false,
-        score: "text-gray-300",
-      };
+    default:
+      // C-26 — «DUPLICADA» inalcanzable en el móvil: sin píldora (no se
+      // fabrica un estilo para un estado que no se produce).
+      return undefined;
   }
 }
 
@@ -90,7 +87,10 @@ function nubeTransmision(status: ActaStatus, online: boolean) {
 }
 
 function PillEstado({ acta }: { acta: Acta }) {
+  // C-26 — estiloTopBar devuelve undefined para estados no producidos por el
+  // móvil (DUPLICADA): sin píldora, sin fabricar estilos muertos.
   const est = estiloTopBar(acta.status, acta.score);
+  if (!est) return null;
   return (
     <div
       className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs transition-all ${est.pill}`}

@@ -2,7 +2,9 @@
 # KIT e14-cierre (§8 del plan, VERSIÓN CORREGIDA por el documento de revisión §4)
 # — batería de verificación global al cerrar la última ola.
 #
-# Correcciones integradas (correcciones-y-huecos-plan-remediacion.md):
+# Correcciones integradas según la revisión del 2026-11-11 (C-35: el doc
+# «correcciones-y-huecos-plan-remediacion.md» es de CUSTODIA LOCAL del dueño,
+# no está versionado — la cita no apunta a un archivo del repo):
 #  · check del receptor: 401 (contrato v0) o 410 (0.7 aplicado) — el código
 #    esperado depende del orden de aplicación; /salud es healthcheck PÚBLICO
 #    por diseño (0.2): SIN Bearer.

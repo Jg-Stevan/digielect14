@@ -15,15 +15,16 @@
  * «✓ ENVIADO AUTOMÁTICAMENTE» + nav (shell BottomNav).
  * LA LÓGICA SIGUE INTACTA (Rev. 5 del score-ocr + todas las specs
  * previas): datos data-driven, gate, escalación, candado RH, parciales,
- * fallback de foto D4, visor F-ZOOM (SERIE 1), sheets Filtros/Texto.
+ * fallback de foto D4, visor F-ZOOM (SERIE 1).
+ * C-26 — los sheets Filtros/Texto se retiraron: su ÚNICO punto de entrada
+ * era la rama OPTIMA muerta (OPTIMA jamás se renderiza en REVISIÓN —
+ * auto-envío D4 al capturar y tras el recorte) → Muerto = fuera (AGENTS.md).
  * D2 (redesign-stitch §4): SIN notificaciones — el feedback vive en la UI
  * persistente (píldoras, banner, píldora flotante, feedback en botón).
  */
 import { useEffect, useMemo, useState } from "react";
 import { useE14Store } from "@/lib/e14/store";
-import { OCR_NO_TEXT } from "@/lib/e14/fachada";
-import { defaultQuad, FILTER_PRESETS } from "@/lib/e14/fachada";
-import type { PageFilter } from "@/lib/e14/fachada";
+import { defaultQuad } from "@/lib/e14/fachada";
 // G4 (KIT camara-visor-v1): descarga de la foto PROCESADA. downloadBlob y
 // sanitizeFileName YA están publicados en el core (pdf-export 0.1.0) —
 // dataUrlToBlob NO existe en el tarball (la instrucción la citaba; se porta
@@ -39,67 +40,13 @@ import { ZoomableVisor } from "@/lib/e14/ui/ZoomableVisor";
 import { PanelClasificacion } from "../PanelClasificacion";
 import { Chip, PrimaryBtn, ToolbarBtn } from "../primitives";
 import {
-  CopyIcon,
   DownloadIcon,
-  LoaderIcon,
-  ScanTextIcon,
-  SlidersIcon,
   WarnTriangleIcon,
   StitchCropIcon,
   StitchRotateIcon,
   StitchEyeIcon,
   StitchSpinIcon,
 } from "../icons";
-
-// Fuente: apps/scanner-lab/src/components/scanner/EditorView.tsx L89-L93
-// (CSS_FILTERS — aproximación CSS de cada filtro para las previews en vivo:
-// solo cosmética; el procesado real ocurre al elegir, vía store.cambiarFiltro).
-const CSS_FILTERS: Record<PageFilter, string> = {
-  original: "none",
-  text: "brightness(1.12) contrast(1.35)",
-  bw: "grayscale(1) contrast(2.6) brightness(1.05)",
-};
-
-// Fuente: apps/scanner-lab/src/components/scanner/EditorView.tsx L237-271
-// (OcrHighlightedText — F-FIND: texto OCR con las coincidencias resaltadas.
-// Sin consulta activa se renderiza el texto plano). Copia COMPLETA aunque e14
-// hoy siempre pasa query={null}. El <mark> amarillo se conserva literal (es
-// del lab, no del tema anterior de e14).
-function OcrHighlightedText({
-  text,
-  query,
-}: {
-  text: string;
-  query: string | null;
-}) {
-  const q = query?.trim();
-  if (!q) {
-    return (
-      <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-white/90">
-        {text}
-      </p>
-    );
-  }
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const parts = text.split(new RegExp(`(${escaped})`, "gi"));
-  const needle = q.toLowerCase();
-  return (
-    <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-white/90">
-      {parts.map((part, i) =>
-        part.toLowerCase() === needle ? (
-          <mark
-            key={i}
-            className="rounded-[3px] bg-[#ffd60a] px-0.5 font-semibold text-black"
-          >
-            {part}
-          </mark>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </p>
-  );
-}
 
 // G4 (KIT camara-visor-v1) — dataUrlToBlob LOCAL: el lab la tiene en su
 // EditorView (L1144-1195 la usa para su F-IMG); el tarball 0.1.0 del core no
@@ -119,37 +66,18 @@ export function ReviewView() {
   // del acta (clasifAuto → tipoDeBanda → «---»). El store no se toca: otras
   // pantallas siguen usando su propio selector.
   const recortando = useE14Store((s) => s.recortando);
-  const revelando = useE14Store((s) => s.revelando);
   const aplicarRecorte = useE14Store((s) => s.aplicarRecorte);
   // KIT e14-recorte-manual-v1 (T2): fallo del recorte VISIBLE — píldora sobre
   // el editor (que NO se cierra en error duro).
   const errorRecorte = useE14Store((s) => s.errorRecorte);
   const rotarFoto = useE14Store((s) => s.rotarFoto);
-  const cambiarFiltro = useE14Store((s) => s.cambiarFiltro);
-  const reconocerTextoActa = useE14Store((s) => s.reconocerTextoActa);
   // L5 §7.5: editor de recorte y visor a pantalla completa (estado local —
   // el acta solo cambia por store.aplicarRecorte al APLICAR).
   const [editando, setEditando] = useState(false);
   const [visorAbierto, setVisorAbierto] = useState(false);
-  // F2 (§F2.2): sheet de filtros (copia del lab EditorView L2253-2309).
-  const [filtrosAbierto, setFiltrosAbierto] = useState(false);
-  // F-OCR (§F3.3, D39): sheet «Texto reconocido» + estado "corriendo" LOCAL.
-  const [textoAbierto, setTextoAbierto] = useState(false);
-  const [ocrEjecutando, setOcrEjecutando] = useState(false);
-  // D2 (redesign-stitch §4.3): feedback de COPIAR en el propio botón
-  // (1.5 s «COPIADO ✓» / «NO SE PUDO COPIAR») — sin toast flotante.
-  const [copiado, setCopiado] = useState<"ok" | "err" | null>(null);
   // G4 (KIT camara-visor-v1): mismo patrón de feedback — 1.5 s en el botón
   // «Imagen» («DESCARGADA ✓» / «NO SE PUDO»), sin toast flotante.
   const [imagenDesc, setImagenDesc] = useState<"ok" | "err" | null>(null);
-  // Fuente: apps/scanner-lab/src/components/scanner/EditorView.tsx L1563-1578
-  // (ocrStats — contadores del sheet de texto). ADAPTACIÓN: sin `matches`
-  // (F-FIND excluido — e14 no tiene biblioteca buscable, §1 del spec).
-  const ocrStats = useMemo(() => {
-    const text = acta?.ocrTexto ?? "";
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-    return { words, chars: text.length };
-  }, [acta?.ocrTexto]);
 
   // FIX C3 (auditoría 2-b): quadInicial del editor MEMOIZADO — defaultQuad()
   // es una factory (array NUEVO por render) y el effect de aterrizaje del
@@ -285,10 +213,6 @@ export function ReviewView() {
   // D35: SIMULACIÓN produce fotos reales (pipeline real) — el gate es la foto, no la fuente.
   // §D4: cualquier foto (procesada u original de respaldo) = acta real.
   const esReal = Boolean(fotoVisible);
-  // F-OCR (§F1.2, D39): TEXTO activo cuando ya hay texto válido (el pipeline
-  // corre el OCR SIEMPRE — §1 del spec; OCR_NO_TEXT distingue el vacío que
-  // pudo dejar el pipeline: ocr.ts L12 del core, PROHIBIDO re-declararlo).
-  const hayTexto = Boolean(acta.ocrTexto) && acta.ocrTexto !== OCR_NO_TEXT;
 
   // ── Esquinas AR (mock §3.3): verdes (óptima/enviada) · rojas (rechazada)
   // · ámbar (advertencia/EN_RH) — mismo predicado del tono de estado.
@@ -352,31 +276,6 @@ export function ReviewView() {
     return null;
   })();
 
-  // Fuente: apps/scanner-lab/src/components/scanner/EditorView.tsx L1446-1455
-  // (copyOcrText). D2 redesign-stitch §4.3: feedback en el PROPIO botón.
-  const copiarTexto = async () => {
-    const text = acta.ocrTexto ?? "";
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiado("ok");
-    } catch {
-      setCopiado("err");
-    }
-    window.setTimeout(() => setCopiado(null), 1500);
-  };
-
-  // F-OCR (§F2, D39): el estado "corriendo" es LOCAL — envuelve el store
-  // action y lo apaga SIEMPRE (finally).
-  const ejecutarOcr = async () => {
-    setOcrEjecutando(true);
-    try {
-      await reconocerTextoActa();
-    } finally {
-      setOcrEjecutando(false);
-    }
-  };
-
   // KIT visor-accion-score-v1 (FASE A+B) — fila de acciones calculada FUERA
   // del flujo: vive en la ZONA FIJA de abajo (nunca scrollea; pegada a los
   // CTAs/BottomNav del shell — page.tsx intocable). FASE A: el botón
@@ -384,53 +283,12 @@ export function ReviewView() {
   // ZoomableVisor mode="card" onOpenFullscreen y la tarjeta ENVIADA es
   // táctil); el modal fullscreen SIGUE existiendo con el mismo punto de
   // entrada. ENVIADA → null: la zona fija NO se monta (sin toolbar fantasma).
+  // C-26 — dead code fuera: la rama OPTIMA muerta (defensa G4, la rama se
+  // declaraba inalcanzable en REVISIÓN) se retiró — OPTIMA nunca llega a
+  // REVISIÓN (auto-envío D4 al capturar y tras el recorte): ENVIADA → sin
+  // toolbar; resto → fila de 3.
   const filaAcciones =
-    status === "OPTIMA" && esReal ? (
-      // Rama OPTIMA (defensa G4 — transitoria, inalcanzable en REVISIÓN):
-      // Recortar · Rotar 90° · Filtros · Imagen · Texto (5). Handlers intactos.
-      <div className="grid grid-cols-3 gap-2 lg:gap-3 w-full select-none">
-        <ToolbarBtn
-          icon={<StitchCropIcon />}
-          label="Recortar"
-          onClick={esReal && acta.fotoOriginal ? () => setEditando(true) : undefined}
-        />
-        <ToolbarBtn
-          icon={<StitchRotateIcon />}
-          label="Rotar 90°"
-          // FIX (auditoría 2-b #9): mismo gate que la barra de 3 — rotarFoto
-          // exige fotoProcesada; con solo esReal el tap era un no-op mudo.
-          onClick={acta.fotoProcesada ? () => void rotarFoto() : undefined}
-        />
-        <ToolbarBtn
-          icon={<SlidersIcon />}
-          label="Filtros"
-          onClick={
-            esReal && acta.fotoOriginal && !revelando
-              ? () => setFiltrosAbierto(true)
-              : undefined
-          }
-        />
-        <ToolbarBtn
-          icon={<DownloadIcon />}
-          label={imagenDesc === "ok" ? "Descargada ✓" : imagenDesc === "err" ? "No se pudo" : "Imagen"}
-          onClick={
-            acta.fotoProcesada
-              ? () => void descargarImagen()
-              : undefined
-          }
-        />
-        <ToolbarBtn
-          icon={<ScanTextIcon />}
-          label="Texto"
-          active={hayTexto}
-          onClick={
-            acta.fotoProcesada && !ocrEjecutando
-              ? () => setTextoAbierto(true)
-              : undefined
-          }
-        />
-      </div>
-    ) : status !== "ENVIADA" ? (
+    status !== "ENVIADA" ? (
       // Resto de estados: Recortar · Rotar 90° · Imagen — UNA sola fila de 3
       // fija (KIT e14-fuera-informes-v1 R-3: fuera la 4ª celda «DIAGNÓSTICO ↓»
       // y el grid-cols-4 condicional — el botón manual del paquete ZIP muere
@@ -487,20 +345,49 @@ export function ReviewView() {
           </div>
         )}
 
-        {/* e64-qr T-2.2 — chip estático de la CAPA 0 QR de cámara (kit FASE 2):
-            solo PRESENCIA, JAMÁS contenido del payload (llave opaca — red
-            line 10; misma convención de los chips QR ✓/✗). Solo nace con el
-            flujo de cámara/SIM (T-2.1) — en actas que no pasaron por cámara
-            viaja ausente (la señal de esa capa vive en el informe). */}
-        {acta.qrPayload && (
-          <div
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#10161f] border border-slate-800 text-[10px] font-mono font-semibold tracking-wide w-full"
-            aria-label="QR leído"
-          >
-            <span className="text-emerald-300/90">QR ✓</span>
-            <span className="text-gray-400 uppercase">capa 0 qr</span>
-          </div>
-        )}
+        {/* C-10 — el chip de la CAPA 0 QR SIEMPRE se monta en REVISIÓN (antes
+            solo nacía con payload y la ausencia era invisible): QR ✓ (payload
+            presente, verde) · QR ✗ neutro (la capa no corrió — p. ej.
+            IMPORTAR) · QR ✗ ámbar (la capa corrió y NO leyó — las actas E-14
+            llevan QR impreso, así que «sin lectura» sobre cámara es fallo de
+            la capa). Solo PRESENCIA, JAMÁS contenido del payload (llave
+            opaca — red line 10). El motivo técnico va en el detalle del chip
+            y en el title: «sin lectura» + por qué. Campos del motor:
+            qrPayload (ausente = no corrió o timeout — jamás inventar) y
+            qrEstado ("leido" | "sin-payload"); no hay qrError que reportar. */}
+        {(() => {
+          const leido = acta.qrPayload != null;
+          const corrio = acta.qrEstado != null;
+          const falloLectura = !leido && acta.qrEstado === "sin-payload";
+          const motivo = leido
+            ? null
+            : corrio
+              ? "sin lectura: la capa 0 QR corrió y no leyó payload"
+              : "sin lectura: la capa 0 QR no corrió en esta captura";
+          return (
+            <div
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#10161f] border border-slate-800 text-[10px] font-mono font-semibold tracking-wide w-full"
+              aria-label={leido ? "QR leído" : "QR sin lectura"}
+              title={motivo ?? undefined}
+            >
+              <span
+                className={
+                  leido
+                    ? "text-emerald-300/90"
+                    : falloLectura
+                      ? "text-amber-400"
+                      : "text-gray-500"
+                }
+              >
+                QR {leido ? "✓" : "✗"}
+              </span>
+              <span className="text-gray-400 uppercase">capa 0 qr</span>
+              {motivo && (
+                <span className="text-gray-500 uppercase truncate">sin lectura</span>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Chips de estado (mock §3.2.3 — grid-cols-3, activo sólido). */}
         <div className="grid grid-cols-3 gap-2 lg:gap-3 w-full select-none">
@@ -761,160 +648,6 @@ export function ReviewView() {
           {errorRecorte}
         </div>
       )}
-
-      {/* ── F2 (§F2.2) — SHEET DE FILTROS (copia del lab, re-vestida con
-          tokens Stitch: ok-tint → brand-green, surface-1 → brand-surface). */}
-      {filtrosAbierto && acta.fotoOriginal ? (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-black/50"
-            onClick={() => setFiltrosAbierto(false)}
-            aria-hidden
-          />
-          <div
-            role="dialog"
-            aria-label="Filtros del acta"
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md lg:max-w-2xl rounded-t-[22px] bg-brand-surface pb-safe outline-none animate-editor-enter"
-          >
-            <div className="mx-auto mt-2.5 h-1.5 w-9 rounded-full bg-white/25" />
-            <h3 className="px-5 pb-1 pt-3 text-center text-[17px] font-semibold text-white">
-              Filtros
-            </h3>
-            <p className="sr-only">Elige un filtro para el acta en edición</p>
-            <div className="flex gap-3 lg:gap-4 overflow-x-auto px-5 lg:px-6 pb-5 pt-2 no-scrollbar">
-              {FILTER_PRESETS.map((f) => {
-                const activo = acta.filtro === f.id;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => {
-                      void cambiarFiltro(f.id);
-                      setFiltrosAbierto(false);
-                    }}
-                    className="flex w-[78px] lg:w-[92px] shrink-0 flex-col items-center gap-1.5"
-                  >
-                    <span
-                      className={`block h-[104px] lg:h-[118px] w-full overflow-hidden rounded-xl border-2 ${
-                        activo
-                          ? "border-brand-green shadow-[0_0_0_3px_rgba(0,230,118,0.25)]"
-                          : "border-white/10"
-                      }`}
-                    >
-                      <img
-                        src={acta.fotoOriginal}
-                        alt=""
-                        draggable={false}
-                        style={{ filter: CSS_FILTERS[f.id] ?? "none" }}
-                        className="h-full w-full object-cover"
-                      />
-                    </span>
-                    <span
-                      className={`text-[11px] ${
-                        activo ? "font-medium text-white" : "text-gray-400"
-                      }`}
-                    >
-                      {f.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </>
-      ) : null}
-
-      {/* ── F-OCR (§F3, D39) — SHEET «TEXTO RECONOCIDO» (copia del lab,
-          re-vestida con tokens Stitch; feedback de COPIAR en el botón). */}
-      {textoAbierto && acta ? (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-black/50"
-            onClick={() => setTextoAbierto(false)}
-            aria-hidden
-          />
-          <div
-            role="dialog"
-            aria-label="Texto reconocido del acta"
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md lg:max-w-2xl rounded-t-[22px] bg-brand-surface pb-safe outline-none animate-editor-enter"
-          >
-            <div className="mx-auto mt-2.5 h-1.5 w-9 rounded-full bg-white/25" />
-            <h3 className="flex items-center justify-center gap-2 px-5 pb-1 pt-3 text-center text-[17px] font-semibold text-white">
-              <ScanTextIcon className="size-[18px] text-brand-green" />
-              Texto reconocido
-            </h3>
-            <p className="sr-only">Texto extraído por OCR del acta</p>
-
-            <div className="px-5 pb-4 pt-1">
-              {ocrEjecutando ? (
-                <div className="flex min-h-[140px] flex-col items-center justify-center gap-3">
-                  <LoaderIcon className="h-6 w-6 animate-spin text-brand-green" />
-                  <span className="text-[13px] font-medium text-white/70">
-                    Reconociendo texto…
-                  </span>
-                </div>
-              ) : hayTexto ? (
-                <>
-                  <div className="max-h-[38vh] lg:max-h-[48vh] overflow-y-auto rounded-xl bg-black/40 p-3.5 ring-1 ring-inset ring-brand-border thin-scroll">
-                    <OcrHighlightedText text={acta.ocrTexto ?? ""} query={null} />
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5 px-0.5">
-                    <span className="rounded-full bg-white/8 px-2.5 py-1 text-[11.5px] font-medium tabular-nums text-white/60">
-                      {ocrStats.words} {ocrStats.words === 1 ? "palabra" : "palabras"}
-                    </span>
-                    <span className="rounded-full bg-white/8 px-2.5 py-1 text-[11.5px] font-medium tabular-nums text-white/60">
-                      {ocrStats.chars} {ocrStats.chars === 1 ? "carácter" : "caracteres"}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => void ejecutarOcr()}
-                      className="flex-1 rounded-full bg-white/10 py-2.5 text-[14px] font-semibold text-white/90 ring-1 ring-inset ring-white/15 transition-all active:scale-[0.97]"
-                    >
-                      Reconocer de nuevo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void copiarTexto()}
-                      className={`flex flex-[1.3] items-center justify-center gap-1.5 rounded-full py-2.5 text-[14px] font-semibold transition-all active:scale-[0.97] ${
-                        copiado === "ok"
-                          ? "bg-brand-green text-black shadow-[0_4px_16px_rgba(0,230,118,0.4)]"
-                          : copiado === "err"
-                            ? "bg-red-500/80 text-white"
-                            : "bg-brand-green text-black shadow-[0_4px_16px_rgba(0,230,118,0.4)]"
-                      }`}
-                    >
-                      <CopyIcon className="size-4" />
-                      {copiado === "ok"
-                        ? "COPIADO ✓"
-                        : copiado === "err"
-                          ? "NO SE PUDO COPIAR"
-                          : "Copiar texto"}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="flex min-h-[140px] flex-col items-center justify-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/8">
-                    <ScanTextIcon className="h-6 w-6 text-gray-500" />
-                  </div>
-                  <span className="max-w-[260px] text-center text-[13px] leading-snug text-gray-500">
-                    Extrae el texto del acta para copiarlo.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void ejecutarOcr()}
-                    className="rounded-full bg-brand-green px-6 py-2.5 text-[14px] font-semibold text-black shadow-[0_4px_16px_rgba(0,230,118,0.4)] transition-all active:scale-[0.97]"
-                  >
-                    Reconocer texto
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      ) : null}
 
       {/* L5 §7 — PANTALLA COMPLETA: visor modal con F-ZOOM (SERIE 1
           e14-sync-visor §4 — COPIA del stage del lab): pinza 1×–6×

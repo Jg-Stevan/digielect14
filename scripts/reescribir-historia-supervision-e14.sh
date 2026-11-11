@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# C-34 — NOTA DE UBICACIÓN: la copia AUTÓNOMA de este script vive en
+# supervision-e14/scripts/reescribir-historia-supervision-e14.sh (el repo a
+# purgar debe poder ejecutar su propia Fase 3 sin depender del hermano).
+# Esta copia en digielect14 se conserva por trazabilidad del kit original
+# (T1.3); antes de ejecutar, compara ambas con `diff` y usa la vigente.
 # KIT e14-ola1 (bloque 1.3, cierra F11 en el hermano) — REESCRITURA de historia
 # de supervision-e14 para eliminar las actas REALES del repositorio:
 #   · src/modules/supervision/data/actas-reales/assets (8 WebP con códigos DANE)

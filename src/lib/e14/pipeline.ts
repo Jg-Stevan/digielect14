@@ -41,6 +41,13 @@ import {
   verificarCompletitud,
   type ResultadoCompletitud,
 } from "@jg-stevan/scanner-core/dominio/completitud";
+// C-30 (IMPORTAR — opción 2): re-lectura del veredicto del guard bajo la
+// postura de archivo — capa app a propósito (el motor es compartido byte a
+// byte con supervision-e14; ver completitud-archivo.ts).
+import {
+  relajarCompletitudParaArchivo,
+  type MotivoRelajacion,
+} from "./completitud-archivo";
 import { medirZonaVotos } from "@jg-stevan/scanner-core/dominio/marcadores";
 import {
   lazoPerdonadoPorLectura,
@@ -512,11 +519,31 @@ export async function correrPipelineL2(
   // la primera es justamente lo que usa ese panel, y el segundo ya había
   // corrido (vive antes de las esquinas, que son insumo de este guard).
   const verificacionResuelta = verificacion ? await verificacion : null;
+  // C-30 (IMPORTAR — OPCIÓN 2, decisión de producto): la vía ARCHIVO (documento ya
+  // capturado, NO foto de cámara) RELAJA el guard-borde — área mínima 0.25 →
+  // 0.15 y la tinta al filo SOLO advierte (no veta). El gate de CÁMARA NO
+  // cambia (integridad); SIM tampoco corre el guard. La relajación vive en
+  // la capa app (completitud-archivo.ts) y deja la evidencia intacta para
+  // el log (borde=/tintaFilo=/franja=). Evidencia del plan: archivos
+  // razonables condenados 4.9/6.4 con contenido 10.0.
+  const viaImportar = !opciones.simular && opciones.fuente === "ARCHIVO";
+  let completitudEfectiva: ResultadoCompletitud | null = verificacionResuelta;
+  let motivoRelajacion: MotivoRelajacion | null = null;
+  if (viaImportar && verificacionResuelta && !verificacionResuelta.completa) {
+    const relajada = relajarCompletitudParaArchivo(verificacionResuelta, quad);
+    completitudEfectiva = relajada.resultado;
+    motivoRelajacion = relajada.motivo;
+    if (motivoRelajacion) {
+      logger.info(
+        `[e14] completitud: IMPORTAR (C-30) — la sospecha geométrica solo advierte (${motivoRelajacion}); el gate no veta`,
+      );
+    }
+  }
   const rechazoTemprano =
     !opciones.simular &&
     leerFlags().ocrCorteIncompleta &&
-    verificacionResuelta != null &&
-    !verificacionResuelta.completa;
+    completitudEfectiva != null &&
+    !completitudEfectiva.completa;
 
   // 5) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.1: el recorte
   //    SIN filtro — regla del dueño; la bw pasa a ser SOLO la imagen de
@@ -670,7 +697,7 @@ export async function correrPipelineL2(
   // IMPRESO (D63-C T2) y el perdón de marco (e63d F0.2) corrían SOLO para
   // entradas del runner MASIVA (`origenActa === "escaneo"`) — retirados
   // con la cola. El guard de fotos (verificarCompletitud) manda igual.
-  let completa = opciones.simular ? true : (verificacionResuelta?.completa ?? true);
+  let completa = opciones.simular ? true : (completitudEfectiva?.completa ?? true);
   // e71 (P10) — VETO 4/4 FIDUCIALES (kit e71-consolidación): la medición
   // de integridad encontró LAS 4 esquinas ausentes (traza
   // `esquinas=FALTA_tl+tr+bl+br`) → el papel NO está demostrado entero y
@@ -936,6 +963,9 @@ export async function correrPipelineL2(
   if (gate.clasificacion?.clasifDebil) {
     sufijosD51.push(["ClasifDebil", gate.clasificacion.clasifDebil]);
   }
+  // C-30 — token grep-able del guard RELAJADO por IMPORTAR (sufijo aditivo
+  // al final — regla D51). Ausente = guard íntegro (cámara) o sin sospecha.
+  if (motivoRelajacion) sufijosD51.push(["c30", motivoRelajacion]);
   const sufijoD51 = construirLogD51(sufijosD51, []);
   logger.info(
     `[e14] pipeline ${opciones.fuente}/${"archivo" in entrada ? "file" : "video-grab"} ` +

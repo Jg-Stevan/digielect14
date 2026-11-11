@@ -98,3 +98,14 @@ problema.
 - **Ledger remoto D1** (`DB_ENVIOS_E14`, `src/app/api/e14/envios`): se retiró con
   la cola MASIVA. No hay binding D1 en `wrangler.jsonc` ni route `/api` en el
   export; el envío sigue siendo `POST {hub}/actas` directo desde el cliente.
+
+## 6. Trampas de entorno (C-27)
+
+- **basePath sin variable:** `BUILD_STATIC=1` sin `NEXT_PUBLIC_BASE_PATH` definida
+  hornea el fallback `/digielect14` (GH Pages). Para la raíz, la variable VACÍA.
+  El `prebuild` imprime un aviso ruidoso con el basePath efectivo
+  (`scripts/aviso-basepath.mjs`) — no lo silencies: es el 404 de `/models` evitado.
+- **Git Bash manglea la variable** (Windows): `NEXT_PUBLIC_BASE_PATH=/digielect14`
+  se convierte en `C:/Program Files/Git/digielect14` y Next rechaza el basePath.
+  Anteponer `MSYS_NO_PATHCONV=1` al comando; en CI (Linux) no aplica. Detalle en
+  `docs/DEUDA.md`.

@@ -71,8 +71,17 @@ redeploy del modelo.
 
 ## El receptor (`e14-puente`) — autenticación y retención (Ola 0)
 
-El hub de producción (`e14-puente.julistevan02.workers.dev`) tiene **fuente
-versionado** en el paquete de remediación (`e14-puente/` — cierra H-1) y:
+C-33 (re-verificación 2026-11-11): la fuente del worker NO está versionada en
+este repo (`git ls-files e14-puente/` = 0) — vive en **custodia local del
+dueño** junto con las claves de jornada. Mientras no se versione (con
+`wrangler.jsonc` sin secretos y test de contrato del HMAC), este documento no
+promete lo que no hay: la frase «fuente versionada en el paquete de
+remediación» quedó retirada y con ella el cierre de H-1 por esta vía (H-1 se
+considera mitigado por el diseño autenticado descrito abajo, no por
+versionado de código). El hub es el activo P0 (§0): si el dueño decide
+versionar la fuente, registrar la decisión y actualizar esta sección.
+
+El hub de producción (`e14-puente.julistevan02.workers.dev`) aplica:
 
 - **Escritura autenticada (0.1):** `POST /v1/actas` exige HMAC-SHA256 del
   **body crudo** (`x-e14-ts` + `x-e14-firma`, ventana de 5 min, comparación en

@@ -48,6 +48,9 @@ import {
 import { cargarDivipol, mesasDePuesto } from "@jg-stevan/scanner-core/dominio/divipol";
 import { logger } from "../logger";
 import { MAX_INTENTOS_ESCANEO } from "./politica/umbrales"; // 7.1/C3 — única fuente de los números del producto
+// C-08 — SHA-256 REAL de la evidencia (doctrina e14-sin-relleno): el hash
+// del acta y del sobre del puente son los bytes reales de la foto procesada.
+import { sha256HexDeDataUrl } from "./hash";
 // KIT L6: persistencia de la jornada (IDB vanilla — mismo patrón de la cola
 // masiva) + derivación del guion real (fix M10).
 import {
@@ -215,7 +218,7 @@ interface E14Store {
    *  se fuerza a mano: el desenlace lo decide `evaluarGate` (§D4) y el ciclo
    *  de intentos/contingencia es el mismo de las capturas reales (AC5). */
   simularScore: (banda: BandaSim) => void;
-  analisisCompletado: () => void;
+  analisisCompletado: () => Promise<void>;
   /** e67-watchdog-rescate-v1 (cambio B): rescate post-timeout del flujo
    *  INDIVIDUAL — el pipeline siguió vivo tras vencer el watchdog y terminó
    *  con un desenlace REAL (el bridge lo entrega vía onRescateTardio). Si
@@ -227,7 +230,7 @@ interface E14Store {
    *  flujo normal (analisisCompletado — D4 auto-envío incluido). Casos
    *  inválidos/tardíos quedan RECHAZADA (correcto — kit §criterios C). */
   rescatarActaPostTimeout: (vencida: Acta, real: Acta, tiempoRealMs: number) => void;
-  enviarActa: () => void;
+  enviarActa: () => Promise<void>;
   repetirFoto: () => void;
   /** D6-bis (SPEC-rediseno-chrome-3-estados Rev. 3): escalación MANUAL a
    *  revisión humana — el botón «REVISIÓN HUMANA» (solo ADVERTENCIA/RECHAZADA,
@@ -386,6 +389,64 @@ function marcarPaginaOK(mesas: Mesa[], objetivo: PaginaObjetivo): Mesa[] {
   );
 }
 
+// ─── C-11 — derivación del guion REAL de mesas (causa raíz de H-18/N-02) ───
+// Antes la derivación de `mesas` desde el archivo de huecos vivía re-
+// implementada en 3 sitios (arranque, rehidratación pasiva, apagado del SIM)
+// y el envío/corrección del panel NO la refrescaban: `mesas` quedaba
+// congelada y RESUMEN/proximaPagina mostraban un avance viejo.
+
+/** Derivación PURA del guion real: `mesasRealesDe` (jornada.ts, fix M10)
+ *  sobre el archivo de huecos + el total DIVIPOL del puesto. ÚNICO camino
+ *  para construir `mesas` fuera del SIM. */
+function derivarMesas(
+  archivadas: Record<string, ActaArchivada>,
+  puesto: PuestoActual,
+  total: number,
+): Mesa[] {
+  return mesasRealesDe(archivadas, puesto, total);
+}
+
+/** C-11 — resuelve el total DIVIPOL del puesto y devuelve el guion derivado.
+ *  null = sin base/total (degradación honesta: el caller conserva `mesas`;
+ *  cargarDivipol jamás rechaza — base vacía → mesasDePuesto null). */
+async function derivarMesasConDivipol(
+  archivadas: Record<string, ActaArchivada>,
+  puesto: PuestoActual,
+): Promise<Mesa[] | null> {
+  try {
+    const base = await cargarDivipol();
+    const [dep, mun, zon, std] = puesto.clave.split("-");
+    const total = mesasDePuesto(base, dep, mun, zon, std);
+    if (!total) return null;
+    return derivarMesas(archivadas, puesto, total);
+  } catch {
+    return null;
+  }
+}
+
+/** C-11 — refresco del guion tras archivar un hueco (envío o corrección del
+ *  panel). Fire-and-forget con guards: jamás pisa el guion del SIM ni llega
+ *  vacío (sin base → `mesas` queda como estaba); si el puesto cambió durante
+ *  la carga, no aplica (el puesto nuevo refresca por su propia vía). */
+function refrescarMesasDeArchivo(): void {
+  try {
+    const { archivadas, puestoActual } = useE14Store.getState();
+    if (!puestoActual) return;
+    void derivarMesasConDivipol(archivadas, puestoActual)
+      .then((derivadas) => {
+        const s = useE14Store.getState();
+        if (!derivadas || s.modoSimulacion) return;
+        if (s.puestoActual?.clave !== puestoActual.clave) return;
+        useE14Store.setState({ mesas: derivadas });
+      })
+      .catch(() => {
+        /* regla de oro: el refresco jamás rompe la app */
+      });
+  } catch {
+    /* silencioso */
+  }
+}
+
 /** Hueco archivado de una mesa real (§6: cuerpo DELEGADOS|TRANSMISIÓN × pág 1/2).
  *  KIT actas-vivas-paginas-v1 (FASE C): `estado` — OK (acta limpia) o
  *  RESCANEO (la captura archivada llegó ADVERTENCIA: ⚠ en ACTAS, cuenta
@@ -501,13 +562,6 @@ function archivarHueco(
     duplicado: yaEstaba,
     puesto,
   };
-}
-
-function hashMock(): string {
-  const hex = Array.from({ length: 12 }, () =>
-    "0123456789abcdef"[Math.floor(Math.random() * 16)],
-  ).join("");
-  return `${hex}…`;
 }
 
 /** Guard anti doble-rotación (espejo del rotatingRef del lab L1054 — la
@@ -701,15 +755,14 @@ async function rehidratarJornadaPasiva(): Promise<void> {
       solicitudesRescaneo: j.solicitudesRescaneo,
       motivosNoEnvio: j.motivosNoEnvio,
     });
-    // mesas DERIVADAS del puesto real (fix M10) — solo fuera del SIM.
+    // mesas DERIVADAS del puesto real (fix M10) — solo fuera del SIM. C-11:
+    // mismo helper único (antes re-implementado aquí).
     const puesto = j.puestoActual;
     if (puesto && !useE14Store.getState().modoSimulacion) {
-      const [dep, mun, zon, std] = puesto.clave.split("-");
-      void cargarDivipol()
-        .then((base) => {
-          const total = mesasDePuesto(base, dep, mun, zon, std);
-          if (total && !useE14Store.getState().modoSimulacion) {
-            useE14Store.setState({ mesas: mesasRealesDe(j.archivadas, puesto, total) });
+      void derivarMesasConDivipol(j.archivadas, puesto)
+        .then((derivadas) => {
+          if (derivadas && !useE14Store.getState().modoSimulacion) {
+            useE14Store.setState({ mesas: derivadas });
           }
         })
         .catch(() => {
@@ -724,12 +777,16 @@ async function rehidratarJornadaPasiva(): Promise<void> {
 export const useE14Store = create<E14Store>((set, get) => {
   const bridge = getBridge();
 
-  const registrarEnvio = (tituloPagina: string) => {
+  // C-08 — async: el hash REAL del acta (SHA-256 de la foto procesada) exige
+  // crypto.subtle. Los callers hacen await (analisisCompletado/enviarActa/
+  // aplicarRecorte/mejorarFotoActa) — el registro del envío sigue atómico
+  // para la UI porque el set ocurre al final.
+  const registrarEnvio = async (tituloPagina: string) => {
     const { online, historial, completadas, mesas, paginaObjetivo, actaActual, archivadas } = get();
     const actaFuente = actaActual;
     // §G.1 — ORDEN-WAVE3-add-envio-individual-v1 (obs-envio-individual-v1):
     // telemetría del envío INDIVIDUAL. t0 al ENTRAR (el costo del armado del
-    // set — archivarHueco incluido — es parte del envío observable).
+    // set — hash + archivarHueco incluido — es parte del envío observable).
     const t0 = performance.now();
     const hora = bridge.horaHistorial();
     const fila: HistorialRow = {
@@ -739,9 +796,15 @@ export const useE14Store = create<E14Store>((set, get) => {
       hora,
     };
     let colaOffline = get().colaOffline;
-    let hash: string;
+    let hash: string | undefined;
     if (online) {
-      hash = hashMock();
+      // C-08 — SHA-256 REAL (hex 64) de los bytes de la evidencia procesada.
+      // SIM incluido: los bytes sintéticos se hashean igual de real. Sin
+      // crypto.subtle (contexto no seguro) el campo queda AUSENTE — jamás
+      // un relleno (doctrina e14-sin-relleno).
+      hash = actaFuente?.fotoProcesada
+        ? ((await sha256HexDeDataUrl(actaFuente.fotoProcesada)) ?? undefined)
+        : undefined;
     } else {
       colaOffline += 1;
       hash = "EN COLA";
@@ -749,21 +812,9 @@ export const useE14Store = create<E14Store>((set, get) => {
     // KIT e14-sin-relleno-v1: conteo HONESTO de envíos reales (antes el cap
     // «Math.min(+1, asignadasHoy)» era herencia del seed demo 12/9 — con
     // asignadasHoy 0 congelaba el contador a cero para siempre).
-    const mesasActualizadas =
-      paginaObjetivo
-        ? mesas.map((m) =>
-            m.id === paginaObjetivo.mesaId
-              ? recalcularMesa({
-                  ...m,
-                  paginas: m.paginas.map((p) =>
-                    p.tipo === paginaObjetivo.tipo && p.pagina === paginaObjetivo.pagina
-                      ? { ...p, estado: "OK" }
-                      : p,
-                  ),
-                })
-              : m,
-          )
-        : mesas;
+    const mesasActualizadas = paginaObjetivo
+      ? marcarPaginaOK(mesas, paginaObjetivo)
+      : mesas;
     // Fase B (§6): acta con clasificación AUTO (gate o panel) → archiva su
     // hueco. Idempotente: si el panel ya la archivó, el reemplazo es
     // silencioso (mismo acta, mismos datos).
@@ -797,10 +848,10 @@ export const useE14Store = create<E14Store>((set, get) => {
               // del actaActual). Regla de contrato: envioMs != null ⇔ había
               // red al enviar
               // (offline → SIN campo — null honesto, misma disciplina del
-              // runner D61). HOY el envío es registro local (~0-5 ms, hash
-              // demo hashMock) — este número ES el BASELINE: cuando §A
-              // (ledger D1) aterrice, el MISMO campo captura la latencia de
-              // red real. §G.2 — la red del momento viaja en el MISMO parche
+              // runner D61). El número ES el tiempo de registro local
+              // (hash SHA-256 real incluido): cuando §A (ledger D1)
+              // aterrice, el MISMO campo captura la latencia de red real.
+              // §G.2 — la red del momento viaja en el MISMO parche
               // (envioRedTipo/envioDownlinkMbps — nulls honestos sin dato).
               ...(actaActual.diagnostico != null && online
                 ? {
@@ -818,6 +869,11 @@ export const useE14Store = create<E14Store>((set, get) => {
             }
           : actaActual,
     });
+    // C-11 — el envío archivó hueco (AUTO) → el guion se RE-DERIVA del
+    // archivo (fuente única): `mesas` deja de congelarse (H-18/N-02). Sin
+    // hueco nuevo se conserva la marca inline de la página objetivo (sin
+    // clasificación AUTO no hay hueco que derive).
+    if (archivadasNuevas !== archivadas) refrescarMesasDeArchivo();
     return { online, hora };
   };
 
@@ -906,13 +962,12 @@ export const useE14Store = create<E14Store>((set, get) => {
         set({ modoSimulacion: false });
         const puesto = get().puestoActual;
         if (puesto) {
-          const [dep, mun, zon, std] = puesto.clave.split("-");
-          void cargarDivipol()
-            .then((base) => {
-              const total = mesasDePuesto(base, dep, mun, zon, std);
+          // C-11 — RESTAURAR el guion REAL con el helper único (fix M10).
+          void derivarMesasConDivipol(get().archivadas, puesto)
+            .then((derivadas) => {
               // Solo si sigue APAGADO (no re-montó el guion SIM debajo).
-              if (total && !get().modoSimulacion) {
-                set({ mesas: mesasRealesDe(get().archivadas, puesto, total) });
+              if (derivadas && !get().modoSimulacion) {
+                set({ mesas: derivadas });
               }
             })
             .catch(() => {
@@ -1070,15 +1125,26 @@ export const useE14Store = create<E14Store>((set, get) => {
       const { online, colaOffline, actaActual } = get();
       if (online) {
         set({ online: false });
-      } else {
-        set({ online: true });
-        if (colaOffline > 0) {
-          set({
-            colaOffline: 0,
-            actaActual:
-              actaActual && actaActual.hashSha256 === "EN COLA"
-                ? { ...actaActual, hashSha256: hashMock() }
-                : actaActual,
+        return;
+      }
+      set({ online: true });
+      if (colaOffline > 0) {
+        set({ colaOffline: 0 });
+        // C-08 — al volver la red, el hash «EN COLA» se sustituye por el
+        // SHA-256 REAL de la evidencia (jamás un relleno). Guard de
+        // identidad: si el acta cambió mientras volaba el hash, no pisa.
+        if (actaActual?.hashSha256 === "EN COLA") {
+          const objetivo = actaActual;
+          void (async () => {
+            const hash = objetivo.fotoProcesada
+              ? await sha256HexDeDataUrl(objetivo.fotoProcesada)
+              : null;
+            if (!hash) return;
+            const actual = get().actaActual;
+            if (actual !== objetivo || actual.hashSha256 !== "EN COLA") return;
+            set({ actaActual: { ...actual, hashSha256: hash } });
+          })().catch(() => {
+            /* sin crypto.subtle → el campo queda «EN COLA» (honesto) */
           });
         }
       }
@@ -1285,7 +1351,7 @@ export const useE14Store = create<E14Store>((set, get) => {
               archivoPendiente: null,
               avisoVisor: null,
             });
-            get().analisisCompletado();
+            void get().analisisCompletado();
             return;
           }
           logger.info(
@@ -1433,18 +1499,29 @@ export const useE14Store = create<E14Store>((set, get) => {
       // motivo no-envío + REVISIÓN. En "analizando" NO se llama: el propio
       // AnalyzingView dispara analisisCompletado leyendo actaActual YA
       // rescatada (doble llamada = doble registrarEnvio — jamás).
-      if (get().vista !== "analizando") get().analisisCompletado();
+      if (get().vista !== "analizando") void get().analisisCompletado();
     },
 
-    analisisCompletado: () => {
+    analisisCompletado: async () => {
       const { actaActual } = get();
       if (!actaActual) return;
+      // C-10 — obs sin PII: acta que entra a REVISIÓN sin payload QR
+      // («qr_ausente» — contador uso, el flush lo hace el subsistema). SIM
+      // no cuenta (la demo jamás contamina la señal de campo).
+      if (actaActual.qrPayload == null && actaActual.fuente !== "SIMULACION") {
+        try {
+          const uso = await import("./obs/uso");
+          void uso.registrarUso("revision", "qr_ausente");
+        } catch {
+          /* la obs jamás rompe el flujo */
+        }
+      }
       // D4: ÓPTIMA (≥8) se envía automáticamente al capturar. Offline → el
       // estado persistente vive en la NUBE del TopBar (roja) + la cola de
       // RESUMEN (redesign-stitch §4.3).
       if (actaActual.status === "OPTIMA") {
         const hora = bridge.horaEnvio();
-        registrarEnvio(tituloPaginaActual());
+        await registrarEnvio(tituloPaginaActual());
         set({
           actaActual: {
             ...get().actaActual!,
@@ -1480,7 +1557,7 @@ export const useE14Store = create<E14Store>((set, get) => {
       set({ vista: "revision" });
     },
 
-    enviarActa: () => {
+    enviarActa: async () => {
       const { actaActual } = get();
       // D20 (L5) + G4 (KIT e14-gate-v2): envío MANUAL para ADVERTENCIA. La
       // ÓPTIMA ya no espera envío manual: el auto-envío D4 dispara al
@@ -1493,7 +1570,7 @@ export const useE14Store = create<E14Store>((set, get) => {
       ) {
         return;
       }
-      registrarEnvio(tituloPaginaActual());
+      await registrarEnvio(tituloPaginaActual());
       set({
         actaActual: { ...get().actaActual!, status: "ENVIADA" },
         vista: "revision",
@@ -1585,6 +1662,9 @@ export const useE14Store = create<E14Store>((set, get) => {
         // panel TAMBIÉN manda (AUTO-manual → el puesto corregido es el actual).
         puestoActual: puesto ?? get().puestoActual,
       });
+      // C-11 — el panel archivó hueco: el guion se RE-DERIVA del archivo
+      // (antes `mesas` quedaba congelada hasta recargar — H-18/N-02).
+      if (nuevas !== archivadas) refrescarMesasDeArchivo();
     },
 
     aplicarRecorte: async (quad, rotacionNueva) => {
@@ -1625,7 +1705,7 @@ export const useE14Store = create<E14Store>((set, get) => {
         const { autoEnvioConRecorte } = leerFlags();
         if (acta.status === "OPTIMA" && autoEnvioConRecorte) {
           const hora = bridge.horaEnvio();
-          registrarEnvio(tituloPaginaActual());
+          await registrarEnvio(tituloPaginaActual());
           set({
             actaActual: {
               ...get().actaActual!,
@@ -1757,7 +1837,7 @@ export const useE14Store = create<E14Store>((set, get) => {
         // captura (mismo camino de analisisCompletado D4).
         if (acta.status === "OPTIMA") {
           const hora = bridge.horaEnvio();
-          registrarEnvio(tituloPaginaActual());
+          await registrarEnvio(tituloPaginaActual());
           // FIX M7 (auditoría 2-b): NO teletransportar — el upgrade vuela
           // ~15 s en segundo plano; si el usuario ya navegó a ACTAS/RESUMEN
           // el acta se actualiza igual pero la vista NO se roba (el banner
@@ -1864,14 +1944,13 @@ export const useE14Store = create<E14Store>((set, get) => {
           motivosNoEnvio: j.motivosNoEnvio,
         });
         // mesas: DERIVADAS del puesto real (fix M10 — jamás el guion SIM).
+        // C-11: mismo helper único (antes re-implementado aquí).
         const puesto = j.puestoActual;
         if (puesto && !get().modoSimulacion) {
-          const [dep, mun, zon, std] = puesto.clave.split("-");
           try {
-            const base = await cargarDivipol();
-            const total = mesasDePuesto(base, dep, mun, zon, std);
-            if (total && !get().modoSimulacion) {
-              set({ mesas: mesasRealesDe(j.archivadas, puesto, total) });
+            const derivadas = await derivarMesasConDivipol(j.archivadas, puesto);
+            if (derivadas && !get().modoSimulacion) {
+              set({ mesas: derivadas });
             }
           } catch {
             /* sin base → mesas queda en seed (degradación honesta) */

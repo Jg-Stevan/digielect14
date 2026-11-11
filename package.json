@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "prebuild": "bun packages/scanner-core/scripts/build-capa0-worker.mjs && bun packages/scanner-core/scripts/build-fallback-canvas-worker.mjs && bun run preparar",
+    "prebuild": "bun scripts/aviso-basepath.mjs && bun packages/scanner-core/scripts/build-capa0-worker.mjs && bun packages/scanner-core/scripts/build-fallback-canvas-worker.mjs && bun run preparar",
     "predev": "bun run preparar",
     "preparar": "bun scripts/sincronizar-vendor.mjs && bun scripts/preparar-assets.mjs",
     "assets": "bun scripts/preparar-assets.mjs",

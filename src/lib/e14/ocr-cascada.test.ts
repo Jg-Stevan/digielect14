@@ -415,7 +415,11 @@ describe("e14-velocidad-5s-v1 · rechazo temprano (source-scan)", () => {
   const fuente = `${bridge}\n${pipeline}`;
   it("el veredicto bloqueado se calcula con la verificación del guard (pre-OCR)", () => {
     expect(fuente).toContain("const rechazoTemprano =");
-    expect(fuente).toContain("!verificacionResuelta.completa;");
+    // C-30 — el veredicto efectivo es el RE-LEÍDO por la postura IMPORTAR
+    // (completitudEfectiva; para CÁMARA es byte-idéntico al del guard).
+    expect(fuente).toContain("!completitudEfectiva.completa;");
+    // La relajación SOLO aplica a la vía ARCHIVO (el gate de cámara intacto).
+    expect(pipeline).toContain('opciones.fuente === "ARCHIVO"');
     // UNA sola cosecha de la promesa: la declaración vieja (junto al gate) fue
     // BORRADA, no duplicada — si vuelve a aparecer hay dos verificaciones.
     expect(
