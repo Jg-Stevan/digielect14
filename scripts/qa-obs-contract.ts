@@ -19,7 +19,7 @@
  *   2. Claves de persistencia §4.1: los 6 literales EXACTOS en src/lib/**.
  *   3. Defaults de política en politica.ts (D4): metadatos ON · textoOcr OFF
  *      · miniaturas OFF · saludEnVivo ON.
- *   4. Anti-recursión: flag `capturando` en captura.ts.
+ *   4. Anti-recursión: guard POR TIPO en buffer.ts appendEvento.
  *   5. Cero PII en perf: emitirPerfDeActa + actaIdHash + fnv1a8 en captura.ts.
  *   6. Firmas públicas §4.3: `export function <nombre>` en su archivo (11
  *      grupos, los 34 nombres + ErrorBoundaryObs del contrato).
@@ -192,8 +192,8 @@ ok(
 console.log("— Bloque 4 · anti-recursión (guard capturando) —");
 
 ok(
-  (srcBuffer ?? "").includes("capturando"),
-  "flag `capturando` existe como guard anti-recursión en buffer.ts appendEvento (regla de oro 4 — CALIBRADO: el núcleo lo implementó en el buffer, no en captura.ts — desviación documentada por el agente 1 en REPORTE-obs-nucleo-v1/worklog)",
+  (srcBuffer ?? "").includes("tipoEnVuelo") && (srcBuffer ?? "").includes("anti-recursion:"),
+  "guard anti-recursión POR TIPO en buffer.ts appendEvento (`tipoEnVuelo` + descarte `anti-recursion:<tipo>` — regla de oro 4; calibrado tras la migración v2.3: el flag global `capturando` pasó a por tipo, B2.2)",
 );
 
 // ---------- Bloque 5 · perf de actas con CERO PII ----------
