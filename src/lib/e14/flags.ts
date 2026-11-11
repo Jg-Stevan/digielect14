@@ -164,6 +164,12 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // ROI para un acta ya condenada. true = cuando el veredicto está bloqueado AN
   // TES del OCR se cobra UNA sola pasada (1280) y se corta ahí; false = hoy.
   ocrCorteIncompleta: true,
+  // KIT fusion-evidencia-divipol-v1 (D89): motor de FUSIÓN de evidencia
+  // acta ↔ DIVIPOL (país/países + zona + puesto + mesa + lugar, con
+  // corroboración de ≥2 grupos). Default OFF: apagado, el pipeline no invoca
+  // el motor y el comportamiento queda byte a byte el de hoy. La clave va en
+  // snake_case por ser el literal del kill-switch aprobado en la tarea.
+  fusion_evidencia: false,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -282,6 +288,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
     limpio.ocrSegundaPresupuestoMs = Math.max(5_000, Math.min(120_000, Math.round(p.ocrSegundaPresupuestoMs)));
   }
   if (typeof p.ocrCorteIncompleta === "boolean") limpio.ocrCorteIncompleta = p.ocrCorteIncompleta;
+  // KIT fusion-evidencia-divipol-v1 (D89) — whitelist aditiva (booleano).
+  if (typeof p.fusion_evidencia === "boolean") limpio.fusion_evidencia = p.fusion_evidencia;
   return limpio;
 }
 

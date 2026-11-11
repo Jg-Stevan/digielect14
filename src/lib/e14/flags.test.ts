@@ -113,6 +113,9 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       // KIT e14-remediacion-movil-v1 (A1) — aditivo AL FINAL (contrato D57):
       // ventana de ARRANQUE de la 2.ª pasada como override MANUAL del dueño.
       ocrSegundaPresupuestoMs: null,
+      // KIT fusion-evidencia-divipol-v1 (D89) — kill-switch del motor de
+      // fusión, default OFF (apagado = pipeline de hoy byte a byte).
+      fusion_evidencia: false,
     });
   });
 

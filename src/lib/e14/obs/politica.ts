@@ -236,6 +236,10 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // KIT e14-velocidad-5s-v1 — mismo criterio (DOBLE whitelist): el kill-switch
     // {"ocrCorteIncompleta": false} del rechazo temprano.
     if (typeof o.ocrCorteIncompleta === "boolean") limpio.ocrCorteIncompleta = o.ocrCorteIncompleta;
+    // KIT fusion-evidencia-divipol-v1 (D89) — mismo criterio (DOBLE whitelist):
+    // sin esta línea el kill-switch {"fusion_evidencia": true|false} del dueño
+    // sería inalcanzable desde localStorage (prioridad máxima, D6).
+    if (typeof o.fusion_evidencia === "boolean") limpio.fusion_evidencia = o.fusion_evidencia;
     // NOTA (eliminación del módulo masiva): las puertas de los 17 flags
     // exclusivos de la cola se retiraron junto con el módulo.
     return limpio;

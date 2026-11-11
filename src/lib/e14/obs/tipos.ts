@@ -174,6 +174,12 @@ export interface FlagsApp {
   // cobra UNA sola pasada y se corta? true = sí · false = la escalada corre
   // siempre, como hoy.
   ocrCorteIncompleta: boolean; // default true
+  // ─── KIT fusion-evidencia-divipol-v1 (D89) — campo ADITIVO AL FINAL (D57).
+  // El motor de FUSIÓN de evidencia acta ↔ DIVIPOL se invoca SOLO con este
+  // flag activo; apagado (default) el pipeline es byte a byte el de hoy. La
+  // clave va en snake_case porque es el nombre literal del kill-switch
+  // aprobado en el documento de la tarea — NO es un identificador del dominio.
+  fusion_evidencia: boolean; // default false
 }
 
 export interface ReporteSesion {
