@@ -99,10 +99,11 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // Piso escénico de ANALIZANDO (D16). Era 1 200 ms + 350 de cierre: con un
   // pipeline de 4 s eso solo era el 40 % del tiempo del puesto.
   pisoEscenicoMs: 300,
-  // Intento 1 de la cascada: RapidOCR 1280 (una sola pasada ~2 s si el GATE
-  // dice AUTO) y Tesseract best solo como rescate final. false = GO-B del
-  // dueño de siempre (Tesseract primero).
-  ocrPrimeraPasadaRapida: true,
+  // D88 (2026-11-10): intento 1 = Tesseract fast (mismo veredicto que best en
+  // 24 pares medidos y 1,5-2,8× más rápido); PP-OCRv4 queda de respaldo.
+  // true = kill-switch del dueño al orden anterior (RapidOCR 1280 primero y
+  // Tesseract solo como rescate final).
+  ocrPrimeraPasadaRapida: false,
   // Ruta corta del IMPORTAR: las dimensiones se leen del contenedor del JPEG
   // (256 KB, sin decodificar) y la foto que ya está dentro del tope pasa como
   // llegó. false = el camino robusto de siempre (data URL + decode + canvas +

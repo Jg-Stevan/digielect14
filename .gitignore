@@ -80,6 +80,7 @@ public/vendor/tesseract/
 public/vendor/opencv-4.5.5-core.js
 public/wasm/zxing_reader.wasm
 public/models/tess/*.traineddata.gz
+public/models/tess/*.traineddata
 public/models/rapidocr/*.onnx
 
 # Evidencia forense conservada a propósito en el repo (regresión D65 / zip 4f9c871):

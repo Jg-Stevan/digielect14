@@ -89,10 +89,10 @@ export interface FlagsApp {
   // 100 %. Con pipeline a 5 s el piso de 1200 ms era el 25 % del tiempo total
   // del puesto. 1200 = HOY byte-idéntico.
   pisoEscenicoMs: number; // default 300 · clamp [0, 1200]
-  // Primer intento de la cascada OCR: true = RapidOCR 1280 (pasada única
-  // ~2 s, si el GATE dice AUTO se acabó) y Tesseract best solo como RESCATE;
-  // false = GO-B del dueño byte-idéntico (Tesseract best primero).
-  ocrPrimeraPasadaRapida: boolean; // default true
+  // Primer intento de la cascada OCR (D88, 2026-11-10): false = Tesseract
+  // fast primero y PP-OCRv4 (RapidOCR 1280) de respaldo; true = kill-switch al
+  // orden anterior (RapidOCR 1280 primero y Tesseract solo como rescate).
+  ocrPrimeraPasadaRapida: boolean; // default false
   // Ruta corta del IMPORTAR: dims leídas del contenedor JPEG (sin decodificar)
   // y el File pasa intacto si ya está dentro del tope. false = camino robusto
   // de siempre (data URL + decode + canvas + FileReader en el hilo principal).

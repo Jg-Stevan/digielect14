@@ -159,3 +159,19 @@ en CI sale «omitido» porque no hay checkout hermano, y en local exige
   dispositivos en campo.
 - `public/models/rapidocr/*` y `public/vendor/**`: versionados a mano junto con
   el core; cambiarlos sin re-medir tiempos rompe las decisiones D53/D60/D76.
+
+## Deuda abierta tras D88 (2026-11-10)
+
+- **Acta `084906` no cierra AUTO con Tesseract**: SUGERIDA con `fast` y con
+  `best` en los 4 equipos medidos (A56, A13, TECNO KN3 y Chrome de escritorio);
+  el pipeline la acepta después con RapidOCR. Investigar qué campos de cabecera
+  rechaza `clasificarCabecera` (DIVIPOLA, completitud, conf por campo) antes de
+  tocar umbrales. Cualquier corrección es cambio del motor compartido: golden
+  `contrato-motor.json` regenerado y misma edición en `supervision-e14`.
+- **Tesseract en iOS sin verificar**: falta medir en Safari/WebKit con un Mac
+  para Web Inspector; el entorno HTTPS de LAN con CA local ya se probó
+  (`https://<ip>:8443`, COOP/COEP y cámara funcionando).
+- **Worker de Tess tras importaciones encadenadas**: fallo intermitente sin
+  recargar página (visto en A13 y PC); no se reproduce con recarga limpia. En
+  campo cada acta llega tras una captura nueva; revisar si conviene reiniciar
+  el worker por importación.

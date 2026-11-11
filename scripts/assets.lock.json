@@ -3,7 +3,7 @@
   "_notas": [
     "Los PP-OCRv4 salen del commit fijo 1cfba2e9 de SWHL/RapidOCR (rama main es móvil; el commit no cambia).",
     "OpenCV es el build oficial de @techstark/opencv-js@4.5.5-release.2, servido por unpkg con la versión fija.",
-    "spa.traineddata.gz sale de naptha/tessdata en un commit fijo; es byte a byte el archivo que estaba vendorizado."
+    "spa.traineddata.gz sale de naptha/tessdata en un commit fijo: desde D88 (2026-11-10) es 4.0.0_fast (1,14 MB comprimido; descomprime al tessdata_fast oficial de 2,29 MB, sha256 6f2e04d0…), el sabor que clasificó igual que best y tardó 1,5-2,8× menos en el banco on-device. Antes era 4.0.0_best (13,57 MB descomprimido). La RUTA lleva versión (/models/tess/4.0.0_fast/) para invalidar las tres cachés del modelo en equipos ya usados: IndexedDB de tesseract.js, MOTOR_CACHE del SW y HTTP (86400 s).",
   ],
   "archivos": [
     {
@@ -12,9 +12,9 @@
       "sha256": "8c33758c3ed6ead5d6d37837e1a7f2fbf7e21111e7bb9b9c41f3f6d59680e81b"
     },
     {
-      "destino": "public/models/tess/spa.traineddata.gz",
-      "url": "https://raw.githubusercontent.com/naptha/tessdata/806cd9adc8c6e8abc11c782db1818c990576bebc/4.0.0_best/spa.traineddata.gz",
-      "sha256": "724c20ba45cff66937906a89c74f1a4ef6ac2d10d233f2387fd81c9a8421526a"
+      "destino": "public/models/tess/4.0.0_fast/spa.traineddata.gz",
+      "url": "https://raw.githubusercontent.com/naptha/tessdata/806cd9adc8c6e8abc11c782db1818c990576bebc/4.0.0_fast/spa.traineddata.gz",
+      "sha256": "8db1167a8c9bb015ac8e97278384c3b07dfa9bc8271569beea071d9e296b4487"
     },
     {
       "destino": "public/models/rapidocr/ch_PP-OCRv4_det_infer.onnx",

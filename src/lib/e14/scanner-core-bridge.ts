@@ -1229,10 +1229,8 @@ async function reconocerRapidOcrCascada(
   const colector = colectorLectura();
   const deps: DepsOcrCascada = {
     intento1: async (foto) => {
-      // KIT e14-velocidad-5s-v1 (flag `ocrPrimeraPasadaRapida`, default ON):
-      // el intento 1 es la pasada RÁPIDA de RapidOCR — barata y ya pagada, y
-      // el caso fácil (gate AUTO) cierra sin tocar Tesseract. Flag OFF ⇒ el
-      // GO-B de siempre (Tess best primero), código intacto debajo.
+      // D88 (2026-11-10) — default OFF: el intento 1 es Tesseract fast y la
+      // pasada RÁPIDA de RapidOCR queda de respaldo (código debajo intacto).
       // RECHAZO TEMPRANO: con el veredicto bloqueado el orden manda poco, pero
       // el motor de rescate NO se paga — Tess es 20-60 s de presupuesto para un
       // acta que ya es RECHAZADA; acá se va directo por la rápida.

@@ -1,8 +1,11 @@
 /**
  * Ítem 3.2 (mapa v2.3): UN motor en el paquete (ocr/motores/tesseract).
- * Este wrapper fija el langPath de ESTA app (/models/tess) y CONSERVA el
- * contrato de D (throw en fallo + {texto, conf} — el bridge de D cae a
- * RapidOCR por su camino de siempre, byte a byte).
+ * Este wrapper fija el langPath de ESTA app y CONSERVA el contrato de D
+ * (throw en fallo + {texto, conf} — el bridge de D cae a RapidOCR por su
+ * camino de siempre, byte a byte).
+ * D88 (2026-11-10): el langPath lleva la versión del sabor servido
+ * (/models/tess/4.0.0_fast) para invalidar IndexedDB/SW/HTTP en equipos
+ * que ya cachearon el traineddata anterior.
  */
 import {
   configurarTesseract,
@@ -12,7 +15,7 @@ import {
   tessPrecalentar as tessPrecalentarPaquete,
 } from "@jg-stevan/scanner-core/ocr/motores/tesseract";
 
-configurarTesseract({ langPath: "/models/tess" });
+configurarTesseract({ langPath: "/models/tess/4.0.0_fast" });
 
 export { tesseractInit, tesseractReiniciar };
 

@@ -88,7 +88,7 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       // orden del intento 1 de OCR).
       ladoMaxTrabajoPx: 2560,
       pisoEscenicoMs: 300,
-      ocrPrimeraPasadaRapida: true,
+      ocrPrimeraPasadaRapida: false,
       importRutaCorta: true,
       // KIT e14-velocidad-5s-v1 (fase rec) — aditivo AL FINAL (contrato D57):
       // los knobs del tensor del rec y el ahorro del segundo warp. `ocrRecWmax`
