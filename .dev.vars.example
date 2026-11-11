@@ -1,0 +1,6 @@
+# Copia a .dev.vars (gitignoreado) y rellena por canal aparte — jamás en commits.
+# Rotación por jornada (SECURITY.md «El receptor (e14-puente)»).
+CLAVE_JORNADA=
+CLAVE_JORNADA_PREVIA=
+CLAVE_LECTURA=
+CLAVE_ADMIN=
