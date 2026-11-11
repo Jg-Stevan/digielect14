@@ -30,7 +30,9 @@ reales y con imágenes de documentos públicos de una elección en curso.
    sintéticas (`src/assets/acta-sim-*.jpg`) — desde la decisión **D35**
    (2026-11-08, ver `docs/DECISIONS.md`) la foto real que estaba en el HEAD fue
    retirada y la historia se reescribe con el script de `scripts/`; la
-   excepción histórica quedó documentada allí, no aquí.
+   reescritura está PREPARADA (script endurecido en la auditoría 2026-11-11);
+   su ejecución es del dueño. La excepción histórica quedó documentada allí,
+   no aquí.
 2. **No envíes actas a endpoints distintos del hub.** Ni para depurar, ni como
    "fallback", ni a un servicio de terceros.
 3. **No añadas dependencias, telemetría ni servicios externos** sin acuerdo
@@ -39,8 +41,13 @@ reales y con imágenes de documentos públicos de una elección en curso.
 4. **No toques los umbrales del gate ni el veto de votos** sin registrar la
    decisión en `docs/DECISIONS.md`: son control de integridad, no preferencia de
    UI.
-5. **Nunca `git push --force`** ni reescritura de historial: el repo es la
-   trazabilidad de qué versión corría en cada puesto el día de la elección.
+5. **Nunca `git push --force`** ni reescritura de historial. **Excepción
+   única y autorizada por el dueño**: purgas puntuales de binarios del
+   historial (`git filter-repo` para dejar de versionar actas o modelos).
+   Requisitos: bundle de respaldo con `--all`, verificación post-reescritura,
+   `--force-with-lease` (nunca `--force` a secas) y registrar en
+   `docs/DECISIONS.md` el SHA previo y el motivo. Caso vigente: **D86**.
+   Cualquier otro caso sigue prohibido.
 
 ## Reportar una vulnerabilidad
 
