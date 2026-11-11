@@ -18,7 +18,8 @@
  *   2. `public/e14/divipol.json` byte a byte — la base que resuelve rutas.
  *   3. Los módulos de negocio del paquete (`dominio/clasificador` ·
  *      `completitud` · `kits` · `integridad` · `diagnostico` · `senal-lectura` ·
- *      `marcadores` · `divipol`). Las dos copias deben ser BYTE A BYTE
+ *      `marcadores` · `divipol` · `normalizar` · `fusion-tipos` · `fusion`) y el
+ *      test del motor de fusión. Las dos copias deben ser BYTE A BYTE
  *      idénticas: un cambio del motor se aplica a los dos repos en el mismo
  *      commit.
  *   4. Anclas puntuales que ya divergieron una vez (el `split` del dict de
@@ -89,6 +90,9 @@ const MODULOS = [
   "senal-lectura.ts",
   "marcadores.ts",
   "divipol.ts",
+  "normalizar.ts",
+  "fusion-tipos.ts",
+  "fusion.ts",
 ];
 
 for (const archivo of MODULOS) {
@@ -112,6 +116,16 @@ for (const archivo of MODULOS) {
   }
   ok(false, `${archivo}: DIVERGE (${primeras.length} primeras diferencias de ${Math.abs(la.length - lb.length)} líneas de delta)\n     ${primeras.join("\n     ")}`);
 }
+
+// El test del motor de fusión es parte del artefacto compartido: si diverge,
+// una de las dos copias quedó sin el cambio (D89 · fusion-evidencia-divipol-v1).
+const fusionTestA = join(PKG_A, "tests", "fusion.test.ts");
+const fusionTestB = join(PKG_B, "tests", "fusion.test.ts");
+ok(
+  existsSync(fusionTestA) && existsSync(fusionTestB) &&
+    md5(lee(fusionTestA).replace(/\r\n/g, "\n")) === md5(lee(fusionTestB).replace(/\r\n/g, "\n")),
+  "tests/fusion.test.ts idéntico en las dos copias del paquete",
+);
 
 // ---------- 4 · anclas puntuales que ya divergieron ----------
 
