@@ -200,3 +200,19 @@ residuales restantes son excepciones documentadas:
    archivo; `preparar` regenera `capa0-qr.worker.js` — verificado idéntico —
    pero no el detection-worker). Sin impacto funcional (comentarios); queda el
    pendiente de regeneración en el pipeline upstream.
+
+## 8. A-10 — escaneo de secretos (C-4 del plan de cierre) — TRIADO
+
+- Fecha: 2026-11-12. Herramienta: fallback manual documentado (C-4.4 del plan;
+  `gitleaks`/`trufflehog` no disponibles en el entorno del cierre) sobre
+  `git rev-list --all` + `git grep -I -n -E` con 11 patrones (gh, github PAT,
+  vcp, gitlab, sk-, AWS AKIA, Google, Slack, Cloudflare token, claves
+  privadas, asignaciones genéricas secret/token/password). Reporte REDACTADO
+  (sin valores): `docs/archivo/gitleaks-2026-11-12.txt`.
+- Resultado: **0 hallazgos** en los 699 commits accesibles de todas las refs.
+- Cobertura: la traversa de `main` se corta en `8583d300` (G-1); el tramo de
+  main anterior a ~2026-11-04 queda pendiente de re-escaneo desde el clon
+  íntegro del mantenedor (coordinar con C-1). Las demás refs: completas.
+- Triage: 0 hallazgos → 0 rotaciones. A-05 (reescritura de historia): sin
+  secretos conocidos en la historia accesible; la reescritura sigue siendo
+  decisión HUMANA (A-05) por si acaso el tramo no cubierto de main.

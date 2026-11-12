@@ -1,0 +1,35 @@
+# Escaneo de secretos — digielect14 (fallback manual A-10/C-4)
+
+- Fecha: 2026-11-12
+- Herramienta: fallback manual (python + `git rev-list --all` + `git grep -I -n -E`)
+  — `gitleaks`/`trufflehog` NO disponibles en el entorno del cierre; opción
+  documentada por el plan de cierre §C-4.4. Reporte REDACTADO por diseño:
+  nunca contiene el valor de un hallazgo.
+- Patrones (11): gh_token, github_pat, vcp_token, gitlab_pat, openai_sk, aws_akia, google_api_key, slack_token, cf_api_token, private_key, asignacion_generico
+- Cobertura: 699 commits de TODAS las refs accesibles (`git rev-list --all`).
+  NOTA de cobertura de este clon: la traversa de `main` se corta en `8583d300`
+  (frontera shallow — el ancestro `a3a3d960…` está ausente del bundle original,
+  hallazgo G-1). Las demás refs (remediacion/*, chore/*, dependabot/*, la rama
+  del plan) SÍ están completas y cubiertas. El tramo de `main` anterior a
+  ~2026-11-04 NO queda cubierto: re-corrar este escaneo desde el clon íntegro
+  del mantenedor cuando el bundle se regenere (C-1).
+- Deduplicación: un hallazgo = (ruta, línea, patrón); se lista el primer commit
+  en que aparece (orden rev-list, del más reciente al más antiguo).
+
+## Resumen por patrón
+
+| Patrón | Hallazgos únicos |
+|---|---|
+| (ninguno) | 0 |
+
+## Hallazgos (REDACTADOS)
+
+Sin hallazgos.
+
+## Cómo triar (regla del plan C-4.2)
+
+- Vivo → rotar/revocar YA y anotar la fecha de rotación en `docs/DEUDA.md`.
+- Muerto (fixture/demo/ejemplo documental) → anotar el triage con fecha en
+  `docs/DEUDA.md`.
+- Coordinar con A-05 (HUMANO): si hay secretos en historia, la reescritura de
+  historia debe purgarlos.
