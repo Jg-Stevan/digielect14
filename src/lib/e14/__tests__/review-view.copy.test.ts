@@ -78,7 +78,7 @@ function actaBase(ajustes: Partial<Acta>): Acta {
   } as Acta;
 }
 
-describe.skip("7.10 · ReviewView — copy visible por estado (bloqueado: alias @ y deps)", () => {
+describe("7.10 · ReviewView — copy visible por estado (Q-52 — activado: alias @ y deps)", () => {
   it("RECHAZADA por INCOMPLETA: píldora del motivo REAL + banner de rechazo", async () => {
     const { renderToStaticMarkup } = await import("react-dom/server");
     const { ReviewView } = await import("@/components/e14/screens/ReviewView");
@@ -132,6 +132,9 @@ describe.skip("7.10 · ReviewView — copy visible por estado (bloqueado: alias 
       actaActual: actaBase({
         status: "ADVERTENCIA",
         score: 7,
+        // El banner con clasificación muestra el nombre del puesto
+        // (ReviewView textoBanner: hayClasificacion → acta.titulo).
+        titulo: "CONSULADO DE PRUEBA",
         clasificacion: { nivel: "SUGERIDA", parciales: { mesa: 3 } },
       } as Partial<Acta>),
       recortando: false,
@@ -144,7 +147,12 @@ describe.skip("7.10 · ReviewView — copy visible por estado (bloqueado: alias 
     };
     const html = renderToStaticMarkup(createElement(ReviewView));
     if (!html.includes("LECTURA PARCIAL")) throw new Error("falta LECTURA PARCIAL");
-    if (!html.includes("CLASIFICACIÓN PENDIENTE")) throw new Error("falta banner pendiente");
+    // Recalibrado Q-52 (2026-11-12): el banner de REVISIÓN ya NO dice
+    // «CLASIFICACIÓN PENDIENTE» para estados con clasificación — muestra el
+    // NOMBRE del puesto (fix del mantenedor 14-oct #1: banner = acta.titulo).
+    // «CLASIFICACIÓN PENDIENTE» queda reservado a EN_REVISION_HUMANA sin
+    // clasificación (ReviewView.tsx: textoBanner).
+    if (!html.includes("CONSULADO DE PRUEBA")) throw new Error("falta banner con el nombre del puesto");
   });
 
   it("ADVERTENCIA recortada: el defecto físico manda sobre la métrica (con LADO)", async () => {
@@ -169,7 +177,11 @@ describe.skip("7.10 · ReviewView — copy visible por estado (bloqueado: alias 
     const { ReviewView } = await import("@/components/e14/screens/ReviewView");
     estadoStore = {
       actaActual: actaBase({
-        status: "OPTIMA",
+        // Recalibrado Q-52 (2026-11-12): el aviso de auto-envío ocupa la zona
+        // fija SOLO en ENVIADA (ReviewView.tsx: filaAcciones — los estados de
+        // REVISIÓN muestran Recortar/Rotar/Imagen). Score y bruto se prueban
+        // en su propio caso de ADVERTENCIA/ÓPTIMA de píldora.
+        status: "ENVIADA",
         score: 8.5,
         scoreVisual: 8.2,
         enviadoAutomaticamente: "12:00:03",

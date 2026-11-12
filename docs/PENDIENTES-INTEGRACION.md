@@ -90,14 +90,14 @@ cambio sea mecánico y seguro; los contratos de TEXTO se quedan):
 * **Kill-switch/flags**: ya es contrato por IMPORT (`flags.test.ts` fija el
   literal exhaustivo de `FLAGS_DEFAULT`) — no hay regex que migrar.
 
-## 8. `noImplicitAny` del raíz (7.7)
+## 8. `noImplicitAny` del raíz (7.7) — ✅ CERRADO (Q-59, plan 2026-11-12)
 
 * `packages/scanner-core/tsconfig.json` ya tiene `noImplicitAny: true`
   (verificado: `bunx tsc --noEmit` verde en el paquete).
-* El `tsconfig.json` RAÍZ sigue en `noImplicitAny: false` A PROPÓSITO (el
-  plan 7.7.4 lo sube directorio por directorio; `src/` hoy genera demasiado
-  ruido sin triar). Siguiente escalón sugerido: `src/lib/e14/politica/**`
-  (nace limpia — ya tiene `no-explicit-any: error` por ESLint).
+* **CIERRE (Q-59, plan 2026-11-12)**: el `tsconfig.json` RAÍZ pasa a
+  `noImplicitAny: true` — `bunx tsc --noEmit` corre LIMPIO (0 errores
+  TS18048): el código ya estaba sin `any` implícitos; el flag estaba apagado
+  por prudencia histórica, no por deuda real.
 
 ## 9. Avisos de lint nuevos a triar (7.7)
 

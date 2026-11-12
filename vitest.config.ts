@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -8,6 +9,13 @@ import { defineConfig } from "vitest/config";
  * que siguen corriendo con `bun scripts/qa-*.ts`.
  */
 export default defineConfig({
+  // Q-52 (plan 2026-11-12) — alias `@` → src/: tsconfig lo define y el test
+  // de componente de ReviewView lo necesita (importa "@/lib/e14/store").
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
