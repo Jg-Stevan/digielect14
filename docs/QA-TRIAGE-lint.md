@@ -40,3 +40,44 @@ saliendo y esta tabla es su decisión anotada (criterio literal del plan:
   ya se documenta el patrón de refs internas.
 - Verificación final: `bun run lint` → 0 errores / 12 warnings (los #5–#16
   deliberados) · `bunx tsc --noEmit` → 0 errores.
+
+## Sección knip (C-6.3 del plan de cierre 2026-11-12)
+
+`knip@5.44.1` (ya declarado en devDependencies) quedó configurado en `knip.json`
+con cobertura completa de entries (tests `*.test.{ts,tsx}`, e2e `*.spec.ts`,
+scripts qa/gen/build/smoke, worker de heartbeat, `open-next.config.ts`) y el
+workspace `packages/scanner-core` con su contrato real: el `exports` map del
+paquete expone **cada** `src/*.ts` como subpath público (`"./*": "./src/*.ts"`),
+así que el entry del workspace es `src/**/*.ts` + workers + scripts.
+
+Resultado: 0 archivos sin usar · 0 dependencias sin usar · 0 binarios sin
+declarar · exports/tipos restantes **en nivel `warn` (no bloqueante)**, triados
+así:
+
+1. **Superficie de la capa e14 vendorizada** (`src/lib/e14/core/*`:
+   pdf-export, pwa, quality, sensor-profiler, frame-loop, motion-stabilizer):
+   helpers/constantes/tipos del trasplante (D83/D94) que comparten contrato con
+   las variantes del repo hermano — no se podan en el cierre.
+2. **Catálogos**: `src/components/e14/icons.tsx` (iconos aún no usados) y las
+   constantes HEIC de `useDestello.ts` — catálogo deliberado.
+3. **Observabilidad/uso** (`obs/export.ts`, `obs/uso.ts`, `obs/captura.ts`,
+   `obs/lcp-cls.ts`): helpers del contrato observable que los reportes
+   consumen desde fuera del grafo estático.
+4. **Alias semántico**: `TECHO_ESCUDO_FONDO = TECHO_ADVERTENCIA`
+   (`politica/umbrales.ts`) — alias de intención, NO duplicado accidental.
+
+`ignoreDependencies` documentados: `heic2any`, `onnxruntime-web`, `tesseract.js`
+y `zxing-wasm` — importados dinámicamente DENTRO del paquete vendorizado pero
+declarados en la raíz por decisión explícita del ancla T-16 de paridad
+(`scripts/qa-paridad-motor.ts` §"Sus imports DINÁMICOS…"): quitarlos «porque no
+aparecen en ningún import de src/» deja el build verde y revienta el HEIC de un
+iPhone en runtime. `@testing-library/*`: el test de componente está INACTIVO
+por bloqueos documentados (`src/lib/e14/__tests__/review-view.copy.test.ts` y
+`docs/PENDIENTES-INTEGRACION.md`).
+
+Adición justificada (knip la destapó): `@playwright/test` entra a
+devDependencies — `e2e/humo.spec.ts` ya lo importaba SIN declarar (dependía de
+`bunx` temporal); ahora el contrato de dependencias del e2e es explícito.
+
+Verificación: `bunx knip` → **exit 0** (63 líneas de avisos warn documentados
+en esta sección) · `bun run lint` → 0 errores · `bunx tsc --noEmit` → 0 errores.
