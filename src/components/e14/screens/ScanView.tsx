@@ -1066,6 +1066,20 @@ export function ScanView() {
                   <h3 className="text-sm font-bold text-white tracking-wide uppercase">
                     {fuente === "SIMULACION" ? "SIMULADOR ELECTORAL" : "IMPORTAR ARCHIVO"}
                   </h3>
+                  {/* D-36 (plan 2026-11-12) — banner de DEMOSTRACIÓN NO
+                      descartable (D89-sup es el ADR origen; aquí el móvil lo
+                      replica en su modo SIM): visible sin cookie ni
+                      localStorage para cerrarlo — jamás se presenta como
+                      captura real. */}
+                  {fuente === "SIMULACION" && (
+                    <p
+                      role="status"
+                      className="w-full max-w-[220px] lg:max-w-[280px] rounded-lg border border-amber-500/50 bg-amber-500/10 px-2.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-amber-400"
+                    >
+                      Modo demostración — fixtures sintéticas; no usar con
+                      actas reales
+                    </p>
+                  )}
                   <p className="text-[11px] font-mono text-slate-400 leading-relaxed max-w-[220px] lg:max-w-[280px]">
                     {fuente === "SIMULACION"
                       ? "Presione el obturador abajo o elija un nivel de score (Óptima, Medio, Baja) para probar la validación."
