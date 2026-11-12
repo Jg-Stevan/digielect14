@@ -214,6 +214,18 @@ export function ReviewView() {
   // §D4: cualquier foto (procesada u original de respaldo) = acta real.
   const esReal = Boolean(fotoVisible);
 
+  // ── CAPA 0 QR (C-10): SOLO presencia del payload, jamás su contenido
+  // (llave opaca — red line 10). C-19 — en móvil el chip completo se
+  // colapsa y el estado se muestra en una línea compacta (mismo dato).
+  const qrLeido = acta.qrPayload != null;
+  const qrCorrio = acta.qrEstado != null;
+  const qrFalloLectura = !qrLeido && acta.qrEstado === "sin-payload";
+  const qrMotivo = qrLeido
+    ? null
+    : qrCorrio
+      ? "sin lectura: la capa 0 QR corrió y no leyó payload"
+      : "sin lectura: la capa 0 QR no corrió en esta captura";
+
   // ── Esquinas AR (mock §3.3): verdes (óptima/enviada) · rojas (rechazada)
   // · ámbar (advertencia/EN_RH) — mismo predicado del tono de estado.
   const cornerColor =
@@ -275,6 +287,13 @@ export function ReviewView() {
     }
     return null;
   })();
+  // RECHAZADA/ADVERTENCIA → el motivo vive en la ZONA FIJA (banner completo,
+  // sin truncar, encima de Recortar/Rotar/Imagen). OPTIMA/ENVIADA conservan
+  // el chip de score flotando sobre la tarjeta.
+  const mostrarPillEnTarjeta = status === "OPTIMA" || status === "ENVIADA";
+  const pillEnTarjeta = mostrarPillEnTarjeta ? pillFlotante : null;
+  const pillEnZonaFija =
+    status === "RECHAZADA" || status === "ADVERTENCIA" ? pillFlotante : null;
 
   // KIT visor-accion-score-v1 (FASE A+B) — fila de acciones calculada FUERA
   // del flujo: vive en la ZONA FIJA de abajo (nunca scrollea; pegada a los
@@ -282,18 +301,36 @@ export function ReviewView() {
   // «Pantalla completa» sale (redundante — tocar la foto abre el visor vía
   // ZoomableVisor mode="card" onOpenFullscreen y la tarjeta ENVIADA es
   // táctil); el modal fullscreen SIGUE existiendo con el mismo punto de
-  // entrada. ENVIADA → null: la zona fija NO se monta (sin toolbar fantasma).
-  // C-26 — dead code fuera: la rama OPTIMA muerta (defensa G4, la rama se
-  // declaraba inalcanzable en REVISIÓN) se retiró — OPTIMA nunca llega a
-  // REVISIÓN (auto-envío D4 al capturar y tras el recorte): ENVIADA → sin
-  // toolbar; resto → fila de 3.
+  // entrada.
+  // ENVIADA → el aviso de envío ocupa la zona fija: queda pegado ENCIMA de
+  // «SEGUIR ESCANEANDO» (los CTAs del shell viven debajo), siempre visible
+  // sin scrollear ni tapar la foto.
   const filaAcciones =
     status !== "ENVIADA" ? (
       // Resto de estados: Recortar · Rotar 90° · Imagen — UNA sola fila de 3
       // fija (KIT e14-fuera-informes-v1 R-3: fuera la 4ª celda «DIAGNÓSTICO ↓»
       // y el grid-cols-4 condicional — el botón manual del paquete ZIP muere
       // con el sistema de informes; grid-cols-3 como toda la barra).
-      <div className="grid grid-cols-3 gap-2 lg:gap-3 w-full select-none">
+      <div className="w-full flex flex-col gap-2">
+        {/* Motivo del estado SIEMPRE visible y completo: banner en la zona
+            fija, encima de la fila de acciones (antes flotaba sobre la foto y
+            se truncaba; con el acta recortada el motivo es largo). */}
+        {pillEnZonaFija && (
+          <div
+            role="status"
+            data-testid={status === "RECHAZADA" ? "barra-rechazo" : "banner-revision"}
+            className={`font-mono font-bold text-[11px] px-3 py-1.5 rounded-lg uppercase tracking-wider text-center leading-snug break-words shadow-md ${
+              pillEnZonaFija.tono === "crit"
+                ? "bg-[#ef4444] text-white shadow-[0_4px_18px_rgba(239,68,68,0.45)]"
+                : pillEnZonaFija.tono === "ok"
+                  ? "bg-[#10b981] text-[#090d12]"
+                  : "bg-[#f59e0b] text-[#090d12] shadow-[0_4px_18px_rgba(245,158,11,0.4)]"
+            }`}
+          >
+            {pillEnZonaFija.texto}
+          </div>
+        )}
+        <div className="grid grid-cols-3 gap-2 lg:gap-3 w-full select-none">
         <ToolbarBtn
           icon={<StitchCropIcon />}
           label="Recortar"
@@ -314,19 +351,36 @@ export function ReviewView() {
               : undefined
           }
         />
+        </div>
       </div>
-    ) : null;
+    ) : (
+      <div
+        role="status"
+        className="bg-[#10b981]/15 border border-[#10b981]/40 rounded-xl px-4 py-2.5 flex items-center justify-between shadow-sm"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[#10b981] font-bold text-sm shrink-0">✓</span>
+          <span className="text-[#10b981] font-bold text-[13px] uppercase tracking-wider font-mono truncate">
+            {acta.enviadoAutomaticamente ? "ENVIADO AUTOMÁTICAMENTE" : "ENVIADO CORRECTAMENTE"}
+          </span>
+        </div>
+        <span className="font-mono text-xs text-white font-bold bg-[#090d12] px-2.5 py-1 rounded-md border border-slate-800 shrink-0">
+          {acta.enviadoAutomaticamente ?? "--:--:--"}
+        </span>
+      </div>
+    );
 
   return (
     // KIT visor-accion-score-v1 (FASE B): root en 2 ZONAS — scroll + barra
     // de acciones FIJA abajo. Shell (page.tsx: h-dvh + main flex-1 min-h-0)
     // INTOCABLE; único overflow-y-auto (sin scroll duplicado).
     <div className="flex-1 min-h-0 flex flex-col">
-      {/* ZONA SCROLL — contenido de siempre, MISMO orden (banner + chips +
-          tarjeta + nota + bloque ENVIADO + panel). max-w-md centrado aquí y
-          en la zona fija: el centrado no baile. Task 2-b: lg:max-w-2xl —
-          escritorio 2 columnas de ancho útil sin tocar el shell. */}
-      <div className="flex-1 min-h-0 overflow-y-auto max-w-md lg:max-w-2xl xl:max-w-3xl mx-auto w-full px-4 lg:px-6 py-3 space-y-3 lg:space-y-4">
+      {/* ZONA SCROLL — banner + chips + tarjeta + nota + panel. La foto se
+          acotó a 38vh (antes 56vh) para que TODO quepa sin desplazar en el
+          teléfono; el aviso de envío vive en la zona fija inferior. max-w-md
+          centrado aquí y en la zona fija: el centrado no baile. Task 2-b:
+          lg:max-w-2xl — escritorio 2 columnas de ancho útil sin tocar el shell. */}
+      <div className="flex-1 min-h-0 overflow-y-auto max-w-md lg:max-w-2xl xl:max-w-3xl mx-auto w-full px-4 lg:px-6 py-3 space-y-3 lg:space-y-4 flex flex-col">
         {/* Banner de ubicación (mock §3.2.2 — mono, dot del estado). */}
         {status === "ENVIADA" || status === "OPTIMA" ? (
           <div className="flex items-center px-3.5 py-2 rounded-xl bg-[#10161f] border border-slate-800 text-xs font-mono shadow-xs overflow-x-auto no-scrollbar">
@@ -354,40 +408,30 @@ export function ReviewView() {
             opaca — red line 10). El motivo técnico va en el detalle del chip
             y en el title: «sin lectura» + por qué. Campos del motor:
             qrPayload (ausente = no corrió o timeout — jamás inventar) y
-            qrEstado ("leido" | "sin-payload"); no hay qrError que reportar. */}
-        {(() => {
-          const leido = acta.qrPayload != null;
-          const corrio = acta.qrEstado != null;
-          const falloLectura = !leido && acta.qrEstado === "sin-payload";
-          const motivo = leido
-            ? null
-            : corrio
-              ? "sin lectura: la capa 0 QR corrió y no leyó payload"
-              : "sin lectura: la capa 0 QR no corrió en esta captura";
-          return (
-            <div
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#10161f] border border-slate-800 text-[10px] font-mono font-semibold tracking-wide w-full"
-              aria-label={leido ? "QR leído" : "QR sin lectura"}
-              title={motivo ?? undefined}
-            >
-              <span
-                className={
-                  leido
-                    ? "text-emerald-300/90"
-                    : falloLectura
-                      ? "text-amber-400"
-                      : "text-gray-500"
-                }
-              >
-                QR {leido ? "✓" : "✗"}
-              </span>
-              <span className="text-gray-400 uppercase">capa 0 qr</span>
-              {motivo && (
-                <span className="text-gray-500 uppercase truncate">sin lectura</span>
-              )}
-            </div>
-          );
-        })()}
+            qrEstado ("leido" | "sin-payload"); no hay qrError que reportar.
+            C-19 — en móvil (< sm) se COLAPSA: el estado sigue visible en la
+            línea compacta bajo los chips y el chip completo queda en sm+. */}
+        <div
+          className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#10161f] border border-slate-800 text-[10px] font-mono font-semibold tracking-wide w-full"
+          aria-label={qrLeido ? "QR leído" : "QR sin lectura"}
+          title={qrMotivo ?? undefined}
+        >
+          <span
+            className={
+              qrLeido
+                ? "text-emerald-300/90"
+                : qrFalloLectura
+                  ? "text-amber-400"
+                  : "text-gray-500"
+            }
+          >
+            QR {qrLeido ? "✓" : "✗"}
+          </span>
+          <span className="text-gray-400 uppercase">capa 0 qr</span>
+          {qrMotivo && (
+            <span className="text-gray-500 uppercase truncate">sin lectura</span>
+          )}
+        </div>
 
         {/* Chips de estado (mock §3.2.3 — grid-cols-3, activo sólido). */}
         <div className="grid grid-cols-3 gap-2 lg:gap-3 w-full select-none">
@@ -417,6 +461,29 @@ export function ReviewView() {
             {paginaIdentificada ? `PÁG ${paginaIdx} DE ${paginaTotal}` : "PÁG - DE -"}
           </Chip>
         </div>
+
+        {/* C-19 — móvil: estado de la CAPA 0 QR colapsado (el chip completo
+            queda desde sm+); mismo dato, sin robarle una fila al acta. */}
+        <p
+          className="sm:hidden font-mono text-[9px] font-semibold tracking-wider uppercase"
+          aria-label={qrLeido ? "QR leído" : "QR sin lectura"}
+          title={qrMotivo ?? undefined}
+        >
+          <span
+            className={
+              qrLeido
+                ? "text-emerald-300/90"
+                : qrFalloLectura
+                  ? "text-amber-400"
+                  : "text-gray-500"
+            }
+          >
+            QR {qrLeido ? "✓" : "✗"}
+          </span>{" "}
+          <span className="text-gray-500">
+            capa 0 qr{qrMotivo ? " · sin lectura" : ""}
+          </span>
+        </p>
 
         {/* LÍNEA DE ID («KIT --- · --- · -/-» + «MESA · POR KIT») — ELIMINADA
             a pedido del dueño. La identidad del acta sigue VIVA en el resto de
@@ -473,20 +540,14 @@ export function ReviewView() {
                   }
                 : undefined
             }
-            className="relative bg-[#10161f] rounded-2xl p-3 border border-slate-800 shadow-2xl w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/60"
+            className="relative bg-[#10161f] rounded-2xl p-3 border border-slate-800 shadow-2xl w-full text-left flex flex-col flex-1 min-h-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/60"
           >
-            {pillFlotante && (
+            {pillEnTarjeta && (
               <span
-                data-testid="barra-rechazo"
-                className={`absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[11px] px-3.5 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md ${
-                  pillFlotante.tono === "crit"
-                    ? "bg-[#ef4444] text-white shadow-[0_4px_18px_rgba(239,68,68,0.5)]"
-                    : pillFlotante.tono === "ok"
-                      ? "bg-[#10b981] text-[#090d12] shadow-[0_4px_18px_rgba(16,185,129,0.5)] font-extrabold"
-                      : "bg-[#f59e0b] text-[#090d12] shadow-[0_4px_18px_rgba(245,158,11,0.45)] font-extrabold"
-                }`}
+                data-testid="banner-revision"
+                className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[11px] px-3.5 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md bg-[#10b981] text-[#090d12] shadow-[0_4px_18px_rgba(16,185,129,0.5)] font-extrabold"
               >
-                {pillFlotante.texto}
+                {pillEnTarjeta.texto}
               </span>
             )}
             <div className="scanner-corner-tl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
@@ -494,7 +555,7 @@ export function ReviewView() {
             <div className="scanner-corner-bl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             <div className="scanner-corner-br" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             {fotoVisible ? (
-              <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] lg:h-[64vh] xl:h-[76vh] lg:max-h-[720px] xl:max-h-[840px] relative flex items-center justify-center mt-2">
+              <div className="w-full flex-1 min-h-[160px] lg:min-h-[240px] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
                   src={fotoVisible}
@@ -526,20 +587,14 @@ export function ReviewView() {
                   }
                 : undefined
             }
-            className="relative bg-[#10161f] rounded-2xl p-3 border border-slate-800 shadow-2xl w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/60"
+            className="relative bg-[#10161f] rounded-2xl p-3 border border-slate-800 shadow-2xl w-full text-left flex flex-col flex-1 min-h-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#10b981]/60"
           >
-            {pillFlotante && (
+            {pillEnTarjeta && (
               <span
-                data-testid={status === "RECHAZADA" ? "barra-rechazo" : "banner-revision"}
-                className={`absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[11px] px-3.5 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md ${
-                  pillFlotante.tono === "crit"
-                    ? "bg-[#ef4444] text-white shadow-[0_4px_18px_rgba(239,68,68,0.5)]"
-                    : pillFlotante.tono === "ok"
-                      ? "bg-[#10b981] text-[#090d12] shadow-[0_4px_18px_rgba(16,185,129,0.5)] font-extrabold"
-                      : "bg-[#f59e0b] text-[#090d12] shadow-[0_4px_18px_rgba(245,158,11,0.45)] font-extrabold"
-                }`}
+                data-testid="banner-revision"
+                className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 font-mono font-bold text-[11px] px-3.5 py-1.5 rounded-full uppercase tracking-wider whitespace-nowrap max-w-[92%] truncate shadow-md bg-[#10b981] text-[#090d12] shadow-[0_4px_18px_rgba(16,185,129,0.5)] font-extrabold"
               >
-                {pillFlotante.texto}
+                {pillEnTarjeta.texto}
               </span>
             )}
             <div className="scanner-corner-tl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
@@ -547,7 +602,7 @@ export function ReviewView() {
             <div className="scanner-corner-bl" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             <div className="scanner-corner-br" style={cornerColor ? { borderColor: cornerColor } : undefined} />
             {fotoVisible ? (
-              <div className="w-full h-[56vh] min-h-[340px] max-h-[640px] lg:h-[64vh] xl:h-[76vh] lg:max-h-[720px] xl:max-h-[840px] relative flex items-center justify-center mt-2">
+              <div className="w-full flex-1 min-h-[160px] lg:min-h-[240px] relative flex items-center justify-center mt-2">
                 <ZoomableVisor
                   mode="card"
                   src={fotoVisible}
@@ -571,21 +626,6 @@ export function ReviewView() {
               ? "TU RECORTE SE APLICÓ — LA FOTO SALIÓ SIN TINTA SUFICIENTE; SE MUESTRA LA ORIGINAL"
               : "SE MUESTRA LA FOTO ORIGINAL"}
           </p>
-        )}
-
-        {/* Bloque ENVIADO */}
-        {status === "ENVIADA" && (
-          <div className="bg-[#10b981]/15 border border-[#10b981]/40 rounded-xl px-4 py-2.5 flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[#10b981] font-bold text-sm shrink-0">✓</span>
-              <span className="text-[#10b981] font-bold text-[13px] uppercase tracking-wider font-mono truncate">
-                {acta.enviadoAutomaticamente ? "ENVIADO AUTOMÁTICAMENTE" : "ENVIADO CORRECTAMENTE"}
-              </span>
-            </div>
-            <span className="font-mono text-xs text-white font-bold bg-[#090d12] px-2.5 py-1 rounded-md border border-slate-800 shrink-0">
-              {acta.enviadoAutomaticamente ?? "--:--:--"}
-            </span>
-          </div>
         )}
 
         {/* ── PANEL DE CORRECCIÓN §5 (SPEC-cabecera-clasificacion): SOLO

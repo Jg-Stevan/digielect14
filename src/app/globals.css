@@ -162,7 +162,12 @@
 html,
 body {
   width: 100%;
-  min-height: 100vh;
+  /* NO min-height:100vh — en Android 100vh es el viewport GRANDE (barra de
+     URL colapsada, ~1018 px) y el shell mide h-dvh (~946 px): esos 71 px
+     de diferencia dejaban desplazar TODA la app, incluso la cámara. El
+     documento se ancla al viewport dinámico y el scroll vive solo en los
+     contenedores internos (overflow-y-auto por vista). */
+  height: 100%;
   margin: 0;
   background-color: var(--color-brand-black);
   color: #f3f4f6;
@@ -172,6 +177,15 @@ body {
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Dock de escaneo flotante: en pantallas bajas (iPhone SE, Safari con sus
+   barras) el obturador se compacta para dejar más cámara visible. */
+@media (max-height: 740px) {
+  .obturador-scanner {
+    width: 64px;
+    height: 64px;
+  }
 }
 
 ::selection {

@@ -618,10 +618,6 @@ export function ScanView() {
     .join(" L ");
 
 
-  // §4: label del modo ACTIVO para la fila de contexto del dock (data-driven).
-  const labelModo =
-    fuente === "CAMARA" ? "CÁMARA" : fuente === "ARCHIVO" ? "IMPORTAR" : "SIMULACIÓN";
-
   // §6.8 (mock 1): obturador Ø72 — aro blanco 3.5px + shutter-glow + interior
   // bg-brand-panel border-green/40 + documento 32px. MISMO disparo por
   // plataforma (~alDisparar), intocado.
@@ -632,7 +628,7 @@ export function ScanView() {
       aria-label="Capturar fotografía del acta E-14"
       onClick={alDisparar}
       disabled={procesando}
-      className={`relative w-[74px] h-[74px] rounded-full p-1 bg-transparent border-2 border-white/80 flex items-center justify-center active:scale-90 transition-all duration-100 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:border-[#10b981] focus:outline-none focus:border-[#10b981] cursor-pointer ${
+      className={`obturador-scanner relative w-[74px] h-[74px] rounded-full p-1 bg-transparent border-2 border-white/80 flex items-center justify-center active:scale-90 transition-all duration-100 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:border-[#10b981] focus:outline-none focus:border-[#10b981] cursor-pointer ${
         procesando ? "opacity-50 cursor-not-allowed" : ""
       }`}
     >
@@ -643,7 +639,7 @@ export function ScanView() {
   );
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-brand-viewfinder pt-safe">
+    <div className="relative flex-1 min-h-0 flex flex-col bg-brand-viewfinder pt-safe">
       {/* Inputs ocultos: IMPORTAR (galería) + cámara nativa iOS (capture).
           accept con .heic/.heif (lab L1536, remediación H5): en Android/Chrome
           los HEIC llegan con MIME vacío o raro y «image/*» a secas los deja
@@ -967,7 +963,7 @@ export function ScanView() {
                 <>
                   {scorePct !== null && (
                     <div
-                      className="pointer-events-none absolute bottom-3 left-3 z-20"
+                      className="pointer-events-none absolute bottom-[118px] left-3 z-20"
                       role="status"
                       aria-label={`Calidad de encuadre ${scorePct} por ciento`}
                     >
@@ -999,7 +995,7 @@ export function ScanView() {
                       </div>
                     </div>
                   )}
-                  <div className="pointer-events-none absolute bottom-3 right-3 z-20 rounded-full border border-white/10 bg-black/55 px-2.5 py-1.5 backdrop-blur-sm">
+                  <div className="pointer-events-none absolute bottom-[118px] right-3 z-20 rounded-full border border-white/10 bg-black/55 px-2.5 py-1.5 backdrop-blur-sm">
                     <span
                       className={`text-[10px] font-bold tracking-[0.12em] font-mono ${
                         live.corners ? "text-brand-green" : "text-white/60"
@@ -1046,8 +1042,8 @@ export function ScanView() {
             /* SIMULACIÓN/ARCHIVO: Visor con marco táctico E-14. Task 2-b: en
                lg+ el marco gana tamaño (max-w/max-h mayores) — los brackets
                tácticos son spans posicionados al contenedor y escalan solos. */
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center select-none">
-              <div className="relative w-full max-w-[280px] sm:max-w-[320px] lg:max-w-[360px] h-[64vh] max-h-[440px] lg:max-h-[540px] rounded-2xl border-2 border-dashed border-[#10b981]/30 bg-[#10b981]/[0.03] flex flex-col items-center justify-between p-5 backdrop-blur-[2px] shadow-[0_0_40px_rgba(16,185,129,0.05)]">
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 pb-32 text-center select-none">
+              <div className="relative w-full max-w-[280px] sm:max-w-[320px] lg:max-w-[360px] h-[58vh] max-h-[420px] lg:max-h-[520px] rounded-2xl border-2 border-dashed border-[#10b981]/30 bg-[#10b981]/[0.03] flex flex-col items-center justify-between p-5 backdrop-blur-[2px] shadow-[0_0_40px_rgba(16,185,129,0.05)]">
                 {/* Esquinas tácticas */}
                 <span className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-[#10b981]" />
                 <span className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-[#10b981]" />
@@ -1118,7 +1114,7 @@ export function ScanView() {
               ni el overlay §E ni la píldora informativa ni el HUD. */}
           {avisoOperador && (
             <div
-              className={`absolute inset-x-4 bottom-16 z-40 rounded-xl bg-[#10161f]/95 border px-3.5 py-2.5 font-mono text-xs shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md lg:inset-x-6 ${
+              className={`absolute inset-x-4 bottom-[124px] z-40 rounded-xl bg-[#10161f]/95 border px-3.5 py-2.5 font-mono text-xs shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md lg:inset-x-6 ${
                 avisoOperador.tipo === "error"
                   ? "border-red-500/40 text-red-400"
                   : "border-amber-500/40 text-amber-400"
@@ -1172,16 +1168,13 @@ export function ScanView() {
         </div>
       </div>
 
-      {/* Dock inferior con botones de simulación y obturador */}
-      <footer className="relative z-20 bg-[#090d12]/92 border-t border-slate-800/80 backdrop-blur-2xl px-4 lg:px-6 pt-3 lg:pt-4 pb-4 flex flex-col items-center shrink-0">
-        {/* Fila de contexto — Task 2-b: lg:max-w-md (acompaña la botonera). */}
-        <div className="w-full max-w-sm lg:max-w-md mx-auto mb-1.5 px-1 flex items-center justify-between text-[10px] font-mono font-medium tracking-widest uppercase text-slate-400 select-none">
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" aria-hidden />
-            {labelModo}
-          </span>
-          {simVisible && <span className="text-[9px] text-slate-400">TEST SCORES</span>}
-        </div>
+      {/* Dock FLOTANTE sobre la cámara (antes era una franja opaca que
+          restaba ~128 px al visor; en un iPhone útil de 553 px la previa
+          quedaba en ~350 px). Ahora el video llega hasta el fondo y los
+          controles se apoyan en un degradado, como en la cámara del sistema.
+          La fila de contexto (CÁMARA/IMPORTAR · TEST SCORES) se retiró: el
+          modo ya lo indica el selector superior y sólo robaba alto. */}
+      <footer className="absolute inset-x-0 bottom-0 z-20 px-4 lg:px-6 pt-6 pb-[max(env(safe-area-inset-bottom),10px)] flex flex-col items-center bg-gradient-to-t from-[#090d12] via-[#090d12]/85 to-transparent">
 
         {/* Barra de SIMULACIÓN — Task 2-b: lg:max-w-md + chips con más aire en
             lg. Mismos ids/aria/handlers (los tests E2E dependen de ellos).
