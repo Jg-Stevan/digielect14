@@ -38,7 +38,7 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
   fallo, no se completa a mano.
 - Todo comportamiento nuevo de producción va **detrás de un flag**
   (`src/lib/e14/flags.ts`: `DEFAULTS ← public/flags.json ← overrides de
-  localStorage`). El dueño usa esa cadena como kill-switch; el override manual
+  localStorage`). El mantenedor usa esa cadena como kill-switch; el override manual
   manda sobre el plan por tier y sobre el default.
 
 ## Privacidad e integridad
@@ -50,7 +50,7 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
   su retirada de la historia está ejecutada con los scripts de `scripts/`).
 - No añadas dependencias, telemetría ni servicios externos sin preguntarlo antes.
 - Nunca `git push --force` ni reescritura de historial. **Excepción única y
-  autorizada por el dueño**: purgas puntuales de binarios del historial
+  autorizada por el mantenedor**: purgas puntuales de binarios del historial
   (p. ej. `git filter-repo` para dejar de versionar modelos). Requisitos:
   bundle de respaldo con `--all`, verificación post-reescritura,
   `--force-with-lease` (nunca `--force` a secas) y registrar en
@@ -96,7 +96,7 @@ puesto individual) y el PP-OCRv5.
 
 Editar el motor: cambia el archivo en `packages/scanner-core/src/**` y
 **aplícalo igual en el hermano en el mismo commit** (el paquete es un
-workspace local, no se publica por cada ajuste — el dueño decide si/toque
+workspace local, no se publica por cada ajuste — el mantenedor decide si/toque
 cuándo publicar a npm; `0.5.0` aún no está publicada). Si solo lo arreglas
 aquí, el golden del hermano se pone rojo con la misma edición pendiente.
 

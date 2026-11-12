@@ -90,13 +90,13 @@ function idHistorial(): string {
 }
 
 /** §D3 (SPEC-e14-simulacion-scores): banda de un chip de calidad del mock.
- *  Los ids SON los del mock (ScanView §5) y el mapeo dueño es fijo:
+ *  Los ids SON los del mock (ScanView §5) y el mapeo mantenedor es fijo:
  *  la completa = óptima · la cortada = intermedio · la borrosa = bajo. */
 export type BandaSim = "optima" | "medio" | "baja";
 
 /** §D3: score INYECTADO por banda (el del bracket del chip). El desenlace
  *  real lo decide el gate (§D4). §D8.5 (SPEC-e14-score-ocr Rev. 3): la b/n
- *  del dueño as-is = medio 7.0 · la borrosa original as-is = bajo 4.3 ·
+ *  del mantenedor as-is = medio 7.0 · la borrosa original as-is = bajo 4.3 ·
  *  8.2 + AUTO → piso 10.0 (ÓPTIMA enviada) · 7.0 con AUTO → ADVERTENCIA
  *  (el chip manda — el piso solo re-aplica con score ≥ 8) · 4.3 →
  *  RECHAZADA. Los mismos números viven pintados en NIVELES_CALIDAD. */
@@ -156,7 +156,7 @@ interface E14Store {
   /** Fase B (§6): archivado «dónde va» — clasificaciones guardadas por
    *  clave de mesa real; la vista ACTAS las añade al seed (modo demo). */
   archivadas: Record<string, ActaArchivada>;
-  /** Regla del dueño «solo un puesto debe de aparecer»: el puesto de la
+  /** Regla del mantenedor «solo un puesto debe de aparecer»: el puesto de la
    *  ÚLTIMA clasificación archivada. ACTAS y RESUMEN renderizan SOLO este
    *  puesto; al escanear otro puesto se reemplaza completo. */
   puestoActual: PuestoActual | null;
@@ -182,7 +182,7 @@ interface E14Store {
   motivosNoEnvio: Record<string, number>;
 
   navegar: (vista: Vista) => void;
-  /** MODO SIMULACIÓN (regla del dueño): alterna el toggle «SIM» de ACTAS.
+  /** MODO SIMULACIÓN (regla del mantenedor): alterna el toggle «SIM» de ACTAS.
    *  KIT actas-vivas-paginas-v1 (FASE A): ENCENDER entrega guion FRESCO
    *  (seed nuevo + SIM reiniciado); APAGAR solo apaga. */
   alternarModoSimulacion: () => void;
@@ -213,7 +213,7 @@ interface E14Store {
   /** §D2/§D3 (SPEC-e14-simulacion-scores): los 3 chips de calidad encima del
    *  obturador SON botones de simulación — disparan el MISMO camino de
    *  dispararEscaneo (REVISIÓN, banner, toast y ACTAS idénticos) con la fuente
-   *  SIMULACION, el asset FIJO de la banda del dueño (la completa = óptima ·
+   *  SIMULACION, el asset FIJO de la banda del mantenedor (la completa = óptima ·
    *  la cortada = intermedio · la borrosa = bajo) y su score inyectado. Nada
    *  se fuerza a mano: el desenlace lo decide `evaluarGate` (§D4) y el ciclo
    *  de intentos/contingencia es el mismo de las capturas reales (AC5). */
@@ -464,7 +464,7 @@ export interface ActaArchivada {
   huecos: HuecoArchivado[];
 }
 
-/** PUESTO ACTUAL (regla del dueño: «solo un puesto debe de aparecer»): el
+/** PUESTO ACTUAL (regla del mantenedor: «solo un puesto debe de aparecer»): el
  *  puesto de la ÚLTIMA clasificación archivada. ACTAS y RESUMEN renderizan
  *  SOLO este puesto; al escanear otro puesto se reemplaza completo. */
 export interface PuestoActual {
@@ -486,7 +486,7 @@ export interface PuestoActual {
  * (análisis §G.4.1). Idempotente: re-archivar el mismo acta es silencioso
  * para el llamador que ignora `duplicado`.
  * KIT actas-resumen-puesto-v2: además devuelve el PUESTO de la clasificación
- * (regla del dueño «solo un puesto» — la última archivada manda).
+ * (regla del mantenedor «solo un puesto» — la última archivada manda).
  */
 function archivarHueco(
   archivadas: Record<string, ActaArchivada>,
@@ -500,7 +500,7 @@ function archivarHueco(
   const prefijo = claveDePuesto(clasif);
   if (!clave || !tipo || !prefijo)
     return { nuevas: archivadas, duplicado: false, puesto: null };
-  // PUESTO ACTUAL (regla del dueño): la última clasificación archivada manda.
+  // PUESTO ACTUAL (regla del mantenedor): la última clasificación archivada manda.
   const puesto: PuestoActual = {
     clave: prefijo,
     titulo: (clasif.puesto?.nombre || "PUESTO SIN NOMBRE").toUpperCase(),
@@ -513,7 +513,7 @@ function archivarHueco(
   // OCR/1D NO la leyó (pagina == null) el hueco va al PRIMER hueco LIBRE de
   // ese tipo (P1 libre → P1 · si no P2 libre → P2 · si no → P1, que
   // reemplaza — duplicado, semántica de hoy). NUNCA se asume P1 en silencio
-  // (bug del dueño 16-oct: pág 2 de Frankfurt archivada en TRANSMISIÓN P1 →
+  // (bug del mantenedor 16-oct: pág 2 de Frankfurt archivada en TRANSMISIÓN P1 →
   // la mesa 012 quedaba incompleta para siempre). Con página conocida →
   // exactamente igual que hoy.
   const previa = archivadas[clave];
@@ -674,7 +674,7 @@ function avisarAlmacenamientoLleno(): void {
     useE14Store.getState().mostrarAvisoVisor({
       tipo: "error",
       motivo: "ALMACENAMIENTO_LLENO",
-      accion: null, // la acción es del dueño (enviar/eliminar) — solo descartable
+      accion: null, // la acción es del mantenedor (enviar/eliminar) — solo descartable
     });
   } catch {
     /* regla de oro: el aviso jamás rompe la escritura */
@@ -993,7 +993,7 @@ export const useE14Store = create<E14Store>((set, get) => {
       void cargarDivipol()
         .then((base) => {
           const total = mesasDePuesto(base, dep, mun, zon, std);
-          // El dueño pudo APAGAR durante la carga (base en caché ~instantáneo,
+          // El mantenedor pudo APAGAR durante la carga (base en caché ~instantáneo,
           // pero el guard es obligatorio): solo aplica si sigue ON.
           if (!total || !get().modoSimulacion) return;
           set({ mesas: guionDePuesto(total), simCompleta: false, simUltima: null });
@@ -1614,7 +1614,7 @@ export const useE14Store = create<E14Store>((set, get) => {
 
     escalarRevisionHumana: () => {
       const acta = get().actaActual;
-      // Guard del dueño: SOLO score intermedio (ADVERTENCIA) y bajo
+      // Guard del mantenedor: SOLO score intermedio (ADVERTENCIA) y bajo
       // (RECHAZADA). ENVIADA/OPTIMA/EN_RH: no-op.
       if (!acta || (acta.status !== "ADVERTENCIA" && acta.status !== "RECHAZADA")) return;
       const fila: HistorialRow = {
@@ -1729,7 +1729,7 @@ export const useE14Store = create<E14Store>((set, get) => {
         // razonable en consola + aviso visible con el mecanismo del repo
         // (sin toasts — redesign-stitch D2 los retiró): píldora en REVISIÓN.
         // El editor NO se cierra (onAplicar cierra solo con `true`) — el
-        // dueño reintenta SIN perder su quad. El gate/score no cambian.
+        // mantenedor reintenta SIN perder su quad. El gate/score no cambian.
         logger.error("[e14] aplicarRecorte falló:", err);
         set({ progresoAnalisis: null, errorRecorte: MSG_RECORTE_FALLIDO });
         // Auto-limpieza ~6 s (guard por mensaje: no borra un error MÁS NUEVO).

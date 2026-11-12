@@ -1,7 +1,7 @@
 # REPORTE — KIT fix-camara-principal (F-LENS v5)
 
 **Fecha:** 2026-11 · **Rama:** `fix/f-lens-v5-camara-principal` · **Base:** main `36a7e77`
-**Bug de campo del dueño:** «en un dispositivo abrió la cámara FRONTAL y no se pudo
+**Bug de campo del mantenedor:** «en un dispositivo abrió la cámara FRONTAL y no se pudo
 hacer las pruebas» — con recarga incluida (persistió).
 
 ## 1 · Diagnóstico (3 vectores confirmados en `useSesionCamara.ts`)
@@ -22,7 +22,7 @@ hacer las pruebas» — con recarga incluida (persistió).
    **excluyendo frontales** → todas (solo si el dispositivo no tiene otra).
 3. **Caché saneada al leerla** (`readMainCameraCache`): entrada frontal por facing o
    label se **borra** y fuerza re-sondeo — cura a los dispositivos ya venenados
-   (el del dueño) sin acción manual. `writeMainCameraCache` jamás persiste una frontal.
+   (el del mantenedor) sin acción manual. `writeMainCameraCache` jamás persiste una frontal.
 4. **Guard de apertura** (`leerFacingDeStream`): stream con facing `user` en la vía
    rápida de caché o en los intentos de la ganadora → se **cierra** y cae a la
    cascada, cuyo primer intento es `facingMode: { exact: "environment" }` (señal
@@ -42,10 +42,10 @@ AF/resolución, cascada, FOTO_LADDER, linterna, captura, pipeline/gates/scores.
   arrays de deps; comportamiento byte-idéntico).
 - `bun run test` — **233/233**.
 - QA harnesses (`scripts/qa-*.ts`): mismos resultados que main — **2 fallos PRE-EXISTENTES**
-  no tocados por este kit (deuda del dueño): `qa-aa-quickwins` 10/11 (C1 gris 500/600 +
+  no tocados por este kit (deuda del mantenedor): `qa-aa-quickwins` 10/11 (C1 gris 500/600 +
   texto ≤12px) y `qa-obs-ui` 7/8 (aria-label del modo diagnóstico). Antes/después del
   parche: idénticos.
-- Validación de campo pendiente del dueño: reabrir la app en el dispositivo afectado —
+- Validación de campo pendiente del mantenedor: reabrir la app en el dispositivo afectado —
   la caché venenada se sana sola en el primer arranque y `__cameraChoice.facing` debe
   decir `environment`.
 
@@ -64,7 +64,7 @@ app por el kit `e14-adaptacion-dispositivo-v1` (hilos OCR por tier BAJO/MEDIO/AL
 La sonda de cámara (`__cameraChoice`) registró lente + AF + resolución correctos en ambos
 perfiles; con este kit además registra `facing`.
 
-## 5 · Pendientes (dueño)
+## 5 · Pendientes (mantenedor)
 
 - Validación de campo en el dispositivo que abrió la frontal (curación de caché
   automática; verificar `__cameraChoice.facing === "environment"`).

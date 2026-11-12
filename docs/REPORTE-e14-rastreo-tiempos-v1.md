@@ -1,8 +1,8 @@
 # REPORTE — KIT e14-rastreo-tiempos-v1 (+ e14-sin-relleno-v1)
 
-Fecha: 2026-10-29 · Base: main `0bef6a6` · Autor: sesión Z.ai (petición del dueño)
+Fecha: 2026-10-29 · Base: main `0bef6a6` · Autor: sesión Z.ai (petición del mantenedor)
 
-## 0. Petición del dueño
+## 0. Petición del mantenedor
 
 1. «Test/diagnóstico/informe/rastreo automatizado para medir los tiempos de
    digitalización, bastante completo para tener datos reales, que se active
@@ -74,7 +74,7 @@ nada sale sin descarga manual.
   (`mesasIniciales`, `guionDePuesto`, `PUESTO_SIMULADO`, `ACTA_MOCK`) SOLO
   alimenta el MODO SIMULACIÓN y los datos de pantalla del editor (fase
   lógica L1).
-- **Simulación con un solo botón, en ACTAS** (como pidió el dueño): el
+- **Simulación con un solo botón, en ACTAS** (como pidió el mantenedor): el
   toggle «SIM» de ActasView sigue siendo la única vía para llenar la vista
   con datos demo. Al apagarlo sin puesto real, la vista vuelve a estado
   REAL vacío («AÚN NO HAY ACTAS ESCANEADAS») — antes re-montaba el mock.

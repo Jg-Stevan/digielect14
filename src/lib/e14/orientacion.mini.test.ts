@@ -124,7 +124,7 @@ const TEXTO_SANA: Linea[] = [
 ];
 /** Texto 0° basura (acta de lado — nada legible). */
 const TEXTO_DEBIL: Linea[] = [{ texto: "arco i1t9 zz", conf: 0.31 }];
-/** Texto 180° legible (la rotación ganadora del caso del dueño). */
+/** Texto 180° legible (la rotación ganadora del caso del mantenedor). */
 const TEXTO_180: Linea[] = [
   { texto: "FORMULARIO E-14", conf: 0.9 },
   { texto: "CONSULADO 12 PAIS 5 MESA 33", conf: 0.88 },
@@ -330,7 +330,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
   });
 
   it("decisión idéntica (estructura): mismo desenlace de rec ⇒ misma decisión que el sondeo de resolución original", async () => {
-    // El caso del dueño (lote 15:04, rot=270 en tira vertical): la MINIATURA
+    // El caso del mantenedor (lote 15:04, rot=270 en tira vertical): la MINIATURA
     // lee la evidencia rotada y la ORIGINAL leería lo MISMO (más resolución
     // nunca gira el texto). Comprobamos que con desenlaces IDÉNTICOS en ambos
     // caminos, la decisión final es la misma rotación — el camino miniatura
@@ -452,7 +452,7 @@ describe("mini-probe de orientación (Cambio 1 — Agente A)", () => {
   });
 
   it('kill-switch {"probeMiniLado":320}: la mini se pinta a 240×320 y la traza escala=320', async () => {
-    // Override manual del dueño (localStorage) ⇒ el comportamiento anterior byte a byte.
+    // Override manual del mantenedor (localStorage) ⇒ el comportamiento anterior byte a byte.
     vi.stubGlobal("window", {
       setTimeout: () => 0,
       clearTimeout: () => {},

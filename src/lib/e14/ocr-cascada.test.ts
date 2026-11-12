@@ -1,5 +1,5 @@
 /**
- * Tests unitarios — KIT e14-ocr-cascada-v1 (K3 fase 2 — plan flujo-dueño
+ * Tests unitarios — KIT e14-ocr-cascada-v1 (K3 fase 2 — plan flujo-mantenedor
  * paso 6). Patrón: runner-watchdog.test.ts (entorno node + mocks) + el
  * patrón PURO de ocr-escalonado (la cascada recibe TODAS sus dependencias
  * inyectadas — la producción (bridge) solo las arma).
@@ -373,7 +373,7 @@ describe("ocr-cascada · source-scan (contrato del kit en src/)", () => {
     // Espera del warm-up del worker OpenCV POR TIER (BAJO 20 s — evidencia v4).
     expect(pipeline).toContain("pasos.esperarWorkerCaliente(esperaWorkerEfectiva())");
   });
-  it("flags: default ON (GO-B del dueño) + DOBLE whitelist (sanearFlags + leerOverridesFlags)", () => {
+  it("flags: default ON (GO-B del mantenedor) + DOBLE whitelist (sanearFlags + leerOverridesFlags)", () => {
     const flags = lee("src/lib/e14/flags.ts");
     expect(flags).toContain("ocrCascada: true,");
     expect(flags).toContain('limpio.ocrCascada = p.ocrCascada;');

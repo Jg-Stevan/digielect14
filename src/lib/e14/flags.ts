@@ -4,10 +4,10 @@
  *
  *   DEFAULTS ← public/flags.json (remoto, cacheado 24 h, offline-safe)
  *            ← overrides localStorage (MÁXIMA prioridad — el kill switch
- *              MANUAL del dueño, D6: la app JAMÁS se auto-configura).
+ *              MANUAL del mantenedor, D6: la app JAMÁS se auto-configura).
  *
  * flags.json es un archivo ESTÁTICO en public/ (hoy NO existe → «sin-
- * endpoint»): el dueño lo puede desplegar/editar sin tocar el código —
+ * endpoint»): el mantenedor lo puede desplegar/editar sin tocar el código —
  * same-origin con NEXT_PUBLIC_BASE_PATH (mismo patrón PUBLIC_BASE del core).
  *
  * SIN dependencias nuevas: fetch nativo + reintentos exponenciales.
@@ -28,7 +28,7 @@ const REINTENTO_TOPE_MS = REFRESH_MS;
 /** Defaults del contrato §4.2 (ocrThreadsTope 4 · telemetriaSalud true ·
  *  endpointReportes null — sin backend, D1 · hangEnCurso true — KIT
  *  e14-obs-hang-atribucion-v1 §D: sensor hang-en-curso, kill-switch del
- *  dueño · qrBrujulaOrientacion true · ocrCascada false).
+ *  mantenedor · qrBrujulaOrientacion true · ocrCascada false).
  *  NOTA (eliminación del módulo masiva): los 17 flags exclusivos de la cola
  *  MASIVA (poolWorkers · thumbsOn · colaPersistente · sondeoQr* · prescan* ·
  *  masiva* · dhashResize) se retiraron junto con el módulo. El flag
@@ -43,29 +43,29 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // KIT e14-orientacion-qr-v1 (§D): QR-brújula de orientación — el cuadrante
   // del QR manda la rotación y el rescate hi-res (ZXing) solo corre si
   // jsQR@warp falla (bench v8.3: 4/4 con fotos arrugadas/blotchy donde
-  // jsQR 0/4). Kill-switch del dueño: OFF = sondeo OCR de siempre byte a
+  // jsQR 0/4). Kill-switch del mantenedor: OFF = sondeo OCR de siempre byte a
   // byte (el probe D56 queda como red de seguridad).
   qrBrujulaOrientacion: true,
-  // KIT e14-ocr-cascada-v1 (K3 fase 2) + GO-B del dueño (2026-11): CASCADA
+  // KIT e14-ocr-cascada-v1 (K3 fase 2) + GO-B del mantenedor (2026-11): CASCADA
   // OCR — intento 1 = TESSERACT BEST (ocr/tesseract.ts — spa 4.0.0_best,
   // vendido, worker propio, budget 60 s) → GATE (clasificador puro) → core
   // RapidOCR escalonado como siempre (1280→1920→elegirMejor) → rescate por
-  // ROIs top/bottom. Default ON por decisión del dueño («tess best primero,
+  // ROIs top/bottom. Default ON por decisión del mantenedor («tess best primero,
   // escalonado a pp ocr»); kill-switch: override {"ocrCascada": false} ⇒
   // OCR escalonado de siempre byte a byte (sin descarga de Tess).
   ocrCascada: true,
   // KIT e14-adaptacion-dispositivo-v1 — adaptación automática al dispositivo
-  // (petición del dueño): el tier consume knobs de RECURSOS (hilos OCR —
+  // (petición del mantenedor): el tier consume knobs de RECURSOS (hilos OCR —
   // adaptacion/plan.ts). Override manual manda (D6); false = byte-idéntico.
   adaptacionDispositivo: true,
   // KIT e14-ocr-tessbest-v1 (GO-B) — presupuesto del ESCANEO individual.
   // null = plan por tier (BAJO 480 s · MEDIO 240 s · ALTO 120 s — evidencia
   // sim-gama-baja: el timeout fijo de 120 s rechazaba actas perfectas en
-  // mono-hilo). Override manual del dueño (D6): número en ms, clamp 30-900 s.
+  // mono-hilo). Override manual del mantenedor (D6): número en ms, clamp 30-900 s.
   presupuestoEscaneoMs: null,
   // KIT e14-capa0-qr-worker-v1 — la capa 0 QR de la cámara corre su cadena
   // jsQR en WORKER (presupuesto real por tier + fases/fin — port D40+R1.1+
-  // R1.4-b de supervision-e14). Kill-switch del dueño: false = camino de HOY
+  // R1.4-b de supervision-e14). Kill-switch del mantenedor: false = camino de HOY
   // byte-idéntico (main thread, tiers "base").
   capa0QrWorker: true,
   // KIT e14-probe-mini768-v1 (port del kit de supervision-e14) — lado mayor de
@@ -88,7 +88,7 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // KIT e14-autoenvio-recorte-v1 — tras un RECORTE manual que pasa a
   // OPTIMA: ¿se envía automáticamente (como captura normal) o se queda en
   // REVISIÓN esperando envío manual? Default true (comportamiento actual
-  // G4 del gate v2); false = el recorte NUNCA auto-envía (dueño decide).
+  // G4 del gate v2); false = el recorte NUNCA auto-envía (mantenedor decide).
   autoEnvioConRecorte: true,
   // ─── KIT e14-velocidad-5s-v1 — tres knobs ADITIVOS AL FINAL (D57) ───────
   // Lado mayor de la foto que entra al trabajo (importación + warp + realce).
@@ -101,7 +101,7 @@ export const FLAGS_DEFAULT: FlagsApp = {
   pisoEscenicoMs: 300,
   // D88 (2026-11-10): intento 1 = Tesseract fast (mismo veredicto que best en
   // 24 pares medidos y 1,5-2,8× más rápido); PP-OCRv4 queda de respaldo.
-  // true = kill-switch del dueño al orden anterior (RapidOCR 1280 primero y
+  // true = kill-switch del mantenedor al orden anterior (RapidOCR 1280 primero y
   // Tesseract solo como rescate final).
   ocrPrimeraPasadaRapida: false,
   // Ruta corta del IMPORTAR: las dimensiones se leen del contenedor del JPEG
@@ -150,7 +150,7 @@ export const FLAGS_DEFAULT: FlagsApp = {
   ocrReOcrRoi: false,
   ocrSegundaTopeMs: 0,
   // KIT e14-remediacion-movil-v1 (A1): ventana de ARRANQUE de la 2.ª pasada
-  // como flag del dueño (override MANUAL — doble whitelist). null = el plan
+  // como flag del mantenedor (override MANUAL — doble whitelist). null = el plan
   // por tier (BAJO 15 s · MEDIO/ALTO 45 s — postura 2 de A1). Número =
   // override MANUAL clampado. El modo por tier sigue en adaptacion/plan.ts
   // (roi-cabecera) y la fórmula k·ms1 del bridge es la garantía dura.
@@ -309,7 +309,7 @@ export function leerFlags(): FlagsApp {
 
 /** Opciones del rescate F-HEIC del core (KIT e14-heic-tope-v1). Un solo lector
  *  de los dos flags para los DOS sitios que decodifican un File (useDestello y
- *  la memo del bridge): si cada uno copiara los números, un override del dueño
+ *  la memo del bridge): si cada uno copiara los números, un override del mantenedor
  *  se aplicaría a medias y el acta se comportaría distinto según de dónde venga. */
 export function opcionesRescateHeic(): OpcionesRescateHeic {
   const f = leerFlags();

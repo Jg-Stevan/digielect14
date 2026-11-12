@@ -57,7 +57,7 @@ export const FALLOS_KILL_LOCAL = 3;
 export const BACKOFF_MS = [60_000, 300_000, 1_800_000] as const;
 
 /** Tipos que el batcher cosecha del buffer (kit A3-C1 — perf NO viaja por
- *  red: ese dato llega al dueño por export manual / reporte de sesión). */
+ *  red: ese dato llega al mantenedor por export manual / reporte de sesión). */
 const TIPOS_LOTE: ReadonlySet<EventoObs["tipo"]> = new Set([
   "error",
   "warn",

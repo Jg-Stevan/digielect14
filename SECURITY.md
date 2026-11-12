@@ -12,7 +12,7 @@ reales y con imágenes de documentos públicos de una elección en curso.
   el gate corren en el dispositivo (`onnxruntime-web`, `zxing-wasm`,
   `tesseract.js`). No hay backend de procesado ni subida a un servicio tercero.
 - **Una sola salida con datos:** `POST {hub}/actas` (ver
-  [docs/ENDPOINT-REPORTES.md](docs/ENDPOINT-REPORTES.md)). El hub es del dueño
+  [docs/ENDPOINT-REPORTES.md](docs/ENDPOINT-REPORTES.md)). El hub es del mantenedor
   del proyecto. No se añade telemetría, analítica ni servicios externos.
 - **Observabilidad sin PII.** `src/lib/e14/obs/` registra errores, rendimiento y
   uso con identificadores opacos (`fnv1a8` sobre `actaId`) y **nunca** texto del
@@ -31,18 +31,18 @@ reales y con imágenes de documentos públicos de una elección en curso.
    (2026-11-08, ver `docs/DECISIONS.md`) la foto real que estaba en el HEAD fue
    retirada y la historia se reescribe con el script de `scripts/`; la
    reescritura está PREPARADA (script endurecido en la auditoría 2026-11-11);
-   su ejecución es del dueño. La excepción histórica quedó documentada allí,
+   su ejecución es del mantenedor. La excepción histórica quedó documentada allí,
    no aquí.
 2. **No envíes actas a endpoints distintos del hub.** Ni para depurar, ni como
    "fallback", ni a un servicio de terceros.
 3. **No añadas dependencias, telemetría ni servicios externos** sin acuerdo
-   explícito del dueño: cada dependencia es superficie de riesgo y peso en un
+   explícito del mantenedor: cada dependencia es superficie de riesgo y peso en un
    dispositivo de gama baja.
 4. **No toques los umbrales del gate ni el veto de votos** sin registrar la
    decisión en `docs/DECISIONS.md`: son control de integridad, no preferencia de
    UI.
 5. **Nunca `git push --force`** ni reescritura de historial. **Excepción
-   única y autorizada por el dueño**: purgas puntuales de binarios del
+   única y autorizada por el mantenedor**: purgas puntuales de binarios del
    historial (`git filter-repo` para dejar de versionar actas o modelos).
    Requisitos: bundle de respaldo con `--all`, verificación post-reescritura,
    `--force-with-lease` (nunca `--force` a secas) y registrar en
@@ -63,7 +63,7 @@ redeploy del modelo.
 - No hay `.env` en el repo ni en runtime: la app es estática. `.dev.vars*` está
   gitignoreado y solo `.dev.vars.example` se versiona.
 - Credenciales de deploy (`vercel`/`wrangler`/`CLOUDFLARE_API_TOKEN`) se usan
-  desde la sesión local del dueño con `bunx wrangler login`. **Nunca** van en un
+  desde la sesión local del mantenedor con `bunx wrangler login`. **Nunca** van en un
   commit, en un workflow ni en un chat.
 - `wrangler.jsonc` lleva el nombre del worker y sus bindings; no contiene
   secretos.
@@ -73,12 +73,12 @@ redeploy del modelo.
 
 C-33 (re-verificación 2026-11-11): la fuente del worker NO está versionada en
 este repo (`git ls-files e14-puente/` = 0) — vive en **custodia local del
-dueño** junto con las claves de jornada. Mientras no se versione (con
+mantenedor** junto con las claves de jornada. Mientras no se versione (con
 `wrangler.jsonc` sin secretos y test de contrato del HMAC), este documento no
 promete lo que no hay: la frase «fuente versionada en el paquete de
 remediación» quedó retirada y con ella el cierre de H-1 por esta vía (H-1 se
 considera mitigado por el diseño autenticado descrito abajo, no por
-versionado de código). El hub es el activo P0 (§0): si el dueño decide
+versionado de código). El hub es el activo P0 (§0): si el mantenedor decide
 versionar la fuente, registrar la decisión y actualizar esta sección.
 
 El hub de producción (`e14-puente.julistevan02.workers.dev`) aplica:

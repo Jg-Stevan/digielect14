@@ -13,11 +13,11 @@
  *  · Sospechosa degenerada + 4 fiduciales → COMPLETA (perdón FASE 2).
  *  · Cobertura < 25% → los CUATRO lados sospechosos (D2).
  *  · Esquina del frame → DOS lados a la vez (D2).
- *  · El caso real del dueño (§1c: encuadre apretado 0.988/0.998) → SANA.
+ *  · El caso real del mantenedor (§1c: encuadre apretado 0.988/0.998) → SANA.
  *
  * FUERA de alcance (requieren canvas real → browser): densidades de tinta
  * 20% condena / 85% escudo anti-fondo D10 y el perdón POR LADO (Q1) con
- * motor utilizable — el dueño los valida en runtime (REPORTE-e14-
+ * motor utilizable — el mantenedor los valida en runtime (REPORTE-e14-
  * esquinas-suaves-v1).
  */
 import { describe, expect, it, vi } from "vitest";
@@ -86,8 +86,8 @@ describe("verificarCompletitud — tabla de decisión §2", () => {
     });
   });
 
-  it("CASO REAL del dueño (§1c): encuadre apretado 0.988/0.998 → SANA (fix del guard)", async () => {
-    // La foto PERFECTA del dueño llena el encuadre por hábito — el guard del
+  it("CASO REAL del mantenedor (§1c): encuadre apretado 0.988/0.998 → SANA (fix del guard)", async () => {
+    // La foto PERFECTA del mantenedor llena el encuadre por hábito — el guard del
     // PR #33 la condenaba; Rev. 2 solo sospecha desde 0.999 (MARGEN_BORDE).
     // Esquinas 0.002..0.998 (el caso medido 0.988/0.998 queda dentro del
     // margen): NINGUNA toca el filo → quad sano sin análisis.

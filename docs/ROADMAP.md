@@ -6,7 +6,7 @@ aquí: vive en `docs/DECISIONS.md` (decisiones `D1…D76`), en los
 
 ## 1. Paridad de resultado con `supervision-e14` (prioridad alta)
 
-Ambos repos comparten dueño, dominio y motor de npm. El objetivo es que **un
+Ambos repos comparten mantenedor, dominio y motor de npm. El objetivo es que **un
 mismo acta produzca la misma salida** en el digitalizador móvil y en el
 supervisor masivo, no que el móvil cargue con la cola masiva.
 
@@ -61,7 +61,7 @@ supervisor masivo, no que el móvil cargue con la cola masiva.
 - [x] `scripts/qa-aa-quickwins.ts` 11/11 — cerrado el 2026-11-04: tres
       microcopias del panel de desarrollador (`text-slate-500` → `text-slate-400`).
 - [x] `scripts/qa-obs-ui.ts` 8/8 — cerrado el 2026-11-04: el ancla pedía
-      «modo de diagnóstico» y el dueño lo renombró a «modo desarrollador»; se
+      «modo de diagnóstico» y el mantenedor lo renombró a «modo desarrollador»; se
       recalibró el harness, no la UI.
 - [x] Correr `scripts/qa-*.ts` dentro de `.github/workflows/quality.yml` —
       cerrado el 2026-11-04. CI ahora valida tipos + lint + vitest + build +
@@ -88,7 +88,7 @@ supervisor masivo, no que el móvil cargue con la cola masiva.
       este no: `pareceImagen()` los rechaza y no hay decodificador de PDF en el
       pipeline. El texto de ayuda ya no lo promete.
 
-## 4. Decisiones del dueño que frenan la salida a público
+## 4. Decisiones del mantenedor que frenan la salida a público
 
 - [ ] **Licencia**: sin `LICENSE`, «público» equivale a todos los derechos
       reservados.
@@ -101,8 +101,9 @@ supervisor masivo, no que el móvil cargue con la cola masiva.
 
 ## 5. Higiene pendiente (bajo riesgo)
 
-- [ ] `docs/evidence/sim-recursos/` (≈76 KB de scripts y JSON de corridas
-      históricas): decidir si sigue siendo evidencia citable o se retira.
+- [x] `docs/evidence/sim-recursos/` (≈76 KB de scripts y JSON de corridas
+      históricas): movido a `docs/archivo/sim-recursos/` (2026-11-12) — se
+      conserva por trazabilidad y sigue citable como evidencia histórica.
 - [ ] Exports de `src/lib/e14/obs/` que `knip` no ve: valorar marcarlos con
       `/** @public */` en vez de documentarlos en `docs/DEUDA.md`.
 - [ ] Duplicado `blobADataUrl` (`jornada.ts` / `puente/mapear.ts`): fusionar solo

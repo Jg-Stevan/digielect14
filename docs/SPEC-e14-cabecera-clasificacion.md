@@ -6,11 +6,11 @@ Archivo de trabajo del agente: `/home/z/my-project/worklog.md` (leer antes de em
 
 ---
 
-## 0. Alcance (decisión de producto del dueño)
+## 0. Alcance (decisión de producto del mantenedor)
 
 **ENTRA:** extraer SOLO los datos IMPRESOS del documento (cabecera + banda + ver/pag + pie de formulario) para saber dónde va cada foto, y archivarla en su mesa/cuerpo/página. Base de datos oficial precargada. Eliminar el veredicto «ACTA NO RECONOCIDA» por fallo de OCR de cabecera.
 
-**NO ENTRA (decisión del dueño, no simplificar ni inventar aquí):**
+**NO ENTRA (decisión del mantenedor, no simplificar ni inventar aquí):**
 - Lectura de manuscritos (votaciones por candidato, firmas, cédulas, X de recuento). Los campos G.2/G.3 del análisis quedan FUERA; el flujo de revisión humana existente los sigue cubriendo.
 - Consulta en vivo a AppSync (queda documentado como fase futura en el análisis §G.4.6).
 - Cambios en `apps/scanner-lab` (prohibido; regla de oro). Esta spec es 100 % dominio E-14: es código NUEVO dentro de `apps/digitalizador-e14`.
@@ -35,9 +35,9 @@ Contenidos reales descargados:
   - 3.013 zonas, **14.438 puestos** con `standCode`, `standName` y `countTable` (número de mesas del puesto).
 - (Referencia, NO bundear: `allTransmissionCodes.json`, 36,7 MB — índice de actas publicadas con estados 3=pendiente / 11=publicada y `expectedName` hash del PDF.)
 
-### 1.1 Validación contra las muestras del dueño (hecha, coincide 1:1)
+### 1.1 Validación contra las muestras del mantenedor (hecha, coincide 1:1)
 
-| Muestra del dueño | En la base descargada |
+| Muestra del mantenedor | En la base descargada |
 |---|---|
 | Cairo KIT 399: `ZONA 05 · PUESTO 02 · MESA 001` | `88 → 335 EGIPTO → zona 05 → puesto 02 "El Cairo - Consulado" → countTable 1` |
 | Frankfurt mesa 012 | `88 → 120 ALEMANIA → zona 15 → puesto 02 "Frankfurt Consulado" → countTable 12` |
@@ -192,7 +192,7 @@ Se muestra cuando `status === "EN_REVISION_HUMANA"` y hay `clasificacion` pendie
 ## 7. Criterios de aceptación (verificables por el auditor con Agent Browser + consola)
 
 - **AC1** `public/e14/divipol.json` presente con exactamente 34 deps / 1.189 mun / 3.013 zonas / 14.438 puestos; cargable offline (sin fetch externo en runtime).
-- **AC2** Con el OCR real de las muestras del dueño (Cairo KIT 399 y Frankfurt): clasificación AUTO `88·335·05·02·001·TRANSMISION` y `88·120·15·02·012` respectivamente (o SUGERIDA con 1 corrección si el OCR de esa foto degradado no llega al umbral — demostrar cuál y por qué).
+- **AC2** Con el OCR real de las muestras del mantenedor (Cairo KIT 399 y Frankfurt): clasificación AUTO `88·335·05·02·001·TRANSMISION` y `88·120·15·02·012` respectivamente (o SUGERIDA con 1 corrección si el OCR de esa foto degradado no llega al umbral — demostrar cuál y por qué).
 - **AC3** Foto nítida cuyo OCR no contiene "E-14"/"REGISTRADURÍA": estado `EN_REVISION_HUMANA` con panel de corrección (NUNCA RECHAZADA). Es el caso que hoy produce «ACTA NO RECONOCIDA» — reproducir antes y después.
 - **AC4** Foto borrosa (score < 6.5): RECHAZADA igual que hoy (regla de calidad intacta, 2 intentos).
 - **AC5** Tras GUARDAR UBICACIÓN, el acta queda archivada en la mesa/clave correcta en la vista ACTAS (Fase B) con su tipo y página.

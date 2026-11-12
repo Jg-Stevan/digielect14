@@ -5,16 +5,19 @@ Next (`BUILD_STATIC=1` → `out/`) o el worker de OpenNext.
 
 | destino | URL | COOP/COEP (multihilo OCR) | cómo se actualiza |
 |---|---|---|---|
-| GitHub Pages (canónico) | `jg-stevan.github.io/digielect14/` | ✗ → wasm a un hilo | automático: `deploy-pages.yml` en push a `main` |
-| Cloudflare Pages | `digielect14.pages.dev` | ✓ vía `public/_headers` | manual (o Git-integration) |
+| Cloudflare Pages (objetivo) | `digielect14.pages.dev` | ✓ vía `public/_headers` | manual (o Git-integration) |
 | Cloudflare Worker | `digielect14e.julistevan02.workers.dev` | ✓ (config del worker) | `bun run deploy` (o Build de la app en el dashboard) |
+| GitHub Pages (retiro aprobado — A-02 del plan 2026-11-12) | `jg-stevan.github.io/digielect14/` | ✗ → wasm a un hilo | automático: `deploy-pages.yml` en push a `main` (el workflow aún existe; se apaga con A-02) |
 
-GitHub Pages no puede enviar cabeceras cross-origin, así que ahí
-`crossOriginIsolated` es `false` y `onnxruntime-web` baja a un hilo. Los otros
-dos son las demos de velocidad.
+El canal vigente es Cloudflare (Pages + Worker). GitHub Pages no puede enviar
+cabeceras cross-origin, así que ahí
+`crossOriginIsolated` es `false` y `onnxruntime-web` baja a un hilo; su retiro
+está aprobado (A-02 del plan 2026-11-12) y la demo canónica pasa a ser
+`digielect14.pages.dev`.
 
 **Por qué el merge no basta**: ni Pages ni el Worker se disparan solos con el
-push (solo GH Pages). Después de mergear hay que lanzar el deploy.
+push (hoy el único automático es GH Pages, que se retira con A-02; después de
+eso ningún canal se auto-dispara). Después de mergear hay que lanzar el deploy.
 
 ## 1. Cloudflare Pages (demo multihilo en la raíz)
 
@@ -102,7 +105,8 @@ problema.
 ## 6. Trampas de entorno (C-27)
 
 - **basePath sin variable:** `BUILD_STATIC=1` sin `NEXT_PUBLIC_BASE_PATH` definida
-  hornea el fallback `/digielect14` (GH Pages). Para la raíz, la variable VACÍA.
+  hornea el fallback `/digielect14` (el basePath histórico de GH Pages, canal
+  en retiro — A-02 del plan 2026-11-12). Para la raíz, la variable VACÍA.
   El `prebuild` imprime un aviso ruidoso con el basePath efectivo
   (`scripts/aviso-basepath.mjs`) — no lo silencies: es el 404 de `/models` evitado.
 - **Git Bash manglea la variable** (Windows): `NEXT_PUBLIC_BASE_PATH=/digielect14`

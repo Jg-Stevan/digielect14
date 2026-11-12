@@ -123,7 +123,7 @@ export default function Page() {
   }, []);
 
   // KIT e14-esquinas-suaves-v1 (T-R): tick del SIM VIVO en el SHELL — corre en
-  // TODAS las vistas (el dueño mira RESUMEN y el puesto se llena a la vista).
+  // TODAS las vistas (el mantenedor mira RESUMEN y el puesto se llena a la vista).
   // Antes vivía en ACTAS (se pausaba al navegar). Misma cadencia 5 s, mismo
   // guard: OFF o guion completo → sin ticks (AC-SIM1). D6 intocable: solo lee.
   const modoSimulacion = useE14Store((s) => s.modoSimulacion);

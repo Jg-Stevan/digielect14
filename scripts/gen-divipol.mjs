@@ -14,7 +14,7 @@
  * (WAF + CORS + offline): este script se corre UNA VEZ al preparar el release.
  *
  * Lógica VERBATIM del spec §1.2 (misma forma del JSON compacto; los conteos
- * de guard son los medidos y verificados contra las muestras del dueño:
+ * de guard son los medidos y verificados contra las muestras del mantenedor:
  * Cairo KIT 399 · Frankfurt mesa 012 · Bremen mesas 001/002).
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -49,7 +49,7 @@ for (const { node: d } of edges) {
 }
 
 // Guard del spec §1.2: si los conteos difieren, parar y reportar (la base
-// pudo cambiar). Medido y verificado 2026-10-10 contra las muestras del dueño.
+// pudo cambiar). Medido y verificado 2026-10-10 contra las muestras del mantenedor.
 const esperados = { deps: 34, mun: 1189, zonas: 3013, puestos: 14438 };
 const reales = { deps: edges.length, mun: totalMun, zonas: totalZonas, puestos: totalPuestos };
 for (const [k, v] of Object.entries(esperados)) {

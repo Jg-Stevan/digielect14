@@ -2,7 +2,7 @@
 # KIT e14-ola1 (bloque 1.3, cierra F11) — REESCRITURA de historia de digielect14
 # para eliminar `src/assets/acta-e14-real.jpg` de TODOS los commits.
 #
-# ⚠️  LO EJECUTA EL DUEÑO, no un agente: fuerza push y reescribe SHAs.
+# ⚠️  LO EJECUTA EL MANTENEDOR, no un agente: fuerza push y reescribe SHAs.
 # Endurecido en la remediación de la auditoría 2026-11-11: bundle de respaldo
 # obligatorio, --force-with-lease (nunca --force a secas) y registro del SHA
 # previo de main.

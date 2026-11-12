@@ -15,7 +15,7 @@ este PR.
 
 ## §0 Mandato
 
-El autor del proyecto (dueño del lab) verificó un bug en producción: la cámara
+El autor del proyecto (mantenedor del lab) verificó un bug en producción: la cámara
 de e14 abría la GRAN ANGULAR en vez de la principal (50MP). Causa raíz: durante
 la fase lógica se **re-escribió («simplificó»)** lógica del lab que ya resolvía
 el problema — violando el principio de copia. El lab es la fuente de verdad: el

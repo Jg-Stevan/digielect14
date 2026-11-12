@@ -47,8 +47,8 @@ Nada de esto es bug: es integración pendiente entre olas.
   (348 KB, foto real de un acta — la decisión D35/Ola 1 la retira).~~
   **EJECUTADO (D86, 2026-11-08):** el binario salió del HEAD; `ls src/assets/`
   hoy solo contiene las 4 fixtures `acta-sim-*.jpg` (blob `18fb854` alcanzable
-  SOLO en la historia git — su purga es la Fase 3 del dueño, C-38/D91).
-* ~~**Validación de demo pendiente del dueño**: con la foto real retirada, el
+  SOLO en la historia git — su purga es la Fase 3 del mantenedor, C-38/D91).
+* ~~**Validación de demo pendiente del mantenedor**: con la foto real retirada, el
   asset [0] del modo SIM es `acta-sim-extra-1.jpg` (pipeline completo) —
   confirmar que el chip 8.2 sigue cayendo en ÓPTIMA; si no, recalibrar el
   orden de `ACTAS_SIM` (un cambio de UNA línea en el bridge).~~
@@ -81,7 +81,7 @@ cambio sea mecánico y seguro; los contratos de TEXTO se quedan):
 | `qa-autoenvio.ts` | imports reales (clasificador) EXCEPTO bloque 4 | **SE QUEDA** | los literales que ancla (`UMBRAL_AUTO=0.82`…) NO están exportados del paquete: exportarlos excede el alcance de paquete autorizado en esta ola. El golden `contrato-motor.json` YA cubre las mutaciones de umbral conductualmente (bandas 0.86/0.82/0.78 — ARQUITECTURA §5.3): el source-scan es cinturón+tirantes. La claves del store que mira son zona ajena (bloque 7.4) |
 | `qa-obs-contract.ts` | regex de firmas `export function nombre` en su archivo | **SE QUEDA** | el contrato §4.3 congela LA FORMA de la firma (function exportada en su módulo) — un import no distingue function de const-arrow ni verifica el archivo |
 | `qa-obs-privacidad.ts` | greps NEGATIVOS (0 `console.`, 0 `localStorage` fuera de claves) | **SE QUEDA** | ausencias: por naturaleza source-scan |
-| `qa-obs-transporte.ts` | anclas estáticas de transporte | **SE QUEDA (en CI)** | el comportamiento YA está cubierto con imports reales por `obs/transporte.test.ts` (vitest). Consolidación futura: eliminar el harness y confiar en el vitest — decisión de dueño, no urgente |
+| `qa-obs-transporte.ts` | anclas estáticas de transporte | **SE QUEDA (en CI)** | el comportamiento YA está cubierto con imports reales por `obs/transporte.test.ts` (vitest). Consolidación futura: eliminar el harness y confiar en el vitest — decisión de mantenedor, no urgente |
 | `qa-obs-ui.ts` | aria-labels/textos de componentes | **SE QUEDA** | contrato de TEXTO de UI; complemento natural: los tests de copy de 7.10 |
 | `qa-paridad-motor.ts` | cotejo de checkout hermano | **SE QUEDA** | en CI sale «omitido» (exit 0) y la paridad real la sostiene el golden compartido (`contrato-motor.json` validado en ambos repos). La opción del plan (sembrar el checkout hermano en cache de CI) exige tocar `.github/**` — zona prohibida de esta ola |
 

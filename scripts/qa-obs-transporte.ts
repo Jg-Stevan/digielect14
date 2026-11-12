@@ -16,7 +16,7 @@
  *   c. Kill local: tras 3 fallos seguidos del endpoint el transporte se
  *      auto-detiene (activo:false) y deja el outbox intacto (constante
  *      documentada en la implementación A3-C1 — nombres congelados por
- *      este QA junto con MI C1; renombrarlos exige acuerdo con el dueño,
+ *      este QA junto con MI C1; renombrarlos exige acuerdo con el mantenedor,
  *      kit A3-C4 ⚠).
  *   d. Reintentos exponenciales 1m → 5m → 30m (tope 3).
  *   e. El envío respeta leerPolitica() — scrub previo: JAMÁS envía

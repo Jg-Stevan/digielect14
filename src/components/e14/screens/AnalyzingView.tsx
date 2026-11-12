@@ -43,7 +43,7 @@ const ORDEN_ETAPAS: readonly EtapaAnalisis[] = [
 /** Piso escénico (D16): mínimo en pantalla antes de poder cerrar al 100 %.
  *  KIT e14-velocidad-5s-v1: ahora es flag (`pisoEscenicoMs`, default 300) —
  *  con el pipeline bajo 5 s, el piso de 1200 ms + el snap de 350 ms eran 1.5 s
- *  de teatro puro sobre el reloj del dueño. override {"pisoEscenicoMs":1200}
+ *  de teatro puro sobre el reloj del mantenedor. override {"pisoEscenicoMs":1200}
  *  ⇒ la animación de siempre (snap 350 incluido). */
 /** Constante de tiempo del tween del % (suaviza los saltos de los eventos). */
 const TAU_SUAVIZADO_MS = 140;
@@ -148,7 +148,7 @@ export function AnalyzingView() {
       // Piso escénico D16: nunca 100 hasta (pipeline resuelto && ≥piso).
       const puedeCerrar = resuelto && t - inicioReloj >= pisoEscenicoMs;
       // KIT e14-velocidad-5s-v1 (`cierreInstantaneo`): el teatro de abajo gasta
-      // ~600 ms del reloj del dueño DESPUÉS de que el trabajo ya terminó (el
+      // ~600 ms del reloj del mantenedor DESPUÉS de que el trabajo ya terminó (el
       // tween exponencial al 0.995 ≈ 2,3·TAU = 320 ms + el `setTimeout` de
       // cierre). Con el flag, en cuanto se puede cerrar se cierra.
       if (puedeCerrar && !cerrado && cierreInstantaneo) {

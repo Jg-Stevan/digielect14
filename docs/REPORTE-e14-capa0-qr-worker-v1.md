@@ -1,6 +1,6 @@
 # REPORTE — KIT e14-capa0-qr-worker-v1 (port del D40+R1.1+R1.4-b de supervision-e14)
 
-**Fecha:** 2026-10-30 · **Rama:** `feat/e14-capa0-qr-worker-v1` (base `b9465a6`) · **Estado:** listo para QA del dueño
+**Fecha:** 2026-10-30 · **Rama:** `feat/e14-capa0-qr-worker-v1` (base `b9465a6`) · **Estado:** listo para QA del mantenedor
 
 ## 1 · Problema
 
@@ -38,7 +38,7 @@ regresiones. Este kit porta EXACTAMENTE esa solución al flujo individual.
 | `src/lib/e14/qr/qr-pixeles.ts` | +`activarGuardBarrido` (R1.1 — sin guard el chequeo interno es `false`, byte-idéntico) · +`ladderBaseDePixeles`/`nitidezQrDePixeles`/`binarizadaQrDePixeles` MOVIDAS byte a byte desde identidad-qr.ts (misma doctrina D40: el worker las importa como módulo puro jsQR-only). `barridoQrDePixeles` gana 3 chequeos de guard. |
 | `src/lib/e14/qr/identidad-qr.ts` | Retira las definiciones movidas y RE-EXPORTA (cero diffs en consumidores). |
 | `src/lib/e14/scanner-core-bridge.ts` | El bloque e64-qr T-2.1 de cámara consume `decodificarQrCapa0Camara`; el catch conserva el camino de hoy byte-idéntico. |
-| `src/lib/e14/{flags,obs/tipos}.ts` + `flags-ejemplo.json` | Flag `capa0QrWorker` (default **true**, kill-switch del dueño: false = hoy byte a byte). Whitelist aditiva. |
+| `src/lib/e14/{flags,obs/tipos}.ts` + `flags-ejemplo.json` | Flag `capa0QrWorker` (default **true**, kill-switch del mantenedor: false = hoy byte a byte). Whitelist aditiva. |
 | `package.json` | `prebuild` (el artefacto va COMMITTEADO — el hook es guardia, no requisito). |
 | `scripts/check-quality.sh` | Smoke de capa 0 en el gate. |
 | `src/lib/e14/flags.test.ts` | Ancla de defaults +`capa0QrWorker: true` (patrón de cada kit). |
@@ -92,5 +92,5 @@ regresiones. Este kit porta EXACTAMENTE esa solución al flujo individual.
   hacia el informe IA (PanelDev §9) — hoy solo consola.
 - **Kit futuro**: rescate zxing en main cuando el worker da null (cobertura
   EXACTA de la masiva) — decide la telemetría.
-- Bench con fotos reales del dueño (`tools/bench-qr-identidad`) para medir
+- Bench con fotos reales del mantenedor (`tools/bench-qr-identidad`) para medir
   % decode antes/después.

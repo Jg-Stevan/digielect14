@@ -9,7 +9,7 @@
  *    real del mismo módulo).
  * Los módulos de datos se MOCKEAN (entorno node — nada toca IndexedDB);
  * politica/flags corren REALES sobre window.localStorage stub (así el
- * espejo se prueba de punta a punta con overrides del dueño incluidos).
+ * espejo se prueba de punta a punta con overrides del mantenedor incluidos).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

@@ -1,7 +1,7 @@
 /**
  * KIT e14-observabilidad-v1 (A1-C6) — export MANUAL del reporte de
  * observabilidad. D1 (REGLA DE ORO §2.2): NADA sale del dispositivo sin
- * acción explícita — no hay autosend, no hay backend; el dueño pulsa
+ * acción explícita — no hay autosend, no hay backend; el mantenedor pulsa
  * «descargar» y elige ZIP/JSON.
  *
  * · construirReporte() — ReporteSesion del contrato §4.2:
@@ -308,7 +308,7 @@ async function miniaturasDeFallidas(): Promise<Array<{ nombre: string; bytes: Ui
 }
 
 /** Descarga MANUAL (D1). vaciarDespues → purgarBuffer tras descargar CON
- *  ÉXITO (el dueño ya tiene su copia — el buffer local muere limpio). */
+ *  ÉXITO (el mantenedor ya tiene su copia — el buffer local muere limpio). */
 export async function descargarReporte(
   formato: "zip" | "json",
   vaciarDespues: boolean,

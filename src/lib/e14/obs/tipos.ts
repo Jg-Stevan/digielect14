@@ -38,19 +38,19 @@ export interface FlagsApp {
   // ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — campo ADITIVO AL FINAL (D57) ───
   // Renombrado de `masivaOcrTesseract` al retirar el módulo masiva (la
   // cascada es del pipeline general; el nombre era herencia del kit).
-  ocrCascada: boolean; // default true (GO-B del dueño) — cascada OCR: intento 1 TESSERACT BEST (ocr/tesseract.ts) → gate → core RapidOCR escalonado como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte
+  ocrCascada: boolean; // default true (GO-B del mantenedor) — cascada OCR: intento 1 TESSERACT BEST (ocr/tesseract.ts) → gate → core RapidOCR escalonado como hoy → rescate ROI top/bottom; false = OCR escalonado de siempre byte a byte
   // NOTA (eliminación del módulo masiva): los 17 flags exclusivos de la cola
   // (poolWorkers · thumbsOn · colaPersistente · sondeoQr* · prescan* ·
   // masiva* · dhashResize) se retiraron con el módulo.
   // ─── KIT e14-adaptacion-dispositivo-v1 — campo ADITIVO AL FINAL (D57) ───
-  // Adaptación automática al dispositivo (petición del dueño): el tier
+  // Adaptación automática al dispositivo (petición del mantenedor): el tier
   // detectado consume knobs de RECURSOS (hilos OCR — plan.ts). El override
-  // MANUAL del dueño manda clave a clave (D6); false = byte-idéntico a hoy.
+  // MANUAL del mantenedor manda clave a clave (D6); false = byte-idéntico a hoy.
   adaptacionDispositivo: boolean; // default true
-  // ─── KIT e14-ocr-tessbest-v1 (GO-B del dueño) — campo ADITIVO AL FINAL
+  // ─── KIT e14-ocr-tessbest-v1 (GO-B del mantenedor) — campo ADITIVO AL FINAL
   // ─── (D57): presupuesto del ESCANEO individual. null = plan por tier
   // ─── (BAJO 480 s · MEDIO 240 s · ALTO 120 s — lección del masiva D48 y
-  // ─── la evidencia sim-gama-baja); número = override MANUAL del dueño.
+  // ─── la evidencia sim-gama-baja); número = override MANUAL del mantenedor.
   presupuestoEscaneoMs: number | null; // default null
   // ─── KIT e14-capa0-qr-worker-v1 — campo ADITIVO AL FINAL (D57): la capa 0
   // ─── QR de la cámara corre su cadena jsQR en WORKER (presupuesto real +
@@ -77,7 +77,7 @@ export interface FlagsApp {
   // ─── KIT e14-autoenvio-recorte-v1 — tras un RECORTE manual que pasa a
   // ─── OPTIMA: ¿se envía automáticamente (como captura normal) o se queda en
   // ─── REVISIÓN esperando envío manual? Default true (comportamiento actual
-  // ─── G4 del gate v2); false = el recorte NUNCA auto-envía (dueño decide).
+  // ─── G4 del gate v2); false = el recorte NUNCA auto-envía (mantenedor decide).
   autoEnvioConRecorte: boolean; // default true
   // ─── KIT e14-velocidad-5s-v1 — campos ADITIVOS AL FINAL (D57) ───────────
   // Tope del lado mayor de la foto que ENTRA al trabajo (importación + warp +
@@ -143,7 +143,7 @@ export interface FlagsApp {
   // Cierre de la pantalla ANALIZANDO: false = el teatro de siempre (el progreso
   // hace tween al 100 y `Math.min(350, pisoEscenicoMs)` extra antes de navegar)
   // · true = en cuanto el pipeline resolvió (y se cumplió el piso) se navega
-  // YA. Son ~600 ms de animación sobre el reloj del dueño.
+  // YA. Son ~600 ms de animación sobre el reloj del mantenedor.
   cierreInstantaneo: boolean; // default false
   // Pases de jsQR sobre el warp COMPLETO antes de tirar el rescate HR de la
   // brújula. Bench v8.3: el warp acertó 0/4 (el QR queda ~110 px) y el rescate
@@ -161,7 +161,7 @@ export interface FlagsApp {
   // re-OCR y el ROI simplemente no abren.
   ocrSegundaTopeMs: number; // default 0 · clamp [0, 120000]
   // KIT e14-remediacion-movil-v1 (A1) — campo ADITIVO AL FINAL (D57): ventana
-  // de ARRANQUE de la 2.ª pasada como override MANUAL del dueño (doble
+  // de ARRANQUE de la 2.ª pasada como override MANUAL del mantenedor (doble
   // whitelist flags.ts + obs/politica.ts). null = plan por tier (BAJO 15 s ·
   // MEDIO/ALTO 45 s — postura 2 de A1, rescate ROI conservado); número =
   // override clampado. La garantía de duración vive en la fórmula k·ms1 del

@@ -35,6 +35,20 @@ bun run test:paquete   # bun test packages/scanner-core (incluye el contrato md5
 
 ## Reglas que más se olvidan
 
+- **Jamás commitear actas reales (SEC-10/D86):** ni fotos de actas, ni
+  capturas con datos de jurados, ni volcados de sesión (ver `SECURITY.md` y
+  `.gitignore`; las capturas de campo quedan fuera del repo).
+- **Jamás reescribir historial sin autorización registrada (D90/D91):**
+  cualquier `git filter-repo` / force-push requiere una decisión D-xx
+  registrada que la autorice; lo demás es historia inmutable.
+- **`packages/scanner-core` se cambia en ESPEJO:** todo cambio del paquete se
+  aplica idéntico (byte a byte) en ambos repos (dig y sup) y deja
+  `qa-paridad-motor` en 20/20. Anúncialo en el título del PR y espera la
+  pasada espejo del hermano (además del contrato md5 D81/D82 de abajo).
+- **Convención de decisiones D-xx-sup / D-xx-dig:** cada repo lleva su
+  propia numeración (pueden divergir); en dig viven en `docs/DECISIONS.md`,
+  en sup en `docs/adr/` y los reportes de seguimiento. No re-numeres
+  decisiones existentes; las nuevas van al final con fecha y motivo.
 - **Motor vendorizado/compartido**: `packages/scanner-core` y los módulos de
   `src/lib/e14/core/` están md5-trazados (`core/CONTRATO.json` +
   `contrato-core.test.ts`). Si editas el motor, regenera los md5 del contrato
@@ -46,3 +60,11 @@ bun run test:paquete   # bun test packages/scanner-core (incluye el contrato md5
   `docs/ROADMAP.md` / plan), con su evidencia en la descripción.
 - **Secretos**: nada de tokens en el repo (`SECURITY.md`); los deploys usan
   `secrets.CF_API_TOKEN` en los workflows de `.github/workflows/`.
+- **Issues/PRs**: usa las plantillas de `.github/ISSUE_TEMPLATE/` y
+  `.github/PULL_REQUEST_TEMPLATE.md` (gates verdes, espejo si toca el
+  motor, sin actas reales, docs al día).
+
+## Conducta y reportes
+
+- Conducta: ver [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
+- Vulnerabilidades: **no abras un issue público**; sigue [`SECURITY.md`](./SECURITY.md).

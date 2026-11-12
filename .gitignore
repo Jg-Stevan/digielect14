@@ -69,6 +69,9 @@ dev.log
 /capturas/
 /assets-locales/
 /scratch/
+# SEC-10/D86 — jamás versionar actas reales ni capturas con datos de jurados
+actas-reales*/
+docs/capturas-*/
 *.onnx
 
 # ─── BINARIOS MATERIALIZADOS (bun run preparar) ────────────────────────────

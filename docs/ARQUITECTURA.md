@@ -22,22 +22,22 @@ Sin base de datos y sin API propia: el estado vive en el dispositivo
 
 Un acta entra por cámara o por archivo y sale con `status`, `score`, `quad`,
 `ocrTexto` y `clasificacion`. El orquestador es
-`RealCoreBridge.escanearActa()` ([src/lib/e14/scanner-core-bridge.ts:1231](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/scanner-core-bridge.ts#L1231));
+`RealCoreBridge.escanearActa()` ([src/lib/e14/scanner-core-bridge.ts:1231](src/lib/e14/scanner-core-bridge.ts#L1231));
 las etapas emiten progreso con `etapa` canónica
 (`DETECTANDO → RECORTANDO → REALZANDO → CALIDAD → OCR`).
 
 | # | etapa | dónde | qué produce |
 |---|---|---|---|
-| 1 | capa 0 QR | [src/lib/e14/qr/capa0-qr.client.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/qr/capa0-qr.client.ts) + `capa0-qr.worker.ts` | identidad del acta desde el frame, en worker, en paralelo a la detección |
+| 1 | capa 0 QR | [src/lib/e14/qr/capa0-qr.client.ts](src/lib/e14/qr/capa0-qr.client.ts) + `capa0-qr.worker.ts` | identidad del acta desde el frame, en worker, en paralelo a la detección |
 | 2 | detección de bordes | `scanner-core` (`detectDocumentEdgesDetail`) | `quad` de 4 esquinas |
-| 3 | orientación | [orientacion.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/orientacion.ts), [orientacion-qr.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/orientacion-qr.ts) | rotación 0/90/180/270 elegida por brújula QR y probe con presupuesto por tier |
+| 3 | orientación | [orientacion.ts](src/lib/e14/orientacion.ts), [orientacion-qr.ts](src/lib/e14/orientacion-qr.ts) | rotación 0/90/180/270 elegida por brújula QR y probe con presupuesto por tier |
 | 4 | warp + realce | `scanner-core` vía `recortar()` | `fotoProcesada` (la que se envía) |
-| 5 | OCR | [ocr-cascada.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/ocr-cascada.ts), [ocr/tesseract.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/ocr/tesseract.ts), [ocr-escalonado.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/ocr-escalonado.ts), [ocr/rapidocr.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/ocr/rapidocr.ts) | texto + líneas + confianza |
-| 6 | clasificación | [clasificador.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/clasificador.ts) + [divipol.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/divipol.ts) + [kits.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/kits.ts) | depto/municipio/zona/puesto/mesa contra el catálogo oficial, nivel `AUTO`/`SUGERIDA`/`MANUAL` |
-| 7 | marcadores | [marcadores.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/marcadores.ts) | ¿hay tinta en la zona de votos? (D41 — **no** lee votos) |
-| 8 | completitud | [completitud.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/completitud.ts) | secciones esperadas presentes |
-| 9 | gate | `evaluarGate()` ([scanner-core-bridge.ts:2722](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/scanner-core-bridge.ts#L2722)) | `status`: AUTO+score≥8 → `OPTIMA`, ≥6.5 → `ADVERTENCIA`, bajo → `RECHAZADA`; SUGERIDA/MANUAL → `EN_REVISION_HUMANA` |
-| 10 | envío | [puente/](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/puente) | `POST {hub}/actas` con cola offline-first |
+| 5 | OCR | [ocr-cascada.ts](src/lib/e14/ocr-cascada.ts), [ocr/tesseract.ts](src/lib/e14/ocr/tesseract.ts), [ocr-escalonado.ts](src/lib/e14/ocr-escalonado.ts), [ocr/rapidocr.ts](src/lib/e14/ocr/rapidocr.ts) | texto + líneas + confianza |
+| 6 | clasificación | [clasificador.ts](src/lib/e14/clasificador.ts) + [divipol.ts](src/lib/e14/divipol.ts) + [kits.ts](src/lib/e14/kits.ts) | depto/municipio/zona/puesto/mesa contra el catálogo oficial, nivel `AUTO`/`SUGERIDA`/`MANUAL` |
+| 7 | marcadores | [marcadores.ts](src/lib/e14/marcadores.ts) | ¿hay tinta en la zona de votos? (D41 — **no** lee votos) |
+| 8 | completitud | [completitud.ts](src/lib/e14/completitud.ts) | secciones esperadas presentes |
+| 9 | gate | `evaluarGate()` ([scanner-core-bridge.ts:2722](src/lib/e14/scanner-core-bridge.ts#L2722)) | `status`: AUTO+score≥8 → `OPTIMA`, ≥6.5 → `ADVERTENCIA`, bajo → `RECHAZADA`; SUGERIDA/MANUAL → `EN_REVISION_HUMANA` |
+| 10 | envío | [puente/](src/lib/e14/puente) | `POST {hub}/actas` con cola offline-first |
 
 Regla de oro del gate: **la decisión la toma `evaluarGate`, no el score crudo**.
 El veto `INCOMPLETA` y el marcador `SIN_VOTOS` corren fuera de `evaluarGate`
@@ -45,12 +45,12 @@ pero mandan sobre él (D6, D41). Nadie fuerza un `status` a mano.
 
 ## 3. Estado y pantallas
 
-`useE14Store` ([src/lib/e14/store.ts:454](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/store.ts#L454))
+`useE14Store` ([src/lib/e14/store.ts:454](src/lib/e14/store.ts#L454))
 es la única máquina de estados: `dispararEscaneo()` invoca al bridge,
 `analisisCompletado()`/`enviarActa()` mueven la vista, y `jornada.ts` persiste
 la sesión (actas archivadas, contadores de motivo de no envío).
 
-Vistas ([src/components/e14/screens/](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/components/e14/screens)):
+Vistas ([src/components/e14/screens/](src/components/e14/screens)):
 `ScanView` (cámara/importar y disparo) → `AnalyzingView` (progreso) →
 `ReviewView` (aceptar/corregir/enviar) → `ActasView` (bandeja del puesto) →
 `ResumenView` (cierre de jornada). Edición manual: `QuadEditor.tsx` (recorte y
@@ -101,7 +101,7 @@ de 2026-11-04, cuando el motor dejó de ser npm y se vendorizó):
 | Negocio | `clasificador.ts` · `completitud.ts` · `kits.ts` · `divipol.ts` idénticos tras diferencias declaradas (el hermano exporta dos símbolos para sus tests y trae `PUBLIC_BASE` de `@/shared/env`) |
 
 Cómo se sostiene, sin ejecutar los dos motores en un mismo CI
-([scripts/qa-paridad-motor.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/scripts/qa-paridad-motor.ts)
+([scripts/qa-paridad-motor.ts](scripts/qa-paridad-motor.ts)
 solo funciona cuando el hermano está en el disco):
 
 1. **El golden** — `src/lib/e14/__fixtures__/contrato-motor.json`: 21 cabeceras
@@ -111,7 +111,7 @@ solo funciona cuando el hermano está en el disco):
    `bun scripts/gen-contrato-motor.ts`; `--check` dice si el golden aún refleja
    el motor.
 2. **Cada repo lo valida contra su propia copia** — aquí
-   [contrato-motor.test.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/contrato-motor.test.ts)
+   [contrato-motor.test.ts](src/lib/e14/contrato-motor.test.ts)
    (vitest), allá el mismo archivo con `bun:test`. El golden es idéntico en los
    dos, así que un cambio de negocio hecho en un solo repo deja rojo el otro: la
    sincronía se paga copiar el archivo, no con una conversación.
@@ -128,16 +128,16 @@ esas capas se valida con los QA y las mediciones de campo, no con el golden.
 
 ## 6. Flags y adaptación por dispositivo
 
-Cadena de precedencia: `DEFAULTS` ([src/lib/e14/flags.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/flags.ts))
+Cadena de precedencia: `DEFAULTS` ([src/lib/e14/flags.ts](src/lib/e14/flags.ts))
 ← `public/flags.json` (remoto, cacheado 24 h, offline-safe) ← overrides de
-`localStorage` (kill-switch manual del dueño, siempre gana).
+`localStorage` (kill-switch manual del mantenedor, siempre gana).
 
 **Alta obligada al añadir un flag**: los dos filtros son INDEPENDIENTES y hay
 que escribir la clave en los dos — `sanearFlags()` en
-[flags.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/flags.ts)
+[flags.ts](src/lib/e14/flags.ts)
 (recibe el JSON remoto) y `leerOverridesFlags()` en
-[obs/politica.ts](file:///C:/Users/JG/Documents/REPOSITORIOS/digielect14/src/lib/e14/obs/politica.ts)
-(recibe el localStorage). Si se omite el segundo, el kill-switch del dueño no
+[obs/politica.ts](src/lib/e14/obs/politica.ts)
+(recibe el localStorage). Si se omite el segundo, el kill-switch del mantenedor no
 manda y el flag se lee siempre por default — fallo silencioso, no ruidoso. El
 tipo vive en `obs/tipos.ts` (`FlagsApp`, campos ADITIVOS AL FINAL por D57) y el
 literal exhaustivo de `FLAGS_DEFAULT` está fijado en `flags.test.ts`.

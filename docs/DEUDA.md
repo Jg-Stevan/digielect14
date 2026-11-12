@@ -3,7 +3,8 @@
 Lo que falta, lo que está bloqueado y lo que **no** se debe tocar. Actualizado
 el 2026-11-04 tras la limpieza profunda (fuera `tools/`, `lab/`,
 `docs/archive/`, código muerto del módulo masiva y 48 KB de registro de kits en
-`AGENTS.md`).
+`AGENTS.md`); cifras y estado re-verificados el 2026-11-12 (rama
+`plan/ejecucion-2026-11-12`).
 
 ## Inventario que parece muerto y no lo es
 
@@ -36,7 +37,7 @@ Los dos fallos que arrastraba `scripts/check-quality.sh` se cerraron en la limpi
   `dev/PanelDev.tsx` y `dev/SeccionRastreo.tsx` pasaron de `text-slate-500` a
   `text-slate-400`. Solo el panel de desarrollador; la UI de campo no se tocó.
 - `qa-obs-ui.ts` (`aria-label` de la puerta del modo dev): el ancla seguía
-  exigiendo «modo de diagnóstico», nombre que el dueño renombró a «modo
+  exigiendo «modo de diagnóstico», nombre que el mantenedor renombró a «modo
   desarrollador». Se recalibró **el harness**, no la UI.
 
 Desde el 2026-11-04 esos harnesses **y** los 2 smoke de worker corren en CI
@@ -92,37 +93,32 @@ en CI sale «omitido» porque no hay checkout hermano, y en local exige
   tree está en CRLF aunque el índice esté en LF — por eso el md5 por bytes crudos
   nunca debió ser la garantía.
 
-## Pendiente de decisión del dueño
+## Pendiente de decisión del mantenedor
 
-1. **`src/assets/acta-e14-real.jpg`** (348 KB) es **foto real de un acta** y viaja
-   empaquetada como fixture SIM (`scanner-core-bridge.ts:104` y `:343`). El repo
-   es público y la regla del proyecto es no commitear actas. Los sintéticos
-   `acta-sim-*.jpg` ya cubren los tiers; reemplazarla cambia el comportamiento
-   del modo SIM (y su peso), por eso no se hizo en la limpieza.
-   Mismo tema en el hermano, pero más grave: en `supervision-e14` las páginas 2
-   de `src/modules/supervision/data/actas-reales/assets/*.webp` muestran nombres,
-   cédulas y firmas de jurados (verificado abriendo los archivos). De ahí ya
-   salieron quince capturas de sesión con lo mismo; el detalle y las cuatro
-   opciones están en `docs/DEUDA.md` §4 de ese repo. Acá la foto es OTRA acta
-   (consulado 88, país 680-Portugal, puesto 86, mesa 003) y es solo la página 1:
-   lleva totales de votación, que son públicos, pero no datos de particulares.
-   La decisión, sin embargo, se toma una sola vez para los dos repos: son actas
-   distintas del mismo formulario, y lo que se elija (anonimizar, sustituir por
-   sintéticos o declarar público) aplica igual a los dos.
-2. **Historial de `.git` (≈55 MB)**: son blobs de binarios ML de commits
+1. **CERRADO por D86 (2026-11-08) — `src/assets/acta-e14-real.jpg` salió del
+   repo.** Era foto real de un acta empaquetada como fixture SIM; el modo SIM
+   carga ahora fixtures sintéticas (`acta-sim-*.jpg`) vía cargadores dinámicos.
+   En el hermano `supervision-e14` las actas reales también salieron del árbol
+   (D87 de ese repo) y la reescritura de historia quedó preparada en los dos
+   repos (D91 acá, D90 allá) — ejecutarla sigue siendo paso del mantenedor.
+2. **Historial de `.git` (verificado 2026-11-12: ≈22 MiB con `du -sh .git`)**:
+   son blobs de binarios ML de commits
    antiguos, no ramas. Reducirlo exige reescribir historial
    (`git filter-repo` / BFG) → roto para cualquiera con clon, y la regla del
    repo prohíbe reescritura de historial sin autorización explícita.
-3. **Siete ramas remotas ya mergeadas** (`git branch -r`): borrarlas es acción
+3. **Ramas remotas mergeadas** (`git branch -r` — verificado 2026-11-12: 28
+   ramas remotas, 29 refs contando `origin/HEAD`; 11 ya mergeadas a `main`
+   según `git branch -r --merged origin/main`): borrarlas es acción
    remota y no reversible para otros.
-4. **Licencia**: el repo aún no tiene `LICENSE`. Sin ella, "público" implica
-   todos los derechos reservados.
+4. **Licencia — RESUELTO**: `LICENSE` (MIT) existe en la raíz
+   (verificado 2026-11-12).
 
 ## Deuda técnica real
 
-- `docs/evidence/sim-recursos/*.js` (4 scripts, ≈76 KB) son evidencia histórica
+- `docs/archivo/sim-recursos/*.js` (4 scripts, ≈76 KB — movidos a archivo el
+  2026-11-12) son evidencia histórica
   de las corridas de gama baja; `knip` los ve como archivos sueltos. Se van con
-  el próximo reporte que los cite o con decisión del dueño.
+  el próximo reporte que los cite o con decisión del mantenedor.
 - **El HEIC de 12 MP sigue costando ~6,9 s.** El tope de D82 corta el caso que
   mataba el acta (50 MP), pero NO acelera el archivo que sí se decodifica:
   heic2any 0.0.4 decodifica a resolución nativa y no admite `width`/`height`

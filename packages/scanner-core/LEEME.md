@@ -20,7 +20,7 @@ terceros**: no hay semver garantizado entre minor, los sub-exports
 (`core/*`, `dominio/*`, `orquestacion/*`) pueden moverse con el mapa de
 migración v2.3. Si un consumidor externo depende de esto, es bajo su riesgo y
 sin canal de soporte. La versión publicada (0.4.1) quedó DESFASADA frente al
-workspace (0.5.0): publicar 0.5.0 es acción del dueño (`bun publish` — ver
+workspace (0.5.0): publicar 0.5.0 es acción del mantenedor (`bun publish` — ver
 `docs/DEUDA.md`); este desfase está anotado como F7 en el plan de remediación.
 
 ## La regla que gobierna todo

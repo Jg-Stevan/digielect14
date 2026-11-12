@@ -1,7 +1,7 @@
 # REPORTE — KIT e14-gama-baja-20s-v1
 
 **Fecha:** 2026-10-29 · **Rama:** `feat/e14-gama-baja-20s-v1` · **Base:** main `65dedc61`
-**Petición del dueño:** «ayudame a que el procesamiento de la imagen sea en 20 segundos, todo en
+**Petición del mantenedor:** «ayudame a que el procesamiento de la imagen sea en 20 segundos, todo en
 el dispositivo del usuario offline sin VLM» · contexto: la única medición con perfil «gama baja»
 dio **pipeline 125 809 ms** (CPU 6×, 4 núcleos, **mono-hilo** — sin COOP/COEP, escenario
 GH Pages; `docs/evidence/sim-recursos/sim-lowend-resultados.json`) y la lectura del repo es
@@ -85,9 +85,9 @@ extra (camino idéntico al escalonado actual).
 - `bunx tsc --noEmit` → **0 errores**.
 - `bun run lint` → **0 problemas / 0 warnings**.
 - `bun run test` → vitest **233/233** (16 archivos — idéntico al baseline, 0 regresiones).
-- Validación de comportamiento pendiente del dueño (ver §6).
+- Validación de comportamiento pendiente del mantenedor (ver §6).
 
-## 6 · Pendientes (dueño)
+## 6 · Pendientes (mantenedor)
 
 1. **Validación de campo en gama baja real** (SM-A135M u otro): medir con el rastreo del
    PanelDev §9 (kit e14-rastreo-tiempos-v1) + informe IA (§8) en CF Pages (multihilo) y
@@ -98,6 +98,6 @@ extra (camino idéntico al escalonado actual).
 3. **Bench `tools/bench-recW400`** (sub-palanca NO activada aquí): REC_WMAX 480→400 en BAJO
    rec ÷~1.2 — requiere ≥99% texto idéntico, Δconf ≤0.5, ≥1.15× (mismo protocolo del
    bench-rec-int8). Solo con GO se suma al plan como 4.º knob.
-4. cls lote 12 (GO del banco B2 para cls: 1.25-1.30×) — decisión global del dueño pendiente
+4. cls lote 12 (GO del banco B2 para cls: 1.25-1.30×) — decisión global del mantenedor pendiente
    (el kit NO la activa).
 5. WebGPU EP (banco B4 bloqueado en headless) — opt-in futuro solo con bench en hardware real.

@@ -34,7 +34,7 @@ Todo el detalle, por módulo, en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 | Motor de escaneo | **`packages/scanner-core`** (`@jg-stevan/scanner-core`, consumido como `workspace:*`) — un solo motor para este app y el supervisor: detección de bordes, warp, realce, OCR escalonado, clasificador, completitud, marcadores. Edítalo AQUÍ, en el paquete; su origen histórico es el repo `web-scanner` (v0.4.1) y su changelog vive en `packages/scanner-core/CHANGELOG.md` |
 | OCR | Tesseract.js 5.1.1 (español `spa` best, PSM 4) como intento 1 y RapidOCR **PP-OCRv4** sobre `onnxruntime-web` 1.30 (EP wasm) como intento 2 |
 | QR/1D | `zxing-wasm` 3.1.6 + jsQR 1.4.0 vendido dentro del paquete (`packages/scanner-core/src/qr/vendor/`), con capa 0 en worker |
-| Estado/flags | cadena `DEFAULTS ← public/flags.json ← overrides de localStorage` (kill-switch del dueño) |
+| Estado/flags | cadena `DEFAULTS ← public/flags.json ← overrides de localStorage` (kill-switch del mantenedor) |
 | Gestor | **bun** (`bun.lock`) — no usar npm ni pnpm |
 
 Los modelos y runtimes que se sirven en runtime viven en `public/`
@@ -79,9 +79,13 @@ el botón «USAR HUB LOCAL (ESTE EQUIPO)». Pasos y matriz de errores: el
 
 ## Deploy
 
-Demo estática: <https://jg-stevan.github.io/digielect14/> (GitHub Pages, sin
-cross-origin isolation). Multihilo: <https://digielect14.pages.dev> (Cloudflare
-Pages con cabeceras COOP/COEP). Instrucciones: [docs/DEPLOY.md](docs/DEPLOY.md).
+Canal vigente: **Cloudflare** — Pages (`digielect14.pages.dev`, con cabeceras
+COOP/COEP para el OCR multihilo) y el Worker (`digielect14e.julistevan02.workers.dev`).
+GitHub Pages (`jg-stevan.github.io/digielect14/`, sin cross-origin isolation)
+queda fuera del objetivo: su **retiro está aprobado** (A-02 del plan
+2026-11-12) — el workflow `deploy-pages.yml` aún existe en `.github/workflows/`
+y se apaga con ese ítem; mientras tanto sigue publicando la demo estática.
+Instrucciones: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Documentación
 

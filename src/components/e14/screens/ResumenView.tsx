@@ -5,7 +5,7 @@
  * segmentada de 12), tarjetas de estadística (cola offline / rescaneos) e
  * historial de envíos con barra de acento por estado. Reactivo en vivo.
  * Responsive 360→1280 (max-w-2xl en lg). La sección "ANÁLISIS DE LA
- * JORNADA" (donut + barras recharts) fue ELIMINADA a pedido del dueño.
+ * JORNADA" (donut + barras recharts) fue ELIMINADA a pedido del mantenedor.
  *
  * KIT e14-observabilidad-v1 (agente 2 · C1): tuerca del modo de
  * diagnóstico SIEMPRE visible arriba-izquierda del header (dev/

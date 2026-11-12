@@ -2,7 +2,7 @@
 
 /**
  * ACTAS (§7.6 / C1) — "CONTROL ACTAS E-14": puesto ACTUAL (el de la ÚLTIMA
- * clasificación archivada — regla del dueño: SOLO un puesto en pantalla) con
+ * clasificación archivada — regla del mantenedor: SOLO un puesto en pantalla) con
  * la cantidad de mesas DIVIPOL del puesto, y acordeón con TODAS las mesas de
  * ESE puesto (1..countTable; PENDIENTE lo no archivado). MODO SIMULACIÓN:
  * toggle que llena la vista con el puesto demo (seed §6.4) cuando NO hay
@@ -122,7 +122,7 @@ export function ActasView() {
   // Puesto mostrado: el real manda; en simulación (sin puesto real) el demo.
   const puestoActual: PuestoActual | null = puestoReal ?? (modoSimulacion ? PUESTO_SIMULADO : null);
   // KIT e14-luz-sim-puntos-v1 (T-S): el SIM corre TAMBIÉN con puesto real
-  // (llena el puesto del acta escaneada — decisión del dueño ⑤). El guion
+  // (llena el puesto del acta escaneada — decisión del mantenedor ⑤). El guion
   // vive en store.mesas (guionDePuesto); archivadas/puestoActual NUNCA se
   // tocan (D6). Apagar devuelve la vista real exacta.
   const enSimulacion = modoSimulacion;

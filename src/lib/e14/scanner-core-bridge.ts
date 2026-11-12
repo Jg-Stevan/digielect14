@@ -134,7 +134,7 @@ import { construirLogD51, ORDEN_LOG_D51, type EntradaD51 } from "./log-contrato"
 // PR de custodia del binario — ver docs/PENDIENTES-INTEGRACION.md).
 // Orden del arreglo (§D3/§D8.1 — el índice lo decide indiceActaPorScore):
 //   [0] ÓPTIMA  = acta-sim-extra-1.jpg (pipeline COMPLETO con detect+warp+bw;
-//       sustituta de la foto real del dueño — el dueño recalibra el orden si
+//       sustituta de la foto real del mantenedor — el mantenedor recalibra el orden si
 //       el chip 8.2 deja de caer en ÓPTIMA con este asset)
 //   [1] MEDIO   = acta-sim-intermedia.jpg (as-is, §D6 Rev. 3)
 //   [2] BAJA    = acta-sim-baja.jpg (as-is, §D7 Rev. 3)
@@ -150,7 +150,7 @@ import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
 import { probeOrientacion, rotarDataUrl } from "./orientacion";
 // KIT e14-orientacion-qr-v1 — la brújula QR decide la rotación por el
 // cuadrante del QR (bench v8.3: 4/4); el sondeo OCR queda como red de
-// seguridad cuando el QR no lee. leerFlags = kill-switch del dueño (§D).
+// seguridad cuando el QR no lee. leerFlags = kill-switch del mantenedor (§D).
 import { leerFlags, opcionesRescateHeic } from "./flags";
 // WAVE2 A1 — tipo del resultado del probe (para el diag de la mini descartada por el fallo seguro).
 import type { ProbeOrientacion } from "./orientacion";
@@ -180,7 +180,7 @@ import {
   type ResumenLectura,
 } from "@jg-stevan/scanner-core/obs-base/eventos-lectura";
 // KIT e14-gama-baja-20s-v1: knobs OCR por tier (SYNC/barato — adaptacion/plan.ts).
-// KIT e14-ocr-tessbest-v1 (GO-B del dueño): TESSERACT BEST como intento 1
+// KIT e14-ocr-tessbest-v1 (GO-B del mantenedor): TESSERACT BEST como intento 1
 // de la cascada (vendido + worker propio + budget) y el presupuesto del
 // escaneo por tier (BAJO 480 s · MEDIO 240 s · ALTO 120 s — P0 del informe
 // sim-gama-baja: el timeout fijo de 120 s rechazaba actas perfectas en
@@ -227,7 +227,7 @@ function decodeArchivoMemo(file: File): Promise<string> {
 
 /** Timeout de seguridad global §5 (worker colgado en gama baja).
  *  KIT e67-watchdog-rescate-v1 (M-e67-0 / cambio A): 15_000 → 120_000 — el
- *  plan del dueño pedía subirlo (asumía 30 s; el default REAL era 15 s desde
+ *  plan del mantenedor pedía subirlo (asumía 30 s; el default REAL era 15 s desde
  *  el split del repo — desviación documentada en el REPORTE). Evidencia:
  *  un ARCHIVO real terminó VÁLIDO a los ~53.5 s y el watchdog de 15 s ya lo
  *  había rechazado (resultado descartado en silencio). 120 s da colchón
@@ -241,7 +241,7 @@ function decodeArchivoMemo(file: File): Promise<string> {
  *  (OpcionesEscaneoConTimeout.timeoutMs — manda sobre el plan). El RECORTE
  *  manual conserva su RECORTE_TIMEOUT_MS propio (ruta distinta). */
 /** KIT e14-recorte-manual-v1 (T1): presupuesto del RECORTE manual — el warp
- *  del editor mide 14–17.4 s en el equipo del dueño (OCR solo: 9.8–14.3 s),
+ *  del editor mide 14–17.4 s en el equipo del mantenedor (OCR solo: 9.8–14.3 s),
  *  al borde del límite de 15 s del escaneo. El timeout SIGUE RECHAZANDO
  *  (gate/score intactos — §5); lo único que cambia es qué foto muestra el
  *  acta resultante: el recorte ya horneado (parcial), no la foto vieja. */
@@ -276,7 +276,7 @@ const DETALLE_INCOMPLETA = "EL ACTA ESTÁ CORTADA EN EL ENCUADRE — ALÉJATE UN
 // runner MASIVA — sin cola no hay flujos «escaneo»).
 // KIT e14-gate-v2 (FASE G2): detalle del rechazo por el MARCADOR
 // OBLIGATORIO de votos fallido — copy CORTO y descriptivo (decisión del
-// dueño: SIN guía de cámara). El rechazo directo regresa el flujo a
+// mantenedor: SIN guía de cámara). El rechazo directo regresa el flujo a
 // captura (comportamiento existente de RECHAZADA).
 const DETALLE_SIN_VOTOS = "ACTA SIN VOTOS VISIBLES";
 // §D1/KIT: los NÚMEROS de la política (TECHO_SIN_SENAL, TECHO_ESCUDO_FONDO,
@@ -286,7 +286,7 @@ const DETALLE_BAJO = "NO SE RECONOCE INFORMACIÓN DEL ACTA — REPITA LA FOTO";
 
 /**
  * §D1 (SPEC-e14-score-ocr): SEÑAL DE CONTENIDO del acta — se calcula DESPUÉS
- * del OCR + clasificación. El score del dueño mide el RECONOCIMIENTO («el
+ * del OCR + clasificación. El score del mantenedor mide el RECONOCIMIENTO («el
  * score se basa en el reconocimiento del acta por ocr y que el acta esté
  * completa»), no solo las métricas fotográficas. Señales: cabecera E-14 o
  * alguna lectura cruda del clasificador (MESA/tipo). `ocrTextIsValid` NO es
@@ -1083,7 +1083,7 @@ async function reconocerRapidOcrEscalonado(
 }
 
 /**
- * KIT e14-ocr-cascada-v1 (K3 fase 2 — plan flujo-dueño paso 6) — recorte de
+ * KIT e14-ocr-cascada-v1 (K3 fase 2 — plan flujo-mantenedor paso 6) — recorte de
  * UN ROI del warp para el rescate OCR: franja horizontal [y0Frac, y1Frac]
  * re-escalada a cap DET_CAP_PROD (1920 — brief K3: «re-escalado a cap 1920»)
  * → dataUrl JPEG 0.92 (entrada de OCR, tolerante; el MISMO patrón de crop
@@ -1122,7 +1122,7 @@ async function recortarRoiDataUrl(
 
 /**
  * KIT e14-ocr-cascada-v1 (K3 fase 2) + GO-B — la CASCADA en el pipeline,
- * SOLO con `leerFlags().ocrCascada` ON (default ON — decisión del dueño
+ * SOLO con `leerFlags().ocrCascada` ON (default ON — decisión del mantenedor
  * 2026-11; kill-switch override {"ocrCascada": false} ⇒ esta función nunca
  * se invoca y el camino es `reconocerRapidOcrEscalonado` byte a byte):
  *
@@ -1137,7 +1137,7 @@ async function recortarRoiDataUrl(
  *
  * El GATE usa el clasificador REAL de producción (clasificarCabecera +
  * cargarDivipol — el MISMO juez que decide el acta más abajo en el
- * pipeline, FASE 6). GO-B OTORGADO (dueño 2026-11: «dejemos como primer
+ * pipeline, FASE 6). GO-B OTORGADO (mantenedor 2026-11: «dejemos como primer
  * motor de ocr tess best y escalonado a pp ocr»): `ocr/tesseract.ts`
  * (tesseract.js 5 vendido, worker propio — JAMÁS main thread) hace el
  * intento 1 con texto SOLO-vía-GATE (jamás elegirMejor) + budget propio
@@ -1145,7 +1145,7 @@ async function recortarRoiDataUrl(
  * RapidOCR 1280 (pasada motor:"rapidocr" — la cascada la REUSA y el
  * escalonado a PP-OCR sigue byte a byte).
  */
-const OCR_CASCADA_TESSERACT_GO = true; // GO-B del dueño (2026-11) — kill-switch: flag `ocrCascada` OFF
+const OCR_CASCADA_TESSERACT_GO = true; // GO-B del mantenedor (2026-11) — kill-switch: flag `ocrCascada` OFF
 /** KIT e14-velocidad-5s-v1 — pasada Tesseract best (worker propio de la lib).
  *  El texto vale SOLO por el GATE (jamás `elegirMejor` — regla §1 del kit
  *  cascada). null = no disponible (presupuesto corto, lib rota, sin texto):
@@ -1190,7 +1190,7 @@ async function reconocerRapidOcrCascada(
   // KIT e14-velocidad-5s-v1 — ORDEN de la cascada. Flag ON (default): el
   // INTENTO 1 es la pasada RÁPIDA de RapidOCR (det 1280) y Tesseract best
   // queda como RESCATE final, solo para el acta que esa pasada no ubicó.
-  // Flag OFF ⇒ GO-B del dueño de siempre (Tess primero). El TEXTO elegido es
+  // Flag OFF ⇒ GO-B del mantenedor de siempre (Tess primero). El TEXTO elegido es
   // el mismo en los dos órdenes: entre motores siempre decidió el GATE.
   const rapidaPrimero = leerFlags().ocrPrimeraPasadaRapida === true;
   // KIT e14-velocidad-5s-v1 — la brújula QR ya fijó el cuadrante del acta:
@@ -1234,7 +1234,7 @@ async function reconocerRapidOcrCascada(
       // el motor de rescate NO se paga — Tess es 20-60 s de presupuesto para un
       // acta que ya es RECHAZADA; acá se va directo por la rápida.
       if (rapidaPrimero || cfg.corteIncompleta === true) return rapid1280(foto);
-      // GO-B (dueño 2026-11): TESSERACT BEST primero (worker propio de la
+      // GO-B (mantenedor 2026-11): TESSERACT BEST primero (worker propio de la
       // lib, budget capado al restante del pipeline) → su texto vale SOLO
       // por el GATE. Cualquier fallo/vencido/sin-presupuesto-suficiente ⇒
       // RapidOCR 1280 de SIEMPRE («escalonado a pp ocr») — pasada marcada
@@ -1590,7 +1590,7 @@ export class RealCoreBridge implements E14Bridge {
     //  · CAMARA + archivo (ZSL/captureSmart/iOS) → MISMO pipeline que ARCHIVO.
     //  · CAMARA sin archivo + frameActual (video vivo) → grab síncrono.
     //  · SIMULACIÓN sin archivo (D35) → el acta E-14 incluida, EXACTAMENTE
-    //    como un archivo de IMPORTAR (la foto real del dueño, EXIF incluido).
+    //    como un archivo de IMPORTAR (la foto real del mantenedor, EXIF incluido).
     //  · Sin entrada → error explícito (el guard del store ya avisó).
     let entrada: EntradaPipeline | null = null;
     if (opciones.archivo) {
@@ -1707,7 +1707,7 @@ export class RealCoreBridge implements E14Bridge {
         (error) => {
           // KIT e14-heic-tope-v1 — el rescate HEIC rechazo o agotó su plazo, la
           // trazabilidad NO puede depender de que el llamador recuerde loggear:
-          // el dueño necesita ver en el registro que un acta murió por el
+          // el mantenedor necesita ver en el registro que un acta murió por el
           // formato de la foto, no por el motor.
           if (error instanceof ErrorRescateHeic) {
             logger.warn("[e14] rescate HEIC topado", { mensaje: error.message });
@@ -1791,7 +1791,7 @@ export class RealCoreBridge implements E14Bridge {
     // KIT e14-recorte-manual-v1 (T1): acumulador del recorte YA HORNEADO —
     // pipelineRecorte lo llena apenas el warp completa (patrón `parcial` del
     // escaneo §5, A7); el timeout lo usa para que el acta RECHAZADA por
-    // tiempo muestre EL RECORTE NUEVO del dueño y no la foto anterior. Si el
+    // tiempo muestre EL RECORTE NUEVO del mantenedor y no la foto anterior. Si el
     // warp no alcanzó, parcial queda vacío → comportamiento actual.
     const parcial: ParcialRecorte = {};
     let vencido = false; // tras el timeout no se emite más progreso (§5)
@@ -1805,7 +1805,7 @@ export class RealCoreBridge implements E14Bridge {
         // §5: el timeout NO rechaza la Promise — resuelve el acta RECHAZADA
         // controlada (el toast sale del flujo normal del store).
         // KIT e14-recorte-manual-v1 (T1): `...parcial` trae el recorte ya
-        // horneado si el warp alcanzó a correr — el dueño ve SU recorte
+        // horneado si el warp alcanzó a correr — el mantenedor ve SU recorte
         // (puede re-aplicar/reintentar), no la foto anterior. Gate y score
         // INTACTOS: sigue RECHAZADA ILEGIBLE por tiempo.
         resolve({
@@ -2590,7 +2590,7 @@ export class RealCoreBridge implements E14Bridge {
       // KIT actas-vivas-paginas-v1 (FASE B): la página viaja COMO VENGA de
       // la clasificación (null incluido — DESCONOCIDA: el chip muestra
       // «PÁG - DE -» y el hueco va al primer libre; el default P1 mintió
-      // con la pág 2 del Frankfurt, bug del dueño 16-oct). Sin
+      // con la pág 2 del Frankfurt, bug del mantenedor 16-oct). Sin
       // clasificación → objetivo seed (hoy).
       pagina: campos.clasificacion
         ? campos.clasificacion.pagina

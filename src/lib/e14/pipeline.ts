@@ -99,7 +99,7 @@ export async function correrPipelineL2(
     total: 0,
     orient: 0,
     cierre: 0,
-    // KIT e14-velocidad-5s-v1 — `orient` era un bloque de ~1 s SIN DUEÑO:
+    // KIT e14-velocidad-5s-v1 — `orient` era un bloque de ~1 s SIN MANTENEDOR:
     // se subdivide (brújula QR vs. lo demás: esquinas/completitud/visor).
     brujula: 0,
     esq: 0,
@@ -214,7 +214,7 @@ export async function correrPipelineL2(
   let quadOrigen: OrigenQuad | "pagina-completa" | null = null;
   // KIT e14-masiva-ux-v1 (T1): trazabilidad del arreglo en el log — si
   // corrió el reintento (§3-T1.2). Solo AÑADIR campos al final del
-  // formato (los instrumentos del dueño lo parsean).
+  // formato (los instrumentos del mantenedor lo parsean).
   let detectReintento = false;
   const tDetect = performance.now();
   if (sinRecorte) {
@@ -274,7 +274,7 @@ export async function correrPipelineL2(
   const calidadPromise = pasos.calidadDeActa(fotoOriginal, quad, infoCrop);
 
   // GUARD-BORDE Rev. 2 (§3b, D1/D3/D4): la señal de ACTA COMPLETA ya NO se
-  // decide aquí con la geometría (el falso positivo del dueño: quad al filo
+  // decide aquí con la geometría (el falso positivo del mantenedor: quad al filo
   // con la imagen perfecta — score 6.4). El cálculo se MUEVE a DESPUÉS del
   // paso 3 (recorte): la condena exige analizar la TINTA del recorte al
   // filo («la geometría sospecha, la tinta condena»). Helper ÚNICO
@@ -286,7 +286,7 @@ export async function correrPipelineL2(
   // 3) Recorte + realce (warp real INTER_CUBIC + filtro default "bw").
   //    §D8.3 (SPEC-e14-score-ocr Rev. 3): con sinRecorte se OMITE
   //    processImage — fotoProcesada = fotoOriginal (sin warp, sin filtro
-  //    "bw", sin realce: la b/n del dueño YA trae su filtro · la borrosa
+  //    "bw", sin realce: la b/n del mantenedor YA trae su filtro · la borrosa
   //    queda original), motor "canvas" (solo traza) y el acta nace con
   //    filtro "original" (veracidad en el editor — al elegir B/N aplica
   //    sobre la foto completa). Los ramps RECORTANDO/REALZANDO se
@@ -406,7 +406,7 @@ export async function correrPipelineL2(
   // individual de siempre sin la señal).
   // KIT e14-orientacion-qr-v1 (T-A) — QR-BRÚJULA PRIMERO: el cuadrante del
   // QR (hogar del E-14: TL del acta derecha) manda la rotación SIN OCR
-  // (bench v8.3 del dueño: 4/4 con fotos arrugadas/blotchy donde jsQR
+  // (bench v8.3 del mantenedor: 4/4 con fotos arrugadas/blotchy donde jsQR
   // sobre el warp daba 0/4 — el rescate hi-res guiado por el quad con
   // ZXing rescató TODAS). El sondeo OCR de abajo SOLO corre si la brújula
   // NO decidió (red de seguridad — comportamiento de HOY byte a byte).
@@ -416,7 +416,7 @@ export async function correrPipelineL2(
   let brujula: BrujulaQr | null = null;
   // KIT e14-velocidad-5s-v1 — el hueco entre el warp y la CALIDAD (brújula
   // QR + probe + rotación + esquinas + completitud + procesadaVacia) no
-  // estaba medido: en el A56 eran ~1,1 s sin dueño dentro de totalMs.
+  // estaba medido: en el A56 eran ~1,1 s sin mantenedor dentro de totalMs.
   const tOri = performance.now();
   if (!opciones.simular && !sinRecorte && leerFlags().qrBrujulaOrientacion) {
     brujula = await brujulaQrOrientacion(fotoOcr, fotoOriginal, quad);
@@ -546,7 +546,7 @@ export async function correrPipelineL2(
     !completitudEfectiva.completa;
 
   // 5) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.1: el recorte
-  //    SIN filtro — regla del dueño; la bw pasa a ser SOLO la imagen de
+  //    SIN filtro — regla del mantenedor; la bw pasa a ser SOLO la imagen de
   //    presentación/guardado). KIT e14-ocr-escalonado-v1 (§2): OCR
   //    ESCALONADO — 1.ª pasada det 1280 → re-OCR 1920 SOLO si la lectura
   //    sale débil, el MEJOR manda (el gate JAMÁS ve un texto degradado si
@@ -726,7 +726,7 @@ export async function correrPipelineL2(
   // AC10). Fallo del 2026-10-16: acta sin votos llegó OPTIMA y se
   // auto-envió sin que nadie mirara la zona de votos. Medición sobre
   // fotoProcesada (<30 ms p95, motor compartido motorTinta —
-  // marcadores.ts). Corre TAMBIÉN en `simular` (default del dueño —
+  // marcadores.ts). Corre TAMBIÉN en `simular` (default del mantenedor —
   // calibración: los 3 assets SIM pasan la zona 8.83-57.5% ≫ 0.8%, la
   // demo no se rompe · decisión D41 del catálogo). INCOMPLETA
   // manda primero: el veto de votos SOLO condena actas completas sin

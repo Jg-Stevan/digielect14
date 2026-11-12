@@ -3,7 +3,7 @@
 /**
  * FASE 2 (mapa v2.3) — WRAPPER: el cliente unificado vive en el paquete
  * (merge D+S sobre el MISMO artefacto del build único 3.7). Aquí se
- * inyectan el kill-switch del dueño y el tier del plan adaptativo.
+ * inyectan el kill-switch del mantenedor y el tier del plan adaptativo.
  */
 import { configurarCapa0 } from "@jg-stevan/scanner-core/qr/capa0-qr.client";
 import { leerFlags } from "../flags";

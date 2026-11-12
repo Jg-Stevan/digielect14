@@ -1,7 +1,7 @@
 /**
  * KIT e14-adaptacion-dispositivo-v1 — INFORME DEL DISPOSITIVO para IA.
  *
- * Petición del dueño: «que se pueda descargar un informe para que una IA
+ * Petición del mantenedor: «que se pueda descargar un informe para que una IA
  * lo pueda interpretar fácilmente». Diseño AUTO-DESCRIBITIVO: el JSON
  * lleva sus propias instrucciones de lectura (_como_interpretar), leyenda
  * de tiers, interpretación por medición y recomendaciones ACCIONABLES —
@@ -102,7 +102,7 @@ function recomendacionesDe(p: {
   }
   if (p.tier === "ALTO" && p.puntuacionGlobal !== null && p.puntuacionGlobal >= 70) {
     out.push(
-      "Equipo con holgura: si el OCR sigue siendo el cuello, el dueño puede subir el tope de hilos " +
+      "Equipo con holgura: si el OCR sigue siendo el cuello, el mantenedor puede subir el tope de hilos " +
         "con override manual (localStorage e14-flags-overrides → {\"ocrThreadsTope\": 8}).",
     );
   }
@@ -141,7 +141,7 @@ function veredictoDe(p: {
   const gpu = p.gpuRenderer ?? "GPU no revelada";
   const capa = p.adaptado
     ? `la app se ADAPTA sola: el OCR usa ${p.hilos} hilo(s) de trabajo para exprimir los recursos sin saturarlos`
-    : `la adaptación automática está APAGADA (kill-switch del dueño): hilos OCR al default histórico`;
+    : `la adaptación automática está APAGADA (kill-switch del mantenedor): hilos OCR al default histórico`;
   return (
     `Dispositivo clasificado como ${textoGama(p.tier)} (puntuación ${p.global ?? "N/D"}/100): ` +
     `${p.nucleos} núcleos de CPU, ${ram}, GPU «${gpu}». ${capa}. ` +
@@ -233,7 +233,7 @@ async function construirInformeIA(): Promise<InformeIA> {
         espera_worker_ms: plan.esperaWorkerMs,
         explicacion:
           "ocr_hilos = workers del WASM que ejecutan la inferencia OCR (RapidOCR PP-OCRv4). " +
-          "Requieren SharedArrayBuffer (COOP/COEP). Fuente: 'override-manual' (decisión del dueño en localStorage), " +
+          "Requieren SharedArrayBuffer (COOP/COEP). Fuente: 'override-manual' (decisión del mantenedor en localStorage), " +
           "'plan-adaptativo' (BAJO 2 · MEDIO 3 · ALTO 6, capado por núcleos reales) o 'default' (4, histórico). " +
           "ocr_reocr_modo / ocr_segunda_presupuesto_ms (KIT e14-gama-baja-20s-v1) = cómo se resuelve " +
           "el 2.º intento OCR cuando la 1.ª pasada sale débil (en BAJO: rescate de la franja cabecera " +

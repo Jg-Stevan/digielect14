@@ -92,7 +92,7 @@ Antes de cada envío el transporte consulta `leerPolitica()` (`e14-obs-politica`
 - `miniaturas: false` (default) → **ninguna** ruta de miniatura viaja.
 - El transporte **jamás** serializa `Blob`/`File`/dataURL: solo JSON del contrato.
 - **Jamás** viaja `actaId` plano (solo `actaIdHash` FNV-1a 8 hex), ni contenido de actas (imágenes), ni identificadores personales. Cero PII (regla de oro 5).
-- El rastreo no puede desactivarse desde el servidor: solo el dueño configura flags/overrides (D6).
+- El rastreo no puede desactivarse desde el servidor: solo el mantenedor configura flags/overrides (D6).
 
 ## 6 · Prueba rápida (receptor mínimo)
 

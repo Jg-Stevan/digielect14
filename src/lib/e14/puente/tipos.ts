@@ -1,6 +1,6 @@
 /**
  * KIT e14-puente-supervision-v2 (§1) — CONTRATO del puente hacia el hub
- * `e14-puente` (Workers — panel de supervisión en vivo del dueño).
+ * `e14-puente` (Workers — panel de supervisión en vivo del mantenedor).
  *
  * ═══ CONTRATO v1 (Ola 0, bloque 0.7) ═══  El sobre es el mismo; cambian las
  * rutas y la autenticación:

@@ -176,7 +176,7 @@ function qrHardKillsDefensivo(): number | undefined {
  *  facingMode (la red de seguridad del lab) y el bug visible en producción
  *  fue la GRAN ANGULAR en vez de la principal 50MP.
  *
- *  F-LENS v5 (kit fix-camara-principal, bug de campo del dueño: «en un
+ *  F-LENS v5 (kit fix-camara-principal, bug de campo del mantenedor: «en un
  *  dispositivo abrió la cámara FRONTAL y no se pudo hacer las pruebas»):
  *  tres vectores confirmados en el código y sus contramedidas —
  *     A) Sondas ciegas al facing: probeCamera leía caps de AF/torch/resolución
@@ -427,7 +427,7 @@ function readMainCameraCache(): MainCameraCache | null {
     if (!raw) return null;
     const c = JSON.parse(raw) as MainCameraCache;
     if (!c || typeof c.deviceId !== "string" || c.deviceId === "") return null;
-    // F-LENS v5 — SANEO de cachés venenadas (el dispositivo del dueño quedó
+    // F-LENS v5 — SANEO de cachés venenadas (el dispositivo del mantenedor quedó
     // pegado a la FRONTAL: la caché solo se invalidaba por FALLO de apertura
     // y abrir la frontal nunca falla). Entrada frontal por facing o label →
     // se borra AHORA y se fuerza re-sondeo completo.

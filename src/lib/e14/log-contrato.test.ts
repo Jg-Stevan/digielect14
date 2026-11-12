@@ -5,7 +5,7 @@
  * fijo (el propio grep del repo los confirma: `…total=…ms (decode=…
  * motor=… ocrValido=… clasif={…} metricas={…})…`). Si un test rojo sale
  * aquí, el cambio de formato es un CAMBIO DE CONTRATO con los instrumentos
- * del dueño: los tokens nuevos van AL FINAL (D51) — nunca en medio.
+ * del mantenedor: los tokens nuevos van AL FINAL (D51) — nunca en medio.
  */
 import { describe, expect, it } from "vitest";
 import { construirLogD51, ORDEN_LOG_D51 } from "./log-contrato";

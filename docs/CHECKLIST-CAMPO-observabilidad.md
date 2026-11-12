@@ -5,7 +5,7 @@
 > validarla en campo cuando `feat/obs-nucleo-v1` (agente 1) y `feat/obs-modo-dev-v1` (agente 2) estén integrados.
 >
 > Regla transversal (regla de oro 4): **el rastreo jamás puede romper la app.** Si cualquier ítem de
-> esta checklist muestra un fallo de la app (no del rastreo), STOP y reportar al dueño.
+> esta checklist muestra un fallo de la app (no del rastreo), STOP y reportar al mantenedor.
 
 ---
 
@@ -85,7 +85,7 @@
 
 ## 7 · Kill switch → tanda masiva sigue
 
-**Objetivo:** los overrides manuales de flags nunca rompen el flujo (D6: la app no cambia reglas sola; el dueño sí).
+**Objetivo:** los overrides manuales de flags nunca rompen el flujo (D6: la app no cambia reglas sola; el mantenedor sí).
 
 **Pasos:**
 1. PanelDev → kill switch/overrides: fijar `poolWorkers: 1` (y opcionalmente `thumbsOn: false`).

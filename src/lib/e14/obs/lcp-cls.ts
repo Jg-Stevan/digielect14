@@ -32,7 +32,7 @@
  * emisores de entorno del repo es perf+codigo (src/lib/e14/ocr/rapidocr.ts
  * → "ocr:multihilo-entorno": tipo "perf" + datos{codigo,…} con sesion/
  * dispositivo/appVersion VACÍOS — appendEvento los sella). El evento perf
- * NO viaja por red (transporte.ts TIPOS_LOTE) — llega al dueño por export
+ * NO viaja por red (transporte.ts TIPOS_LOTE) — llega al mantenedor por export
  * manual / reporte de sesión, igual que el resto del perf.
  *
  * PRIVACIDAD: solo números y nombres de elemento (tag/#id/clases) — cero

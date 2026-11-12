@@ -5,6 +5,33 @@ archivo cubre la APP `digitalizador-e14` (raíz del workspace). El MOTOR tiene
 su propio changelog: [`packages/scanner-core/CHANGELOG.md`](./packages/scanner-core/CHANGELOG.md)
 (última entrada del paquete: **0.5.0** — 2026-11-07, migración v2.3).
 
+## [0.6.0] — 2026-11-12
+
+Kits de campo del puente y del motor (olas del plan 2026-11-11). Referencias
+D-xx en `docs/DECISIONS.md`.
+
+### Añadido
+- **Fusión de evidencia acta ↔ DIVIPOL** (PR #158, D89-dig): motor con pesos
+  calibrados que cruza la lectura cruda del encabezado contra la base DIVIPOL;
+  queda tras el kill-switch `fusion_evidencia` (flag APAGADO por defecto).
+- **Anti-reproceso P-22**: el sobre transporta el `qrPayload` exacto y el
+  `dhash64` perceptual (espejo sup) — el receptor descarta re-procesos por
+  identidad de contenido.
+- **Tier P-23**: la regla ALTO usa red CONGELADA (espejo sup) — sin sorpresas
+  de re-descarga en jornada.
+- **Banner de demostración D-36** en el móvil (ola 3) — marca el modo demo
+  para no confundirlo con jornada real.
+- **Check de cabeceras D-35**: verificación de las cabeceras de seguridad del
+  despliegue en cada build (ola 3).
+
+### Cambiado
+- **Pantallas sin scroll + cámara a pantalla completa** (`78a9d09`): Review y
+  Scan re-flujados a viewport (`globals.css` + `ReviewView`/`ScanView`).
+- **No auto-capturar al borde** (`f2dc192`): el frame-loop no dispara captura
+  cuando el acta toca el borde del encuadre (tests de calidad incluidos).
+- **E3 marcas de esquina por regiones** portado del hermano (T-12) + cierre
+  del §11 (T-15).
+
 ## [0.5.0] — 2026-11-07
 
 Alineada con `@jg-stevan/scanner-core` 0.5.0 (paquete único del motor — ver

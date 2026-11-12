@@ -5,14 +5,14 @@
  * el módulo masiva): el tier YA detectado deja de ser solo-telemetría y
  * CONSUME presupuestos de recursos — acotado a knobs de PERFORMANCE
  * (jamás reglas de negocio: scores, gates, umbrales y desenlaces del
- * pipeline NO se tocan) y con el kill-switch del dueño:
+ * pipeline NO se tocan) y con el kill-switch del mantenedor:
  *
  *   FLAG `adaptacionDispositivo` (default TRUE — petición explícita del
- *   dueño 2026-11) · override manual localStorage MÁXIMA prioridad (D6):
+ *   mantenedor 2026-11) · override manual localStorage MÁXIMA prioridad (D6):
  *   {"adaptacionDispositivo": false} ⇒ knobs byte-idénticos a hoy.
  *
  * PRIORIDAD POR KNOB (hilos OCR):
- *   1. override MANUAL del dueño (`ocrThreadsTope` en e14-flags-overrides)
+ *   1. override MANUAL del mantenedor (`ocrThreadsTope` en e14-flags-overrides)
  *      — el plan NO lo toca (D6: la app jamás revierte una decisión manual).
  *   2. plan adaptativo por tier — BAJO 2 · MEDIO 3 · ALTO 6 (exprimir en
  *      gama alta; proteger en gama baja). Siempre capado por
@@ -30,7 +30,7 @@ import { tierRapido } from "./perfil";
 import type { Tier } from "../obs/tipos";
 
 /** Hilos OCR objetivo por tier (ANTES del cap por hardwareConcurrency).
- *  ALTO exprime (6 > default 4 — petición del dueño); BAJO protege. */
+ *  ALTO exprime (6 > default 4 — petición del mantenedor); BAJO protege. */
 const HILOS_POR_TIER: Record<Tier, number> = {
   BAJO: 2,
   MEDIO: 3,
@@ -70,11 +70,11 @@ const HILOS_POR_TIER: Record<Tier, number> = {
  *  acta RECHAZADA que con sondeo completo era 10.0 ÓPTIMA. Gana el knob
  *  de main (probeOrientacionMs: BAJO 150 s · MEDIO 60 s · ALTO 12 s).
  *
- *  Prioridad D6 intacta: override MANUAL del dueño (ocrThreadsTope) manda
+ *  Prioridad D6 intacta: override MANUAL del mantenedor (ocrThreadsTope) manda
  *  sobre ocrHilos; los knobs por tier se revierten con el kill-switch
  *  `adaptacionDispositivo: false`. EXCEPCIÓN (A1): `ocrSegundaPresupuestoMs`
  *  ahora también existe como FLAG (override MANUAL, doble whitelist) — manda
- *  sobre el knob del tier cuando el dueño lo fija. */
+ *  sobre el knob del tier cuando el mantenedor lo fija. */
 const KNOBS_OCR_HISTORICO = {
   ocrReOcrModo: "completo",
   ocrSegundaPresupuestoMs: null,
@@ -90,7 +90,7 @@ const KNOBS_OCR_HISTORICO = {
 // a 120,9 s RECHAZADA 0.0) NO puede reproducirse por la 2.ª pasada. BAJO
 // queda byte-idéntico (15 s — mismo modo). El knob `ocrSegundaPresupuestoMs`
 // pasó a la DOBLE WHITELIST de flags (flags.ts + obs/politica.ts) para el
-// A/B del dueño sin rebuild — el override MANUAL manda sobre el plan (D6).
+// A/B del mantenedor sin rebuild — el override MANUAL manda sobre el plan (D6).
 
 const KNOBS_OCR_POR_TIER: Record<
   Tier,
@@ -103,7 +103,7 @@ const KNOBS_OCR_POR_TIER: Record<
   // KIT e14-remediacion-movil-v1 (A1): ventana 45 s + rescate ROI (postura 2
   // del plan — ver comentario de arriba). El re-OCR completo de MEDIO/ALTO
   // sin tope de duración era la causa raíz del P0 #1 (acta legible
-  // RECHAZADA 0.0 por el watchdog a los 120 s). override MANUAL del dueño:
+  // RECHAZADA 0.0 por el watchdog a los 120 s). override MANUAL del mantenedor:
   // flag `ocrSegundaPresupuestoMs` (doble whitelist) manda sobre estos knobs.
   MEDIO: { ocrReOcrModo: "roi-cabecera", ocrSegundaPresupuestoMs: 45_000 },
   ALTO: { ocrReOcrModo: "roi-cabecera", ocrSegundaPresupuestoMs: 45_000 },
@@ -116,7 +116,7 @@ const KNOBS_OCR_POR_TIER: Record<
  *  necesita ~125 s y el timeout fijo de 120 s (e67) lo RECHAZABA con score
  *  0.0 justo antes de terminar (P0). ALTO = 120 s byte-idéntico al
  *  histórico; MEDIO/BAJO escalan (lección D48 del masiva: el presupuesto
- *  manda sobre el reloj de la máquina del dueño, no al revés). La UI nunca
+ *  manda sobre el reloj de la máquina del mantenedor, no al revés). La UI nunca
  *  se congela: el pipeline corre en worker y el ANALIZANDO es event-driven
  *  (D18). Coherente con la cascada: vencido ⇒ no se abre ninguna etapa
  *  nueva (§3 del kit escalonado). */
@@ -131,7 +131,7 @@ const PRESUPUESTO_ESCANEO_DEFAULT_MS = 120_000;
 
 /** KIT e14-ocr-tessbest-v1 — presupuesto del PROBE de orientación por tier
  *  (histórico fijo 12 000 — D56 §3 T3, calibrado con det del probe a
- *  DET_CAP_RAPIDO en equipos del dueño: det ~1.2 s + rec0 ~3 s + rec90 ~3 s
+ *  DET_CAP_RAPIDO en equipos del mantenedor: det ~1.2 s + rec0 ~3 s + rec90 ~3 s
  *  + rec270 ~3 s ≈ 10.2 s). Evidencia sim-lowend v5/v6 (mono-hilo 6× + 3G):
  *  el t0 COMPARTIDO se consume con cargas de fondo (descarga vendida de
  *  Tess, modelos en cola) ⇒ el sondeo queda cortado (cortes=presupuesto) sin
@@ -166,7 +166,7 @@ const ESPERA_WORKER_POR_TIER: Record<Tier, number> = {
 const ESPERA_WORKER_DEFAULT_MS = 5_000;
 
 export interface PlanAdaptativo {
-  /** false ⇒ el flag del dueño está OFF ⇒ knobs byte-idénticos a hoy. */
+  /** false ⇒ el flag del mantenedor está OFF ⇒ knobs byte-idénticos a hoy. */
   adaptado: boolean;
   tier: Tier;
   tierInferido: boolean;
@@ -222,7 +222,7 @@ function hilosWasmDisponibles(): boolean {
 }
 
 /** Resuelve el presupuesto del escaneo con la MISMA prioridad del plan:
- *  override MANUAL del dueño (flag `presupuestoEscaneoMs`, clamp 30-900 s)
+ *  override MANUAL del mantenedor (flag `presupuestoEscaneoMs`, clamp 30-900 s)
  *  > plan por tier > default 120 s. Jamás lanza. */
 function resolverPresupuesto(tier: Tier): {
   ms: number;
@@ -265,7 +265,7 @@ export function planAdaptativo(): PlanAdaptativo {
   try {
     const flags = leerFlags();
     if (!flags.adaptacionDispositivo) {
-      // Adaptación OFF (flag del dueño o kill-switch) → histórico puro.
+      // Adaptación OFF (flag del mantenedor o kill-switch) → histórico puro.
       return {
         adaptado: false,
         tier: tierRap.tier,
@@ -282,7 +282,7 @@ export function planAdaptativo(): PlanAdaptativo {
         probeOrientacionMs: PROBE_ORIENTACION_DEFAULT_MS,
       };
     }
-    // 1 · override MANUAL del dueño — manda sobre el plan (D6). El override
+    // 1 · override MANUAL del mantenedor — manda sobre el plan (D6). El override
     // existe para ocrHilos; los knobs OCR nuevos siguen siendo por-tier
     // (solo el kill-switch `adaptacionDispositivo: false` los revierte).
     const overrideHilos = leerOverridesFlags().ocrThreadsTope;

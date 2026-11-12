@@ -2,7 +2,7 @@
 
 /**
  * PanelDev — panel del MODO DESARROLLADOR (antes «modo de diagnóstico»,
- * renombrado por el dueño — KIT e14-observabilidad-v1,
+ * renombrado por el mantenedor — KIT e14-observabilidad-v1,
  * agente 2 · C4). La puerta de entrada visual a TODA la observabilidad.
  *
  * Convención de overlay COPIADA de AyudaOverlay.tsx (fixed inset-0 z-[70],
@@ -1027,7 +1027,7 @@ export function PanelDev({ onClose }: { onClose: () => void }) {
                 valor={perfil?.camaras != null ? `${perfil.camaras}` : "—"}
               />
             </div>
-            {/* Descarga del INFORME IA (petición del dueño — JSON auto-descrito) */}
+            {/* Descarga del INFORME IA (petición del mantenedor — JSON auto-descrito) */}
             <button
               type="button"
               onClick={() => void exportarInformeIA()}

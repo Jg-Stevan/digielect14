@@ -3,7 +3,7 @@
 **Fecha:** 2026-11-09 · **Rama:** `remediacion/olas-a-d` @ `c6f5ed3` · **Servidor:** build estático raíz (`BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH=`) en `:8123`
 **Dispositivo:** Samsung **SM-A135M** (Galaxy A13) · Android **14** · Chrome **156** · 8 núcleos · 4 GB · 1080×2410 (384×857 CSS @ 2.8125)
 **Cómo se abrió:** `adb reverse tcp:8123 tcp:8123` → `http://localhost:8123/` (origen confiable: COOP/COEP surten efecto). Observación por CDP (`tcp:9333`) y lectura del buffer `e14-obs` (IndexedDB).
-**Privacidad:** no se transcriben datos de actas ni se adjuntan fotos. Todas las corridas usaron **actas reales** manipuladas por el dueño (cámara con AUTO y fotos importadas desde su galería); no se usó ninguna imagen sintética.
+**Privacidad:** no se transcriben datos de actas ni se adjuntan fotos. Todas las corridas usaron **actas reales** manipuladas por el mantenedor (cámara con AUTO y fotos importadas desde su galería); no se usó ninguna imagen sintética.
 
 ## 1 · Entorno del motor (evento `ocr:multihilo-entorno`)
 
@@ -37,7 +37,7 @@ Sesión única tras cerrar las pestañas extra, origen `localhost` (6 hilos). Mu
 
 Las tres últimas filas son la **cadena de reintentos de la misma acta**: 68,1 + 109,8 + 23,2 = **201,1 s** hasta quedar rechazada en el intento 3 de 4.
 
-**Atribución de origen:** `PerfActa` no registra si la corrida vino de cámara o de importación. Por los breadcrumbs del buffer, en esta sesión hubo ambas (clics «Importar imagen» del dueño y capturas AUTO de la cámara); la serie mezcla los dos caminos y no se puede segmentar por rendimiento. Es una carencia de instrumentación, no de comportamiento.
+**Atribución de origen:** `PerfActa` no registra si la corrida vino de cámara o de importación. Por los breadcrumbs del buffer, en esta sesión hubo ambas (clics «Importar imagen» del mantenedor y capturas AUTO de la cámara); la serie mezcla los dos caminos y no se puede segmentar por rendimiento. Es una carencia de instrumentación, no de comportamiento.
 
 ## 4 · Observaciones
 

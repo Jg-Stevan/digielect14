@@ -40,7 +40,7 @@ import { CAP_ACTAS, CAP_EVENTOS, CAP_SESIONES, CLAVE_RASTREO } from "./tipos";
 // ─── Estado del módulo (module state — mismo patrón de operacion.ts) ────────
 
 let instalado = false; // suscripción única (bootstrap idempotente)
-let activo = false; // el rastreo SOLO corre cuando el dueño lo activa
+let activo = false; // el rastreo SOLO corre cuando el mantenedor lo activa
 let sesion: SesionRastreo | null = null;
 let unidad: UnidadRastreo | null = null; // unidad EN CURSO (tsFin === null)
 

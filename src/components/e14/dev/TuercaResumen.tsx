@@ -2,7 +2,7 @@
 
 /**
  * TuercaResumen — puerta de entrada al MODO DESARROLLADOR (antes «modo de
- * diagnóstico», renombrado por el dueño — KIT
+ * diagnóstico», renombrado por el mantenedor — KIT
  * e14-observabilidad-v1, agente 2 · C1). SIEMPRE visible arriba-izquierda
  * del header de ResumenView; GRIS con modo dev OFF, ACENTO con ON.
  *

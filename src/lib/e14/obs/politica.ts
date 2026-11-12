@@ -105,7 +105,7 @@ export function guardarModoDev(on: boolean): void {
 }
 
 /** Overrides de flags — la MÁXIMA prioridad en leerFlags (kill switch
- *  manual del dueño, D6). JSON corrupto → {} silencioso. */
+ *  manual del mantenedor, D6). JSON corrupto → {} silencioso. */
 export function leerOverridesFlags(): Partial<FlagsApp> {
   try {
     const raw = window.localStorage.getItem(CLAVE_OVERRIDES);
@@ -139,7 +139,7 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
       }
     }
     // KIT e14-obs-hang-atribucion-v1 (§D) — el kill-switch `hangEnCurso` del
-    // dueño pasa por ESTE whitelist: sin esta línea el override localStorage
+    // mantenedor pasa por ESTE whitelist: sin esta línea el override localStorage
     // (§G.3.d del smoke) sería inalcanzable (el override MANUAL es la
     // máxima prioridad, D6; el whitelist de leerOverridesFlags es
     // INDEPENDIENTE del de sanearFlags en flags.ts — cada puerta su línea).
@@ -150,7 +150,7 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // Renombrado de `masivaOcrTesseract` al retirar el módulo masiva.
     if (typeof o.ocrCascada === "boolean") limpio.ocrCascada = o.ocrCascada;
     // KIT e14-adaptacion-dispositivo-v1 — mismo criterio (DOBLE whitelist):
-    // el kill-switch {"adaptacionDispositivo": false} del dueño pasa por
+    // el kill-switch {"adaptacionDispositivo": false} del mantenedor pasa por
     // ESTE whitelist (prioridad máxima, D6 — plan.ts ya lo respeta).
     if (typeof o.adaptacionDispositivo === "boolean") limpio.adaptacionDispositivo = o.adaptacionDispositivo;
     // KIT e14-ocr-tessbest-v1 (GO-B) — mismo criterio (DOBLE whitelist):
@@ -165,7 +165,7 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
       limpio.probeMiniLado = Math.max(320, Math.min(1280, Math.round(o.probeMiniLado)));
     }
     // KIT e14-heic-tope-v1 — mismo criterio (DOBLE whitelist). Acá 0 SÍ es un
-    // valor válido y es justo el que el dueño usa como kill-switch: 0 = sin tope
+    // valor válido y es justo el que el mantenedor usa como kill-switch: 0 = sin tope
     // / sin límite = el camino anterior. El clamp es [0, tope] por eso.
     if (typeof o.heicTopeMp === "number" && Number.isFinite(o.heicTopeMp)) {
       limpio.heicTopeMp = Math.max(0, Math.min(60, Math.round(o.heicTopeMp)));
@@ -226,7 +226,7 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
       limpio.ocrSegundaTopeMs = Math.max(0, Math.min(120_000, Math.round(o.ocrSegundaTopeMs)));
     }
     // KIT e14-remediacion-movil-v1 (A1) — mismo criterio (DOBLE whitelist):
-    // ventana de ARRANQUE de la 2.ª pasada como override MANUAL del dueño
+    // ventana de ARRANQUE de la 2.ª pasada como override MANUAL del mantenedor
     // (A/B del knob por tier sin rebuild — el punto 3 del ítem A1). Sin esta
     // línea el override localStorage sería inalcanzable (prioridad máxima, D6).
     if (o.ocrSegundaPresupuestoMs === null) limpio.ocrSegundaPresupuestoMs = null;
@@ -237,7 +237,7 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // {"ocrCorteIncompleta": false} del rechazo temprano.
     if (typeof o.ocrCorteIncompleta === "boolean") limpio.ocrCorteIncompleta = o.ocrCorteIncompleta;
     // KIT fusion-evidencia-divipol-v1 (D89) — mismo criterio (DOBLE whitelist):
-    // sin esta línea el kill-switch {"fusion_evidencia": true|false} del dueño
+    // sin esta línea el kill-switch {"fusion_evidencia": true|false} del mantenedor
     // sería inalcanzable desde localStorage (prioridad máxima, D6).
     if (typeof o.fusion_evidencia === "boolean") limpio.fusion_evidencia = o.fusion_evidencia;
     // NOTA (eliminación del módulo masiva): las puertas de los 17 flags

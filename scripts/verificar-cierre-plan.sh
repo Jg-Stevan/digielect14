@@ -3,7 +3,7 @@
 # — batería de verificación global al cerrar la última ola.
 #
 # Correcciones integradas según la revisión del 2026-11-11 (C-35: el doc
-# «correcciones-y-huecos-plan-remediacion.md» es de CUSTODIA LOCAL del dueño,
+# «correcciones-y-huecos-plan-remediacion.md» es de CUSTODIA LOCAL del mantenedor,
 # no está versionado — la cita no apunta a un archivo del repo):
 #  · check del receptor: 401 (contrato v0) o 410 (0.7 aplicado) — el código
 #    esperado depende del orden de aplicación; /salud es healthcheck PÚBLICO
@@ -65,5 +65,5 @@ git count-objects -vH | grep size-pack
 echo "(coherencia con docs/DEUDA.md — cifra real: 6,17 MiB / 1.600 objetos al 7-nov-2026)"
 
 echo "═══ Mundo físico (§12.1 fase 2 — NO scripteable) ═══"
-echo "Pendiente del dueño: perfilado en dispositivo real, reproducción de U1/U3/U4"
+echo "Pendiente del mantenedor: perfilado en dispositivo real, reproducción de U1/U3/U4"
 echo "en pantalla, lector de pantalla (TalkBack/VoiceOver), set dorado de actas."

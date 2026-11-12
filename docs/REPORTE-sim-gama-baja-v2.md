@@ -1,7 +1,7 @@
 # REPORTE — Simulación gama baja v2: herramientas del navegador, problemas y soluciones
 
 **Fecha:** 2026-11 · **Rama:** `docs/sim-gama-baja-v2` · **Base:** main `65dedc6` (PR #117 mergeado)
-**Petición del dueño:** «genera un informe de las herramientas del navegador usadas y los
+**Petición del mantenedor:** «genera un informe de las herramientas del navegador usadas y los
 problemas que encontraste y como lo solucionaste» · **Restricciones:** SIN VLM, SIN leer
 los manuscritos (cumplidas — ver §5.3).
 
@@ -27,7 +27,7 @@ la misma de D35 — nada inventado).
 ~125 s y `TIMEOUT_MS = 120_000` (e67) lo mata **justo antes de terminar**. El acta —
 que en normal es 10/10 con auto-envío — termina `RECHAZADA 0.0/10 · NO IDENTIFICADO`,
 el operador entra al ciclo de «OBLIGATORIO REPETIR FOTO (intento 1 de 4)» y cada
-reintento vuelve a gastar ~2 min. **El objetivo del dueño («cumplir el score para
+reintento vuelve a gastar ~2 min. **El objetivo del mantenedor («cumplir el score para
 enviar automáticamente») falla por PRESUPUESTO DE TIEMPO, no por calidad de la foto,
 no por memoria y no por crash**: 0 errores JS, heap a 10 MB, cámara con lente/AF
 correctos. Además, el rescate post-timeout e67 **no materializó** ningún cambio de
@@ -72,7 +72,7 @@ DevTools cuando lo usas a mano:
 Perfil honesto: es una **aproximación** al sm-a135m/ds (Exynos 850, 8 núcleos A55,
 3-4 GB). El throttling 6× de CDP aproxima la velocidad efectiva de sus núcleos para
 wasm/JS; `deviceMemory` 2 y 4 núcleos son lo que un Android de 3 GB reporta. La
-validación final de campo en el dispositivo físico sigue siendo del dueño (igual que
+validación final de campo en el dispositivo físico sigue siendo del mantenedor (igual que
 los kits previos).
 
 ---
@@ -100,7 +100,7 @@ mismo desenlace con ±1 s de diferencia alrededor de los 120 s del timeout.
 - El mismo bug de clase YA se resolvió en masiva (D48: «con multihilo el pipeline real
   ~21 s quedaba falsamente RECHAZADA a los 15 s») y el plan de `gama.ts` de masiva usa
   watchdog POR TIER (BAJO 105 s). El escaneo individual quedó rezagado.
-- Impacto directo en el objetivo del dueño: el score nunca se calcula → jamás llega a
+- Impacto directo en el objetivo del mantenedor: el score nunca se calcula → jamás llega a
   ÓPTIMA → jamás auto-envía → el operador repite foto (4 intentos × ~2 min = 8 min
   tirados por acta que en realidad estaba perfecta).
 
@@ -125,7 +125,7 @@ mismo desenlace con ±1 s de diferencia alrededor de los 120 s del timeout.
 
 ### P4 — Problemas históricos ya resueltos (contexto de cómo se han solucionado)
 
-| Problema (síntoma del dueño/ campo) | Kit que lo resolvió | Evidencia |
+| Problema (síntoma del mantenedor/ campo) | Kit que lo resolvió | Evidencia |
 |---|---|---|
 | «Abrió la cámara FRONTAL y no se pudo hacer las pruebas» | F-LENS v5 (facing-primero, saneo de caché venenada, guard de apertura) — PR #117 | `docs/REPORTE-fix-camara-principal-f-lens-v5.md` |
 | Foto de 50 MP revienta el decode en gama media/baja (~200 MB bitmap) | F-SENSOR-PROFILER 3 capas de tope (D34): decode 523→98 ms | DECISIONS D34 |
@@ -144,11 +144,11 @@ fotos grandes, NO congela la UI (todo lo pesado corre en workers) y se observa a
 misma (heartbeat/hang/breadcrumbs + informe descargable). En perfil normal el flujo
 completo dura 14 s y auto-envía a 10/10.
 
-### 5.2 Propuestas de HOY (pendientes del OK del dueño — todas SIN VLM y SIN leer manuscritos)
+### 5.2 Propuestas de HOY (pendientes del OK del mantenedor — todas SIN VLM y SIN leer manuscritos)
 
 | # | Propuesta | Qué toca | Efecto esperado |
 |---|---|---|---|
-| **A** | **Presupuesto del escaneo individual por tier/velocidad REAL** — reutilizar el benchmark CPU de `adaptacion/perfil.ts`: `timeoutEfectivo = clamp(120 s × factor_cpu_medido, 120 s, 480 s)` (o plan por tier BAJO/MEDIO/ALTO, mismo patrón de `gama.ts` de masiva; override manual del dueño manda; kill-switch por flag) | `scanner-core-bridge.ts` (constante → función) + `adaptacion/plan.ts` (nuevo knob) | El acta REAL termina su OCR (~125 s) y el score SE CALCULA → con cabecera/QR correctos vuelve el auto-envío en gama baja |
+| **A** | **Presupuesto del escaneo individual por tier/velocidad REAL** — reutilizar el benchmark CPU de `adaptacion/perfil.ts`: `timeoutEfectivo = clamp(120 s × factor_cpu_medido, 120 s, 480 s)` (o plan por tier BAJO/MEDIO/ALTO, mismo patrón de `gama.ts` de masiva; override manual del mantenedor manda; kill-switch por flag) | `scanner-core-bridge.ts` (constante → función) + `adaptacion/plan.ts` (nuevo knob) | El acta REAL termina su OCR (~125 s) y el score SE CALCULA → con cabecera/QR correctos vuelve el auto-envío en gama baja |
 | **B** | **Verificar/arreglar el rescate e67 en la vista individual** — si el pipeline termina tras el timeout, REVISIÓN debe actualizarse sola (hoy no lo hizo en +120 s) | `scanner-core-bridge.ts` + `ReviewView/store` (rescate ya resuelto → refrescar acta en vista) | Aunque venza el presupuesto, el resultado bueno llega después — sin obligar a repetir foto |
 | **C** | **Desplegar producción en Cloudflare Pages** (las cabeceras COOP/COEP ya están en `public/_headers`) → OCR multihilo (BAJO=2 hilos) | Deploy config (cero código) | Tiempo de OCR se divide (≈2 hilos) → margen holgado bajo el presupuesto incluso sin A |
 | **D** | **Higiene de evidencia** (ya incluida en ESTA rama): guion v3 parametrizado + resultados crudos + corrección del metadato de throttle | `docs/evidence/sim-recursos/` | Pruebas reproducibles sin rutas absolutas |
@@ -156,12 +156,12 @@ completo dura 14 s y auto-envía a 10/10.
 Orden recomendado: **D (hecho) → A → C → B**. A+C juntos convierten el caso
 «RECHAZADA 0.0 a los 2 min» en «ÓPTIMA + auto-envío», que es exactamente el objetivo.
 
-### 5.3 Aclaración VLM / manuscritos (petición explícita del dueño)
+### 5.3 Aclaración VLM / manuscritos (petición explícita del mantenedor)
 - **No hay VLM ni LLM en ningún repo.** Grep sobre `src/` de ambos: 0 usos de
   VLM/LLM/APIs de IA externas. Los comentarios «crítica VLM» en `ScanView/ReviewView`
   son anotaciones de QA visual del diseño (revisión de capturas), no llamadas a
   modelos. `adaptacion/informe-ia.ts` NO llama a ninguna IA: **genera un JSON** para
-  que una IA (o el dueño) lo lea después.
+  que una IA (o el mantenedor) lo lea después.
 - **El OCR no lee manuscritos**: el motor es RapidOCR PP-OCRv4 (det/cls/rec ONNX,
   100 % en el dispositivo vía onnxruntime-web). Se usa para la cabecera IMPRESA
   (E-14 / REGISTRADURÍA / divipola), la identidad por QR (zxing/jsQR) y marcadores
@@ -213,12 +213,12 @@ git push -u origin fix/e14-presupuesto-escaneo-adaptativo   # → PR
 ```
 
 **Nota de credenciales:** este entorno puede clonar (repo público) pero NO tiene tus
-credenciales de push — el push final lo hace el dueño (una vez con `gh auth login`
+credenciales de push — el push final lo hace el mantenedor (una vez con `gh auth login`
 o HTTPS token); todo lo demás (ramas, commits, gates, informe) queda listo en local.
 
 ---
 
-## 8 · Pendientes (dueño)
+## 8 · Pendientes (mantenedor)
 1. OK a las propuestas A/B/C (§5.2) para implementarlas como kits con sus gates.
 2. Validación de campo en el sm-a135m/ds físico (la simulación es aproximación honesta).
 3. Decidir hosting de producción (CF Pages recomendado — P1) — GH Pages queda como peor caso cubierto por A.

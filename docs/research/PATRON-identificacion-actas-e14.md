@@ -1,13 +1,13 @@
 # PATRÓN de identificación del E-14 exterior (consulados) — v1
 
-Fecha: 2026-10-16 · Autor: Z.ai Code (Task 119, diagnóstico) · Pedido del dueño:
+Fecha: 2026-10-16 · Autor: Z.ai Code (Task 119, diagnóstico) · Pedido del mantenedor:
 «¿cómo identificamos correctamente el acta? — delegados/transmisión · página · mesa · ¿completa sin recortar?»
 
 Fuentes de evidencia:
 - 6 actas oficiales descargadas del visor Registraduría (12 páginas → 12 códigos 1D leídos):
   ROMA - CONSULADO (kit 982) · EL CAIRO - CONSULADO transmisión y delegados (kit 399, las DOS
   copias) · BARCELONA - GIRONA (kit 1265) · BERLIN CONSULADO mesas 008 y 009 (kits 726/727).
-- 1 acta ya registrada en el clasificador por OCR del dueño: FRANKFURT CONSULADO (kit 745,
+- 1 acta ya registrada en el clasificador por OCR del mantenedor: FRANKFURT CONSULADO (kit 745,
   zona 15, puesto 02, mesa 012, transmisión — «ZONA: 18» era OCR de 15; filename real
   `E14_SINKIT_88_120_15_02_012_TRANSMISION-1`).
 - Decodificación real de QR/códigos con zxing-cpp sobre los PDF (script en este análisis, §6).
@@ -77,7 +77,7 @@ Notas:
 1. **Banda** (señal primaria, ya implementada): banner negro bajo el título.
    «TRANSMISIÓN» vs «CÓNSUL/EMBAJADOR». Cuidado histórico ya resuelto en el repo: el literal
    de delegados se matchea por «EMBAJADOR/DELEGADOS» porque «CÓNSUL» suelto colisionaba con
-   la caja «CONSULADO: 88» (corrección con evidencia del dueño, clasificador.ts L133-140).
+   la caja «CONSULADO: 88» (corrección con evidencia del mantenedor, clasificador.ts L133-140).
 2. **d9 del código** (respaldo, conf 0.9): 2=delegados, 3=transmisión.
 3. **Evidencia fuerte del dígito**: el kit 399 de EL CAIRO trae las DOS copias de la MISMA
    mesa con códigos distintos — `3992…` (delegados) y `3993…` (transmisión). Es decir, el
@@ -115,7 +115,7 @@ Notas:
 | 335 | 05 | 02 | 399 | 1 | EL CAIRO - CONSULADO |
 | 120 | 05 | 02 | 726 | 8 | BERLIN CONSULADO |
 | 120 | 05 | 02 | 727 | 9 | BERLIN CONSULADO |
-| 120 | 15 | 02 | 745 | 12 | FRANKFURT CONSULADO (OCR dueño + filename oficial) |
+| 120 | 15 | 02 | 745 | 12 | FRANKFURT CONSULADO (OCR mantenedor + filename oficial) |
 | 355 | 03 | 08 | 1265 | 1 | BARCELONA - GIRONA |
 
    Guardas: solo aplica con municipio resuelto que coincida; NUNCA da AUTO (el nivel sigue
@@ -228,9 +228,9 @@ Dependencias de rama: PR #6 (visor-accion-score) → kit 118 (actas-vivas-pagina
 - Filenames oficiales observados: `E14_XXX_X_88_495_010_02_000_X_XXX.pdf` (Roma),
   `E14_XXX_X_88_355_003_08_000_X_XXX.pdf` (Barcelona),
   `E14_XXX_X_88_120_005_02_000_X_XXX.pdf` + `(1)` (Berlin 008 y 009 — MISMO nombre),
-  `transmision el cairo.pdf` / `delegados el cairo.pdf` (renombrados por el dueño).
+  `transmision el cairo.pdf` / `delegados el cairo.pdf` (renombrados por el mantenedor).
   Estructura: `E14_{XXX}_{X}_{CONSULADO 88}_{PAIS}_{ZONA}_{PUESTO}_{MESA=000}_{X}_{XXX}`.
-- Export de la app ya observado en uploads del dueño: `E14_SINKIT_88_120_15_02_012_TRANSMISION-1`
+- Export de la app ya observado en uploads del mantenedor: `E14_SINKIT_88_120_15_02_012_TRANSMISION-1`
   (sin kit leído) y `E14_CAPTURA_HHMMSS` — el kit 120 elimina la mayoría de `SINKIT`.
 - Decoder sandbox: `python3.13` + `pymupdf` + `zxing-cpp` (pip). Comando reproducible:
   renderizar a 200 dpi y `zxingcpp.read_barcodes(img)`; QR → base64 de 32 bytes.

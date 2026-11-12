@@ -41,7 +41,7 @@ export interface AvisoOperador {
    *  "recargar" → KIT e14-remediacion-movil-v1 (A4): el botón Recarga la
    *  página (única salida honesta cuando la memoria del motor OCR está
    *  agotada tras el reintento). null → solo descartable (p. ej.
-   *  ALMACENAMIENTO_LLENO: la acción es del dueño). */
+   *  ALMACENAMIENTO_LLENO: la acción es del mantenedor). */
   accion: "reintentar" | "recargar" | null;
   /** Marca de tiempo (desempate/orden — no se persiste). */
   ts: number;

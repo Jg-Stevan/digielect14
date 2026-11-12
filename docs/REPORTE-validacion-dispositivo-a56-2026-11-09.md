@@ -3,7 +3,7 @@
 **Fecha:** 2026-11-09 · **Rama:** `remediacion/olas-a-d` @ `b5120a8` · **Servidor:** build estático raíz (`BUILD_STATIC=1 NEXT_PUBLIC_BASE_PATH=`) en `:8123`
 **Dispositivo:** Samsung **SM-A566E** (Galaxy A56 5G) · Android **16** (SDK 36) · Chrome **156.0.8078.47** · 8 núcleos · 7,6 GB RAM · 1080×2340 @ 450 dpi (override 352)
 **Cómo se abrió:** `adb reverse tcp:8123 tcp:8123` → `http://localhost:8123/` (origen confiable). CDP en `tcp:9334` (el A13 usa 9333) y lectura del buffer `e14-obs`.
-**Privacidad:** no se transcriben datos de actas ni se adjuntan fotos. Actas reales del dueño; sin imágenes sintéticas.
+**Privacidad:** no se transcriben datos de actas ni se adjuntan fotos. Actas reales del mantenedor; sin imágenes sintéticas.
 
 ## 1 · Entorno del motor (evento `ocr:multihilo-entorno`)
 
@@ -23,7 +23,7 @@ Mismo tope de hilos que el A13 (6), así que la diferencia de tiempos es de sili
 
 ## 3 · Corridas medidas (PerfActa del buffer)
 
-Serie de 10 muestras con la app en una sola pestaña. El dueño alternó cámara con AUTO e importación de fotos reales (se ven clics «Importar imagen» y avisos de conversión HEIC en la sesión); `PerfActa` no registra el origen de cada corrida.
+Serie de 10 muestras con la app en una sola pestaña. El mantenedor alternó cámara con AUTO e importación de fotos reales (se ven clics «Importar imagen» y avisos de conversión HEIC en la sesión); `PerfActa` no registra el origen de cada corrida.
 
 | # | Hora | Total | Proceso | OCR | Probe | Banda | Desenlace |
 |---|---|---|---|---|---|---|---|

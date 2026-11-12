@@ -62,7 +62,7 @@ export function ReviewView() {
   // KIT consenso-frankfurt-v1 (FASE 5, §6.1): el selector paginaObjetivo fue
   // RETIRADO de esta pantalla — PROHIBIDO paginaObjetivo?.tipo (era el tipo
   // del HUECO donde cayó archivada la acta, no el del acta: el «DELEGADOS»
-  // falso del dueño con Frankfurt 746). El chip muestra solo señales REALES
+  // falso del mantenedor con Frankfurt 746). El chip muestra solo señales REALES
   // del acta (clasifAuto → tipoDeBanda → «---»). El store no se toca: otras
   // pantallas siguen usando su propio selector.
   const recortando = useE14Store((s) => s.recortando);
@@ -138,7 +138,7 @@ export function ReviewView() {
   const clasifAuto = acta.clasificacion?.nivel === "AUTO" ? acta.clasificacion : null;
   // KIT consenso-frankfurt-v1 (FASE 5, §6.1): chip de tipo HONESTO —
   // PROHIBIDO paginaObjetivo?.tipo (era el tipo del HUECO donde CAYÓ
-  // archivada la acta, no el del acta: el «DELEGADOS» falso del dueño con
+  // archivada la acta, no el del acta: el «DELEGADOS» falso del mantenedor con
   // Frankfurt 746). Sin clasifAuto → tipoDeBanda sobre el OCR; tampoco →
   // «---» (mismo estilo que MESA ---).
   const tipoBanda = tipoDeBanda(acta.ocrTexto ?? "");
@@ -148,7 +148,7 @@ export function ReviewView() {
   // KIT actas-vivas-paginas-v1 (FASE B): paginaIdentificada exige página
   // LEÍDA — clasificación sin página (acta.pagina == null) → chip «PÁG -
   // DE -» (honesto; el default P1 mintió con la pág 2 de Frankfurt, bug
-  // del dueño 16-oct). Con página leída sigue mostrando PÁG X DE Y.
+  // del mantenedor 16-oct). Con página leída sigue mostrando PÁG X DE Y.
   const paginaIdx = clasifAuto ? (clasifAuto.pagina?.index ?? 1) : (acta.pagina?.index ?? 1);
   const paginaTotal = clasifAuto ? (clasifAuto.pagina?.total ?? 2) : (acta.pagina?.total ?? 2);
   const status = acta.status;
@@ -158,7 +158,7 @@ export function ReviewView() {
     acta.clasificacion != null && acta.clasificacion.nivel !== "MANUAL";
   const paginaIdentificada = acta.clasificacion != null && acta.pagina != null;
   // ── Banner de ubicación (mock §3.2.2): dot del color del estado + texto
-  // uppercase real. Fix del dueño (14-oct) #1: el banner es el NOMBRE DEL
+  // uppercase real. Fix del mantenedor (14-oct) #1: el banner es el NOMBRE DEL
   // PUESTO (acta.titulo) — nunca la ruta con «>».
   const dotUbicacion = hayClasificacion
     ? "bg-brand-green"
@@ -166,7 +166,7 @@ export function ReviewView() {
       ? "bg-amber-400"
       : "bg-red-500";
   const textoBanner = (() => {
-    // Fix del dueño (14-oct) #1: banner = nombre del puesto (p. ej.
+    // Fix del mantenedor (14-oct) #1: banner = nombre del puesto (p. ej.
     // «FRANKFURT - CONSULADO»), NUNCA la ruta construida a mano
     // (departamento > municipio > puesto > MESA > …). Sin clasificación
     // → estados de fallback de siempre.
@@ -237,7 +237,7 @@ export function ReviewView() {
 
   // ── PÍLDORA FLOTANTE de la tarjeta (mock §3.2.4/§3.3): el MOTIVO REAL
   // (rechazo D1/PR #33 · parcial de Rev. 2 · razón de advertencia).
-  // Fix del dueño (14-oct) #2: ÓPTIMA/ENVIADA también llevan píldora —
+  // Fix del mantenedor (14-oct) #2: ÓPTIMA/ENVIADA también llevan píldora —
   // la tarjeta del óptimo tiene el mismo tratamiento que medio/bajo.
   const pillFlotante = (() => {
     if (status === "RECHAZADA") {
@@ -246,7 +246,7 @@ export function ReviewView() {
       if (acta.rechazo?.tipo === "BAJO")
         return { texto: `SCORE BAJO${acta.rechazo.detalle ? ` · ${acta.rechazo.detalle}` : ""}`, tono: "crit" as const };
       // KIT e14-gate-v2 (G2): marcador obligatorio de votos fallido — copy
-      // CORTO y descriptivo (decisión del dueño: SIN guía de cámara).
+      // CORTO y descriptivo (decisión del mantenedor: SIN guía de cámara).
       if (acta.rechazo?.tipo === "SIN_VOTOS")
         return { texto: "ACTA SIN VOTOS", tono: "crit" as const };
       return { texto: "ACTA RECHAZADA", tono: "crit" as const };
@@ -279,7 +279,7 @@ export function ReviewView() {
       }
       return null;
     }
-    // Fix del dueño (14-oct) #2: píldora verde para ÓPTIMA/ENVIADA.
+    // Fix del mantenedor (14-oct) #2: píldora verde para ÓPTIMA/ENVIADA.
     // Score visual = bruto del scoreDeCalidad ANTES de los caps del sitio.
     if (status === "OPTIMA" || status === "ENVIADA") {
       const sv = acta.scoreVisual != null ? acta.scoreVisual.toFixed(1) : "—";
@@ -486,7 +486,7 @@ export function ReviewView() {
         </p>
 
         {/* LÍNEA DE ID («KIT --- · --- · -/-» + «MESA · POR KIT») — ELIMINADA
-            a pedido del dueño. La identidad del acta sigue VIVA en el resto de
+            a pedido del mantenedor. La identidad del acta sigue VIVA en el resto de
             la app: chips de estado de arriba (tipo/MESA/PÁG), clasificación
             (dedup, infoTitulo) e informe ZIP. Cero cambios de
             lógica: solo se retiró el bloque visual del KIT consenso-frankfurt
@@ -654,7 +654,7 @@ export function ReviewView() {
           fotoOriginal={acta.fotoOriginal}
           // KIT e14-luz-sim-puntos-v1 (T-E): RECHAZADA = la detección ya
           // falló una vez (importadas: franja Sobel degenerada — ZIPs A56)
-          // → NO se devuelve al dueño el quad fracasado como punto de
+          // → NO se devuelve al mantenedor el quad fracasado como punto de
           // partida: el marco completo (puntos a arrastrar al papel).
           // ADVERTENCIA conserva quadDetectado (la detección acertó el
           // marco; solo hay que corregir una esquina).
@@ -665,7 +665,7 @@ export function ReviewView() {
           onAplicar={(quad, rotacion) => {
             // KIT e14-recorte-manual-v1 (T2): el editor SOLO se cierra si el
             // recorte resolvió (éxito o timeout-controlado → `true`). En
-            // error duro queda ABIERTO — la píldora avisa y el dueño
+            // error duro queda ABIERTO — la píldora avisa y el mantenedor
             // reintenta SIN perder su quad (antes el .then cerraba SIEMPRE).
             void aplicarRecorte(quad, rotacion).then((ok) => {
               if (ok) setEditando(false);

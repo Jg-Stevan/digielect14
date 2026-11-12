@@ -45,7 +45,7 @@ describe("flags · sanearFlags", () => {
 
   // KIT e14-orientacion-qr-v1 (§D) — whitelist aditiva (booleano):
   it("orientacion-qr · qrBrujulaOrientacion: override válido acepta; tipo inválido → default", () => {
-    // Override válido — aceptado (kill switch del dueño):
+    // Override válido — aceptado (kill switch del mantenedor):
     expect(sanearFlags({ qrBrujulaOrientacion: false })).toEqual({ qrBrujulaOrientacion: false });
     expect(sanearFlags({ qrBrujulaOrientacion: true })).toEqual({ qrBrujulaOrientacion: true });
     // Tipo inválido → ausente (el caller conserva el default — jamás inventar):
@@ -67,7 +67,7 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       hangEnCurso: true,
       // KIT e14-orientacion-qr-v1 (§D) — aditivo AL FINAL (contrato D57):
       qrBrujulaOrientacion: true,
-      // KIT e14-ocr-cascada-v1 (K3 fase 2) + GO-B del dueño (2026-11) — aditivo AL FINAL (contrato D57):
+      // KIT e14-ocr-cascada-v1 (K3 fase 2) + GO-B del mantenedor (2026-11) — aditivo AL FINAL (contrato D57):
       ocrCascada: true,
       // KIT e14-adaptacion-dispositivo-v1 — aditivo AL FINAL (contrato D57):
       adaptacionDispositivo: true,
@@ -111,7 +111,7 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       ocrSegundaTopeMs: 0,
       ocrCorteIncompleta: true,
       // KIT e14-remediacion-movil-v1 (A1) — aditivo AL FINAL (contrato D57):
-      // ventana de ARRANQUE de la 2.ª pasada como override MANUAL del dueño.
+      // ventana de ARRANQUE de la 2.ª pasada como override MANUAL del mantenedor.
       ocrSegundaPresupuestoMs: null,
       // KIT fusion-evidencia-divipol-v1 (D89) — kill-switch del motor de
       // fusión, default OFF (apagado = pipeline de hoy byte a byte).
@@ -173,7 +173,7 @@ describe("flags · refrescarFlags (fetch mockeado)", () => {
     expect(f.telemetriaSalud).toBe(true); // default intacto
   });
 
-  it("overrides ganan a los remotos (prioridad máxima del dueño)", async () => {
+  it("overrides ganan a los remotos (prioridad máxima del mantenedor)", async () => {
     vi.stubGlobal("window", {
       setTimeout: () => 0,
       clearTimeout: () => {},
@@ -225,7 +225,7 @@ describe("flags · hangEnCurso (kill-switch del sensor hang-en-curso, §D)", () 
         setItem: () => {},
       },
     });
-    expect(leerFlags().hangEnCurso).toBe(false); // override manual del dueño (D6)
+    expect(leerFlags().hangEnCurso).toBe(false); // override manual del mantenedor (D6)
   });
   it("tipo inválido (no-booleano) → default (ausente del whitelist)", () => {
     expect(sanearFlags({ hangEnCurso: "off" })).toEqual({});
@@ -237,7 +237,7 @@ describe("flags · hangEnCurso (kill-switch del sensor hang-en-curso, §D)", () 
 
 // ─── KIT e14-ocr-cascada-v1 (K3 fase 2) — flag ocrCascada ──────────────────
 describe("flags · ocrCascada (cascada OCR GO-B; renombrado del antiguo masivaOcrTesseract)", () => {
-  it("default ON (GO-B del dueño 2026-11: tess best primero, escalonado a pp ocr)", () => {
+  it("default ON (GO-B del mantenedor 2026-11: tess best primero, escalonado a pp ocr)", () => {
     stubWindow();
     expect(leerFlags().ocrCascada).toBe(true); // FLAGS_DEFAULT
   });
@@ -256,7 +256,7 @@ describe("flags · ocrCascada (cascada OCR GO-B; renombrado del antiguo masivaOc
         removeItem: () => {},
       },
     });
-    expect(leerFlags().ocrCascada).toBe(false); // kill-switch manual del dueño (D6 — pasa por los DOS whitelists: sanearFlags + leerOverridesFlags)
+    expect(leerFlags().ocrCascada).toBe(false); // kill-switch manual del mantenedor (D6 — pasa por los DOS whitelists: sanearFlags + leerOverridesFlags)
   });
 
   it("tipo inválido (no-booleano) → default (ausente del whitelist)", () => {
@@ -268,7 +268,7 @@ describe("flags · ocrCascada (cascada OCR GO-B; renombrado del antiguo masivaOc
   });
 });
 
-describe("flags · presupuestoEscaneoMs (presupuesto del escaneo — override MANUAL del dueño, KIT e14-ocr-tessbest-v1)", () => {
+describe("flags · presupuestoEscaneoMs (presupuesto del escaneo — override MANUAL del mantenedor, KIT e14-ocr-tessbest-v1)", () => {
   it("default null ⇒ el plan por tier resuelve (BAJO 480 s · MEDIO 240 s · ALTO 120 s)", () => {
     stubWindow();
     expect(leerFlags().presupuestoEscaneoMs).toBe(null); // FLAGS_DEFAULT
@@ -350,7 +350,7 @@ describe("flags · cada clave de FLAGS_DEFAULT tiene sus DOS puertas", () => {
       if (!(clave in leerOverridesFlags())) sinPuertaLocal.push(clave);
     }
     // «cada puerta su línea»: un flag sin su línea en politica.ts es un
-    // kill-switch MUERTO — el override manual del dueño (máxima prioridad, D6)
+    // kill-switch MUERTO — el override manual del mantenedor (máxima prioridad, D6)
     // jamás llega. Dos flag del kit lo estuvieron hasta este test.
     expect(sinPuertaRemota, `sin puerta en sanearFlags: ${sinPuertaRemota.join(",")}`).toEqual([]);
     expect(sinPuertaLocal, `sin puerta en leerOverridesFlags: ${sinPuertaLocal.join(",")}`).toEqual([]);

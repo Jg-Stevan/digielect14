@@ -7,7 +7,7 @@
  * El golden es el ÚNICO artefacto compartido entre `digielect14` (móvil, por
  * puesto) y `supervision-e14` (masivo). Cada repo tiene un test que corre SUS
  * propios módulos contra ÉL: si un cambio de negocio altera la clasificación,
- * el test del repo donde se cambió pone rojo hasta que el dueño regenere el
+ * el test del repo donde se cambió pone rojo hasta que el mantenedor regenere el
  * golden y lo copie al hermano — donde el mismo golden pone rojo hasta que se
  * sincronice. Paridad garantizada por un archivo, no por ejecutar los dos
  *  motores (imposible en un solo CI).
@@ -80,7 +80,7 @@ const descriptores = DESCRYPTORES.map((d) => {
 /** Escalera score→status (`types.ts`): los umbrales D23/D41 del desenlace. Se
  *  pinan aquí porque `types.ts` NO es comparable byte a byte entre los dos
  *  repos (el hermano tiene tipos del lote) y aun así deciden el chip que ve el
- *  dueño. Barrido por los cantos, no por valores random. */
+ *  mantenedor. Barrido por los cantos, no por valores random. */
 const estados = [10, 8, 7.99, 6.5, 6.49, 0].map((score) => ({ score, status: statusDeScore(score) }));
 
 const golden = {

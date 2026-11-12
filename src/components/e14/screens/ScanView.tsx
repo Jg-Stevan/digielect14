@@ -17,7 +17,7 @@
  * calidad encima del obturador pasan de decorativos a <button> — BOTONES de
  * simulación (§D2): mismo visual exacto del mock, área táctil ≥44px
  * invisible, disabled durante análisis, funcionan en los 3 modos y disparan
- * store.simularScore(banda) → pipeline real con el asset FIJO del dueño y
+ * store.simularScore(banda) → pipeline real con el asset FIJO del mantenedor y
  * score inyectado (§D3 — la completa = óptima · la cortada = intermedio ·
  * la borrosa = bajo). Nada visual cambia salvo cursor/feedback de toque.
  * Historial previo: marco con corner brackets, retícula central, botón
@@ -86,7 +86,7 @@ import { useWakeLock } from "@/lib/e14/core/wake-lock";
 // KIT e14-ocr-tessbest-v1 (GO-B): pre-warm de TESSERACT BEST junto al del
 // motor RapidOCR — la descarga vendida (~19 MB, 1.ª vez) arranca al abrir
 // el visor y el SW la cachea ⇒ la 1.ª captura ya compite con assets
-// calientes. Solo con la cascada ON (kill-switch del dueño).
+// calientes. Solo con la cascada ON (kill-switch del mantenedor).
 import { tessPrecalentar } from "@/lib/e14/ocr/tesseract";
 import { leerFlags } from "@/lib/e14/flags";
 // KIT e14-sin-relleno-v1: la barra de SIMULACIÓN (chips TEST SCORES) solo se
@@ -117,7 +117,7 @@ import { esIOS, useSesionCamara, type CamEstado, type LiveUi } from "../hooks/us
 /* ── Chips de calidad = BOTONES DE SIMULACIÓN (SPEC-e14-simulacion-scores
  *  §D2/§D3) ────
  *  Antes: leyenda decorativa del gate. Ahora: cada chip es un <button> que
- *  dispara un análisis determinista con la foto de ejemplo del dueño y el
+ *  dispara un análisis determinista con la foto de ejemplo del mantenedor y el
  *  score inyectado de su banda (la completa = óptima · la cortada =
  *  intermedio · la borrosa = bajo); el desenlace real lo decide el gate
  *  (ÓPTIMA → 10.0 enviada · MEDIO → ADVERTENCIA revisión (7.0) · BAJA →
@@ -211,7 +211,7 @@ export function ScanView() {
   const procesandoRef = useRef(false);
   const cooldownRef = useRef(0);
   // D9 (SPEC-e14-guard-borde Rev. 2): captura automática ARMADA por defecto —
-  // REVISA el default OFF de D22/D24 por mandato del dueño («cuando se habra
+  // REVISA el default OFF de D22/D24 por mandato del mantenedor («cuando se habra
   // la camara siempre este activado la captura automatica»). El estado nace
   // armado Y cada APERTURA de cámara RE-ARMA (setAutoArmado(true) en el
   // arranque exitoso del stream — el estado persiste entre aperturas, hay
@@ -673,13 +673,13 @@ export function ScanView() {
           ref={visorRef}
           className="relative flex-1 bg-brand-viewfinder flex items-center justify-center overflow-hidden"
         >
-          {/* FIX del dueño (14-oct): la vista previa va LIMPIA — sin capas
+          {/* FIX del mantenedor (14-oct): la vista previa va LIMPIA — sin capas
               decorativas sobre el video. Las tres del mock 1 (haze radial
               mix-blend-screen + gradiente negro 80/40/90 + scanlines)
               oscurecían y "filtraban" la imagen real de la cámara, que es
               justo lo que el operador necesita ver nítido para encuadrar.
               G1 (KIT camara-visor-v1): el LÁSER de escaneo también sale
-              (puro adorno — pointer-events-none — pedido expreso del dueño:
+              (puro adorno — pointer-events-none — pedido expreso del mantenedor:
               «quitar la línea verde de la cámara»). Se conserva SOLO la
               retícula opcional (no altera la imagen). */}
           {/* Retícula visual (§3.1.1: botón de cuadrícula de la píldora IA) */}

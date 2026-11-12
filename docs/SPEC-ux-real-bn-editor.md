@@ -7,9 +7,9 @@
 
 ## §0. CONTEXTO Y REGLA DE ORO (lea primero)
 
-El dueño probó el flujo real de punta a punta y reportó 5 defectos. Esta spec los resuelve en orden de dependencia (§C plan de commits), NO en el orden del reporte.
+El mantenedor probó el flujo real de punta a punta y reportó 5 defectos. Esta spec los resuelve en orden de dependencia (§C plan de commits), NO en el orden del reporte.
 
-**R0 — NUEVA REGLA DE ORO #0 al inicio del repo (petición literal del dueño):**
+**R0 — NUEVA REGLA DE ORO #0 al inicio del repo (petición literal del mantenedor):**
 > *"No importa si es lógica o diseño: si ya existe en `apps/scanner-lab`, se COPIA (verbatim, con comentario `// Fuente: apps/scanner-lab/<ruta> L<ini>–L<fin>`) y se adapta. Nunca se re-inventa ni se 'simplifica'."*
 
 **Tarea R0 (commit 1):**
@@ -19,7 +19,7 @@ El dueño probó el flujo real de punta a punta y reportó 5 defectos. Esta spec
 # AGENTS.md — reglas obligatorias para cualquier IA/humano de este repo
 
 ## ⚠️ REGLA DE ORO #0 — EL LAB ES LA FUENTE DE VERDAD
-`apps/scanner-lab/` es el producto validado por el dueño. ANTES de implementar
+`apps/scanner-lab/` es el producto validado por el mantenedor. ANTES de implementar
 CUALQUIER cosa (lógica **o** UI/diseño) busca si ya existe en el lab:
 
 1. Si existe → COPIA VERBATIM el bloque a la app destino, con comentario de
@@ -42,7 +42,7 @@ docs/worklog.md (veredictos FIEL/ADAPTACIÓN/DESVIACIÓN).
 
 ## §1. RECURSO: LA IMAGEN REAL DE SIMULACIÓN
 
-Foto real del dueño (Galaxy A56 5G) de un E-14 auténtico sobre mesa oscura:
+Foto real del mantenedor (Galaxy A56 5G) de un E-14 auténtico sobre mesa oscura:
 
 | Propiedad | Valor |
 |---|---|
@@ -59,7 +59,7 @@ Foto real del dueño (Galaxy A56 5G) de un E-14 auténtico sobre mesa oscura:
    sha256sum apps/digitalizador-e14/src/assets/acta-e14-real.jpg
    ```
    El SHA-256 DEBE coincidir con el de la tabla. Si no coincide, PARAR y reportar.
-2. **Fallback:** el dueño tiene una copia idéntica en `download/acta-e14-real.jpg` (se la puede pasar el dueño si el CDN fallara).
+2. **Fallback:** el mantenedor tiene una copia idéntica en `download/acta-e14-real.jpg` (se la puede pasar el mantenedor si el CDN fallara).
 
 **Reglas del recurso (obligatorias):**
 - **PROHIBIDO pre-procesarla**: ni rotarla, ni recortarla, ni recomprimirla. Los bytes deben ser idénticos (sha256). El EXIF `upper-right` (rotación 90°) es PARTE DE LA PRUEBA: el pipeline real del core ya maneja EXIF (F-IMPORT, `fileToCaptureDataUrl`) y así se prueba de verdad.
@@ -70,9 +70,9 @@ Foto real del dueño (Galaxy A56 5G) de un E-14 auténtico sobre mesa oscura:
 
 ## §F1. SIMULACIÓN = PIPELINE REAL SOBRE LA IMAGEN INCLUIDA (mock retirado)
 
-**Síntoma (dueño):** «Elimina la imagen de prueba por completo, no la quiero volver a ver. Utilizar una imagen real para la simulación.»
+**Síntoma (mantenedor):** «Elimina la imagen de prueba por completo, no la quiero volver a ver. Utilizar una imagen real para la simulación.»
 
-**Diagnóstico (verificado en `main`):** SIMULACIÓN hoy NO analiza ninguna imagen: `MockBridge` (`src/lib/e14/bridge.ts` L71–L186) inventa scores aleatorios (`OPTIMA_SCORES`/`ADVERTENCIA_SCORES`/`RECHAZADA_SCORES` L55–57, `generarActa` L97–165) sin foto. Por eso en revisión se ve el «papel sintético» (`ActaDocument`) con datos semilla: esa es la «imagen de prueba» que el dueño NO quiere volver a ver.
+**Diagnóstico (verificado en `main`):** SIMULACIÓN hoy NO analiza ninguna imagen: `MockBridge` (`src/lib/e14/bridge.ts` L71–L186) inventa scores aleatorios (`OPTIMA_SCORES`/`ADVERTENCIA_SCORES`/`RECHAZADA_SCORES` L55–57, `generarActa` L97–165) sin foto. Por eso en revisión se ve el «papel sintético» (`ActaDocument`) con datos semilla: esa es la «imagen de prueba» que el mantenedor NO quiere volver a ver.
 
 **Solución:** SIMULACIÓN pasa a ser un escaneo REAL de la imagen incluida §1, idéntico al de IMPORTAR. El resultado tiene `fotoOriginal`, `fotoProcesada`, score real, OCR real. El mock se elimina.
 
@@ -121,7 +121,7 @@ Foto real del dueño (Galaxy A56 5G) de un E-14 auténtico sobre mesa oscura:
 
 ## §F2. FILTRO POR DEFECTO «B/N ADAPTATIVO» + SELECTOR DE FILTROS (copia del lab)
 
-**Síntoma (dueño):** «La captura sale original; por defecto toca que sea el filtro de "B/N adaptativo".»
+**Síntoma (mantenedor):** «La captura sale original; por defecto toca que sea el filtro de "B/N adaptativo".»
 
 **Diagnóstico:** el pipeline de e14 pide el filtro **hard-codeado** `"original"`:
 - `scanner-core-bridge.ts` **L242**: `processImage(fotoOriginal, quad, "original")` (captura).
@@ -162,14 +162,14 @@ Copia del sheet de filtros del lab (`EditorView.tsx`), re-vestida con tokens e14
 
 ## §F3. ELIMINAR «VER FOTO» — LA FOTO REAL ES EL DEFAULT ÚNICO
 
-**Síntoma (dueño):** «El botón "ver foto" en el editor no es necesario, elimínalo.»
+**Síntoma (mantenedor):** «El botón "ver foto" en el editor no es necesario, elimínalo.»
 
 **Diagnóstico:** `ReviewView.tsx` L120 `verFoto` alterna entre el papel sintético (`ActaDocument`, L287) y `fotoProcesada` (L280–285). Botones: 4ª columna del toolbar L332–338 y bloque centrado de ENVIADA L344–352.
 
 **Cambio (depende de F1):**
 1. Eliminar el estado `verFoto` (L120) y TODOS sus usos: toggle del toolbar (L332–338), bloque ENVIADA (L344–352), condicional del visor (L280–288) y el badge «FOTO REAL DISPONIBLE» (L289–295, ya no tiene sentido).
 2. Visor único: `{hayFoto ? <img src={acta.fotoProcesada} … /> : <placeholder>}` — el placeholder (solo posible en un timeout del pipeline que no alcanzó a procesar) es la MISMA caja con brackets y un texto centrado `font-data` «FOTO NO DISPONIBLE». **`ActaDocument` queda fuera de ReviewView.**
-3. Borrar `src/components/e14/ActaDocument.tsx` si queda sin usos (verificar con grep: hoy su único import es ReviewView L19). Si el dueño lo quiere para el futuro, queda en el historial de git — la petición es «no volver a verla».
+3. Borrar `src/components/e14/ActaDocument.tsx` si queda sin usos (verificar con grep: hoy su único import es ReviewView L19). Si el mantenedor lo quiere para el futuro, queda en el historial de git — la petición es «no volver a verla».
 4. Eliminar el estado local `rotacion` de ReviewView (L119) y la rama decorativa `setRotacion` del botón ROTAR (L318–323): con F1, SIMULACIÓN también rota real vía `store.rotarFoto`. El botón queda: `onClick={() => void rotarFoto()}` para todo `esReal`.
 5. Actualizar el comentario de cabecera del archivo (L3–15) reflejando el nuevo contrato (D36/D37).
 
@@ -177,13 +177,13 @@ Copia del sheet de filtros del lab (`EditorView.tsx`), re-vestida con tokens e14
 
 ## §F4. EDITOR DE RECORTE: BOTONES «ROTAR» Y «DETECCIÓN AUTOMÁTICA»
 
-**Síntoma (dueño):** «Cuando se entra a recortar manualmente, agrega un botón para "rotar" la imagen y "detección automática".»
+**Síntoma (mantenedor):** «Cuando se entra a recortar manualmente, agrega un botón para "rotar" la imagen y "detección automática".»
 
 **Dónde:** `src/components/e14/QuadEditor.tsx` (copia del subsistema CROP del lab, §7.5). Hoy NO tiene ninguno de los dos.
 
 **Fuente en el lab (copiar verbatim y re-vestir):**
 - **Detección automática**: `EditorView.tsx` **L1198–1212** (`handleDetect`: `detectDocumentEdges(page.original)` → actualiza el quad) + el botón pill **L2123–2141** (spinner mientras detecta, `Sparkles` → usar icono nuevo `SparklesIcon`).
-- **Rotación**: la mecánica de quad-en-marco-rotado YA está en e14 QuadEditor (`rotation` prop L81/L123, `pointerToNormalized` L215–236 invierte la rotación, handles dentro del div rotado L410–417). Lo único nuevo es el botón que la cambia localmente (el lab rota en REVIEW con F-ROT-RAPID L1080–1119; aquí el botón vive DENTRO del editor de recorte, como pide el dueño).
+- **Rotación**: la mecánica de quad-en-marco-rotado YA está en e14 QuadEditor (`rotation` prop L81/L123, `pointerToNormalized` L215–236 invierte la rotación, handles dentro del div rotado L410–417). Lo único nuevo es el botón que la cambia localmente (el lab rota en REVIEW con F-ROT-RAPID L1080–1119; aquí el botón vive DENTRO del editor de recorte, como pide el mantenedor).
 
 ### Diseño (respetando D19 — el editor es PURO)
 1. **Estado local** `rotLocal` inicializado de `rotationProp` (reemplaza el `rotation` calculado en L123; todos los usos de `rotation` pasan a `rotLocal`).
@@ -200,7 +200,7 @@ Copia del sheet de filtros del lab (`EditorView.tsx`), re-vestida con tokens e14
 
 ## §F5. BARRA DE CONTROLES FIJA ABAJO EN REVISIÓN
 
-**Síntoma (dueño):** «Los controles en el editor se adaptan al tamaño y la orientación del documento escaneado; deben ir fijos en la parte inferior del editor.»
+**Síntoma (mantenedor):** «Los controles en el editor se adaptan al tamaño y la orientación del documento escaneado; deben ir fijos en la parte inferior del editor.»
 
 **Diagnóstico:** en `ReviewView.tsx` el toolbar vive DENTRO de la tarjeta del documento (L271 `<section … h-full max-h-[calc(100vh-260px)]>` con `justify-between`, toolbar en L303–340), y ENVIADA usa otro bloque distinto (L344–352). El resultado se siente «pegado» al documento y cambia de posición/contenido según estado y orientación.
 
@@ -237,7 +237,7 @@ main (flex col, flex-1, min-h-0)
 **Reglas del protocolo (iguales a PR #7):**
 - Cada commit funcional lleva su sección en `docs/worklog.md` con la tabla de veredictos **FIEL / ADAPTACIÓN / DESVIACIÓN** de sus bloques copiados del lab (los de F2 y F4 son copias con Fuente; los de F1/F3/F5 son decisión propia → registrar como «DECISIÓN PROPIA (D3x)»).
 - `docs/DECISIONS.md`: **D35** SIMULACIÓN = pipeline real + imagen incluida (mock retirado; chips de forzado obsoletos) · **D36** filtro default `bw` + selector (base: types.ts L50 y CameraView L602–604 del lab) · **D37** ROTAR/DETECCIÓN en el editor de recorte; `onAplicar(quad, rotacion)` · **D38** barra de controles fija (fuera de la tarjeta del documento).
-- Checks OBLIGATORIOS antes del PR: `bun run lint` en la raíz + build estático de e14: `cd apps/digitalizador-e14 && BUILD_STATIC=1 bunx next build` (debe pasar con el asset y el import estático; NO subir el deploy — el dueño hará merge).
+- Checks OBLIGATORIOS antes del PR: `bun run lint` en la raíz + build estático de e14: `cd apps/digitalizador-e14 && BUILD_STATIC=1 bunx next build` (debe pasar con el asset y el import estático; NO subir el deploy — el mantenedor hará merge).
 - NO tocar `apps/scanner-lab/` ni `packages/scanner-core/`. NO instalar dependencias nuevas (el sheet de filtros se hace sin `vaul`). NO cambiar rutas ni flujos fuera de lo listado.
 
 ---

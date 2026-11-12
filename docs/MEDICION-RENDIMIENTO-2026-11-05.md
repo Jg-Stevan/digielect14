@@ -255,7 +255,7 @@ Bajar de 5 exige **una de estas dos**, y ninguna es una bandera:
 
 - **Dejar de leer la hoja entera** (bandas: cabecera + tabla de votos + pie, no las 40 líneas) — cambia el
   contrato de extracción y hay que revalidar el gate línea por línea.
-- **Sacar el OCR del wasm** (sidecar en la LAN o runtime nativo) — descartado por el dueño en la decisión
+- **Sacar el OCR del wasm** (sidecar en la LAN o runtime nativo) — descartado por el mantenedor en la decisión
   del 2026-11-05.
 
 Palancas medidas y cerradas: hilos, sesiones hermanas, WebGPU, forma fija del tensor, `ocrRecWmax` 384/320,

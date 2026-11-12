@@ -11,17 +11,17 @@
  *   b. aria-label="Abrir modo desarrollador" existe en components/e14/**.
  *   c. `e14-dev-mode` se lee/escribe SOLO vía leerModoDev/guardarModoDev
  *      (grep negativo de acceso directo a la clave en components — la
- *      persistencia es del contrato §4.1, dueño agente 1).
+ *      persistencia es del contrato §4.1, mantenedor agente 1).
  *   d. badge DEV en TopBar.tsx (el modo dev es visible siempre que está ON).
  *   e. PanelDev contiene las 6 secciones del contrato (modo dev, salud,
  *      errores agrupados, uso, política de datos, kill switch/overrides) —
  *      greps conceptuales: si el agente 2 usó textos distintos NO cambiar
- *      el QA a ciegas: coordinar con el dueño y documentar en el REPORTE
+ *      el QA a ciegas: coordinar con el mantenedor y documentar en el REPORTE
  *      (kit A3-C4 ⚠). NOTA limpieza-masiva-v1: la fila «perf de actas»
  *      (/perf/i) se elimina — PanelDev NUNCA renderizó esa sección y el
  *      grep pasaba solo por el comentario «performance.memory» del
  *      scaffold dev/contrato.ts (eliminado: contrato migrado a obs/tipos
- *      en FASE 1). Verde falso desde el nacimiento del ancla; si el dueño
+ *      en FASE 1). Verde falso desde el nacimiento del ancla; si el mantenedor
  *      añade una sección de perf al modo dev, restaurar la fila
  *      DELIBERADAMENTE junto con la UI.
  *   f. El kill switch escribe por guardarOverridesFlags (grep positivo) y
@@ -129,7 +129,7 @@ ok(
 console.log("— Bloque b · aria-label de la puerta del modo diagnóstico —");
 
 // CALIBRADO (FASE 1, UI real del agente 2; recalibrado 2026-11-04 tras el
-// renombrado del dueño «modo de diagnóstico» → «modo desarrollador»):
+// renombrado del mantenedor «modo de diagnóstico» → «modo desarrollador»):
 // TuercaResumen.tsx usa un ternario — aria-label={modoDev
 // ? "Abrir modo desarrollador" : "Activar modo desarrollador"} — lo que el
 // ancla exige es el binding + ambos nombres accesibles, no el literal pegado.
@@ -182,7 +182,7 @@ console.log("— Bloque e · PanelDev: 6 secciones —");
     faltantes.length === 0,
     `PanelDev cubre las 6 secciones del contrato${
       faltantes.length ? ` — FALTA: ${faltantes.join(", ")}` : ""
-    } (kit A3-C4 e — textos distintos → coordinar con el dueño, NO editar a ciegas)`,
+    } (kit A3-C4 e — textos distintos → coordinar con el mantenedor, NO editar a ciegas)`,
   );
 }
 

@@ -3,7 +3,7 @@
  * EN CURSO (heartbeat → worker + WAL).
  *
  * Singleton IDEMPOTENTE arrancado junto a iniciarDetectorHang (page.tsx).
- *  · Kill-switch del dueño (§D): `hangEnCurso: false` → SIN drenaje, SIN
+ *  · Kill-switch del mantenedor (§D): `hangEnCurso: false` → SIN drenaje, SIN
  *    worker, SIN beats, SIN listeners — comportamiento observable IDÉNTICO
  *    a b688fbc (byte-idéntico, §1).
  *  · Feature-detect (§C.1): sin Worker o sin indexedDB → sensor off,
@@ -234,8 +234,8 @@ export function iniciarSensorHangEnCurso(): void {
     if (typeof window === "undefined") return;
     if (iniciado) return;
     iniciado = true;
-    // Kill-switch del dueño (§D): OFF → byte-idéntico a b688fbc — la marca
-    // sobreviviente NO se drena (el dueño eligió apagar el sensor completo).
+    // Kill-switch del mantenedor (§D): OFF → byte-idéntico a b688fbc — la marca
+    // sobreviviente NO se drena (el mantenedor eligió apagar el sensor completo).
     if (!leerFlags().hangEnCurso) return;
     // Feature-detect (§C.1) — ambos lados: sin soporte, sensor off honesto.
     if (typeof Worker === "undefined" || typeof indexedDB === "undefined") return;

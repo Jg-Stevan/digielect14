@@ -5,7 +5,7 @@
  * e14-observabilidad-v1, agente 2 · C5). Modal HIJO del PanelDev
  * (z-[80] sobre el z-[70] del panel): cada `ErroresAgrupados` como card;
  * al expandir, los breadcrumbs del evento más reciente en timeline
- * vertical — el dueño ve «cómo surgió» cada error.
+ * vertical — el mantenedor ve «cómo surgió» cada error.
  *
  * Botón «VACIAR BUFFER» con confirmación armada (patrón 4 s) →
  * `purgarBuffer()`. FASE 0: datos vía dev/puente.ts (buffer honestamente

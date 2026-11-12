@@ -1,7 +1,7 @@
 # REPORTE — KIT e14-ocr-tessbest-v1 (GO-B: Tess best primero, escalonado a PP-OCR)
 
 **Fecha:** 2026-11 · **Rama:** `feat/e14-ocr-tessbest-cascada` · **Base:** `docs/sim-gama-baja-v2` (informe v2) → main `65dedc6`
-**Petición literal del dueño:** «dejemos como primer motor de ocr tess best y escalonado a pp ocr, y sigue y sube los cambios a un pr».
+**Petición literal del mantenedor:** «dejemos como primer motor de ocr tess best y escalonado a pp ocr, y sigue y sube los cambios a un pr».
 
 ## 1 · Qué hace el kit
 
@@ -43,7 +43,7 @@ primer uso (offline desde la 1.ª cascada con éxito, igual que RapidOCR ~30 MB)
 el bundle principal no lo descarga hasta la 1.ª cascada.
 
 ### Presupuestos (por tier — el fix del P0 del informe sim-gama-baja)
-`adaptacion/plan.ts` suma 3 knobs RESUELTOS por tier (override manual del dueño
+`adaptacion/plan.ts` suma 3 knobs RESUELTOS por tier (override manual del mantenedor
 manda vía el flag nuevo `presupuestoEscaneoMs`; kill-switch
 `adaptacionDispositivo:false` ⇒ valores históricos byte-idénticos):
 
@@ -86,7 +86,7 @@ starvation. El 10.0 histórico se midió SIN throttling de red.
   obs-privacidad 7/7 · obs-ui 7/8 · aa-quickwins 10/11 — **los 2 fallos son la
   deuda pre-existente de main** (documentada en el worklog de F-LENS v5).
 
-## 4 · Kill-switches (D6 — la decisión manual del dueño manda)
+## 4 · Kill-switches (D6 — la decisión manual del mantenedor manda)
 - `{"ocrCascada": false}` — cascada OFF: OCR escalonado de siempre byte a byte,
   Tess ni se menciona (ni prewarm ni descarga).
 - `{"adaptacionDispositivo": false}` — presupuestos históricos exactos
@@ -94,9 +94,9 @@ starvation. El 10.0 histórico se midió SIN throttling de red.
 - `{"presupuestoEscaneoMs": N}` — override MANUAL del presupuesto del pipeline
   (clamp 30-900 s; DOBLE whitelist sanearFlags + politica).
 
-## 5 · Pendientes (dueño)
+## 5 · Pendientes (mantenedor)
 1. Kit «primera-descarga» (P1 del A/B): traza `origen=` del det, presupuesto de
    primera descarga y revisión del quad bajo starvation de red.
 2. Validación de campo en el sm-a135m/ds físico (la simulación es aproximación).
 3. Confirmar en campo que Tess best sube el score/gate vs RapidOCR con las actas
-   reales del lote del dueño (el bench `tools/bench-ocr-cascada/` queda disponible).
+   reales del lote del mantenedor (el bench `tools/bench-ocr-cascada/` queda disponible).

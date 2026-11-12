@@ -10,7 +10,7 @@
 
 > Lo que ya existe en el lab se COPIA verbatim con comentario `// Fuente: apps/scanner-lab/<ruta> L<ini>–L<fin>` y se adapta SOLO el re-vestido (tokens e14). Nunca re-implementar ni "simplificar".
 
-Petición literal del dueño: **«Copiemos el botón de "Texto" (con sus funciones) de lab en el editor de e14»**.
+Petición literal del mantenedor: **«Copiemos el botón de "Texto" (con sus funciones) de lab en el editor de e14»**.
 
 ## §1. QUÉ ES EL BOTÓN «TEXTO» EN EL LAB (análisis verificado)
 
@@ -117,6 +117,6 @@ Mismo patrón de los existentes (`SparklesIcon`/`SlidersIcon` de F4 — SVG inli
 2. SIMULACIÓN → revisión → TEXTO abre el sheet: con el acta incluida y OCR válido muestra el texto real + contadores; si el OCR del pipeline no extrajo texto → estado vacío con «Reconocer texto».
 3. «Reconocer de nuevo»: spinner + al terminar toast «TEXTO RECONOCIDO · N caracteres…» y el texto/contadores se actualizan (el botón TEXTO queda `active`).
 4. «Copiar texto»: toast de éxito (o el toast honesto de fallo de portapapeles en headless — el catch del lab debe verse).
-5. Con la foto del dueño (gate RECHAZADA) el sheet funciona igual — el texto es el crudo del OCR, sea bueno o malo (el sheet NO re-etiqueta el acta; solo muestra texto — igual que el lab).
+5. Con la foto del mantenedor (gate RECHAZADA) el sheet funciona igual — el texto es el crudo del OCR, sea bueno o malo (el sheet NO re-etiqueta el acta; solo muestra texto — igual que el lab).
 6. Cierre por backdrop; sin leaks de estado (reabrir conserva el texto; ENVIADA sin barra; el sheet no aparece en otros estados).
 7. Lint + tsc + build estático en verde; D39 + worklog + ROADMAP actualizados.

@@ -26,7 +26,7 @@
 
 /** Umbral del hang-en-curso (§C.5): bajo el letrero Android (5 s) y
  *  coherente con DRIFT_UMBRAL_MS (3000). SIN flag nuevo de umbral — el
- *  kill-switch del dueño es `hangEnCurso` (§D). */
+ *  kill-switch del mantenedor es `hangEnCurso` (§D). */
 export const HANG_EN_CURSO_UMBRAL_MS = 3000;
 
 /** DB PROPIA del WAL (§1) — store único `marcas` con keyPath `id`. */

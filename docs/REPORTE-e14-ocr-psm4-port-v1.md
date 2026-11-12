@@ -1,7 +1,7 @@
 # REPORTE — e14-ocr-psm4-port-v1
 
 **Puerto de velocidad desde `supervision-e14` @ `a249518`** («feat/tesseract-spa-best-v1»
-— el commit que el dueño midió con los MEJORES tiempos de OCR). Pregunta de origen:
+— el commit que el mantenedor midió con los MEJORES tiempos de OCR). Pregunta de origen:
 «ese commit es el ideal — necesito pasar esa rapidez a este proyecto». Diagnóstico
 comparativo lado a lado de los dos motores Tesseract (mismo linaje, caminos distintos).
 
@@ -61,5 +61,5 @@ Y el fallback no-SIMD devuelve el camino rápido en los dispositivos de gama baj
   escalonado sigue igual que siempre.
 - La creación del worker ahora puede cargar el core lstm (~6,8 MB) en no-SIMD — el SW
   ya cachea /vendor/tesseract en MOTOR_CACHE (kit tessbest), aplica igual.
-- El dueño mantiene supervision-e14 @ a249518 como línea base de rendimiento; este kit
+- El mantenedor mantiene supervision-e14 @ a249518 como línea base de rendimiento; este kit
   alinea el intento 1 con esa config SIN transplantar la arquitectura vieja.

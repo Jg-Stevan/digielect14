@@ -1,10 +1,10 @@
 # REPORTE — Tesseract `fast` vs `best` en el gate de clasificación (2026-11-10)
 
 **Fecha:** 2026-11-10 · **Rama:** `remediacion/olas-a-d`
-**Petición del dueño:** «quiero probar tesseract best, fast, quiero saber si logran
+**Petición del mantenedor:** «quiero probar tesseract best, fast, quiero saber si logran
 clasificar el acta con la lectura que hacen y cuánto tiempo tardan».
 **Regla de privacidad:** solo se reportan tiempos y veredictos de rendimiento; las
-actas usadas son del corpus local del dueño, no se versionaron, no se transcribió
+actas usadas son del corpus local del mantenedor, no se versionaron, no se transcribió
 contenido y los fixtures temporales se borraron al terminar.
 
 ## 1 · Método (sin cambios de código)
@@ -89,7 +89,7 @@ status del pipeline tras la cascada.
   paga la pasada RapidOCR igual. En KN3 RapidOCR sí aceptó AUTO (OPTIMA 10); en
   A56/PC/A13 quedó en SUGERIDA hasta el cierre.
 
-## 4 · Decisión del dueño (2026-11-10)
+## 4 · Decisión del mantenedor (2026-11-10)
 
 **Primer motor de OCR = Tesseract `fast`** con escalonado a **PP-OCRv4**
 (RapidOCR: 1280 → 1920 → ROI). Es la cascada GO-B ya existente, cambiando el
@@ -99,7 +99,7 @@ sabor del traineddata a `fast` y el default de primera pasada a Tess.
 versionada (`/models/tess/4.0.0_fast/`) y el default de
 `ocrPrimeraPasadaRapida` es `false` (Tess primero). Kill-switch: ponerlo en
 `true` en `public/flags.json` o en el override de localStorage.
-## 5 · Deuda abierta (exigida por el dueño)
+## 5 · Deuda abierta (exigida por el mantenedor)
 
 **Investigar por qué la lectura de Tess no cierra AUTO en el acta `084906`**
 (SUGERIDA con `fast` y con `best`, en los 4 equipos: no depende del sabor).
@@ -132,7 +132,7 @@ acta llega tras una captura nueva, no tras importaciones encadenadas.
    (`/models/tess/4.0.0_fast`) — invalida IndexedDB de tesseract.js,
    MOTOR_CACHE del SW y HTTP.
 3. `src/lib/e14/flags.ts`: default `ocrPrimeraPasadaRapida: false` (Tess
-   primero; el dueño conserva el kill-switch en `true`).
+   primero; el mantenedor conserva el kill-switch en `true`).
 4. `supervision-e14`: mismo traineddata y ruta versionada
    (`/models/tesseract/4.0.0_fast`) para mantener la paridad del motor.
 5. `bun run preparar` + `bun run verificar` (typecheck, lint, tests y tests del

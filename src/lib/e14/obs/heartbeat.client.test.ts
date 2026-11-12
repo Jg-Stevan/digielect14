@@ -163,7 +163,7 @@ function stubDom(visibility = "visible"): {
   };
 }
 
-/** Override de flags a mitad de vida (kill-switch del dueño — §A.1.1). */
+/** Override de flags a mitad de vida (kill-switch del mantenedor — §A.1.1). */
 function encenderOverride(valores: Record<string, string>, f: unknown): void {
   valores["e14-flags-overrides"] = JSON.stringify(f);
 }

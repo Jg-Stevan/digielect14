@@ -1,7 +1,7 @@
 /**
  * F2 — KIT e63k-capa2-identidad-e-instalar-v1: píldora «Instalar app» (PWA).
  *
- * Evidencia del dueño (consola, kit §0.3): `Banner not shown:
+ * Evidencia del mantenedor (consola, kit §0.3): `Banner not shown:
  * beforeinstallpromptevent.preventDefault() called. The page must call
  * prompt()`. El módulo `core/pwa.ts` captura el evento
  * (e.preventDefault()), guarda deferredPrompt y expone promptInstall() /

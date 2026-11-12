@@ -38,7 +38,7 @@ export function useDialogFocus(
     const nodo = ref.current;
     // Foco de RETORNO: quién lo tenía justo antes de abrir el diálogo.
     const previo = document.activeElement as HTMLElement | null;
-    // Foco inicial: el elemento marcado por el dueño del diálogo.
+    // Foco inicial: el elemento marcado por el mantenedor del diálogo.
     nodo.querySelector<HTMLElement>("[data-autofocus]")?.focus();
 
     const alTecla = (e: KeyboardEvent) => {
