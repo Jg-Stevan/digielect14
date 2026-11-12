@@ -23,7 +23,7 @@
 
 export function setupUpdateBanner(): void {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-  if (window.location.protocol !== "https:") return; // GitHub Pages es https; localhost dev se salta
+  if (window.location.protocol !== "https:") return; // el deploy (Cloudflare Pages) es https; localhost dev se salta
 
   const showBanner = (reg: ServiceWorkerRegistration) => {
     // Ya visible → no duplicar (waiting + updatefound pueden coincidir).

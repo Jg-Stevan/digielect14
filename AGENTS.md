@@ -26,7 +26,9 @@ digitalizador de actas E-14 que corre en el navegador del celular; trabaja con
 - `.gitattributes` fuerza LF y `-text` en `public/scanner/*.js`. Sin eso, un clon
   en Windows con `core.autocrlf=true` materializa CRLF y la frescura falla.
 - En Windows + Git Bash, `NEXT_PUBLIC_BASE_PATH=/digielect14` se manglea a una
-  ruta local: antepón `MSYS_NO_PATHCONV=1`. Los detalles, en `docs/DEUDA.md`.
+  ruta local: antepón `MSYS_NO_PATHCONV=1`. Desde A-02 el build no fija basePath
+  (canal único Cloudflare en raíz), pero el código cliente del motor sigue
+  leyendo la variable — no la definas. Los detalles, en `docs/DEUDA.md`.
 
 ## Reglas del producto
 

@@ -79,13 +79,11 @@ el botón «USAR HUB LOCAL (ESTE EQUIPO)». Pasos y matriz de errores: el
 
 ## Deploy
 
-Canal vigente: **Cloudflare** — Pages (`digielect14.pages.dev`, con cabeceras
+Canal único: **Cloudflare** — Pages (`digielect14.pages.dev`, con cabeceras
 COOP/COEP para el OCR multihilo) y el Worker (`digielect14e.julistevan02.workers.dev`).
-GitHub Pages (`jg-stevan.github.io/digielect14/`, sin cross-origin isolation)
-queda fuera del objetivo: su **retiro está aprobado** (A-02 del plan
-2026-11-12) — el workflow `deploy-pages.yml` aún existe en `.github/workflows/`
-y se apaga con ese ítem; mientras tanto sigue publicando la demo estática.
-Instrucciones: [docs/DEPLOY.md](docs/DEPLOY.md).
+GitHub Pages se retiró como canal de deploy (A-02 del plan 2026-11-12: sin
+cross-origin isolation, el wasm caía a un hilo) — no queda ningún resto de ese
+canal en el repo. Instrucciones: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Documentación
 

@@ -90,7 +90,7 @@ jobs:
           if-no-files-found: ignore
 
       # 6.6 (R6) — VERSION del SW y `?v=` del detection-worker derivadas del
-      # SHA del commit (misma receta que deploy-pages.yml y deploy-cf.yml).
+      # SHA del commit (misma receta que deploy-cf.yml).
       # Se corre DESPUÉS de los tests para que la suite vea las fuentes tal
       # cual, y ANTES del build para que el artefacto lleve la marca.
       - name: Derivar versión del SW del build (6.6)
@@ -109,7 +109,6 @@ jobs:
         run: bunx next build
         env:
           BUILD_STATIC: "1"
-          NEXT_PUBLIC_BASE_PATH: /digielect14
 
       # 6.9 (O2) — cota de tamaño: JS + imágenes ≤ 20 MB (un `import` estático
       # accidental de jspdf o de los JPG SIM entraría sin ruido y esto lo hace

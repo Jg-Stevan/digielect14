@@ -71,9 +71,11 @@ en CI sale «omitido» porque no hay checkout hermano, y en local exige
 - **`bun` flotante**: los workflows usaban `setup-bun@v2` sin versión → `latest`.
   El minificador cambia entre versiones y el artefacto de capa 0 se commiteó con
   bun 1.3.x, así que la frescura dependía del día que corriera el job. Fijado en
-  **1.4.2** en `quality.yml` y `deploy-pages.yml`.
-- **`deploy-pages.yml` y `quality.yml` usan `bunx next build`**, que NO dispara el
-  `prebuild` de `package.json`: publican los bytes commiteados de
+  **1.4.2** en `quality.yml` y `deploy-cf.yml` (el mismo pin existía en
+  `deploy-pages.yml`, retirado con A-02).
+- **`quality.yml` y `deploy-cf.yml` usan `bunx next build`** (deploy-cf vía
+  `bun run build`, que SÍ dispara el `prebuild`), que NO dispara el
+  `prebuild` de `package.json`: publica los bytes commiteados de
   `capa0-qr.worker.js`. Si alguien edita `src/lib/e14/qr/capa0-qr.worker.ts` sin
   regenerar el artefacto, el worker publicado queda viejo — y ahora el smoke de
   CI lo atrapa. Regenerar con `bun run prebuild`.

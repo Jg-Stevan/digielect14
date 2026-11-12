@@ -1,18 +1,19 @@
-# Ola 5 §5.3 (O1) — check diario de FRESCURA de los dos deploys.
+# Ola 5 §5.3 (O1) — check diario de FRESCURA del deploy.
 #
-# Con GH Pages automático y Cloudflare manual, la demo buena (CF, multihilo)
-# se iba quedando atrás sin señal. Desde deploy-cf.yml el deploy CF también
-# es automático; este job es la RED: cada mañana compara la MARCA DE BUILD
-# servida en los dos deploys y FALLA con mensaje accionable si divergen o si
-# alguno no responde. (Abrir un issue automático queda documentado aquí como
-# extensión — hoy el fallo rojo del cron es la señal.)
+# Actualizado por A-02 (plan 2026-11-12): GitHub Pages se retiró como canal de
+# deploy (borramos deploy-pages.yml y su basePath gemelo) — el canal único es
+# Cloudflare Pages (`digielect14.pages.dev`, deploy automático desde
+# deploy-cf.yml). Este job ya no COMPARA dos deploys: sondea el único y FALLA
+# con mensaje accionable si no responde o si la marca de build no se puede
+# extraer. (Abrir un issue automático queda documentado aquí como extensión —
+# hoy el fallo rojo del cron es la señal.)
 #
-# ¿Qué marca se compara? La VERSION del Service Worker (`const VERSION =
-# "e14-<shorthash>"`), que los tres workflows que construyen derivan del SHA
-# del commit en el paso «Derivar versión del SW del build» (6.6) — es el
-# BUILD_ID observable desde fuera: mismo commit servido ⇒ misma cadena. Es el
+# ¿Qué marca se verifica? La VERSION del Service Worker (`const VERSION =
+# "e14-<shorthash>"`), que los workflows que construyen derivan del SHA del
+# commit en el paso «Derivar versión del SW del build» (6.6) — es el BUILD_ID
+# observable desde fuera: mismo commit servido ⇒ misma cadena. Es el
 # equivalente servido del `appVersion`/BUILD_ID que nombra el bloque 5.3.
-name: Frescura de deploys
+name: Frescura de deploy
 
 on:
   schedule:
@@ -26,20 +27,13 @@ jobs:
   frescura:
     runs-on: ubuntu-latest
     steps:
-      - name: Comparar marca de build servida (GH Pages vs Cloudflare Pages)
+      - name: Verificar marca de build servida (Cloudflare Pages)
         run: |
           set -euo pipefail
-          GH_URL="https://jg-stevan.github.io/digielect14/sw.js"
           CF_URL="https://digielect14.pages.dev/sw.js"
 
-          estado_gh=$(curl -sS -o /tmp/sw-gh.js -w '%{http_code}' "$GH_URL") || estado_gh="sin-respuesta"
           estado_cf=$(curl -sS -o /tmp/sw-cf.js -w '%{http_code}' "$CF_URL") || estado_cf="sin-respuesta"
 
-          if [ "$estado_gh" != "200" ]; then
-            echo "::error::GH Pages no sirve sw.js (HTTP: $estado_gh) — $GH_URL"
-            echo "Accionable: revisa el último run de deploy-pages.yml (¿falló el build?)."
-            exit 1
-          fi
           if [ "$estado_cf" != "200" ]; then
             echo "::error::Cloudflare Pages no sirve sw.js (HTTP: $estado_cf) — $CF_URL"
             echo "Accionable: revisa el último run de deploy-cf.yml (¿falta el secreto CF_API_TOKEN o falló el deploy?)."
@@ -48,23 +42,14 @@ jobs:
 
           # Misma regex que el sed de «Derivar versión del SW del build»: si
           # este check deja de extraer la cadena, el patrón se desalineó.
-          ver_gh=$(sed -n 's/^[[:space:]]*const VERSION = "\(.*\)";.*/\1/p' /tmp/sw-gh.js | head -n1)
           ver_cf=$(sed -n 's/^[[:space:]]*const VERSION = "\(.*\)";.*/\1/p' /tmp/sw-cf.js | head -n1)
 
-          echo "GH Pages  : $ver_gh"
           echo "Cloudflare: $ver_cf"
 
-          if [ -z "$ver_gh" ] || [ -z "$ver_cf" ]; then
+          if [ -z "$ver_cf" ]; then
             echo "::error::No se pudo extraer la VERSION del sw.js servido."
             echo "Accionable: el patrón del sed de «Derivar versión» ya no coincide con public/sw.js — alinear workflow y archivo."
             exit 1
           fi
 
-          if [ "$ver_gh" != "$ver_cf" ]; then
-            echo "::error::DEPLOY DESFASADO: GH Pages sirve «$ver_gh» y Cloudflare «$ver_cf»."
-            echo "Accionable: relanza deploy-cf.yml (o revisa por qué no corrió tras el merge)."
-            echo "Extensión documentada (no implementada hoy): abrir un issue automático con estos dos valores."
-            exit 1
-          fi
-
-          echo "OK: ambos deploys sirven la MISMA marca de build («$ver_gh»)."
+          echo "OK: Cloudflare Pages sirve la marca de build «$ver_cf»."

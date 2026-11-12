@@ -78,27 +78,6 @@ export default function RootLayout({
          * try/catch total — silencioso si no hay PerformanceObserver.
          */}
         <script dangerouslySetInnerHTML={{ __html: SCRIPT_LCP_CLS }} />
-        {/*
-         * 6.7 (S4+F10) — META CSP para el deploy gemelo de GitHub Pages:
-         * GH Pages no controla cabeceras HTTP, así que la CSP de ese deploy
-         * vive AQUÍ (la de Cloudflare Pages va en public/_headers). Igual a
-         * la de _headers MENOS `frame-ancestors` (los meta no lo soportan).
-         * NOTA S-7 (revisión del plan): un meta-CSP no gobierna a los
-         * workers servidos desde `self` — su CSP viene de sus propias
-         * cabeceras de respuesta. Queda anotado en «endurecer después
-         * (hashes)»: la auditoría siguiente no debe contarlo como cubierto.
-         * `'wasm-unsafe-eval'` y `data:` en connect-src: los motores OCR
-         * instancian WASM (Tesseract compila su core desde una URL data:).
-         * `'unsafe-eval'`: OBLIGATORIO para el detector — el core de OpenCV
-         * (vendor/opencv-4.5.5-core.js, emscripten) usa `new Function` en
-         * `makeDynCaller` (tabla dynCall) y `createNamedFunction`. Sin esto
-         * el importScripts del core lanza EvalError, el worker nunca emite
-         * 'ready' y la captura automática queda muerta (regresión 2026-11-11).
-         */}
-        <meta
-          http-equiv="Content-Security-Policy"
-          content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' data: blob: https://e14-puente.julistevan02.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'none'"
-        />
         <meta name="referrer" content="strict-origin-when-cross-origin" />
       </head>
       <body

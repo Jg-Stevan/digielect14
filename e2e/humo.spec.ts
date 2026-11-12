@@ -21,8 +21,8 @@
  */
 import { expect, test } from "@playwright/test";
 
-/** URL base del humo (deploy de GH Pages por defecto; BASE_URL para local). */
-const BASE = process.env.BASE_URL ?? "https://jg-stevan.github.io/digielect14/";
+/** URL base del humo (deploy de Cloudflare Pages por defecto; BASE_URL para local). */
+const BASE = process.env.BASE_URL ?? "https://digielect14.pages.dev";
 
 test.describe("humo · captura SIM → revisión", () => {
   test("abrir la app, escanear en modo SIM y llegar a REVISIÓN", async ({ page }) => {

@@ -1,11 +1,11 @@
 # Ola 5 §5.3 (O1) — deploy AUTOMÁTICO de Cloudflare Pages.
 #
-# HOY el deploy multihilo (el bueno — COOP/COEP vía public/_headers) es MANUAL
-# tras cada merge (docs/DEPLOY.md §1) mientras GH Pages se publica solo: con
-# el tiempo la demo buena queda atrás sin señal. Este workflow lo automatiza:
-# un push a main (o dispatch manual) construye el export estático en la RAÍZ
-# (NEXT_PUBLIC_BASE_PATH vacío) y lo publica en el proyecto Pages
-# `digielect14` con wrangler-action.
+# Desde A-02 (2026-11-12) el deploy multihilo (el bueno — COOP/COEP vía
+# public/_headers) es el ÚNICO canal: GitHub Pages se retiró (deploy-pages.yml
+# eliminado) y este workflow es quien publica tras cada merge (docs/DEPLOY.md
+# §1): un push a main (o dispatch manual) construye el export estático en la
+# RAÍZ (sin basePath) y lo publica en el proyecto Pages `digielect14` con
+# wrangler-action.
 #
 # Requisitos (fuera del repo): secreto del repo `CF_API_TOKEN` con permiso
 # Cloudflare Pages: Edit (jamás pegado en el repo — ver SECURITY.md). Si el
@@ -13,8 +13,8 @@
 # en el job diario `frescura-deploys.yml` (mismo bloque 5.3).
 #
 # El `?v=` del detection-worker se deriva del build (6.6) en el paso marcado;
-# el VERSION del SW también (misma receta que quality.yml y deploy-pages.yml
-# — así el check diario de frescura compara la misma marca en los dos deploys).
+# el VERSION del SW también (misma receta que quality.yml — así el check
+# diario de frescura verifica la misma marca que publica este deploy).
 name: Deploy Cloudflare Pages
 
 on:
@@ -36,17 +36,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BUILD_STATIC: "1"
-      # "" explícito = SIN basePath: el deploy de CF vive en la raíz del
-      # dominio (digielect14.pages.dev) — docs/DEPLOY.md §1.
-      NEXT_PUBLIC_BASE_PATH: ""
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Bun (versión FIJA — jamás `latest`, bloque 6.14)
         uses: oven-sh/setup-bun@v2
-        # Misma fijación que quality.yml/deploy-pages.yml: el gate compara
-        # artefactos generados con la MISMA cadena de herramientas.
+        # Misma fijación que quality.yml: el gate compara artefactos generados
+        # con la MISMA cadena de herramientas.
         with:
           bun-version: 1.4.2
 
@@ -54,7 +51,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       # Los binarios de public/ no se versionan (~35 MB): cache por hash del
-      # lock de assets, misma receta de quality.yml/deploy-pages.yml.
+      # lock de assets, misma receta de quality.yml.
       - name: Cache de assets externos
         uses: actions/cache@v4
         with:

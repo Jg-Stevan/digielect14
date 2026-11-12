@@ -5,7 +5,7 @@
  *   el botón "Instalar app" que dispara el prompt nativo.
  * · iOS Safari: no existe el prompt — se detecta y Ajustes muestra las
  *   instrucciones de "Añadir a pantalla de inicio".
- * · Registro del Service Worker SOLO en producción (https o GitHub Pages):
+ * · Registro del Service Worker SOLO en producción (https — el deploy de Cloudflare Pages):
  *   en localhost dev interferiría con HMR.
  */
 
@@ -100,7 +100,7 @@ export async function promptInstall(): Promise<"accepted" | "dismissed" | "unava
 /** Registra el Service Worker (producción: https/distinto de localhost). */
 export function registerServiceWorker(): void {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-  if (window.location.protocol !== "https:") return; // GitHub Pages es https; localhost dev se salta
+  if (window.location.protocol !== "https:") return; // el deploy (Cloudflare Pages) es https; localhost dev se salta
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   const register = () => {
     navigator.serviceWorker.register(`${base}/sw.js`).catch(() => {

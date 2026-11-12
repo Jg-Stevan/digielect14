@@ -68,7 +68,7 @@ supervisor masivo, no que el móvil cargue con la cola masiva.
       los 2 smoke de worker + los harnesses (7 con `qa-paridad-motor.ts`, que en
       CI sale «omitido» porque el checkout hermano no existe: la paridad en CI
       la sostiene `contrato-motor.test.ts` con el golden commiteado), y `bun`
-      quedó **fijo en 1.4.2** en `quality.yml` y `deploy-pages.yml` (el smoke
+      quedó **fijo en 1.4.2** en `quality.yml` y `deploy-cf.yml` (el smoke
       compara el artefacto commiteado byte a byte y el minificador de bun cambia
       entre versiones).
 - [x] Recalibrar los contadores que citaban cifras viejas: la cabecera de

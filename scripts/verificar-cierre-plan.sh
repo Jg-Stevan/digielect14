@@ -5,18 +5,17 @@
 # Correcciones integradas según la revisión del 2026-11-11 (C-35: el doc
 # «correcciones-y-huecos-plan-remediacion.md» es de CUSTODIA LOCAL del mantenedor,
 # no está versionado — la cita no apunta a un archivo del repo):
+#  · El canal de deploy es ÚNICO desde A-02 (2026-11-12): Cloudflare Pages.
+#    La CSP vive en cabeceras reales (public/_headers) y se verifica con
+#    curl -sI; ya no hay deploy gemelo de GH Pages que verificar sobre HTML.
 #  · check del receptor: 401 (contrato v0) o 410 (0.7 aplicado) — el código
 #    esperado depende del orden de aplicación; /salud es healthcheck PÚBLICO
 #    por diseño (0.2): SIN Bearer.
-#  · GH Pages NO controla cabeceras: su CSP es <meta> y se verifica sobre el
-#    HTML (no sobre headers).
 #  · Orden: ejecutar el check de 0.1 (POST /v1/actas → 401) ANTES de retirar
 #    el legado (0.7) — tras 0.7 el viejo endpoint da 410 y el test "parece roto".
 set -uo pipefail
 HUB="${HUB:-https://e14-puente.julistevan02.workers.dev}"
-GH="${GH:-https://jg-stevan.github.io/digielect14}"
 CF="${CF:-https://digielect14.pages.dev}"
-GH_SUP="${GH_SUP:-https://jg-stevan.github.io/supervision-e14}"
 TOKEN_LECTURA="${TOKEN_LECTURA:-}"
 
 echo "═══ 1. Calidad ═══"
@@ -52,13 +51,9 @@ echo "buildId configurado: $(rg -c 'generateBuildId' next.config.ts && echo sí 
 echo "═══ 5. Datos electorales (si anonimizaste — 1.3) ═══"
 git rev-list --all --objects | grep -c "acta-e14-real" 2>/dev/null || echo "0 (limpio en este clon)"
 
-echo "═══ 6. Deploys (corregido: CSP de GH Pages se verifica sobre el HTML) ═══"
-echo "— Cloudflare Pages (cabeceras reales):"
+echo "═══ 6. Deploy (canal único: Cloudflare Pages — CSP en cabeceras desde A-02) ═══"
+echo "— Cloudflare Pages $CF (cabeceras):"
 curl -sI "$CF" | grep -iE "content-security-policy|x-content-type-options|cross-origin-opener" || echo "  sin CSP/nosniff — REVISAR _headers"
-echo "— GH Pages digielect14 (meta CSP en el HTML):"
-curl -s "$GH/" | grep -io 'http-equiv="content-security-policy"[^>]*' | head -1 || echo "  SIN meta CSP — REVISAR layout.tsx"
-echo "— GH Pages supervision-e14 (meta CSP o gemelo retirado — 6.7.3):"
-curl -s "$GH_SUP/" | grep -io 'http-equiv="content-security-policy"' | head -1 || echo "  SIN meta CSP — decidir: meta o dejar de publicar el gemelo"
 
 echo "═══ 7. Historia ═══"
 git count-objects -vH | grep size-pack
