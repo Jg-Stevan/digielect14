@@ -62,6 +62,17 @@ export interface EntradaPuente {
    *  que viaja). Opcional: sobres viejos y contextos sin crypto.subtle viajan
    *  sin él — jamás un hash de relleno (doctrina e14-sin-relleno). */
   hashSha256?: string;
+  /** P-22 (plan 2026-11-12) — payload EXACTO del código impreso (capa 0 del
+   *  móvil), ya NORMALIZADO (trim+NFKD sin diacríticos+mayúsculas). La capa 2
+   *  del anti-reproceso del panel: misma página + mismo payload → DUPLICADA
+   *  aunque los bytes de la foto difieran (acta re-fotografiada). Opcional:
+   *  sin lectura del código viaja ausente — jamás relleno. */
+  qrPayload?: string;
+  /** P-22 — dhash64 perceptual (hex 16, dhash horizontal 9×8) de la foto
+   *  PROCESADA. Capa 3 del anti-reproceso, respaldo SIN QR legible:
+   *  Hamming ≤ 6 (umbral D65) contra el índice del panel decide «misma
+   *  imagen». Opcional: sin canvas/crypto disponible viaja ausente. */
+  dhash64?: string;
   /** C-07 — epoch ms del momento del gate en el móvil (`Date.now()` al armar
    *  el sobre). Nombre NO reservado del hub (el hub reserva seq/ts/
    *  dispositivo/hashHub); opcional para compatibilidad con sobre viejos. */

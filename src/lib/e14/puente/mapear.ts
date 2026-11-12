@@ -19,6 +19,8 @@ import type { Acta } from "@jg-stevan/scanner-core/dominio/types";
 import type { ClasificacionE14, TipoCopia } from "@jg-stevan/scanner-core/dominio/clasificador";
 // C-08 — SHA-256 REAL de la evidencia (helper puro compartido con el store).
 import { sha256HexDeDataUrl } from "../hash";
+// P-22 (plan 2026-11-12) — huellas del puente (capas 2/3 del anti-reproceso).
+import { dhash64DeDataUrl, normalizarQrPayload } from "./huellas";
 import type { EntradaPuente, FormularioPuente, ImpresionPuente } from "./tipos";
 
 /** Acta mapeable: igual al contrato Acta pero tolerante a la foto como Blob
@@ -124,6 +126,13 @@ export async function mapearActaAPuente(
       acta.hashSha256 && /^[0-9a-f]{64}$/.test(acta.hashSha256)
         ? acta.hashSha256
         : await sha256HexDeDataUrl(srcFoto);
+    // P-22 — huellas del puente. qrPayload: el payload EXACTO que la capa 0
+    // leyó del código impreso (acta.codigoBarras), normalizado; sin lectura →
+    // ausente (jamás relleno). dhash64: perceptual de la foto PROCESADA que
+    // viaja (srcFoto) — el respaldo sin QR legible del panel. Ambos son
+    // best-effort: fallo → campo AUSENTE, el sobre sale igual (regla de oro).
+    const qrPayload = normalizarQrPayload(acta.codigoBarras);
+    const dhash64 = await dhash64DeDataUrl(srcFoto);
     // C-07 — ts del gate: epoch ms del móvil EN el momento en que se arma el
     // sobre (nombre NO reservado del hub — ver tipos.ts).
     const tsEscaneo = Date.now();
@@ -140,6 +149,8 @@ export async function mapearActaAPuente(
       score: acta.score,
       statusActa: acta.status,
       ...(hashActa ? { hashSha256: hashActa } : {}),
+      ...(qrPayload ? { qrPayload } : {}),
+      ...(dhash64 ? { dhash64 } : {}),
       tsEscaneo,
     };
   } catch {
