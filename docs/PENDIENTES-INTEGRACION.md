@@ -115,16 +115,16 @@ real es **~334 en src (vitest) + 170 en el paquete (bun)** — se actualizó
 donde tocaba; el número que congele cada PR nuevo debe re-verificarse
 (`npx vitest run` · `bun test packages/scanner-core`).
 
-## 11. Paridad `integridad.ts`: E3 (marcas de esquina por regiones) vive solo en el hermano
+## 11. Paridad `integridad.ts`: E3 (marcas de esquina por regiones) — ✅ CERRADO (T-12, plan 2026-11-12)
 
 * `supervision-e14` (commit `09c3da2`, olas E/F del motor) añadió
   `OpcionesMarcasEsquina { porRegiones?: boolean }` y la lectura por regiones
-  en `marcasEsquina`; nuestra copia no lo tiene. `scripts/qa-paridad-motor.ts`
-  la marca DIVERGE **desde antes** de la rama de fusión (verificado contra
-  `main`: la deriva no es de `feat/fusion-evidencia-divipol`, que no toca
-  `integridad.ts`).
-* **CIERRE**: portar E3 (firma + lectura por regiones + su test
-  `marcas-esquina.test.ts`) a este repo con su propia medición —es un cambio
-  de motor, no un efecto colateral de la fusión—, o revertirla en el hermano.
-  Hasta entonces el QA de paridad queda 19/20; todos los demás módulos,
-  incluidos los tres nuevos de fusión, cotejan byte a byte.
+  en `marcasEsquina`; nuestra copia no lo tenía y `scripts/qa-paridad-motor.ts`
+  la marcaba DIVERGE desde antes de la rama de fusión.
+* **CIERRE (2026-11-12)**: E3 portado AL ESTE repo (dirección elegida: sup era
+  el lado con medición; la opción «revertir en sup» se descarta porque el
+  diseño es aditivo — sin opciones = comportamiento de hoy byte a byte).
+  `packages/scanner-core/src/dominio/integridad.ts` y su test
+  `packages/scanner-core/tests/marcas-esquina.test.ts` son BYTE A BYTE los del
+  hermano. `qa-paridad-motor.ts` → **20/20** (19/19 desde sup; el ancla
+  «A declara jspdf» es condicional: pdf-export es feature del móvil).
