@@ -22,6 +22,8 @@ import {
   shouldTriggerShutter,
   detectionTimedOut,
   lumaHistogram,
+  quadTouchesEdge,
+  EDGE_MARGIN,
   type QuadSample,
   type ScoreSample,
 } from "../quality";
@@ -258,6 +260,33 @@ describe("escape a manual y histograma", () => {
     expect(h[255]).toBe(1);
     const total = h.reduce((a, b) => a + b, 0);
     expect(total).toBe(2);
+  });
+
+  test("quadTouchesEdge: acta centrada con margen NO bloquea; pegada al borde SÍ", () => {
+    // Quad holgado dentro del 2 % de margen en los cuatro lados.
+    const holgado = [
+      { x: 0.1, y: 0.1 },
+      { x: 0.9, y: 0.1 },
+      { x: 0.9, y: 0.9 },
+      { x: 0.1, y: 0.9 },
+    ];
+    expect(quadTouchesEdge(holgado)).toBe(false);
+    // Cualquiera de las cuatro esquinas tocando su borde basta para bloquear.
+    const bordes = [
+      [{ x: 0.0, y: 0.5 }, { x: 0.9, y: 0.1 }, { x: 0.9, y: 0.9 }, { x: 0.1, y: 0.9 }],
+      [{ x: 0.1, y: 0.1 }, { x: 1.0, y: 0.5 }, { x: 0.9, y: 0.9 }, { x: 0.1, y: 0.9 }],
+      [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.5, y: 1.0 }, { x: 0.1, y: 0.9 }],
+      [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.9, y: 0.9 }, { x: 0.5, y: 0.0 }],
+    ];
+    for (const q of bordes) expect(quadTouchesEdge(q)).toBe(true);
+    // El margen exacto no dispara el bloqueo (comparación estricta).
+    const justo = [
+      { x: EDGE_MARGIN, y: EDGE_MARGIN },
+      { x: 1 - EDGE_MARGIN, y: EDGE_MARGIN },
+      { x: 1 - EDGE_MARGIN, y: 1 - EDGE_MARGIN },
+      { x: EDGE_MARGIN, y: 1 - EDGE_MARGIN },
+    ];
+    expect(quadTouchesEdge(justo)).toBe(false);
   });
 
   test("lumaHistogram: gris 50 % cae en el bin 127/128 (0.299·0.587·0.114)", () => {

@@ -36,6 +36,7 @@ import {
   computeShutterDecision,
   detectionTimedOut,
   lumaHistogram,
+  quadTouchesEdge,
   shouldTriggerShutter,
   CAPTURE_COOLDOWN_MS,
   NO_DETECT_TIMEOUT_MS,
@@ -419,6 +420,13 @@ export class CameraFrameLoop {
       // re-evalúa en el siguiente frame sin consumir el historial.
       const motion = this.stabilizer.isDeviceStable(280);
       if (!motion.stable) {
+        return;
+      }
+      // FIX borde: papel pegado al encuadre → el warp recorta el filo y el
+      // gate marca INCOMPLETA (falta marca fiducial) aunque la foto se lea.
+      // Se posterga el disparo sin consumir el historial: el operador aleja
+      // un poco el acta y el k-de-n vuelve a evaluar.
+      if (corners && quadTouchesEdge(corners)) {
         return;
       }
       this.lastTriggerMs = now;

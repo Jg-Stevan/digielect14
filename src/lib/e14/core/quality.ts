@@ -368,6 +368,25 @@ export function shouldTriggerShutter(history: ScoreSample[]): boolean {
   return computeShutterDecision(history).triggered;
 }
 
+/** Margen mínimo al borde del encuadre (fracción 0–1) para la auto-captura:
+ *  si el quad detectado toca el borde, el warp recorta el filo del acta y
+ *  el gate la marca INCOMPLETA (falta una marca fiducial) aunque a la vista
+ *  se lea bien. El trigger se posterga hasta que el operador aleje el papel. */
+export const EDGE_MARGIN = 0.02;
+
+/** true si alguna esquina del quad cae dentro del margen del borde. */
+export function quadTouchesEdge(
+  corners: readonly { x: number; y: number }[],
+  margin: number = EDGE_MARGIN
+): boolean {
+  for (const c of corners) {
+    if (c.x < margin || c.x > 1 - margin || c.y < margin || c.y > 1 - margin) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Escape a manual: true si pasó más de NO_DETECT_TIMEOUT_MS desde el primer intento. */
 export function detectionTimedOut(firstAttemptMs: number, nowMs: number): boolean {
   return nowMs - firstAttemptMs > NO_DETECT_TIMEOUT_MS;
