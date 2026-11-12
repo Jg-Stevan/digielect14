@@ -89,10 +89,15 @@ export default function RootLayout({
          * (hashes)»: la auditoría siguiente no debe contarlo como cubierto.
          * `'wasm-unsafe-eval'` y `data:` en connect-src: los motores OCR
          * instancian WASM (Tesseract compila su core desde una URL data:).
+         * `'unsafe-eval'`: OBLIGATORIO para el detector — el core de OpenCV
+         * (vendor/opencv-4.5.5-core.js, emscripten) usa `new Function` en
+         * `makeDynCaller` (tabla dynCall) y `createNamedFunction`. Sin esto
+         * el importScripts del core lanza EvalError, el worker nunca emite
+         * 'ready' y la captura automática queda muerta (regresión 2026-11-11).
          */}
         <meta
           http-equiv="Content-Security-Policy"
-          content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' data: blob: https://e14-puente.julistevan02.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'none'"
+          content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' data: blob: https://e14-puente.julistevan02.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'none'"
         />
         <meta name="referrer" content="strict-origin-when-cross-origin" />
       </head>

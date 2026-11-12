@@ -14,6 +14,11 @@
 #    endpoint de obs remoto, añadirlo AQUÍ (y en el meta-CSP de GH Pages).
 #  · `'wasm-unsafe-eval'` + `data:` en connect-src: los motores OCR instancian
 #    WASM y Tesseract compila su core desde una URL data:.
+#  · `'unsafe-eval'`: OBLIGATORIO para el detector — el core self-hosted de
+#    OpenCV (vendor/opencv-4.5.5-core.js, emscripten) usa `new Function` en
+#    `makeDynCaller` (tabla dynCall de WASM) y `createNamedFunction`. Sin
+#    esto importScripts lanza EvalError, el DetectionWorker nunca emite
+#    'ready' y la captura automática queda muerta (regresión 2026-11-11).
 #  · S-7 (nota honesta): el meta-CSP del deploy de GH Pages NO gobierna los
 #    workers — un worker servido desde self recibe SU CSP de las cabeceras de
 #    su propia respuesta, que GH Pages no controla. Esta cabecera de CF sí
@@ -23,7 +28,7 @@
   Cross-Origin-Embedder-Policy: require-corp
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' data: blob: https://e14-puente.julistevan02.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' data: blob: https://e14-puente.julistevan02.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'
 
 # Chunks de Next con hash de contenido → inmutables
 /_next/static/*
