@@ -7,6 +7,11 @@
  *
  *   bun scripts/qa-paridad-motor.ts
  *
+ * T-16 (plan 2026-11-12): el script es SIMÉTRICO — versionado byte a byte en
+ * los DOS repos y corre desde cualquiera de los dos checkouts (autodetecta
+ * cuál es por el nombre de la carpeta y mira al hermano en disco).
+ * E14_HERMANO lo señala a mano cuando los clones no están lado a lado.
+ *
  * Sin hermano en el disco (el caso del CI de GitHub, que solo clona este repo)
  * sale OK con «omitido» explícito: el golden del paquete lo validan las dos
  * apps contra SU propia copia, y los 120 tests del paquete corren en ambos CI
@@ -28,7 +33,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -41,13 +46,17 @@ function ok(cond: boolean, etiqueta: string): void {
   if (!cond) fallos++;
 }
 
-const HERMANO = process.env.E14_HERMANO ?? join(RAIZ, "..", "supervision-e14");
+// T-16 (plan 2026-11-12): simétrico — «el otro repo» se deduce del nombre de
+// ESTE checkout (digielect14 ↔ supervision-e14); en el resto de layouts el
+// hermano sigue siendo supervision-e14 y E14_HERMANO manda sobre todo.
+const OTRO = basename(RAIZ) === "supervision-e14" ? "digielect14" : "supervision-e14";
+const HERMANO = process.env.E14_HERMANO ?? join(RAIZ, "..", OTRO);
 const PKG_A = join(RAIZ, "packages", "scanner-core");
 const PKG_B = join(HERMANO, "packages", "scanner-core");
 const SRC_A = join(PKG_A, "src", "dominio");
 const SRC_B = join(PKG_B, "src", "dominio");
 
-if (!existsSync(SRC_B)) {
+if (resolve(HERMANO) === RAIZ || !existsSync(SRC_B)) {
   console.log(
     `OK · omitido — no hay checkout hermano en ${HERMANO} (E14_HERMANO para señalarlo).\n` +
       `     En CI este paso no corre; la paridad la sostiene el golden compartido.`,
@@ -135,13 +144,23 @@ const splitDict = (t: string): boolean => /\.text\(\)\)\.split\(\/\\r\?\\n\/\)/.
 ok(splitDict(rapidocrA), "A parsea el dict de RapidOCR con split(/\\r?\\n/) (tolerante a CRLF)");
 ok(splitDict(rapidocrB), "B parsea el dict de RapidOCR con split(/\\r?\\n/) (misma ancla)");
 
-const escanerA = lee(join(RAIZ, "src", "lib", "e14", "scanner-core-bridge.ts"));
+// T-16 — la ruta del bridge ES POR REPO: dig lo vive en src/lib/e14/, sup en
+// src/modules/digitalizador/lib/e14/. El cotejo sigue mirando al checkout
+// ACTUAL (A) — con el mismo ancla (`clasificarCabecera`) en los dos.
+const escanerA = lee(
+  join(
+    RAIZ,
+    basename(RAIZ) === "supervision-e14"
+      ? "src/modules/digitalizador/lib/e14/scanner-core-bridge.ts"
+      : "src/lib/e14/scanner-core-bridge.ts",
+  ),
+);
 
 // El motor vive en el paquete. Sus imports DINÁMICOS (`import("heic2any")` en
-// el rescate F-HEIC) y directos (`jspdf` en pdf-export) se resuelven desde el
-// app que consume el workspace: si alguien los quita «porque no aparecen en
-// ningún import de src/», el build sigue verde y el HEIC de un iPhone revienta
-// en runtime.
+// el rescate F-HEIC) se resuelven desde la app que consume el workspace: si
+// alguien los quita «porque no aparecen en ningún import de src/», el build
+// sigue verde y el HEIC de un iPhone revienta en runtime. (El `jspdf` de
+// pdf-export es import dinámico de la APP móvil, no del paquete — T-16.)
 const pkgA = JSON.parse(lee(join(RAIZ, "package.json"))) as {
   dependencies?: Record<string, string>;
 };
@@ -152,7 +171,12 @@ ok(
   !!pkgA.dependencies?.heic2any && !!pkgB.dependencies?.heic2any,
   "los dos declaran heic2any (import dinámico del core — HEIC)",
 );
-ok(!!pkgA.dependencies?.jspdf, "A declara jspdf (pdf-export del core)");
+// T-16 — ancla CONDICIONAL: el pdf-export del acta es feature del móvil (dig,
+// src/lib/e14/core/pdf-export.ts). sup no la tiene y no declara jspdf; exigir
+// la dependencia a los dos rompería la simetría del script.
+if (basename(RAIZ) !== "supervision-e14") {
+  ok(!!pkgA.dependencies?.jspdf, "A declara jspdf (pdf-export del acta — feature del móvil)");
+}
 ok(
   pkgA.dependencies?.["@jg-stevan/scanner-core"] === "workspace:*" &&
     pkgB.dependencies?.["@jg-stevan/scanner-core"] === "workspace:*",

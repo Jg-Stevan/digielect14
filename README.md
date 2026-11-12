@@ -51,11 +51,15 @@ descargado con URL y SHA-256 fijados en `scripts/assets.lock.json`).
 bun install
 bun run dev            # http://localhost:3000 (modo simple, un hilo de OCR)
 bun run verificar      # preparar + typecheck + lint + test — la puerta de salida
+bun scripts/qa-paridad-motor.ts   # paridad del motor con supervision-e14 (T-16)
 ```
 
 `bun run verificar` es obligatorio antes de dar por terminado cualquier cambio.
 Un clon limpio necesita `bun run preparar` antes de correr la suite a mano
 (`bun run dev` y `bun run build` ya lo encadenan).
+La paridad repo↔repo (`qa-paridad-motor.ts`, T-16) es SIMÉTRICA: el script
+idéntico vive en los dos repos y corre desde cualquiera de los dos checkouts
+lado a lado (`E14_HERMANO` señala el hermano; sin hermano en disco, «omitido»).
 Para medir OCR/QR con multihilo real (`crossOriginIsolated`), `next dev` no
 sirve: construye y sirve con el servidor COOP/COEP.
 
