@@ -240,6 +240,10 @@ export function leerOverridesFlags(): Partial<FlagsApp> {
     // sin esta línea el kill-switch {"fusion_evidencia": true|false} del mantenedor
     // sería inalcanzable desde localStorage (prioridad máxima, D6).
     if (typeof o.fusion_evidencia === "boolean") limpio.fusion_evidencia = o.fusion_evidencia;
+    // KIT e14-seccion-inferior-banda-v1 — mismo criterio (DOBLE whitelist):
+    // sin esta línea el kill-switch {"bandaInferiorOcr": false} sería
+    // inalcanzable desde localStorage (prioridad máxima, D6).
+    if (typeof o.bandaInferiorOcr === "boolean") limpio.bandaInferiorOcr = o.bandaInferiorOcr;
     // NOTA (eliminación del módulo masiva): las puertas de los 17 flags
     // exclusivos de la cola se retiraron junto con el módulo.
     return limpio;

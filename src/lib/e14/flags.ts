@@ -170,6 +170,12 @@ export const FLAGS_DEFAULT: FlagsApp = {
   // el motor y el comportamiento queda byte a byte el de hoy. La clave va en
   // snake_case por ser el literal del kill-switch aprobado en la tarea.
   fusion_evidencia: false,
+  // KIT e14-seccion-inferior-banda-v1 — la señal de sección no se puede
+  // confiar al OCR rápido (no llega al pie). Cuando el texto principal no leyó
+  // «SUMA TOTAL»/«FIRMA», se OCR-ea una banda inferior dedicada y el par
+  // fiducial inferior también cuenta como evidencia física. Default ON;
+  // override false = camino anterior byte a byte.
+  bandaInferiorOcr: true,
 };
 
 /** Último flags.json bueno (null = nunca llegó). */
@@ -290,6 +296,8 @@ export function sanearFlags(o: unknown): Partial<FlagsApp> {
   if (typeof p.ocrCorteIncompleta === "boolean") limpio.ocrCorteIncompleta = p.ocrCorteIncompleta;
   // KIT fusion-evidencia-divipol-v1 (D89) — whitelist aditiva (booleano).
   if (typeof p.fusion_evidencia === "boolean") limpio.fusion_evidencia = p.fusion_evidencia;
+  // KIT e14-seccion-inferior-banda-v1 — whitelist aditiva (booleano).
+  if (typeof p.bandaInferiorOcr === "boolean") limpio.bandaInferiorOcr = p.bandaInferiorOcr;
   return limpio;
 }
 

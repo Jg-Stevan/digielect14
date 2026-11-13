@@ -67,6 +67,7 @@ import { cargarDivipol } from "@jg-stevan/scanner-core/dominio/divipol";
 import {
   clasificarCabecera,
   faltaSeccionInferior,
+  faltaSeccionInferiorConBanda,
   PATRON_CABECERA,
   tituloYUbicacionDe,
   tipoDeBanda,
@@ -113,6 +114,10 @@ import {
   BANDA_ARRIBA_FRACCION,
   BANDA_DER_FRACCION,
   BANDA_ABAJO_FRACCION,
+  BANDA_INFERIOR_IZQ_FRACCION,
+  BANDA_INFERIOR_ARRIBA_FRACCION,
+  BANDA_INFERIOR_DER_FRACCION,
+  BANDA_INFERIOR_ABAJO_FRACCION,
   CALIDAD_JPEG_ENVIO,
   CALIDAD_JPEG_REVISION,
 } from "./politica/umbrales";
@@ -1363,6 +1368,32 @@ async function ocrBanda(fotoProcesada: string): Promise<string> {
   }
 }
 
+/** KIT e14-seccion-inferior-banda-v1: OCR DEDICADO de la franja del PIE —
+ *  «SUMA TOTAL» (pág 1) / «FIRMA» (pág ≥2). Solo se cobra cuando el OCR
+ *  rápido no leyó la sección. No invierte: el pie es tinta oscura sobre
+ *  papel claro; ×2 y RapidOCR, igual que `ocrBanda`. */
+async function ocrBandaInferior(fotoProcesada: string): Promise<string> {
+  try {
+    const img = await loadImageMemo(fotoProcesada);
+    const W = img.naturalWidth;
+    const H = img.naturalHeight;
+    if (!W || !H) return "";
+    const x0 = Math.round(W * BANDA_INFERIOR_IZQ_FRACCION);
+    const y0 = Math.round(H * BANDA_INFERIOR_ARRIBA_FRACCION);
+    const x1 = Math.round(W * BANDA_INFERIOR_DER_FRACCION);
+    const y1 = Math.round(H * BANDA_INFERIOR_ABAJO_FRACCION);
+    const w = Math.max(1, x1 - x0);
+    const h = Math.max(1, y1 - y0);
+    const canvas = canvasCon(w * 2, h * 2);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+    ctx.drawImage(img, x0, y0, w, h, 0, 0, w * 2, h * 2);
+    return await reconocerRapidOcr(canvas.toDataURL("image/jpeg", CALIDAD_JPEG_ENVIO));
+  } catch {
+    return "";
+  }
+}
+
 /** KIT e14-masiva-ux-v1 (T1): ¿el worker OpenCV está listo para detectar?
  *  Si no, espera su warm-up con TOPE (warmUpScannerWorker/waitReady del
  *  core — nunca tumba el pipeline: false = continuar como hoy, fallback
@@ -1553,6 +1584,7 @@ export type PasosOcr = {
   reconocerRapidOcrEscalonado: typeof reconocerRapidOcrEscalonado;
   reconocerRapidOcrCascada: typeof reconocerRapidOcrCascada;
   ocrBanda: typeof ocrBanda;
+  ocrBandaInferior: typeof ocrBandaInferior;
 };
 /** Etapa GATE: señales, clasificación y desenlace (§4.2 — la política vive
  *  además en politica/gate.ts desde 7.2; estas piezas llegan inyectadas). */
@@ -1744,6 +1776,7 @@ export class RealCoreBridge implements E14Bridge {
       reconocerRapidOcrEscalonado,
       reconocerRapidOcrCascada,
       ocrBanda,
+      ocrBandaInferior,
       fmtClasif,
       construirActa: (o, p, c) => this.construirActa(o, p, c),
       evaluarGate: (s, t, c, i, m) => this.evaluarGate(s, t, c, i, m),
@@ -2066,7 +2099,30 @@ export class RealCoreBridge implements E14Bridge {
     // moverlas no cambia ningún valor; `medirZonaVotos` y el resto del orden
     // quedan donde estaban.
     const clasificacion = clasificarCabecera(texto, await cargarDivipol());
-    const faltaSeccion = faltaSeccionInferior(texto, clasificacion.pagina);
+    // KIT e14-seccion-inferior-banda-v1: si el OCR rápido no llegó al pie,
+    // la banda inferior DEDICADA (o el par fiducial inferior) decide la
+    // sección. Ese texto NO se agrega al `texto` de clasificación/score.
+    let faltaSeccion = faltaSeccionInferior(texto, clasificacion.pagina);
+    if (faltaSeccion && leerFlags().bandaInferiorOcr) {
+      const tBandaInferior = performance.now();
+      const textoBandaInferior = await ocrBandaInferior(fotoProcesada);
+      const msBandaInferior = performance.now() - tBandaInferior;
+      ms.ocr += msBandaInferior;
+      ms.total = performance.now() - inicio;
+      const parFiducialInferior = Boolean(esquinas?.bl && esquinas?.br);
+      faltaSeccion = faltaSeccionInferiorConBanda(
+        true,
+        clasificacion.pagina,
+        textoBandaInferior,
+        parFiducialInferior,
+      );
+      logger.info(
+        `[e14] banda-inferior recorte ${Math.round(msBandaInferior)}ms ` +
+          `texto=${textoBandaInferior.length} ` +
+          `seccion=${!faltaSeccionInferior(textoBandaInferior, clasificacion.pagina)} ` +
+          `par=${parFiducialInferior} falta=${faltaSeccion}`,
+      );
+    }
     const lazoPerdonado = lazoPerdonadoPorLectura(esquinas, texto, faltaSeccion);
     const recortada = faltaSeccion || (ladoEsquina !== null && !lazoPerdonado);
     const senal = senalDeLectura(texto, clasificacion.parciales);

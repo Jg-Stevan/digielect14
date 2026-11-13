@@ -53,6 +53,12 @@ describe("flags · sanearFlags", () => {
     expect(sanearFlags({ qrBrujulaOrientacion: 1 })).toEqual({});
   });
 
+  it("seccion-inferior · bandaInferiorOcr: override válido acepta; tipo inválido → default", () => {
+    expect(sanearFlags({ bandaInferiorOcr: false })).toEqual({ bandaInferiorOcr: false });
+    expect(sanearFlags({ bandaInferiorOcr: true })).toEqual({ bandaInferiorOcr: true });
+    expect(sanearFlags({ bandaInferiorOcr: "sí" })).toEqual({});
+  });
+
 });
 
 describe("flags · leerFlags (cadena de prioridad)", () => {
@@ -116,6 +122,9 @@ describe("flags · leerFlags (cadena de prioridad)", () => {
       // KIT fusion-evidencia-divipol-v1 (D89) — kill-switch del motor de
       // fusión, default OFF (apagado = pipeline de hoy byte a byte).
       fusion_evidencia: false,
+      // KIT e14-seccion-inferior-banda-v1 — OCR dedicado de la banda inferior
+      // cuando el OCR rápido no llegó al pie; default ON.
+      bandaInferiorOcr: true,
     });
   });
 

@@ -23,6 +23,7 @@ import { cargarDivipol } from "@jg-stevan/scanner-core/dominio/divipol";
 import {
   clasificarCabecera,
   faltaSeccionInferior,
+  faltaSeccionInferiorConBanda,
   leerCamposCrudos,
   PATRON_CABECERA,
   tipoDeBanda,
@@ -643,7 +644,32 @@ export async function correrPipelineL2(
   // positivo (margen corto/sombra). La señal de secciones NUNCA se perdona.
   // En SIM esquinas=ESQUINAS_OK (L955) → helper false → recortada idéntica a
   // hoy (chips 8.2/7.0/4.3 intactos — §2 del kit).
-  const faltaSeccion = faltaSeccionInferior(texto, clasificacion.pagina);
+  // KIT e14-seccion-inferior-banda-v1: el OCR rápido no siempre llega al
+  // pie. Si la sección no se leyó, se OCR-ea una banda inferior DEDICADA;
+  // el par fiducial inferior también es evidencia física de que el borde de
+  // abajo está en la foto. No es un perdón del lazo ni contamina `texto`.
+  const faltaSeccionBase = faltaSeccionInferior(texto, clasificacion.pagina);
+  let faltaSeccion = faltaSeccionBase;
+  if (faltaSeccionBase && !opciones.simular && leerFlags().bandaInferiorOcr) {
+    const tBandaInferior = performance.now();
+    const textoBandaInferior = await pasos.ocrBandaInferior(fotoProcesada);
+    const msBandaInferior = performance.now() - tBandaInferior;
+    ms.ocr += msBandaInferior;
+    ms.total = performance.now() - inicio;
+    const parFiducialInferior = Boolean(esquinas?.bl && esquinas?.br);
+    faltaSeccion = faltaSeccionInferiorConBanda(
+      faltaSeccionBase,
+      clasificacion.pagina,
+      textoBandaInferior,
+      parFiducialInferior,
+    );
+    logger.info(
+      `[e14] banda-inferior ${Math.round(msBandaInferior)}ms ` +
+        `texto=${textoBandaInferior.length} ` +
+        `seccion=${!faltaSeccionInferior(textoBandaInferior, clasificacion.pagina)} ` +
+        `par=${parFiducialInferior} falta=${faltaSeccion}`,
+    );
+  }
   const lazoPerdonado = lazoPerdonadoPorLectura(esquinas, texto, faltaSeccion);
   const recortada = faltaSeccion || (ladoEsquina !== null && !lazoPerdonado);
   const ocrLegible = ocrTextIsValid(texto);

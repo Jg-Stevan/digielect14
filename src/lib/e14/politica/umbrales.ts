@@ -94,6 +94,18 @@ export const BANDA_ARRIBA_FRACCION = 0.03;
 export const BANDA_DER_FRACCION = 0.88;
 export const BANDA_ABAJO_FRACCION = 0.13;
 
+// ── Sección inferior (banda dedicada `ocrBandaInferior`) ────────────────
+
+/** Fracciones del crop del PIE sobre la foto procesada: la franja que
+ *  contiene «SUMA TOTAL» (pág 1) o «FIRMA» (pág ≥2) va del 3 % al 97 %
+ *  del ancho y del 66 % al 100 % del alto. La usa el OCR de sección
+ *  inferior cuando el OCR rápido no llegó al pie; NO se invierte (el pie
+ *  es tinta oscura sobre papel claro). */
+export const BANDA_INFERIOR_IZQ_FRACCION = 0.03;
+export const BANDA_INFERIOR_ARRIBA_FRACCION = 0.66;
+export const BANDA_INFERIOR_DER_FRACCION = 0.97;
+export const BANDA_INFERIOR_ABAJO_FRACCION = 1;
+
 // ── Intentos ─────────────────────────────────────────────────────────────
 
 /**

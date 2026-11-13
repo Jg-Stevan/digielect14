@@ -180,6 +180,11 @@ export interface FlagsApp {
   // clave va en snake_case porque es el nombre literal del kill-switch
   // aprobado en el documento de la tarea — NO es un identificador del dominio.
   fusion_evidencia: boolean; // default false
+  // ─── KIT e14-seccion-inferior-banda-v1 — campo ADITIVO AL FINAL (D57):
+  // si el OCR rápido no leyó «SUMA TOTAL»/«FIRMA», una banda inferior DEDICADA
+  // (o el par fiducial inferior) cuenta como evidencia de que el pie está en la
+  // foto. Default true; false = comportamiento anterior byte a byte.
+  bandaInferiorOcr: boolean; // default true
 }
 
 export interface ReporteSesion {

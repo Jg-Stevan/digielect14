@@ -1171,6 +1171,26 @@ export function faltaSeccionInferior(
   return !/FIRMA/i.test(texto);
 }
 
+/**
+ * KIT e14-seccion-inferior-banda-v1: la señal de sección calculada con el OCR
+ * RÁPIDO no siempre llega al pie de la foto. Si el texto principal ya leyó la
+ * sección, no hay nada que resolver. Si no, la banda inferior DEDICADA (que
+ * sí recorta «SUMA TOTAL»/«FIRMA») o el par fiducial inferior —prueba física
+ * de que el borde de abajo está dentro de la foto— son evidencia positiva de
+ * que la sección está presente. Sin ninguna de las dos, se conserva la
+ * condena conservadora.
+ */
+export function faltaSeccionInferiorConBanda(
+  faltaSeccionPrincipal: boolean,
+  pagina: { index: number; total: number } | null,
+  textoBandaInferior: string,
+  parFiducialInferior: boolean,
+): boolean {
+  if (!faltaSeccionPrincipal) return false;
+  if (!faltaSeccionInferior(textoBandaInferior, pagina)) return false;
+  return !parFiducialInferior;
+}
+
 // ---------- Título y ubicación reales (SPEC-titulo-ubicacion §1) ----------
 
 /**
