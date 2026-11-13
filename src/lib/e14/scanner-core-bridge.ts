@@ -128,30 +128,25 @@ import { aplicarPoliticaGate } from "./politica/gate";
 import { PISO_LECTURA_FUERTE } from "./politica/umbrales";
 // 7.9 (C4): ÚNICO constructor del log-contrato D51 (+ su orden canónico).
 import { construirLogD51, ORDEN_LOG_D51, type EntradaD51 } from "./log-contrato";
-// §G-1 (SPEC-camara-funcional): los assets de la SIMULACIÓN de scores —
-// S-6 (plan de remediación, correcciones §3): CARGADORES DINÁMICOS en mapa
-// explícito (a prueba de refactors de nombres, resoluble estáticamente por
-// el bundler). El import estático engordaba el bundle crítico del escaneo
-// con los fixtures del modo demo.
-// Ola 1/D35: foto real retirada del repo — `acta-e14-real.jpg` ya NO se
-// usa NI se referencia: el modo SIM corre SOLO con los 4 sintéticos
-// `acta-sim-*.jpg` (el archivo sobrante en src/assets/ se elimina en el
-// PR de custodia del binario — ver docs/PENDIENTES-INTEGRACION.md).
-// Orden del arreglo (§D3/§D8.1 — el índice lo decide indiceActaPorScore):
-//   [0] ÓPTIMA  = acta-sim-extra-1.jpg (pipeline COMPLETO con detect+warp+bw;
-//       sustituta de la foto real del mantenedor — el mantenedor recalibra el orden si
-//       el chip 8.2 deja de caer en ÓPTIMA con este asset)
-//   [1] MEDIO   = acta-sim-intermedia.jpg (as-is, §D6 Rev. 3)
-//   [2] BAJA    = acta-sim-baja.jpg (as-is, §D7 Rev. 3)
-//   [3] EXTRA   = acta-sim-extra-2.jpg (solo ciclo rotativo §G)
+// KIT e14-simulacion-imagenes-v1: la galería «Simulación» del visor y su
+// catálogo (título, descripción y cargador dinámico de cada imagen) viven en
+// ./simulacion-imagenes — fuente ÚNICA compartida con la UI. Aquí solo se
+// consume para servir el File del asset elegido; el import estático
+// engordaría el bundle crítico del escaneo.
+import {
+  IMAGENES_SIMULADAS,
+  imagenSimuladaPorId,
+  type ImagenSimuladaId,
+} from "./simulacion-imagenes";
 import type { Acta, ActaFirma, ActaStatus, DiagnosticoActa, ProgresoAnalisis } from "@jg-stevan/scanner-core/dominio/types";
 import type { E14Bridge, OpcionesEscaneo } from "@jg-stevan/scanner-core/dominio/bridge";
 // KIT e14-motor-rapidocr-v1 (PROD-2 §3): adaptador del motor de producción.
 import { rapidOcrInit, rapidOcrReconocer } from "./ocr/rapidocr";
 // KIT e14-orientacion-auto-v1 (T-A2/A3): probe de orientación por confianza
 // de rec + anclas (§2.1) — corre ANTES del OCR completo en AMBOS pipelines
-// (escaneo y pipelineRecorte). SIM OMITIDO (guard — chips 8.2/7.0/4.3
-// intactos, §2.2); JAMÁS lanza (catch interno — el pipeline no depende, §5).
+// (escaneo y pipelineRecorte). La galería de simulación también lo corre:
+// procesa como IMPORTAR. JAMÁS lanza (catch interno — el pipeline no
+// depende, §5).
 import { probeOrientacion, rotarDataUrl } from "./orientacion";
 // KIT e14-orientacion-qr-v1 — la brújula QR decide la rotación por el
 // cuadrante del QR (bench v8.3: 4/4); el sondeo OCR queda como red de
@@ -353,97 +348,33 @@ function capturarFrame(video: HTMLVideoElement): string | null {
 export type EntradaPipeline = { archivo: File; sinRecorte?: boolean } | { dataUrl: string };
 
 /**
- * SIMULACIÓN = pipeline real sobre los assets SIM (D35, Ola 1: foto real
- * retirada — solo sintéticos). §G-2 (SPEC-camara-funcional): ciclo
- * determinista de las actas del arreglo (óptima → intermedia → baja →
- * extra → óptima…) — cada disparo consume el índice actual y avanza el
- * contador de módulo. Mismo camino que IMPORTAR: File →
- * fileToCaptureDataUrl (F-IMPORT: EXIF/12MP). Caché POR ÍNDICE a nivel de
- * módulo para no re-descargar un acta ya servida en el ciclo.
- * §D8.1 (SPEC-e14-score-ocr Rev. 3): flag «sin recorte» por ENTRADA — el
- * flag viaja con el ASSET, no con el chip (el ciclo rotativo §G lo hereda
- * automáticamente): [0] óptima = pipeline completo · [1] b/n as-is ·
- * [2] borrosa as-is · [3] extra as-is.
- * S-6: los src se cargan con `import()` DINÁMICO vía mapa explícito de
- * cargadores — el módulo del asset (StaticImageData) llega asíncrono y el
- * `.src` ya resuelve el basePath /web-scanner del deploy estático.
+ * SIMULACIÓN = pipeline real sobre las imágenes incluidas en el repo
+ * (src/assets/simuladas, elegidas desde la galería del visor). MISMO camino
+ * que IMPORTAR: File → fileToCaptureDataUrl (F-IMPORT: EXIF/12MP) y de ahí
+ * orientación, completitud, esquinas, OCR y gate reales — sin score inyectado
+ * ni atajos. La imagen y sus datos de tarjeta viven en ./simulacion-imagenes
+ * (fuente única). Caché POR ID a nivel de módulo para no re-descargar una
+ * imagen ya servida.
+ * Los src se cargan con `import()` DINÁMICO vía cargador del módulo de
+ * metadatos — el `.src` ya resuelve el basePath del deploy estático.
  */
-interface ActaSim {
-  /** S-6 — cargador dinámico del asset (resoluble estáticamente). */
-  cargar: () => Promise<{ default: { src: string } }>;
-  nombre: string;
-  sinRecorte: boolean;
-}
-const ACTAS_SIM: readonly ActaSim[] = [
-  {
-    cargar: () => import("@/assets/acta-sim-extra-1.jpg"),
-    nombre: "acta-sim-extra-1.jpg",
-    sinRecorte: false,
-  }, // Ola 1/D35: sustituta de la foto real retirada (pipeline completo)
-  {
-    cargar: () => import("@/assets/acta-sim-intermedia.jpg"),
-    nombre: "acta-sim-intermedia.jpg",
-    sinRecorte: true,
-  },
-  {
-    cargar: () => import("@/assets/acta-sim-baja.jpg"),
-    nombre: "acta-sim-baja.jpg",
-    sinRecorte: true,
-  },
-  {
-    cargar: () => import("@/assets/acta-sim-extra-2.jpg"),
-    nombre: "acta-sim-extra-2.jpg",
-    sinRecorte: true,
-  },
-];
-let actaSimIdx = 0;
 interface EntradaSim {
   archivo: File;
-  sinRecorte: boolean;
 }
-const actasSimCache: EntradaSim[] = [];
-/** Resuelve el asset del índice (cargador S-6 → fetch → File) con la caché
- *  por índice. ÚNICO camino de carga — antes el fetch+cache estaba duplicado
- *  en fetchActaSimulada y fetchActaSimPorScore. */
-async function entradaSimDeActa(idx: number): Promise<EntradaSim> {
-  const cache = actasSimCache[idx];
+const entradasSimCache = new Map<ImagenSimuladaId, EntradaSim>();
+async function entradaSimDeImagen(id: ImagenSimuladaId): Promise<EntradaSim> {
+  const cache = entradasSimCache.get(id);
   if (cache) return cache;
-  const { default: imagen } = await ACTAS_SIM[idx].cargar();
-  const res = await fetch(imagen.src);
+  // Fallback defensivo: un id desconocido sirve la primera imagen.
+  const imagen = imagenSimuladaPorId(id) ?? IMAGENES_SIMULADAS[0];
+  const { default: asset } = await imagen.cargar();
+  const res = await fetch(asset.src);
   if (!res.ok) throw new Error("SIMULACIÓN: no se pudo cargar la imagen incluida");
-  // File con nombre real del asset (.jpg — evita el camino HEIC).
   const entrada: EntradaSim = {
-    archivo: new File([await res.blob()], ACTAS_SIM[idx].nombre, {
-      type: "image/jpeg",
-    }),
-    sinRecorte: ACTAS_SIM[idx].sinRecorte,
+    archivo: new File([await res.blob()], imagen.nombre, { type: "image/jpeg" }),
   };
-  actasSimCache[idx] = entrada;
+  entradasSimCache.set(imagen.id, entrada);
   return entrada;
-}
-async function fetchActaSimulada(): Promise<EntradaSim> {
-  const idx = actaSimIdx;
-  actaSimIdx = (actaSimIdx + 1) % ACTAS_SIM.length;
-  return entradaSimDeActa(idx);
-}
-
-/**
- * §D3 (SPEC-e14-simulacion-scores): asset FIJO por score de chip — mapeo
- * determinista (la óptima = pipeline completo · la cortada = intermedio ·
- * la borrosa = bajo): 8.2 → acta-sim-extra-1.jpg · 7.0 →
- * acta-sim-intermedia.jpg · 4.3 → acta-sim-baja.jpg. Reutiliza la MISMA
- * caché por índice del ciclo rotativo (§G del PR #33, que queda INTACTO —
- * esta vía solo cambia QUÉ índice se sirve: el del chip, nunca el contador
- * rotativo). El flag sinRecorte del asset viaja con la entrada (§D8.1).
- * (Ola 1/D35: la óptima era la foto real — retirada del repo.)
- */
-function indiceActaPorScore(score: number): number {
-  if (score >= 8) return 0; // ÓPTIMA [8.2] → la sustituta de la real, pipeline completo
-  if (score >= UMBRAL_RECHAZO_SCORE) return 1; // MEDIO [7.0] → la b/n as-is (Rev. 3)
-  return 2; // BAJA [4.3] → la borrosa as-is (Rev. 3)
-}
-async function fetchActaSimPorScore(score: number): Promise<EntradaSim> {
-  return entradaSimDeActa(indiceActaPorScore(score));
 }
 
 function dosDigitos(n: number): string {
@@ -1432,6 +1363,10 @@ export type OpcionesEscaneoConTimeout = OpcionesEscaneo & {
    *  revierte el rechazo. Firmas intactas.
    *  `tiempoRealMs` = ms reales del pipeline completo (dato, jamás inventado). */
   onRescateTardio?: (acta: Acta, tiempoRealMs: number) => void;
+  /** KIT e14-simulacion-imagenes-v1: imagen del catálogo elegida en la
+   *  galería del visor (fuente SIMULACION). Ausente sin elección = primera
+   *  imagen del catálogo. No altera el pipeline: se procesa como IMPORTAR. */
+  imagenSimulada?: ImagenSimuladaId;
 };
 
 /** Resultado del gate §4 (evaluarGate) — status + rechazo + clasificación. */
@@ -1637,17 +1572,14 @@ export class RealCoreBridge implements E14Bridge {
       }
       entrada = { dataUrl };
     } else if (opciones.fuente === "SIMULACION") {
-      // SIMULACIÓN = pipeline real sobre el acta E-14 incluida (D35).
-      // Mismo camino que IMPORTAR: File → fileToCaptureDataUrl (F-IMPORT: EXIF/12MP).
-      // §D3 (SPEC-e14-simulacion-scores): con `simular` el asset es el FIJO de
-      // la banda del chip (determinista) — el ciclo rotativo §G queda intacto
-      // para el disparo normal de la fuente. §D8.2 (Rev. 3): el flag
-      // sinRecorte del asset viaja con la entrada (parámetro interno privado).
-      const sim =
-        opciones.simular && opciones.scoreSimulado != null
-          ? await fetchActaSimPorScore(opciones.scoreSimulado)
-          : await fetchActaSimulada();
-      entrada = { archivo: sim.archivo, sinRecorte: sim.sinRecorte };
+      // SIMULACIÓN = pipeline real sobre la imagen del catálogo elegida en la
+      // galería del visor. EXACTAMENTE como IMPORTAR: File →
+      // fileToCaptureDataUrl (F-IMPORT: EXIF/12MP) y de ahí todos los pasos
+      // reales (orientación, completitud, esquinas, OCR, banda inferior y
+      // gate con el score medido). Sin selección se sirve la primera imagen
+      // del catálogo.
+      const sim = await entradaSimDeImagen(opciones.imagenSimulada ?? IMAGENES_SIMULADAS[0].id);
+      entrada = { archivo: sim.archivo };
     } else {
       throw new Error("SIN IMAGEN PARA ANALIZAR (fuente ARCHIVO)");
     }
@@ -2037,8 +1969,8 @@ export class RealCoreBridge implements E14Bridge {
     // 3) OCR sobre la variante de ENTRADA del OCR (PROD-1 §4.2: recorte SIN
     //    filtro con fallback idéntico al escaneo; gate §4.2). KIT
     //    e14-ocr-escalonado-v1 (§2): MISMO OCR ESCALONADO del escaneo — el
-    //    manual también merece el ahorro (§2). El recorte NO tiene SIM
-    //    (siempre real; guard fuente SIMULACION = mismo del diag §9.2).
+    //    manual también merece el ahorro (§2). Sin atajos de simulación: un
+    //    acta SIMULACION re-escaneada corre idéntica a una real.
     //    Motor RapidOCR (PROD-2 §2-C2); progreso real por lotes (§2-C4).
     const tOcr = performance.now();
     const ocrEsc = await reconocerRapidOcrEscalonado(
@@ -2047,7 +1979,7 @@ export class RealCoreBridge implements E14Bridge {
         emitir({ etapa: "OCR", progreso: Math.min(1, Math.max(0, p)) });
       },
       {
-        simular: acta.fuente === "SIMULACION",
+        simular: false, // la galería ya NO usa el atajo: SIM corre el OCR real
         // §3 presupuesto: el timeout EXISTENTE del recorte manda
         // (RECORTE_TIMEOUT_MS — T1 recorte-manual); sin presupuestos nuevos.
         presupuestoMs: RECORTE_TIMEOUT_MS,

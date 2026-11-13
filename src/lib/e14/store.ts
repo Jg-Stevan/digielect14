@@ -19,6 +19,9 @@ import type { Acta, FuenteCaptura, HistorialRow, Mesa, ProgresoAnalisis, TipoPag
 // sin excess-check en la llamada al bridge).
 import { type OpcionesEscaneoConTimeout } from "./scanner-core-bridge";
 import { leerFlags } from "./flags";
+// KIT e14-simulacion-imagenes-v1: catálogo de la galería «Simulación»
+// (fuente única de título/descripción de cada imagen).
+import { imagenSimuladaPorId, type ImagenSimuladaId } from "./simulacion-imagenes";
 // §G.2 — ORDEN-WAVE3-add-envio-individual-v1: la red del momento del envío
 // (registrarEnvio G.1 — envioRedTipo/envioDownlinkMbps en el diagnóstico).
 import { redActual } from "./obs/dispositivo";
@@ -89,30 +92,13 @@ function idHistorial(): string {
   return `h-${Date.now()}-${contadorHistorial++}`;
 }
 
-/** §D3 (SPEC-e14-simulacion-scores): banda de un chip de calidad del mock.
- *  Los ids SON los del mock (ScanView §5) y el mapeo mantenedor es fijo:
- *  la completa = óptima · la cortada = intermedio · la borrosa = bajo. */
-export type BandaSim = "optima" | "medio" | "baja";
-
-/** §D3: score INYECTADO por banda (el del bracket del chip). El desenlace
- *  real lo decide el gate (§D4). §D8.5 (SPEC-e14-score-ocr Rev. 3): la b/n
- *  del mantenedor as-is = medio 7.0 · la borrosa original as-is = bajo 4.3 ·
- *  8.2 + AUTO → piso 10.0 (ÓPTIMA enviada) · 7.0 con AUTO → ADVERTENCIA
- *  (el chip manda — el piso solo re-aplica con score ≥ 8) · 4.3 →
- *  RECHAZADA. Los mismos números viven pintados en NIVELES_CALIDAD. */
-// knip C3: de-export — uso SOLO interno (avanzarSimulacion).
-const SCORE_SIMULADO: Record<BandaSim, number> = {
-  optima: 8.2,
-  medio: 7.0,
-  baja: 4.3,
-};
-
-/** §D3: opciones de simulación por chips — SOLO store↔dispararEscaneo; el
- *  bridge las recibe como `simular`/`scoreSimulado` (OpcionesEscaneo). */
-// knip C3: de-export — uso SOLO interno (dispararEscaneo).
+/** KIT e14-simulacion-imagenes-v1: opciones de simulación por imagen.
+ *  SOLO store↔dispararEscaneo; el bridge resuelve el File por
+ *  `imagenSimulada`. NO lleva score ni atajos: el pipeline es el MISMO de
+ *  IMPORTAR. */
+// knip C3: de-export — uso SOLO interno (dispararEscaneo/simularImagen).
 interface OpcionesSimEscaneo {
-  simular: boolean;
-  scoreSimulado: number;
+  imagenSimulada: ImagenSimuladaId;
 }
 
 interface E14Store {
@@ -203,21 +189,20 @@ interface E14Store {
    *  CONTINÚA el ciclo de repetición si el acta previa sigue sin resolver
    *  (RECHAZADA o EN_REVISION_HUMANA «repetir-primero») — el contador cuenta
    *  CAPTURAS; ciclo nuevo (ENVIADA/OPTIMA/ADVERTENCIA/agotada) → 1.
-   *  §D3 (SPEC-e14-simulacion-scores): `sim` presente SOLO cuando el disparo
-   *  viene de un chip (simularScore) — enruta el MISMO camino con fuente
-   *  SIMULACION + asset fijo de la banda + score inyectado; los guards de
-   *  ARCHIVO/CAMARA no aplican y no consume archivoPendiente/framePendiente. */
+   *  KIT e14-simulacion-imagenes-v1: `sim` presente SOLO cuando el disparo
+   *  viene de la galería (simularImagen) — enruta el MISMO camino con fuente
+   *  SIMULACION + imagen elegida; los guards de ARCHIVO/CAMARA no aplican y
+   *  no consume archivoPendiente/framePendiente. */
   dispararEscaneo: (intento?: number, sim?: OpcionesSimEscaneo) => Promise<void>;
   /** Destello de captura del shell (key nueva = animación desde cero). */
   destellar: () => void;
-  /** §D2/§D3 (SPEC-e14-simulacion-scores): los 3 chips de calidad encima del
-   *  obturador SON botones de simulación — disparan el MISMO camino de
-   *  dispararEscaneo (REVISIÓN, banner, toast y ACTAS idénticos) con la fuente
-   *  SIMULACION, el asset FIJO de la banda del mantenedor (la completa = óptima ·
-   *  la cortada = intermedio · la borrosa = bajo) y su score inyectado. Nada
-   *  se fuerza a mano: el desenlace lo decide `evaluarGate` (§D4) y el ciclo
-   *  de intentos/contingencia es el mismo de las capturas reales (AC5). */
-  simularScore: (banda: BandaSim) => void;
+  /** KIT e14-simulacion-imagenes-v1: dispara el MISMO camino de
+   *  dispararEscaneo (REVISIÓN, banner, toast y ACTAS idénticos) con la
+   *  fuente SIMULACION y la imagen elegida en la galería (catálogo en
+   *  ./simulacion-imagenes). El pipeline corre EXACTAMENTE como «Importar»
+   *  (orientación, completitud, esquinas, OCR y gate reales); el desenlace lo
+   *  decide `evaluarGate` con el score medido, nunca inyectado. */
+  simularImagen: (id: ImagenSimuladaId) => void;
   analisisCompletado: () => Promise<void>;
   /** e67-watchdog-rescate-v1 (cambio B): rescate post-timeout del flujo
    *  INDIVIDUAL — el pipeline siguió vivo tras vencer el watchdog y terminó
@@ -1189,12 +1174,12 @@ export const useE14Store = create<E14Store>((set, get) => {
         return;
       }
       const { mesas, fuente, archivoPendiente, framePendiente, actaActual: previa } = get();
-      // §D3 (SPEC-e14-simulacion-scores): un chip SIEMPRE corre la fuente
-      // SIMULACION con el asset fijo de su banda + score inyectado (el bridge
-      // resuelve el asset por `scoreSimulado`). No toca archivoPendiente ni
-      // framePendiente — los guards de fuentes reales NO aplican (los chips
-      // funcionan en los 3 modos, sin cámara viva). Sin `sim`, nada cambia.
-      const simActiva = sim?.simular === true && typeof sim.scoreSimulado === "number";
+      // KIT e14-simulacion-imagenes-v1: una imagen de la galería SIEMPRE corre
+      // la fuente SIMULACION (el bridge resuelve el File por `imagenSimulada`).
+      // No toca archivoPendiente ni framePendiente — los guards de fuentes
+      // reales NO aplican (la galería funciona en los 3 modos, sin cámara
+      // viva). Sin `sim`, nada cambia.
+      const simActiva = sim?.imagenSimulada != null;
       const fuenteEfectiva: FuenteCaptura = simActiva ? "SIMULACION" : fuente;
       // §7 (SPEC-rediseno-revision): el conteo cuenta CAPTURAS del ciclo de
       // repetición. Una captura SIN intento explícito (importar/disparo del
@@ -1260,9 +1245,10 @@ export const useE14Store = create<E14Store>((set, get) => {
           archivo: simActiva ? undefined : (archivoPendiente ?? undefined),
           frameActual:
             !simActiva && fuenteEfectiva === "CAMARA" ? framePendiente : undefined,
-          // §D3: campos de simulación SOLO cuando el disparo viene de un chip.
-          simular: simActiva ? true : undefined,
-          scoreSimulado: simActiva ? sim!.scoreSimulado : undefined,
+          // KIT e14-simulacion-imagenes-v1: SOLO la imagen elegida — sin
+          // `simular` ni `scoreSimulado`: el pipeline corre idéntico a
+          // «Importar» y el score lo mide el OCR real.
+          imagenSimulada: simActiva ? sim!.imagenSimulada : undefined,
           onProgreso: (p) => {
             // Un disparo nuevo ya tomó la posta: el progreso del viejo no
             // puede mover el anillo del nuevo (H1).
@@ -1598,17 +1584,19 @@ export const useE14Store = create<E14Store>((set, get) => {
       void get().dispararEscaneo(intento);
     },
 
-    simularScore: (banda) => {
-      // §D2/§D3 (SPEC-e14-simulacion-scores): un chip es UNA captura del ciclo
-      // — reutiliza dispararEscaneo INTACTO (intento vigente: continúa el
-      // ciclo si el acta previa sigue sin resolver, ciclo nuevo → 1) para que
-      // REVISIÓN, banner, toast, historial, ACTAS y contingencia C4 se
-      // comporten idénticos a las capturas reales. El guard cubre el race de
-      // un double-tap: vista ya en "analizando" → ignorado (AC7).
-      if (get().vista === "analizando") return;
+    simularImagen: (id) => {
+      // KIT e14-simulacion-imagenes-v1: una imagen de la galería es UNA
+      // captura del ciclo — reutiliza dispararEscaneo INTACTO (intento
+      // vigente: continúa el ciclo si el acta previa sigue sin resolver,
+      // ciclo nuevo → 1) para que REVISIÓN, banner, toast, historial, ACTAS y
+      // contingencia C4 se comporten idénticos a las capturas reales. El
+      // guard cubre el race de un double-tap: vista ya en "analizando" →
+      // ignorado. La imagen se procesa EXACTAMENTE como «Importar»; el gate
+      // decide con el score real.
+      const imagen = imagenSimuladaPorId(id);
+      if (!imagen || get().vista === "analizando") return;
       void get().dispararEscaneo(undefined, {
-        simular: true,
-        scoreSimulado: SCORE_SIMULADO[banda],
+        imagenSimulada: imagen.id,
       });
     },
 

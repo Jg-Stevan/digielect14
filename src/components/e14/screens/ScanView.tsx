@@ -13,13 +13,13 @@
  * reintento y fin del rebote silencioso (§E), fila de estado centrada sin
  * «ISO: 1600» (§A). La lógica intocable (disparo por plataforma, cascada,
  * sondas, gate, ZSL) queda byte a byte.
- * SIMULACIÓN DE SCORES (SPEC-e14-simulacion-scores Rev. 1): los 3 chips de
- * calidad encima del obturador pasan de decorativos a <button> — BOTONES de
- * simulación (§D2): mismo visual exacto del mock, área táctil ≥44px
- * invisible, disabled durante análisis, funcionan en los 3 modos y disparan
- * store.simularScore(banda) → pipeline real con el asset FIJO del mantenedor y
- * score inyectado (§D3 — la completa = óptima · la cortada = intermedio ·
- * la borrosa = bajo). Nada visual cambia salvo cursor/feedback de toque.
+ * SIMULACIÓN POR IMÁGENES (KIT e14-simulacion-imagenes-v1): el icono de
+ * simulación arriba a la derecha abre la galería «Imágenes simuladas» — las
+ * fotos de prueba del repo (completa, color, rotada, inclinada, con sombras y
+ * recortada por arriba o por abajo) con título, descripción y desenlace
+ * esperado. Elegir una tarjeta dispara store.simularImagen(id) → pipeline real
+ * con esa imagen y su score inyectado; el gate sigue decidiendo. Los antiguos
+ * chips ÓPTIMA/MEDIO/BAJA se retiraron (ocupaban demasiado espacio en cámara).
  * Historial previo: marco con corner brackets, retícula central, botón
  * disparo, ghost IMPORTAR y PANEL DE SIMULACIÓN para forzar el resultado.
  * FASE LÓGICA L2 (§7): chips de FUENTE (SIMULACIÓN · CÁMARA · IMPORTAR);
@@ -76,7 +76,7 @@ import { SHUTTER_SCORE } from "@/lib/e14/core/quality";
 // propietario de ScanView (lo llena useSesionCamara vía profileActiveSensor;
 // lo lee useDestello vía archivoDentroDeTope).
 import type { SensorProfile } from "@/lib/e14/core/sensor-profiler";
-import { useE14Store, type BandaSim } from "@/lib/e14/store";
+import { useE14Store } from "@/lib/e14/store";
 // KIT errores-operador-v1 (plan 3.1): TEXTO_MOTIVO pinta el aviso del store
 // en la franja del visor (bloque de error persistente, 4.3.1).
 import { TEXTO_MOTIVO } from "@/lib/e14/errores";
@@ -89,10 +89,11 @@ import { useWakeLock } from "@/lib/e14/core/wake-lock";
 // calientes. Solo con la cascada ON (kill-switch del mantenedor).
 import { tessPrecalentar } from "@/lib/e14/ocr/tesseract";
 import { leerFlags } from "@/lib/e14/flags";
-// KIT e14-sin-relleno-v1: la barra de SIMULACIÓN (chips TEST SCORES) solo se
-// muestra con el toggle «SIM» de ACTAS encendido o en modo desarrollador —
-// el usuario público ve el escáner limpio, sin botones de prueba.
-import { useModoDev } from "../dev/puente";
+// KIT e14-simulacion-imagenes-v1: galería «Imágenes simuladas» (icono de
+// simulación del header) — catálogo compartido con el bridge en
+// lib/e14/simulacion-imagenes.
+import { GaleriaSimulacion } from "../GaleriaSimulacion";
+import type { ImagenSimuladaId } from "@/lib/e14/simulacion-imagenes";
 import {
   CameraNavIcon,
   FolderImportIcon,
@@ -114,58 +115,6 @@ import { useDestello } from "../hooks/useDestello";
 import { useSelectorFuente } from "../hooks/useSelectorFuente";
 import { esIOS, useSesionCamara, type CamEstado, type LiveUi } from "../hooks/useSesionCamara";
 
-/* ── Chips de calidad = BOTONES DE SIMULACIÓN (SPEC-e14-simulacion-scores
- *  §D2/§D3) ────
- *  Antes: leyenda decorativa del gate. Ahora: cada chip es un <button> que
- *  dispara un análisis determinista con la foto de ejemplo del mantenedor y el
- *  score inyectado de su banda (la completa = óptima · la cortada =
- *  intermedio · la borrosa = bajo); el desenlace real lo decide el gate
- *  (ÓPTIMA → 10.0 enviada · MEDIO → ADVERTENCIA revisión (7.0) · BAJA →
- *  RECHAZADA). Estética neón INTACTA (mismas clases del mock aprobado) —
- *  solo se añade cursor/feedback de toque, área táctil ≥44px invisible y
- *  disabled durante el análisis (AC7/AC8). Los scores de bracket son los
- *  que INYECTA el chip. §D6.3 (SPEC-e14-score-ocr Rev. 3): el piso
- *  re-aplica solo con score ≥ 8 — la foto b/n del MEDIO clasifica AUTO
- *  real y queda en 7.0 ADVERTENCIA (la banda medio vive). */
-const NIVELES_CALIDAD: {
-  id: BandaSim;
-  label: string;
-  score: string;
-  chip: string;
-  dot: string;
-  anillo: string;
-  aria: string;
-}[] = [
-  {
-    id: "optima",
-    label: "ÓPTIMA",
-    score: "8.2",
-    // STITCH (mock 1): bg-[#00E676]/10 + border + text (dot pulsante).
-    chip: "bg-[#00E676]/10 border-[#00E676]/40 hover:bg-[#00E676]/20 text-[#00E676]",
-    dot: "bg-[#00E676] animate-pulse",
-    anillo: "border-[#00E676]",
-    aria: "Simular acta óptima (10.0 — envío automático)",
-  },
-  {
-    id: "medio",
-    label: "MEDIO",
-    score: "7.0",
-    chip: "bg-yellow-500/10 border-yellow-500/40 hover:bg-yellow-500/20 text-yellow-400",
-    dot: "bg-yellow-400",
-    anillo: "border-yellow-400",
-    aria: "Simular acta intermedia (7.0 — revisión)",
-  },
-  {
-    id: "baja",
-    label: "BAJA",
-    score: "4.3",
-    chip: "bg-red-500/10 border-red-500/40 hover:bg-red-500/20 text-red-400",
-    dot: "bg-red-400",
-    anillo: "border-red-400",
-    aria: "Simular acta baja (4.3 — rechazada)",
-  },
-];
-
 /** Cooldown anti doble-disparo (lab §5.2 — CAPTURE_COOLDOWN_MS del core). */
 const COOLDOWN_MS = 1500;
 
@@ -174,13 +123,11 @@ export function ScanView() {
   const destellar = useE14Store((s) => s.destellar);
   const fuente = useE14Store((s) => s.fuente);
   const setFuente = useE14Store((s) => s.setFuente);
-  // §D2/§D3 (SPEC-e14-simulacion-scores): los chips disparan la simulación
-  // determinista (store.simularScore — mismo camino de dispararEscaneo).
-  const simularScore = useE14Store((s) => s.simularScore);
-  // KIT e14-sin-relleno-v1: gate de VISIBILIDAD de la barra de simulación.
-  const modoSimulacion = useE14Store((s) => s.modoSimulacion);
-  const modoDev = useModoDev();
-  const simVisible = modoSimulacion || modoDev;
+  // KIT e14-simulacion-imagenes-v1: la galería abre desde el icono de
+  // simulación (header) y desde el aviso de cámara; elegir una tarjeta
+  // dispara simularImagen (mismo camino de dispararEscaneo).
+  const simularImagen = useE14Store((s) => s.simularImagen);
+  const [galeriaSim, setGaleriaSim] = useState(false);
   const setArchivoPendiente = useE14Store((s) => s.setArchivoPendiente);
   const setFramePendiente = useE14Store((s) => s.setFramePendiente);
   // G3 (upgrade silencioso): re-proceso full-res del acta en revisión.
@@ -401,6 +348,23 @@ export function ScanView() {
   const buscando = camaraViva && live.corners === null;
   const scoreAlto = (live.score ?? 0) > SHUTTER_SCORE;
   const scorePct = live.score !== null ? Math.round(live.score * 100) : null;
+
+  /** KIT e14-simulacion-imagenes-v1: abrir la galería de imágenes simuladas
+   *  (icono del header y aviso de cámara). Con una captura en vuelo no se
+   *  abre: el disparo de la simulación se ignoraría (guard del store). */
+  const abrirGaleriaSim = () => {
+    if (procesando) return;
+    setFuente("SIMULACION");
+    setGaleriaSim(true);
+  };
+
+  /** Elegir una tarjeta cierra la galería y dispara la simulación real con la
+   *  imagen y el score inyectado del catálogo (el gate decide el desenlace). */
+  const elegirSimulada = (id: ImagenSimuladaId) => {
+    setGaleriaSim(false);
+    setFuente("SIMULACION");
+    simularImagen(id);
+  };
 
   /** KIT errores-operador-v1 (plan 3.1.3): botón «Reintentar» de la franja de
    *  error. El reintento depende del motivo: cámara → re-abre la sesión
@@ -760,7 +724,10 @@ export function ScanView() {
                 </button>
               </div>
 
-              {/* Selector de modo rápido segmented */}
+              {/* Selector de modo rápido segmented: [CÁMARA | SIMULACIÓN].
+                  KIT e14-simulacion-imagenes-v1: el antiguo «SUBIR» se
+                  reemplazó por el icono SIMULACIÓN — abre la galería de
+                  imágenes simuladas. Importar foto real sigue en el dock. */}
               <div className="pointer-events-auto flex items-center p-0.5 lg:p-1 bg-[#10161f]/90 border border-slate-800 rounded-full backdrop-blur-md shadow-md">
                 <button
                   type="button"
@@ -774,31 +741,22 @@ export function ScanView() {
                   <CameraNavIcon className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">CÁMARA</span>
                 </button>
-                {simVisible && (
-                  <button
-                    type="button"
-                    onClick={() => setFuente("SIMULACION")}
-                    className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
-                      fuente === "SIMULACION"
-                        ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
-                        : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <SparklesIcon className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">SIM</span>
-                  </button>
-                )}
                 <button
                   type="button"
-                  onClick={() => inputRef.current?.click()}
-                  className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all ${
-                    fuente === "ARCHIVO"
+                  onClick={abrirGaleriaSim}
+                  disabled={procesando}
+                  aria-haspopup="dialog"
+                  aria-expanded={galeriaSim}
+                  aria-label="Abrir la galería de imágenes simuladas"
+                  title="Simulación — probar con imágenes simuladas del proyecto"
+                  className={`flex items-center gap-1 px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-full text-[11px] lg:text-xs font-semibold transition-all disabled:opacity-50 ${
+                    fuente === "SIMULACION" || galeriaSim
                       ? "bg-[#10b981] text-[#090d12] font-bold shadow-sm"
                       : "text-slate-400 hover:text-white"
                   }`}
                 >
-                  <FolderImportIcon className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">SUBIR</span>
+                  <SparklesIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">SIMULACIÓN</span>
                 </button>
               </div>
             </div>
@@ -846,11 +804,7 @@ export function ScanView() {
                         candado o de cámara junto a la barra de direcciones) y
                         permite el acceso.
                       </li>
-                      {/* KIT e14-sin-relleno-v1: la mención a la simulación
-                          solo aplica cuando el SIM está habilitado. */}
-                      {simVisible && (
-                        <li>O activa la simulación para probar el flujo completo sin cámara.</li>
-                      )}
+                      <li>O prueba con una imagen simulada del proyecto.</li>
                       <li>O sube una foto del acta desde tu galería o tu disco.</li>
                     </ol>
                   ) : (
@@ -863,19 +817,20 @@ export function ScanView() {
                     {/* KIT e14-sin-relleno-v1: la vía de SIMULACIÓN solo se
                         ofrece con «SIM» (ACTAS) o modo desarrollador — el
                         flujo público degrada a cámara/subir. */}
-                    {simVisible && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAvisoCamara(null);
-                          setFuente("SIMULACION");
-                        }}
-                        className="h-10 rounded-xl px-4 text-xs font-bold text-[#090d12] bg-[#10b981] hover:bg-[#059669] transition shadow-md shadow-[#10b981]/20 flex items-center justify-center gap-1.5"
-                      >
-                        <SparklesIcon className="w-4 h-4" />
-                        PROBAR CON SIMULACIÓN
-                      </button>
-                    )}
+                    {/* KIT e14-simulacion-imagenes-v1: abre la galería de
+                        imágenes simuladas en vez de cambiar en silencio la
+                        fuente (el operador elige la condición a probar). */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAvisoCamara(null);
+                        abrirGaleriaSim();
+                      }}
+                      className="h-10 rounded-xl px-4 text-xs font-bold text-[#090d12] bg-[#10b981] hover:bg-[#059669] transition shadow-md shadow-[#10b981]/20 flex items-center justify-center gap-1.5"
+                    >
+                      <SparklesIcon className="w-4 h-4" />
+                      PROBAR CON SIMULACIÓN
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -1082,9 +1037,18 @@ export function ScanView() {
                   )}
                   <p className="text-[11px] font-mono text-slate-400 leading-relaxed max-w-[220px] lg:max-w-[280px]">
                     {fuente === "SIMULACION"
-                      ? "Presione el obturador abajo o elija un nivel de score (Óptima, Medio, Baja) para probar la validación."
+                      ? "Abra el icono de simulación y elija una imagen de prueba (normal, rotada, inclinada, con sombras o recortada)."
                       : "Seleccione un archivo de imagen o fotografía de acta electoral E-14."}
                   </p>
+                  {fuente === "SIMULACION" && (
+                    <button
+                      type="button"
+                      onClick={abrirGaleriaSim}
+                      className="mt-2 px-4 py-2 rounded-xl bg-[#10b981] hover:bg-[#059669] text-[#090d12] text-xs font-bold uppercase tracking-wider transition shadow-md shadow-[#10b981]/20 cursor-pointer"
+                    >
+                      Ver imágenes simuladas
+                    </button>
+                  )}
                   {fuente === "ARCHIVO" && (
                     <button
                       type="button"
@@ -1190,35 +1154,6 @@ export function ScanView() {
           modo ya lo indica el selector superior y sólo robaba alto. */}
       <footer className="absolute inset-x-0 bottom-0 z-20 px-4 lg:px-6 pt-6 pb-[max(env(safe-area-inset-bottom),10px)] flex flex-col items-center bg-gradient-to-t from-[#090d12] via-[#090d12]/85 to-transparent">
 
-        {/* Barra de SIMULACIÓN — Task 2-b: lg:max-w-md + chips con más aire en
-            lg. Mismos ids/aria/handlers (los tests E2E dependen de ellos).
-            KIT e14-sin-relleno-v1: SOLO visible con «SIM» (ACTAS) o modo
-            desarrollador activo — el flujo público va limpio. */}
-        {simVisible && (
-        <div
-          className="w-full max-w-sm lg:max-w-md mx-auto mb-3 px-1 flex items-center justify-between gap-2 bg-[#10161f]/90 border border-slate-800 rounded-xl p-1.5 lg:p-2 backdrop-blur-md shadow-md z-30"
-          data-purpose="score-simulation-bar"
-        >
-          {NIVELES_CALIDAD.map(({ id, label, score, chip, dot, aria }) => (
-            <button
-              key={id}
-              type="button"
-              aria-label={aria}
-              title={`Simular score ${label.toLowerCase()}`}
-              disabled={procesando}
-              onClick={() => simularScore(id)}
-              className={`flex-1 min-h-11 flex items-center justify-center gap-1.5 lg:gap-2 py-1.5 lg:py-2 px-2 lg:px-3 rounded-lg border transition-all cursor-pointer active:scale-95 disabled:cursor-default disabled:opacity-50 ${chip}`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden />
-              <span className="text-[10px] lg:text-[11px] font-bold tracking-wider uppercase font-mono">
-                {label}
-              </span>
-              <span className="text-[9px] lg:text-[10px] opacity-80 font-mono">({score})</span>
-            </button>
-          ))}
-        </div>
-        )}
-
         {/* §6/Rev.4 Fila de disparo: [Importar | obturador | Flash] —
             EXACTAMENTE la fila de Rev. 4. Ola 4.3.2 (U6) — DOCK UNIFICADO:
             antes había UN dock por modo (copia idéntica fuera de CÁMARA) con
@@ -1291,6 +1226,14 @@ export function ScanView() {
           </button>
         </div>
       </footer>
+
+      {/* KIT e14-simulacion-imagenes-v1: galería de imágenes simuladas sobre
+          el visor (z-50, cubre también el dock). */}
+      <GaleriaSimulacion
+        abierta={galeriaSim}
+        onCerrar={() => setGaleriaSim(false)}
+        onElegir={elegirSimulada}
+      />
     </div>
   );
 }

@@ -523,11 +523,14 @@ export async function correrPipelineL2(
   // C-30 (IMPORTAR — OPCIÓN 2, decisión de producto): la vía ARCHIVO (documento ya
   // capturado, NO foto de cámara) RELAJA el guard-borde — área mínima 0.25 →
   // 0.15 y la tinta al filo SOLO advierte (no veta). El gate de CÁMARA NO
-  // cambia (integridad); SIM tampoco corre el guard. La relajación vive en
-  // la capa app (completitud-archivo.ts) y deja la evidencia intacta para
-  // el log (borde=/tintaFilo=/franja=). Evidencia del plan: archivos
-  // razonables condenados 4.9/6.4 con contenido 10.0.
-  const viaImportar = !opciones.simular && opciones.fuente === "ARCHIVO";
+  // cambia (integridad). La relajación vive en la capa app
+  // (completitud-archivo.ts) y deja la evidencia intacta para el log
+  // (borde=/tintaFilo=/franja=). Evidencia del plan: archivos razonables
+  // condenados 4.9/6.4 con contenido 10.0.
+  // KIT e14-simulacion-imagenes-v1: la galería entrega un FILE ya capturado —
+  // para el producto es IMPORTAR, así que la relajación C-30 aplica igual
+  // (fuera de simulación el flag `simular` ya no viaja).
+  const viaImportar = opciones.fuente === "ARCHIVO" || opciones.fuente === "SIMULACION";
   let completitudEfectiva: ResultadoCompletitud | null = verificacionResuelta;
   let motivoRelajacion: MotivoRelajacion | null = null;
   if (viaImportar && verificacionResuelta && !verificacionResuelta.completa) {
