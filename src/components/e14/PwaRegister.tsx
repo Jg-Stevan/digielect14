@@ -18,15 +18,14 @@
  * de nueva versión E-04.
  */
 import { useEffect } from "react";
-import { registerServiceWorker, setupPwaListeners } from "@/lib/e14/core/pwa";
+import { registerServiceWorker } from "@/lib/e14/core/pwa";
 // E-04 — banner «Nueva versión lista»: con el SW sin skipWaiting
 // incondicional, la versión nueva queda waiting hasta que el usuario acepte
 // recargar desde el banner (self-contained en src/lib/e14).
 import { setupUpdateBanner } from "@/lib/e14/update-banner";
-// e63k — KIT e63k-capa2-identidad-e-instalar-v1 (F2): píldora «Instalar app»
-// — consume el promptInstall del core que NADIE llamaba (kit §0.3: el evento
-// beforeinstallprompt era tragado y el usuario no podía instalar nunca).
-import { setupPwaInstalar } from "@/lib/e14/pwa-instalar";
+// KIT e14-instalacion-oficial-v1: la instalación va por el banner OFICIAL de
+// Chrome (beforeinstallprompt ya NO se intercepta). La píldora «Instalar app»
+// (pwa-instalar) se retiró.
 
 export function PwaRegister() {
   useEffect(() => {
@@ -50,10 +49,8 @@ export function PwaRegister() {
       }
       return;
     }
-    setupPwaListeners();
     registerServiceWorker();
     setupUpdateBanner();
-    setupPwaInstalar();
   }, []);
 
   return null;

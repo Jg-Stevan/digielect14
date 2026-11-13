@@ -54,8 +54,9 @@ const ResumenView = dynamic(
   () => import("@/components/e14/screens/ResumenView").then((m) => m.ResumenView),
   { ssr: false }
 );
-// F-PWA (kit H6): registro del Service Worker + listeners de instalación +
-// banner E-04 «Nueva versión lista» — montaje único, no renderiza nada.
+// F-PWA (kit H6): registro del Service Worker + banner E-04 «Nueva versión
+// lista» — montaje único, no renderiza nada. La instalación la ofrece el
+// banner OFICIAL de Chrome (sin píldora propia).
 import { PwaRegister } from "@/components/e14/PwaRegister";
 // Task 4: guía de uso (onboarding 1.ª visita + «?»/«h» + SideNav).
 import { AyudaOverlay, abrirAyuda } from "@/components/e14/AyudaOverlay";

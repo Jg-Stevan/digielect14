@@ -1,101 +1,17 @@
 /**
  * F-PWA — instalación de la app (PWA) en el móvil.
  *
- * · Android/Chrome desktop: captura `beforeinstallprompt` → Ajustes muestra
- *   el botón "Instalar app" que dispara el prompt nativo.
- * · iOS Safari: no existe el prompt — se detecta y Ajustes muestra las
- *   instrucciones de "Añadir a pantalla de inicio".
- * · Registro del Service Worker SOLO en producción (https — el deploy de Cloudflare Pages):
- *   en localhost dev interferiría con HMR.
+ * La instalación va por el canal OFICIAL del navegador: el aviso/banner de
+ * instalación de Chrome (install prompt). ANTES este módulo interceptaba
+ * `beforeinstallprompt` con `preventDefault()` para disparar un botón propio
+ * («Instalar app»); desde KIT e14-instalacion-oficial-v1 esa interceptación y
+ * la píldora personalizada se retiraron: Chrome muestra SU banner y la app no
+ * lo suprime. En iOS Safari no existe prompt nativo — el usuario instala con
+ * Compartir → Añadir a pantalla de inicio.
+ *
+ * Único trabajo restante: registrar el Service Worker (offline + banner de
+ * nueva versión E-04).
  */
-
-export interface PwaInstallState {
-  /** El navegador puede mostrar el prompt nativo de instalación. */
-  canPrompt: boolean;
-  /** La app ya corre instalada (display-mode standalone). */
-  installed: boolean;
-  /** iOS/iPadOS (Safari): instalación vía Compartir → Añadir a inicio. */
-  isIos: boolean;
-  /** Escritorio. */
-  isDesktop: boolean;
-}
-
-type InstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
-
-let deferredPrompt: InstallPromptEvent | null = null;
-const listeners = new Set<(state: PwaInstallState) => void>();
-
-export function isStandalone(): boolean {
-  if (typeof window === "undefined") return false;
-  const nav = navigator as Navigator & { standalone?: boolean };
-  return (
-    window.matchMedia?.("(display-mode: standalone)").matches === true ||
-    window.matchMedia?.("(display-mode: minimal-ui)").matches === true ||
-    nav.standalone === true
-  );
-}
-
-export function isIosDevice(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent;
-  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
-}
-
-function emit(): void {
-  const state = getPwaInstallState();
-  for (const fn of listeners) fn(state);
-}
-
-/** Se llama UNA VEZ desde el componente de registro (client). */
-export function setupPwaListeners(): void {
-  if (typeof window === "undefined") return;
-
-  window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();
-    deferredPrompt = e as InstallPromptEvent;
-    emit();
-  });
-
-  window.addEventListener("appinstalled", () => {
-    deferredPrompt = null;
-    emit();
-  });
-
-  // display-mode cambia al instalarse (iOS incluido al volver a abrir).
-  window.matchMedia?.("(display-mode: standalone)")?.addEventListener?.("change", emit);
-}
-
-export function getPwaInstallState(): PwaInstallState {
-  const ios = isIosDevice();
-  return {
-    canPrompt: deferredPrompt !== null,
-    installed: isStandalone(),
-    isIos: ios,
-    isDesktop: !ios && typeof window !== "undefined" && !/Android/i.test(navigator.userAgent),
-  };
-}
-
-export function subscribePwaState(fn: (state: PwaInstallState) => void): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
-
-/** Dispara el prompt nativo. "unavailable" → usar instrucciones manuales. */
-export async function promptInstall(): Promise<"accepted" | "dismissed" | "unavailable"> {
-  if (!deferredPrompt) return "unavailable";
-  try {
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    emit();
-    return outcome;
-  } catch {
-    return "unavailable";
-  }
-}
 
 /** Registra el Service Worker (producción: https/distinto de localhost). */
 export function registerServiceWorker(): void {
