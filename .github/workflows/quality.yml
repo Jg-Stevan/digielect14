@@ -51,7 +51,7 @@ jobs:
       # El cache evita bajar ~35 MB por corrida; la clave cuelga del manifiesto,
       # así que cambiar un hash invalida el cache automáticamente.
       - name: Cache de assets externos
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             public/models/rapidocr/*.onnx
